@@ -12,8 +12,14 @@ import type { Loja, CategoriaLoja } from "@/types"
 const CAT_ICONS: Record<string, string> = {
   Restaurante: "🍔", Mercadinho: "🛒", "Farmácia": "💊", Outros: "📦",
 }
+const CAT_IMG: Record<string, string> = {
+  Restaurante: "https://cdn-icons-png.flaticon.com/512/3075/3075977.png",
+  Mercadinho:  "https://cdn-icons-png.flaticon.com/512/3081/3081559.png",
+  "Farmácia":  "https://cdn-icons-png.flaticon.com/512/2913/2913133.png",
+  Outros:      "https://cdn-icons-png.flaticon.com/512/869/869869.png",
+}
 const CAT_COLORS: Record<string, { bg: string; text: string; accent: string }> = {
-  Restaurante: { bg: "#fff4ee", text: "#c2410c", accent: "#f97316" },
+  Restaurante: { bg: "#fff4ee", text: "#c2410c", accent: "#FF6B00" },
   Mercadinho:  { bg: "#f0fdf4", text: "#15803d", accent: "#22c55e" },
   "Farmácia":  { bg: "#eff6ff", text: "#1d4ed8", accent: "#3b82f6" },
   Outros:      { bg: "#f5f3ff", text: "#6d28d9", accent: "#8b5cf6" },
@@ -81,7 +87,7 @@ export default function Home() {
   const fechadas = filtradas.filter(l => !l.aberto)
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f5f5f5" }}>
+    <div style={{ minHeight: "100vh", background: "#F9FAFB" }}>
 
       {/* ── SPLASH ─────────────────────────────────────────── */}
       {splashVis && (
@@ -95,10 +101,10 @@ export default function Home() {
             {Array.from({ length: 12 }).map((_, i) => (
               <div key={i} style={{
                 position: "absolute", width: 6, height: 6, borderRadius: "50%",
-                background: i % 3 === 0 ? "#f97316" : i % 3 === 1 ? "rgba(249,115,22,0.4)" : "rgba(255,255,255,0.08)",
+                background: i % 3 === 0 ? "#FF6B00" : i % 3 === 1 ? "rgba(255,107,0,0.4)" : "rgba(255,255,255,0.08)",
                 left: `${(i * 8.3 + 5) % 100}%`, top: `${(i * 13 + 10) % 100}%`,
                 animation: `float ${3 + (i % 3)}s ease-in-out ${i * 0.3}s infinite alternate`,
-                opacity: logoVis ? 1 : 0, transition: "opacity 0.5s",
+                opacity: logoVis ? 1 : 0,
               }} />
             ))}
           </div>
@@ -107,11 +113,11 @@ export default function Home() {
             opacity: logoVis ? 1 : 0,
             transition: "transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.6s ease",
             transformStyle: "preserve-3d",
-            filter: logoVis ? "drop-shadow(0 0 50px rgba(249,115,22,0.6))" : "none",
+            filter: logoVis ? "drop-shadow(0 0 50px rgba(255,107,0,0.6))" : "none",
           }}>
             <img src="/logo-chego.jpg" alt="Chegô" style={{
               width: 200, height: 200, borderRadius: 40, objectFit: "contain",
-              border: "2px solid rgba(249,115,22,0.3)",
+              border: "2px solid rgba(255,107,0,0.3)",
             }} />
           </div>
           <p style={{
@@ -130,22 +136,24 @@ export default function Home() {
 
       {/* ── NAVBAR ─────────────────────────────────────────── */}
       <nav style={{
-        background: "#ffffff",
-        borderBottom: "1px solid #e8e8e8",
-        position: "sticky", top: 0, zIndex: 40,
-        boxShadow: "0 1px 8px rgba(0,0,0,0.06)",
+        background: "rgba(255,255,255,0.96)",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+        borderBottom: "none",
+        position: "sticky", top: 0, zIndex: 100,
+        boxShadow: "0 2px 16px rgba(0,0,0,0.08)",
       }}>
         <div style={{
-          maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 16px" : "0 28px",
-          height: 64, display: "flex", alignItems: "center", gap: 8,
+          maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 16px" : "0 24px",
+          height: 68, display: "flex", alignItems: "center", gap: 8,
         }}>
-          <Link href="/" style={{ textDecoration: "none", flexShrink: 0, marginRight: isMobile ? 8 : 16 }}>
-            <img src="/logo-chego.jpg" alt="Chegô" style={{ height: isMobile ? 40 : 52, width: "auto", borderRadius: 12, objectFit: "contain" }} />
+          <Link href="/" style={{ textDecoration: "none", flexShrink: 0, marginRight: isMobile ? 8 : 20 }}>
+            <img src="/logo-chego.jpg" alt="Chegô" style={{ height: isMobile ? 38 : 44, width: "auto", borderRadius: 10, objectFit: "contain" }} />
           </Link>
 
           {/* Nav links — hidden on mobile */}
           {!isMobile && (
-            <div style={{ display: "flex", gap: 2, flex: 1 }}>
+            <div style={{ display: "flex", gap: 4, flex: 1 }}>
               {[
                 { label: "Restaurantes", cat: "Restaurante" },
                 { label: "Mercadinho",   cat: "Mercadinho"  },
@@ -153,12 +161,11 @@ export default function Home() {
               ].map(({ label, cat }) => (
                 <button key={cat} onClick={() => selectCat(cat)}
                   style={{
-                    background: filtro === cat ? "#fff4ee" : "transparent",
-                    border: filtro === cat ? "1px solid #f9731633" : "1px solid transparent",
+                    background: filtro === cat ? "#FFF3E0" : "transparent",
+                    border: filtro === cat ? "1px solid rgba(255,107,0,0.25)" : "1px solid transparent",
                     borderRadius: 10, padding: "8px 16px", cursor: "pointer",
-                    color: filtro === cat ? "#f97316" : "#666",
-                    fontWeight: filtro === cat ? 700 : 500, fontSize: 14,
-                    transition: "all 0.15s",
+                    color: filtro === cat ? "#FF6B00" : "#374151",
+                    fontWeight: 500, fontSize: 15,
                   }}>
                   {label}
                 </button>
@@ -172,27 +179,44 @@ export default function Home() {
             {count > 0 && (
               <Link href="/carrinho" style={{
                 display: "flex", alignItems: "center", gap: 6,
-                padding: isMobile ? "9px 12px" : "9px 16px", borderRadius: 12,
-                background: "#f97316", color: "white", fontWeight: 800, fontSize: 13, textDecoration: "none",
+                padding: isMobile ? "8px 12px" : "8px 16px", borderRadius: 12,
+                background: "#FF6B00", color: "white", fontWeight: 700, fontSize: 13, textDecoration: "none",
+                boxShadow: "0 4px 12px rgba(255,107,0,0.3)",
               }}>
                 🛒 {count}{!isMobile && ` · R$ ${total.toFixed(2)}`}
               </Link>
             )}
             {!user && !isMobile && (
               <Link href="/cadastro-loja" style={{
-                padding: "9px 14px", borderRadius: 12,
-                color: "#f97316", fontWeight: 700, fontSize: 13, textDecoration: "none",
+                padding: "8px 16px", borderRadius: 12,
+                color: "#FF6B00", fontWeight: 600, fontSize: 14, textDecoration: "none",
               }}>
                 Anuncie sua loja
               </Link>
             )}
-            <Link href={user ? "/cliente/perfil" : "/cliente/entrar"} style={{
-              display: "flex", alignItems: "center", gap: 7,
-              padding: isMobile ? "9px 14px" : "9px 20px", borderRadius: 12,
-              background: user ? "#fff4ee" : "#f97316",
-              border: user ? "1px solid #f9731633" : "none",
-              color: user ? "#f97316" : "white", fontWeight: 700, fontSize: 13, textDecoration: "none",
-            }}>
+            <Link href={user ? "/cliente/perfil" : "/cliente/entrar"}
+              style={{
+                display: "flex", alignItems: "center", gap: 7,
+                padding: isMobile ? "8px 14px" : "8px 18px", borderRadius: 12,
+                background: user ? "#FFF3E0" : "#FF6B00",
+                border: user ? "1px solid rgba(255,107,0,0.2)" : "none",
+                color: user ? "#FF6B00" : "white", fontWeight: 600, fontSize: 13, textDecoration: "none",
+                boxShadow: user ? "none" : "0 4px 12px rgba(255,107,0,0.35)",
+              }}
+              onMouseEnter={e => {
+                if (!user) {
+                  (e.currentTarget as HTMLAnchorElement).style.background = "#E55A00"
+                  ;(e.currentTarget as HTMLAnchorElement).style.transform = "translateY(-1px)"
+                  ;(e.currentTarget as HTMLAnchorElement).style.boxShadow = "0 6px 16px rgba(255,107,0,0.45)"
+                }
+              }}
+              onMouseLeave={e => {
+                if (!user) {
+                  (e.currentTarget as HTMLAnchorElement).style.background = "#FF6B00"
+                  ;(e.currentTarget as HTMLAnchorElement).style.transform = ""
+                  ;(e.currentTarget as HTMLAnchorElement).style.boxShadow = "0 4px 12px rgba(255,107,0,0.35)"
+                }
+              }}>
               {user ? (
                 <>
                   {user.user_metadata?.avatar_url
@@ -200,7 +224,7 @@ export default function Home() {
                     : "👤"}
                   {!isMobile && (primeiroNome ?? "Minha conta")}
                 </>
-              ) : (isMobile ? "Entrar" : "Entrar")}
+              ) : "Entrar"}
             </Link>
           </div>
         </div>
@@ -208,47 +232,72 @@ export default function Home() {
 
       {/* ── HERO ───────────────────────────────────────────── */}
       <div style={{
-        background: "linear-gradient(135deg, #f97316 0%, #ea580c 100%)",
-        padding: isMobile ? "40px 16px 48px" : "56px 24px 64px",
-        textAlign: "center",
+        background: "linear-gradient(135deg, #FF6B00 0%, #FF7A1A 40%, #FF9240 70%, #FFB347 100%)",
+        minHeight: isMobile ? 320 : 440,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        position: "relative", overflow: "hidden",
+        padding: isMobile ? "40px 16px" : "56px 24px",
       }}>
-        <div style={{ maxWidth: 640, margin: "0 auto" }}>
+        {/* Moto decorativa — desktop only */}
+        {!isMobile && (
+          <img
+            className="hero-deco-img"
+            src="https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=400&q=80"
+            alt=""
+            aria-hidden
+            style={{
+              position: "absolute", right: "5%", bottom: 0,
+              height: "85%", objectFit: "contain", opacity: 0.9,
+              filter: "drop-shadow(0 8px 24px rgba(0,0,0,0.2))",
+              pointerEvents: "none",
+            }}
+          />
+        )}
+        {/* Círculos decorativos de fundo */}
+        <div style={{ position: "absolute", top: -80, right: -80, width: 320, height: 320, borderRadius: "50%", background: "rgba(255,255,255,0.06)", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", bottom: -60, left: -60, width: 240, height: 240, borderRadius: "50%", background: "rgba(255,255,255,0.04)", pointerEvents: "none" }} />
+
+        <div style={{ maxWidth: 640, width: "100%", textAlign: "center", position: "relative", zIndex: 1 }}>
           <h1 style={{
-            color: "white", fontWeight: 900,
-            fontSize: "clamp(30px, 5vw, 50px)",
+            color: "white", fontWeight: 800,
+            fontSize: "clamp(2rem, 4vw, 3rem)",
             lineHeight: 1.15, marginBottom: 14,
             textShadow: "0 2px 8px rgba(0,0,0,0.15)",
           }}>
             {primeiroNome ? `Olá, ${primeiroNome}! 👋` : "Chegô. O delivery de Aragoiânia."}
           </h1>
-          <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 17, lineHeight: 1.6, marginBottom: 36 }}>
+          <p style={{ color: "rgba(255,255,255,0.9)", fontSize: "1.1rem", lineHeight: 1.6, marginBottom: 36, fontWeight: 400 }}>
             Peça da sua loja favorita e receba em casa rapidinho.
           </p>
 
           {/* Search bar */}
           <div style={{
-            display: "flex", maxWidth: 520, margin: "0 auto",
-            background: "white", borderRadius: 16,
-            boxShadow: "0 4px 24px rgba(0,0,0,0.18)", overflow: "hidden",
+            maxWidth: 680, width: "90%", margin: "0 auto",
+            borderRadius: 16, overflow: "hidden",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+            display: "flex",
           }}>
-            <span style={{ padding: "0 16px", fontSize: 18, display: "flex", alignItems: "center", color: "#f97316", flexShrink: 0 }}>
-              📍
-            </span>
-            <input
-              value={busca}
-              onChange={e => setBusca(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") scrollToLojas() }}
-              placeholder="Buscar restaurante ou produto..."
-              style={{
-                flex: 1, padding: "16px 0", fontSize: 15, fontWeight: 500,
-                background: "transparent", border: "none", color: "#1a1a1a", outline: "none",
-              }}
-            />
+            <div style={{ position: "relative", flex: 1, display: "flex", alignItems: "center", background: "white" }}>
+              <span style={{ padding: "0 16px", fontSize: 18, color: "#FF6B00", flexShrink: 0, lineHeight: 1 }}>📍</span>
+              <input
+                value={busca}
+                onChange={e => setBusca(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") scrollToLojas() }}
+                placeholder="Buscar restaurante ou produto..."
+                style={{
+                  flex: 1, height: 60, fontSize: 16, fontWeight: 500,
+                  background: "transparent", border: "none", color: "#1a1a1a", outline: "none",
+                  padding: "0 20px 0 0",
+                }}
+              />
+            </div>
             <button onClick={scrollToLojas} style={{
-              padding: "0 24px", border: "none",
-              background: "#f97316", color: "white",
-              fontWeight: 800, fontSize: 14, cursor: "pointer", flexShrink: 0,
-            }}>
+              height: 60, padding: "0 28px", border: "none",
+              background: "#FF6B00", color: "white",
+              fontWeight: 700, fontSize: 16, cursor: "pointer", flexShrink: 0,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = "#E55A00"; e.currentTarget.style.boxShadow = "inset -4px 0 16px rgba(0,0,0,0.1)" }}
+            onMouseLeave={e => { e.currentTarget.style.background = "#FF6B00"; e.currentTarget.style.boxShadow = "" }}>
               Buscar
             </button>
           </div>
@@ -256,34 +305,50 @@ export default function Home() {
       </div>
 
       {/* ── MAIN ───────────────────────────────────────────── */}
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "24px 16px 80px" : "40px 24px 72px" }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: isMobile ? "28px 16px 80px" : "48px 24px 80px" }}>
 
         {/* Category chips */}
         {!busca && (
-          <div style={{ marginBottom: 36 }}>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ marginBottom: 40 }}>
+            <div className="cat-chips-wrap" style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               {CATEGORIAS.map(cat => {
-                const c    = CAT_COLORS[cat]
+                const c     = CAT_COLORS[cat]
                 const ativo = filtro === cat
                 return (
                   <button key={cat} onClick={() => selectCat(cat)} style={{
-                    display: "flex", alignItems: "center", gap: 8,
-                    padding: "10px 20px", borderRadius: 50, border: "none", cursor: "pointer",
-                    background: ativo ? c.accent : "#ffffff",
-                    color: ativo ? "white" : "#444",
-                    fontWeight: ativo ? 700 : 600, fontSize: 14,
-                    boxShadow: ativo ? `0 4px 16px ${c.accent}44` : "0 1px 4px rgba(0,0,0,0.08)",
-                    transition: "all 0.18s",
+                    display: "flex", alignItems: "center", gap: 10,
+                    padding: "12px 22px", borderRadius: 50,
+                    border: ativo ? `1.5px solid ${c.accent}` : "1.5px solid #e5e7eb",
+                    background: ativo ? c.accent : "white",
+                    color: ativo ? "white" : "#374151",
+                    fontWeight: 600, fontSize: 14, cursor: "pointer",
+                    boxShadow: ativo ? `0 6px 16px ${c.accent}44` : "0 4px 12px rgba(0,0,0,0.08)",
+                    flexShrink: 0,
+                  }}
+                  onMouseEnter={e => {
+                    if (!ativo) {
+                      e.currentTarget.style.transform = "translateY(-3px)"
+                      e.currentTarget.style.boxShadow = "0 8px 20px rgba(0,0,0,0.12)"
+                      e.currentTarget.style.borderColor = "#FF6B00"
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (!ativo) {
+                      e.currentTarget.style.transform = ""
+                      e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)"
+                      e.currentTarget.style.borderColor = "#e5e7eb"
+                    }
                   }}>
-                    <span style={{ fontSize: 18 }}>{CAT_ICONS[cat]}</span>
+                    <img src={CAT_IMG[cat]} alt={cat} style={{ width: 24, height: 24, objectFit: "contain", filter: ativo ? "brightness(0) invert(1)" : "none" }} />
                     {cat}
                   </button>
                 )
               })}
               {filtro && (
                 <button onClick={() => setFiltro(null)} style={{
-                  padding: "10px 18px", borderRadius: 50, border: "1px dashed #ddd",
-                  background: "transparent", color: "#999", fontWeight: 600, fontSize: 14, cursor: "pointer",
+                  padding: "12px 18px", borderRadius: 50, border: "1.5px dashed #d1d5db",
+                  background: "transparent", color: "#9ca3af", fontWeight: 600, fontSize: 14, cursor: "pointer",
+                  flexShrink: 0,
                 }}>
                   ✕ Limpar
                 </button>
@@ -294,66 +359,109 @@ export default function Home() {
 
         {/* 2 CARDS GRANDES */}
         {!busca && !filtro && (
-          <div style={{ marginBottom: 44 }}>
-            <h2 style={{ color: "#1a1a1a", fontWeight: 900, fontSize: 22, marginBottom: 18 }}>
-              O que você quer pedir?
-            </h2>
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 16 }}>
+          <div style={{ marginBottom: 52 }}>
+            {/* Título de seção */}
+            <div style={{ marginBottom: 22 }}>
+              <h2 style={{
+                color: "#1a1a1a", fontWeight: 800, fontSize: "1.6rem",
+                letterSpacing: "-0.5px",
+                borderLeft: "4px solid #FF6B00", paddingLeft: 12,
+                lineHeight: 1.2,
+              }}>
+                O que você quer pedir?
+              </h2>
+              <p style={{ fontSize: 14, color: "#6B7280", marginTop: 6, paddingLeft: 16 }}>Escolha onde quer pedir</p>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 20 }}>
 
               {/* Restaurante */}
               <button onClick={() => selectCat("Restaurante")} style={{
-                position: "relative", borderRadius: 24, overflow: "hidden",
-                height: isMobile ? 160 : 210, cursor: "pointer", border: "none", textAlign: "left",
-                background: "linear-gradient(135deg, #f97316 0%, #ea580c 100%)",
-                boxShadow: "0 6px 24px rgba(249,115,22,0.35)",
-                transition: "transform 0.18s, box-shadow 0.18s",
+                position: "relative", borderRadius: 20, overflow: "visible",
+                minHeight: isMobile ? 160 : 200, cursor: "pointer", border: "none", textAlign: "left",
+                boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
+                padding: 0,
               }}
-              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-3px)"; e.currentTarget.style.boxShadow = "0 12px 32px rgba(249,115,22,0.45)" }}
-              onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = "0 6px 24px rgba(249,115,22,0.35)" }}>
-                <div style={{ position: "absolute", inset: 0, padding: "30px 32px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-6px)"; e.currentTarget.style.boxShadow = "0 16px 48px rgba(0,0,0,0.2)" }}
+              onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = "0 8px 32px rgba(0,0,0,0.15)" }}>
+                {/* BG layer */}
+                <div style={{
+                  position: "absolute", inset: 0, borderRadius: 20, overflow: "hidden",
+                  background: "linear-gradient(135deg, #FF6B00 0%, #E55A00 100%)",
+                }} />
+                {/* Content */}
+                <div style={{ position: "relative", padding: isMobile ? "28px 24px" : "30px 32px", display: "flex", flexDirection: "column", justifyContent: "space-between", height: isMobile ? 160 : 200 }}>
                   <div>
                     <p style={{ color: "white", fontWeight: 900, fontSize: 26, lineHeight: 1, marginBottom: 8 }}>Restaurantes</p>
                     <p style={{ color: "rgba(255,255,255,0.75)", fontSize: 14 }}>Comida pronta na sua porta</p>
                   </div>
                   <span style={{
                     display: "inline-flex", width: "fit-content",
-                    padding: "9px 18px", borderRadius: 12,
-                    background: "rgba(255,255,255,0.2)", backdropFilter: "blur(8px)",
+                    padding: "10px 20px", borderRadius: 12,
+                    background: "rgba(0,0,0,0.3)", backdropFilter: "blur(8px)",
                     color: "white", fontWeight: 700, fontSize: 14,
-                    border: "1px solid rgba(255,255,255,0.3)",
+                    border: "none",
                   }}>
                     Ver opções ›
                   </span>
                 </div>
-                <div style={{ position: "absolute", right: -10, bottom: -12, fontSize: 140, opacity: 0.18, transform: "rotate(-8deg)", pointerEvents: "none", lineHeight: 1 }}>🍔</div>
+                {/* Decorative photo */}
+                <img
+                  className="cat-card-deco"
+                  src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400&q=85"
+                  alt=""
+                  aria-hidden
+                  style={{
+                    position: "absolute", right: -10, bottom: -10,
+                    height: "130%", objectFit: "contain",
+                    filter: "drop-shadow(0 8px 20px rgba(0,0,0,0.25))",
+                    pointerEvents: "none",
+                    display: isMobile ? "none" : undefined,
+                  }}
+                />
               </button>
 
               {/* Mercadinho */}
               <button onClick={() => selectCat("Mercadinho")} style={{
-                position: "relative", borderRadius: 24, overflow: "hidden",
-                height: isMobile ? 160 : 210, cursor: "pointer", border: "none", textAlign: "left",
-                background: "linear-gradient(135deg, #22c55e 0%, #16a34a 100%)",
-                boxShadow: "0 6px 24px rgba(34,197,94,0.3)",
-                transition: "transform 0.18s, box-shadow 0.18s",
+                position: "relative", borderRadius: 20, overflow: "visible",
+                minHeight: isMobile ? 160 : 200, cursor: "pointer", border: "none", textAlign: "left",
+                boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
+                padding: 0,
               }}
-              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-3px)"; e.currentTarget.style.boxShadow = "0 12px 32px rgba(34,197,94,0.4)" }}
-              onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = "0 6px 24px rgba(34,197,94,0.3)" }}>
-                <div style={{ position: "absolute", inset: 0, padding: "30px 32px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-6px)"; e.currentTarget.style.boxShadow = "0 16px 48px rgba(0,0,0,0.2)" }}
+              onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = "0 8px 32px rgba(0,0,0,0.15)" }}>
+                <div style={{
+                  position: "absolute", inset: 0, borderRadius: 20, overflow: "hidden",
+                  background: "linear-gradient(135deg, #22C55E 0%, #16a34a 100%)",
+                }} />
+                <div style={{ position: "relative", padding: isMobile ? "28px 24px" : "30px 32px", display: "flex", flexDirection: "column", justifyContent: "space-between", height: isMobile ? 160 : 200 }}>
                   <div>
                     <p style={{ color: "white", fontWeight: 900, fontSize: 26, lineHeight: 1, marginBottom: 8 }}>Mercadinho</p>
                     <p style={{ color: "rgba(255,255,255,0.75)", fontSize: 14 }}>Produtos do dia a dia sem sair</p>
                   </div>
                   <span style={{
                     display: "inline-flex", width: "fit-content",
-                    padding: "9px 18px", borderRadius: 12,
-                    background: "rgba(255,255,255,0.2)", backdropFilter: "blur(8px)",
+                    padding: "10px 20px", borderRadius: 12,
+                    background: "rgba(0,0,0,0.3)", backdropFilter: "blur(8px)",
                     color: "white", fontWeight: 700, fontSize: 14,
-                    border: "1px solid rgba(255,255,255,0.3)",
+                    border: "none",
                   }}>
                     Ver lojas ›
                   </span>
                 </div>
-                <div style={{ position: "absolute", right: -10, bottom: -12, fontSize: 140, opacity: 0.18, transform: "rotate(-8deg)", pointerEvents: "none", lineHeight: 1 }}>🛒</div>
+                <img
+                  className="cat-card-deco"
+                  src="https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=85"
+                  alt=""
+                  aria-hidden
+                  style={{
+                    position: "absolute", right: -10, bottom: -10,
+                    height: "130%", objectFit: "contain",
+                    filter: "drop-shadow(0 8px 20px rgba(0,0,0,0.25))",
+                    pointerEvents: "none",
+                    display: isMobile ? "none" : undefined,
+                  }}
+                />
               </button>
             </div>
           </div>
@@ -365,9 +473,9 @@ export default function Home() {
             {["Todas", ...CATEGORIAS].map(c => (
               <button key={c} onClick={() => setFiltro(c === "Todas" ? null : c)} style={{
                 padding: "8px 16px", borderRadius: 50, fontSize: 13, fontWeight: 600, cursor: "pointer",
-                background: (filtro === c || (c === "Todas" && !filtro)) ? "#f97316" : "white",
-                color:      (filtro === c || (c === "Todas" && !filtro)) ? "white" : "#666",
-                border: "1px solid #e0e0e0",
+                background: (filtro === c || (c === "Todas" && !filtro)) ? "#FF6B00" : "white",
+                color:      (filtro === c || (c === "Todas" && !filtro)) ? "white" : "#6B7280",
+                border: "1px solid #e5e7eb",
                 boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
               }}>
                 {c === "Todas" ? "🏪 Todas" : `${CAT_ICONS[c]} ${c}`}
@@ -385,7 +493,7 @@ export default function Home() {
               </h2>
               {filtro && (
                 <button onClick={() => setFiltro(null)} style={{
-                  background: "none", border: "none", color: "#999", fontSize: 13, cursor: "pointer", fontWeight: 600,
+                  background: "none", border: "none", color: "#9ca3af", fontSize: 13, cursor: "pointer", fontWeight: 600,
                 }}>
                   Limpar ✕
                 </button>
@@ -394,22 +502,28 @@ export default function Home() {
           )}
 
           {!filtro && !busca && (
-            <h2 style={{ color: "#1a1a1a", fontWeight: 900, fontSize: 22, marginBottom: 20 }}>
-              🟢 Lojas abertas agora
-            </h2>
+            <div style={{ marginBottom: 20 }}>
+              <h2 style={{
+                color: "#1a1a1a", fontWeight: 900, fontSize: 22,
+                display: "flex", alignItems: "center", gap: 10,
+              }}>
+                <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#22C55E", display: "inline-block", boxShadow: "0 0 0 3px rgba(34,197,94,0.2)" }} />
+                Lojas abertas agora
+              </h2>
+            </div>
           )}
 
           {loading ? (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 20 }}>
               {[1,2,3,4].map(i => (
-                <div key={i} style={{ background: "white", borderRadius: 20, height: 220, boxShadow: "0 1px 6px rgba(0,0,0,0.06)" }} />
+                <div key={i} style={{ background: "white", borderRadius: 16, height: 240, boxShadow: "var(--shadow-sm)" }} />
               ))}
             </div>
           ) : filtradas.length === 0 ? (
-            <div style={{ textAlign: "center", marginTop: 64, background: "white", borderRadius: 20, padding: "48px 24px", boxShadow: "0 1px 6px rgba(0,0,0,0.06)" }}>
+            <div style={{ textAlign: "center", marginTop: 64, background: "white", borderRadius: 20, padding: "48px 24px", boxShadow: "var(--shadow-sm)" }}>
               <p style={{ fontSize: 40, marginBottom: 12 }}>🔍</p>
               <p style={{ color: "#1a1a1a", fontWeight: 700, fontSize: 16 }}>Nenhuma loja encontrada</p>
-              <p style={{ color: "#999", fontSize: 14, marginTop: 4 }}>Tente outro nome ou categoria</p>
+              <p style={{ color: "#9ca3af", fontSize: 14, marginTop: 4 }}>Tente outro nome ou categoria</p>
             </div>
           ) : (
             <>
@@ -417,13 +531,13 @@ export default function Home() {
                 <div style={{ marginBottom: 40 }}>
                   {(filtro || busca) && (
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e" }} />
-                      <p style={{ color: "#888", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22C55E" }} />
+                      <p style={{ color: "#9ca3af", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
                         Abertas · {abertas.length} loja{abertas.length !== 1 ? "s" : ""}
                       </p>
                     </div>
                   )}
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 20 }}>
                     {abertas.map(loja => <LojaCard key={loja.id} loja={loja} />)}
                   </div>
                 </div>
@@ -431,12 +545,12 @@ export default function Home() {
               {fechadas.length > 0 && (
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#ccc" }} />
-                    <p style={{ color: "#bbb", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#d1d5db" }} />
+                    <p style={{ color: "#d1d5db", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
                       Fechadas · {fechadas.length} loja{fechadas.length !== 1 ? "s" : ""}
                     </p>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 20 }}>
                     {fechadas.map(loja => <LojaCard key={loja.id} loja={loja} />)}
                   </div>
                 </div>
@@ -444,84 +558,124 @@ export default function Home() {
             </>
           )}
         </div>
-
-        {/* ── FOOTER ─────────────────────────────────────────── */}
-        <div style={{ marginTop: 72, paddingTop: 32, borderTop: "1px solid #e8e8e8" }}>
-          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap", marginBottom: 20 }}>
-            {[
-              { label: "🏪 Cadastrar minha loja", href: "/cadastro-loja" },
-              { label: "🛵 Quero ser motoboy",    href: "/cadastro-motoboy" },
-              { label: "🤝 Portal de parceiros",   href: "/parceiros" },
-              { label: "🔐 Acesso lojista",        href: "/entrar" },
-            ].map(({ label, href }) => (
-              <Link key={href} href={href} style={{
-                color: "#999", fontSize: 13, textDecoration: "none", fontWeight: 500,
-                padding: "8px 14px", borderRadius: 8, border: "1px solid #e0e0e0",
-                background: "white",
-              }}>
-                {label}
-              </Link>
-            ))}
-          </div>
-          <p style={{ textAlign: "center", color: "#bbb", fontSize: 12 }}>
-            © 2026 Chegô Delivery · Aragoiânia, GO · Instagram{" "}
-            <a href="https://instagram.com/ChegoAragyn" target="_blank" rel="noopener noreferrer"
-              style={{ color: "#f97316", textDecoration: "none", fontWeight: 600 }}>@ChegoAragyn</a>
-          </p>
-        </div>
       </div>
+
+      {/* ── FOOTER ─────────────────────────────────────────── */}
+      <footer style={{ background: "#1C1C1E", color: "rgba(255,255,255,0.85)", padding: "56px 24px 32px" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+          {/* Logo + tagline */}
+          <div style={{ marginBottom: 40 }}>
+            <img src="/logo-chego.jpg" alt="Chegô" style={{ height: 44, borderRadius: 10, marginBottom: 12 }} />
+            <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 14 }}>O delivery de Aragoiânia, GO</p>
+          </div>
+
+          {/* Colunas */}
+          <div className="footer-cols" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 40, marginBottom: 40 }}>
+            <div>
+              <p style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "rgba(255,255,255,0.4)", marginBottom: 16 }}>Parceiros</p>
+              {[
+                { label: "Cadastrar minha loja", href: "/cadastro-loja" },
+                { label: "Portal de parceiros",  href: "/parceiros" },
+                { label: "Acesso lojista",        href: "/entrar" },
+              ].map(({ label, href }) => (
+                <Link key={href} href={href} style={{ display: "block", color: "rgba(255,255,255,0.75)", fontSize: 14, textDecoration: "none", marginBottom: 10, fontWeight: 400 }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = "#FF6B00" }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = "rgba(255,255,255,0.75)" }}>
+                  {label}
+                </Link>
+              ))}
+            </div>
+            <div>
+              <p style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "rgba(255,255,255,0.4)", marginBottom: 16 }}>Entregadores</p>
+              {[
+                { label: "Quero ser motoboy", href: "/cadastro-motoboy" },
+              ].map(({ label, href }) => (
+                <Link key={href} href={href} style={{ display: "block", color: "rgba(255,255,255,0.75)", fontSize: 14, textDecoration: "none", marginBottom: 10, fontWeight: 400 }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = "#FF6B00" }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = "rgba(255,255,255,0.75)" }}>
+                  {label}
+                </Link>
+              ))}
+            </div>
+            <div>
+              <p style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "rgba(255,255,255,0.4)", marginBottom: 16 }}>Redes sociais</p>
+              <a href="https://instagram.com/ChegoAragyn" target="_blank" rel="noopener noreferrer"
+                style={{ display: "block", color: "rgba(255,255,255,0.75)", fontSize: 14, textDecoration: "none", marginBottom: 10 }}
+                onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = "#FF6B00" }}
+                onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = "rgba(255,255,255,0.75)" }}>
+                Instagram @ChegoAragyn
+              </a>
+            </div>
+            <div>
+              <p style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "rgba(255,255,255,0.4)", marginBottom: 16 }}>Localização</p>
+              <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 14, lineHeight: 1.6 }}>Aragoiânia, Goiás</p>
+            </div>
+          </div>
+
+          {/* Bottom bar */}
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 24, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+            <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13 }}>© 2026 Chegô Delivery · Todos os direitos reservados</p>
+            <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 12 }}>Feito com ❤️ em Aragoiânia</p>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }
 
-/* ── LOJA CARD (light mode) ────────────────────────── */
+/* ── LOJA CARD ────────────────────────────────────────── */
 function LojaCard({ loja }: { loja: Loja }) {
   const c = CAT_COLORS[loja.categoria] ?? CAT_COLORS["Outros"]
+  const CAT_ICONS_LOCAL: Record<string, string> = {
+    Restaurante: "🍔", Mercadinho: "🛒", "Farmácia": "💊", Outros: "📦",
+  }
   return (
     <Link href={`/restaurante/${loja.id}`} style={{ textDecoration: "none" }}>
       <div
         style={{
-          background: "white", borderRadius: 20, overflow: "hidden", cursor: "pointer",
-          boxShadow: "0 2px 12px rgba(0,0,0,0.08)",
-          transition: "transform 0.15s, box-shadow 0.15s",
-          opacity: loja.aberto ? 1 : 0.6,
+          background: "white", borderRadius: 16, overflow: "hidden", cursor: "pointer",
+          boxShadow: "0 4px 20px rgba(0,0,0,0.09)",
+          transition: "transform 0.18s, box-shadow 0.18s",
+          opacity: loja.aberto ? 1 : 0.65,
         }}
         onMouseEnter={e => {
           if (loja.aberto) {
-            e.currentTarget.style.transform = "translateY(-4px)"
-            e.currentTarget.style.boxShadow = "0 12px 32px rgba(0,0,0,0.14)"
+            e.currentTarget.style.transform = "translateY(-5px)"
+            e.currentTarget.style.boxShadow = "0 12px 36px rgba(0,0,0,0.15)"
           }
         }}
         onMouseLeave={e => {
           e.currentTarget.style.transform = ""
-          e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.08)"
+          e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,0.09)"
         }}>
 
         {/* Banner */}
         {loja.logo_url ? (
-          <div style={{ height: 140, position: "relative", overflow: "hidden" }}>
+          <div style={{ height: 160, position: "relative", overflow: "hidden" }}>
             <img src={loja.logo_url} alt={loja.nome} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             <span style={{
-              position: "absolute", top: 10, right: 10, fontSize: 11, fontWeight: 700,
-              padding: "4px 10px", borderRadius: 999,
-              background: loja.aberto ? "#22c55e" : "rgba(0,0,0,0.45)",
-              color: "white", backdropFilter: "blur(4px)",
+              position: "absolute", top: 10, right: 10, fontSize: 12, fontWeight: 700,
+              padding: "4px 12px", borderRadius: 20,
+              background: loja.aberto ? "#22C55E" : "rgba(0,0,0,0.5)",
+              color: "white",
             }}>
               {loja.aberto ? "● Aberto" : "Fechado"}
             </span>
           </div>
         ) : (
           <div style={{
-            height: 120, display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 52, position: "relative",
-            background: c.bg,
+            height: 160, display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 56, position: "relative",
+            background: loja.aberto
+              ? `linear-gradient(135deg, ${c.accent}, ${c.accent}cc)`
+              : `linear-gradient(135deg, #d1d5db, #9ca3af)`,
           }}>
-            {CAT_ICONS[loja.categoria]}
+            {CAT_ICONS_LOCAL[loja.categoria]}
             <span style={{
-              position: "absolute", top: 10, right: 10, fontSize: 11, fontWeight: 700,
-              padding: "4px 10px", borderRadius: 999,
-              background: loja.aberto ? "#22c55e" : "#e5e5e5",
-              color: loja.aberto ? "white" : "#999",
+              position: "absolute", top: 10, right: 10, fontSize: 12, fontWeight: 700,
+              padding: "4px 12px", borderRadius: 20,
+              background: loja.aberto ? "#22C55E" : "rgba(0,0,0,0.3)",
+              color: "white",
             }}>
               {loja.aberto ? "● Aberto" : "Fechado"}
             </span>
@@ -529,23 +683,31 @@ function LojaCard({ loja }: { loja: Loja }) {
         )}
 
         <div style={{ padding: "14px 16px 18px" }}>
-          <p style={{ color: "#1a1a1a", fontWeight: 800, fontSize: 15, lineHeight: 1.2, marginBottom: 4 }}>{loja.nome}</p>
+          <p style={{ color: "#1a1a1a", fontWeight: 700, fontSize: 16, lineHeight: 1.2, marginBottom: 4 }}>{loja.nome}</p>
           {loja.descricao && (
             <p style={{
-              color: "#888", fontSize: 12, marginBottom: 10, lineHeight: 1.4,
+              color: "#6B7280", fontSize: 13, marginBottom: 10, lineHeight: 1.4,
               display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
             }}>
               {loja.descricao}
             </p>
           )}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}>
-            <span style={{ color: "#888" }}>🕐 {loja.tempo_min}–{loja.tempo_max} min</span>
-            <span style={{ color: "#ddd" }}>·</span>
-            <span style={{ color: loja.taxa_entrega === 0 ? "#16a34a" : "#888", fontWeight: loja.taxa_entrega === 0 ? 700 : 400 }}>
-              {loja.taxa_entrega === 0 ? "🎉 Grátis" : `R$ ${loja.taxa_entrega.toFixed(2)}`}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
+            <span style={{ color: "#6B7280", display: "flex", alignItems: "center", gap: 4 }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              {loja.tempo_min}–{loja.tempo_max} min
+            </span>
+            <span style={{ color: "#e5e7eb" }}>·</span>
+            <span style={{ color: loja.taxa_entrega === 0 ? "#16a34a" : "#6B7280", fontWeight: loja.taxa_entrega === 0 ? 700 : 400, display: "flex", alignItems: "center", gap: 4 }}>
+              {loja.taxa_entrega === 0 ? (
+                <>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                  Grátis
+                </>
+              ) : `R$ ${loja.taxa_entrega.toFixed(2)}`}
             </span>
             <span style={{
-              marginLeft: "auto", fontSize: 11, fontWeight: 700, padding: "3px 9px", borderRadius: 999,
+              marginLeft: "auto", fontSize: 12, fontWeight: 600, padding: "4px 10px", borderRadius: 8,
               background: c.bg, color: c.text,
             }}>
               {loja.categoria}

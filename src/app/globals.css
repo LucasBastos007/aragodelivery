@@ -1,6 +1,39 @@
 @import "tailwindcss";
 
-* { box-sizing: border-box; }
+:root {
+  --primary: #FF6B00;
+  --primary-light: #FF8C38;
+  --primary-dark: #E55A00;
+  --secondary: #22C55E;
+  --dark: #1a1a1a;
+  --gray: #6B7280;
+  --light: #F9FAFB;
+  --white: #ffffff;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.08);
+  --shadow-md: 0 4px 20px rgba(0,0,0,0.12);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.15);
+  --shadow-primary: 0 6px 20px rgba(255,107,0,0.35);
+}
+
+* {
+  box-sizing: border-box;
+  transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (max-width: 768px) {
+  .hero-deco-img { display: none !important; }
+  .cat-card-deco  { display: none !important; }
+  .footer-cols    { grid-template-columns: 1fr 1fr !important; }
+  .cat-chips-wrap { flex-wrap: nowrap !important; overflow-x: auto; padding-bottom: 4px; }
+  .cat-chips-wrap::-webkit-scrollbar { display: none; }
+}
 
 @keyframes marquee {
   from { transform: translateX(0) }
