@@ -81,8 +81,9 @@ export default function Home() {
   const [filtro,     setFiltro]     = useState<string | null>(null)
   const [busca,      setBusca]      = useState("")
   const [splashVis,  setSplashVis]  = useState(true)
-  const [logoVis,    setLogoVis]    = useState(false)
   const [splashFade, setSplashFade] = useState(false)
+  // step: 0=nenhum 1=hamburguer 2=carrinho 3=farmácia 4=logo
+  const [step, setStep] = useState(0)
 
   const isMobile    = useIsMobile()
   const primeiroNome = perfil?.nome?.split(" ")[0] ?? user?.user_metadata?.name?.split(" ")[0] ?? null
@@ -91,13 +92,20 @@ export default function Home() {
     if (typeof window !== "undefined" && !localStorage.getItem("arago_onboarded")) {
       router.replace("/onboarding"); return
     }
-    const t1 = setTimeout(() => { setLogoVis(true); playSound() }, 300)
-    const t2 = setTimeout(() => setSplashFade(true), 2000)
-    const t3 = setTimeout(() => setSplashVis(false), 2600)
+    // sequência: cada ícone entra e sai antes do próximo
+    const t1  = setTimeout(() => setStep(1),                          150)   // hamburguer entra
+    const t2  = setTimeout(() => setStep(0),                          950)   // hamburguer sai
+    const t3  = setTimeout(() => setStep(2),                         1200)   // carrinho entra
+    const t4  = setTimeout(() => setStep(0),                         2000)   // carrinho sai
+    const t5  = setTimeout(() => setStep(3),                         2250)   // farmácia entra
+    const t6  = setTimeout(() => setStep(0),                         3050)   // farmácia sai
+    const t7  = setTimeout(() => { setStep(4); playSound() },        3300)   // logo entra + som
+    const t8  = setTimeout(() => setSplashFade(true),                4800)   // fade começa
+    const t9  = setTimeout(() => setSplashVis(false),                5400)   // desmonta
     supabase.from("lojas").select("*").eq("status", "ativo")
       .order("aberto", { ascending: false }).order("nome")
       .then(({ data }) => { setLojas((data as Loja[]) ?? []); setLoading(false) })
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }
+    return () => [t1,t2,t3,t4,t5,t6,t7,t8,t9].forEach(clearTimeout)
   }, [])
 
   function scrollToLojas() {
@@ -125,40 +133,111 @@ export default function Home() {
           position: "fixed", inset: 0, zIndex: 9999, background: "#0a0a0a",
           display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
           opacity: splashFade ? 0 : 1, transition: "opacity 0.6s ease",
-          pointerEvents: splashFade ? "none" : "all", perspective: "800px",
+          pointerEvents: splashFade ? "none" : "all",
         }}>
+          {/* Partículas de fundo */}
           <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
             {Array.from({ length: 12 }).map((_, i) => (
               <div key={i} style={{
-                position: "absolute", width: 6, height: 6, borderRadius: "50%",
-                background: i % 3 === 0 ? "#FF6B00" : i % 3 === 1 ? "rgba(255,107,0,0.4)" : "rgba(255,255,255,0.08)",
+                position: "absolute", width: 5, height: 5, borderRadius: "50%",
+                background: i % 3 === 0 ? "#FF6B00" : i % 3 === 1 ? "rgba(255,107,0,0.35)" : "rgba(255,255,255,0.06)",
                 left: `${(i * 8.3 + 5) % 100}%`, top: `${(i * 13 + 10) % 100}%`,
-                animation: `float ${3 + (i % 3)}s ease-in-out ${i * 0.3}s infinite alternate`,
-                opacity: logoVis ? 1 : 0,
+                animation: `splashFloat ${3 + (i % 3)}s ease-in-out ${i * 0.3}s infinite alternate`,
+                opacity: step > 0 ? 1 : 0, transition: "opacity 0.5s",
               }} />
             ))}
           </div>
+
+          {/* Anel de glow que pulsa enquanto os ícones aparecem */}
           <div style={{
-            transform: logoVis ? "rotateY(0deg) scale(1)" : "rotateY(-90deg) scale(0.5)",
-            opacity: logoVis ? 1 : 0,
-            transition: "transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.6s ease",
-            transformStyle: "preserve-3d",
-            filter: logoVis ? "drop-shadow(0 0 50px rgba(255,107,0,0.6))" : "none",
-          }}>
-            <img src="/logo-chego.jpg" alt="Chegô" style={{
-              width: 200, height: 200, borderRadius: 40, objectFit: "contain",
-              border: "2px solid rgba(255,107,0,0.3)",
-            }} />
+            position: "absolute",
+            width: 280, height: 280, borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(255,107,0,0.12) 0%, transparent 70%)",
+            opacity: step > 0 && step < 4 ? 1 : 0,
+            transform: step > 0 && step < 4 ? "scale(1)" : "scale(0.6)",
+            transition: "opacity 0.4s, transform 0.4s",
+          }} />
+
+          {/* Container dos ícones — todos empilhados, só o ativo visível */}
+          <div style={{ position: "relative", width: 200, height: 200, perspective: "600px" }}>
+
+            {/* 1 — Hamburguer */}
+            <img
+              src="https://cdn-icons-png.flaticon.com/512/3075/3075977.png"
+              alt="Restaurantes"
+              style={{
+                position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain",
+                opacity: step === 1 ? 1 : 0,
+                transform: step === 1 ? "scale(1) translateY(0px)" : step < 1 ? "scale(0.6) translateY(32px)" : "scale(0.6) translateY(-32px)",
+                transition: "opacity 0.4s ease, transform 0.4s ease",
+                filter: "drop-shadow(0 0 32px rgba(249,115,22,0.6))",
+              }}
+            />
+
+            {/* 2 — Carrinho */}
+            <img
+              src="https://cdn-icons-png.flaticon.com/512/3081/3081559.png"
+              alt="Mercados"
+              style={{
+                position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain",
+                opacity: step === 2 ? 1 : 0,
+                transform: step === 2 ? "scale(1) translateY(0px)" : step < 2 ? "scale(0.6) translateY(32px)" : "scale(0.6) translateY(-32px)",
+                transition: "opacity 0.4s ease, transform 0.4s ease",
+                filter: "drop-shadow(0 0 32px rgba(34,197,94,0.6))",
+              }}
+            />
+
+            {/* 3 — Farmácia */}
+            <img
+              src="https://cdn-icons-png.flaticon.com/512/2913/2913133.png"
+              alt="Farmácias"
+              style={{
+                position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain",
+                opacity: step === 3 ? 1 : 0,
+                transform: step === 3 ? "scale(1) translateY(0px)" : step < 3 ? "scale(0.6) translateY(32px)" : "scale(0.6) translateY(-32px)",
+                transition: "opacity 0.4s ease, transform 0.4s ease",
+                filter: "drop-shadow(0 0 32px rgba(59,130,246,0.6))",
+              }}
+            />
+
+            {/* 4 — Logo Chegô (3D flip) */}
+            <div style={{
+              position: "absolute", inset: 0,
+              transform: step === 4 ? "rotateY(0deg) scale(1)" : "rotateY(-90deg) scale(0.5)",
+              opacity: step === 4 ? 1 : 0,
+              transition: "transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.5s ease",
+              transformStyle: "preserve-3d",
+              filter: step === 4 ? "drop-shadow(0 0 48px rgba(255,107,0,0.65))" : "none",
+            }}>
+              <img src="/logo-chego.jpg" alt="Chegô" style={{
+                width: "100%", height: "100%", borderRadius: 40, objectFit: "contain",
+                border: "2px solid rgba(255,107,0,0.3)",
+              }} />
+            </div>
           </div>
+
+          {/* Label que muda a cada step */}
           <p style={{
-            color: "rgba(255,255,255,0.35)", fontSize: 13, fontWeight: 700, marginTop: 24,
-            opacity: logoVis ? 1 : 0, transform: logoVis ? "translateY(0)" : "translateY(20px)",
-            transition: "all 0.6s ease 0.4s", letterSpacing: 3, textTransform: "uppercase",
-          }}>Aragoiânia · GO</p>
+            marginTop: 32, fontSize: 13, fontWeight: 700, letterSpacing: 3,
+            textTransform: "uppercase",
+            opacity: step > 0 ? 1 : 0,
+            transform: step > 0 ? "translateY(0px)" : "translateY(12px)",
+            transition: "opacity 0.35s ease, transform 0.35s ease",
+            color: step === 1 ? "#f97316"
+                 : step === 2 ? "#22c55e"
+                 : step === 3 ? "#60a5fa"
+                 : "rgba(255,255,255,0.45)",
+          }}>
+            {step === 1 ? "Restaurantes"
+           : step === 2 ? "Mercados"
+           : step === 3 ? "Farmácias"
+           : "Aragoiânia · GO"}
+          </p>
+
           <style>{`
-            @keyframes float {
+            @keyframes splashFloat {
               from { transform: translateY(0px) rotate(0deg); }
-              to   { transform: translateY(-20px) rotate(180deg); }
+              to   { transform: translateY(-18px) rotate(180deg); }
             }
           `}</style>
         </div>
