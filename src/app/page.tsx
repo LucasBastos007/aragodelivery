@@ -9,6 +9,30 @@ import { useClienteAuth } from "@/lib/auth-cliente"
 import { useIsMobile } from "@/lib/use-mobile"
 import type { Loja, CategoriaLoja } from "@/types"
 
+/* Remove fundo preto do JPG via canvas — sem dependências externas */
+function LogoClean({ height, style }: { height: number; style?: React.CSSProperties }) {
+  const [src, setSrc] = useState("/logo-chego.jpg")
+  useEffect(() => {
+    const img = new Image()
+    img.src = "/logo-chego.jpg"
+    img.onload = () => {
+      const canvas = document.createElement("canvas")
+      canvas.width = img.naturalWidth
+      canvas.height = img.naturalHeight
+      const ctx = canvas.getContext("2d")!
+      ctx.drawImage(img, 0, 0)
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+      const px = imageData.data
+      for (let i = 0; i < px.length; i += 4) {
+        if (px[i] < 55 && px[i + 1] < 55 && px[i + 2] < 55) px[i + 3] = 0
+      }
+      ctx.putImageData(imageData, 0, 0)
+      setSrc(canvas.toDataURL("image/png"))
+    }
+  }, [])
+  return <img src={src} alt="Chegô" style={{ height, objectFit: "contain", ...style }} />
+}
+
 const CAT_ICONS: Record<string, string> = {
   Restaurante: "🍔", Mercadinho: "🛒", "Farmácia": "💊", Outros: "📦",
 }
@@ -17,6 +41,12 @@ const CAT_IMG: Record<string, string> = {
   Mercadinho:  "https://cdn-icons-png.flaticon.com/512/3081/3081559.png",
   "Farmácia":  "https://cdn-icons-png.flaticon.com/512/2913/2913133.png",
   Outros:      "https://cdn-icons-png.flaticon.com/512/869/869869.png",
+}
+const CAT_DISPLAY: Record<string, string> = {
+  Restaurante: "Restaurante",
+  Mercadinho:  "Mercados",
+  "Farmácia":  "Farmácia",
+  Outros:      "Outros",
 }
 const CAT_COLORS: Record<string, { bg: string; text: string; accent: string }> = {
   Restaurante: { bg: "#fff4ee", text: "#c2410c", accent: "#FF6B00" },
@@ -145,10 +175,10 @@ export default function Home() {
       }}>
         <div style={{
           maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 16px" : "0 24px",
-          height: 68, display: "flex", alignItems: "center", gap: 8,
+          height: isMobile ? 72 : 80, display: "flex", alignItems: "center", gap: 8,
         }}>
           <Link href="/" style={{ textDecoration: "none", flexShrink: 0, marginRight: isMobile ? 8 : 20 }}>
-            <img src="/logo-chego.jpg" alt="Chegô" style={{ height: isMobile ? 38 : 44, width: "auto", borderRadius: 10, objectFit: "contain" }} />
+            <LogoClean height={isMobile ? 48 : 64} />
           </Link>
 
           {/* Nav links — hidden on mobile */}
@@ -156,7 +186,7 @@ export default function Home() {
             <div style={{ display: "flex", gap: 4, flex: 1 }}>
               {[
                 { label: "Restaurantes", cat: "Restaurante" },
-                { label: "Mercadinho",   cat: "Mercadinho"  },
+                { label: "Mercados",     cat: "Mercadinho"  },
                 { label: "Farmácias",    cat: "Farmácia"    },
               ].map(({ label, cat }) => (
                 <button key={cat} onClick={() => selectCat(cat)}
@@ -232,30 +262,16 @@ export default function Home() {
 
       {/* ── HERO ───────────────────────────────────────────── */}
       <div style={{
-        background: "linear-gradient(135deg, #FF6B00 0%, #FF7A1A 40%, #FF9240 70%, #FFB347 100%)",
-        minHeight: isMobile ? 320 : 440,
+        background: "linear-gradient(135deg, #B91C1C 0%, #DC2626 40%, #EF4444 75%, #F87171 100%)",
+        minHeight: isMobile ? 300 : 420,
         display: "flex", alignItems: "center", justifyContent: "center",
         position: "relative", overflow: "hidden",
         padding: isMobile ? "40px 16px" : "56px 24px",
       }}>
-        {/* Moto decorativa — desktop only */}
-        {!isMobile && (
-          <img
-            className="hero-deco-img"
-            src="https://images.unsplash.com/photo-1558981806-ec527fa84c39?w=400&q=80"
-            alt=""
-            aria-hidden
-            style={{
-              position: "absolute", right: "5%", bottom: 0,
-              height: "85%", objectFit: "contain", opacity: 0.9,
-              filter: "drop-shadow(0 8px 24px rgba(0,0,0,0.2))",
-              pointerEvents: "none",
-            }}
-          />
-        )}
         {/* Círculos decorativos de fundo */}
         <div style={{ position: "absolute", top: -80, right: -80, width: 320, height: 320, borderRadius: "50%", background: "rgba(255,255,255,0.06)", pointerEvents: "none" }} />
         <div style={{ position: "absolute", bottom: -60, left: -60, width: 240, height: 240, borderRadius: "50%", background: "rgba(255,255,255,0.04)", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", top: "50%", right: "8%", transform: "translateY(-50%)", width: 200, height: 200, borderRadius: "50%", background: "rgba(255,255,255,0.04)", pointerEvents: "none" }} />
 
         <div style={{ maxWidth: 640, width: "100%", textAlign: "center", position: "relative", zIndex: 1 }}>
           <h1 style={{
@@ -340,7 +356,7 @@ export default function Home() {
                     }
                   }}>
                     <img src={CAT_IMG[cat]} alt={cat} style={{ width: 24, height: 24, objectFit: "contain", filter: ativo ? "brightness(0) invert(1)" : "none" }} />
-                    {cat}
+                    {CAT_DISPLAY[cat] ?? cat}
                   </button>
                 )
               })}
@@ -377,91 +393,82 @@ export default function Home() {
 
               {/* Restaurante */}
               <button onClick={() => selectCat("Restaurante")} style={{
-                position: "relative", borderRadius: 20, overflow: "visible",
-                minHeight: isMobile ? 160 : 200, cursor: "pointer", border: "none", textAlign: "left",
+                position: "relative", borderRadius: 20, overflow: "hidden",
+                height: isMobile ? 160 : 200, cursor: "pointer", border: "none", textAlign: "left",
                 boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
-                padding: 0,
+                background: "linear-gradient(135deg, #FF6B00 0%, #E55A00 100%)",
+                padding: 0, display: "block", width: "100%",
               }}
-              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-6px)"; e.currentTarget.style.boxShadow = "0 16px 48px rgba(0,0,0,0.2)" }}
+              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px)"; e.currentTarget.style.boxShadow = "0 16px 40px rgba(255,107,0,0.35)" }}
               onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = "0 8px 32px rgba(0,0,0,0.15)" }}>
-                {/* BG layer */}
-                <div style={{
-                  position: "absolute", inset: 0, borderRadius: 20, overflow: "hidden",
-                  background: "linear-gradient(135deg, #FF6B00 0%, #E55A00 100%)",
-                }} />
+                {/* Foto lateral direita (desktop) — com overlay para não cobrir texto */}
+                {!isMobile && (
+                  <>
+                    <div style={{
+                      position: "absolute", right: 0, top: 0, bottom: 0, width: "45%",
+                      backgroundImage: "url(https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400&q=85)",
+                      backgroundSize: "cover", backgroundPosition: "center",
+                    }} />
+                    <div style={{
+                      position: "absolute", right: 0, top: 0, bottom: 0, width: "60%",
+                      background: "linear-gradient(to right, #E55A00 0%, #FF6B0000 100%)",
+                    }} />
+                  </>
+                )}
                 {/* Content */}
-                <div style={{ position: "relative", padding: isMobile ? "28px 24px" : "30px 32px", display: "flex", flexDirection: "column", justifyContent: "space-between", height: isMobile ? 160 : 200 }}>
+                <div style={{ position: "relative", zIndex: 1, padding: isMobile ? "28px 24px" : "30px 32px", display: "flex", flexDirection: "column", justifyContent: "space-between", height: "100%", width: isMobile ? "100%" : "65%" }}>
                   <div>
                     <p style={{ color: "white", fontWeight: 900, fontSize: 26, lineHeight: 1, marginBottom: 8 }}>Restaurantes</p>
-                    <p style={{ color: "rgba(255,255,255,0.75)", fontSize: 14 }}>Comida pronta na sua porta</p>
+                    <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 14 }}>Comida pronta na sua porta</p>
                   </div>
                   <span style={{
                     display: "inline-flex", width: "fit-content",
                     padding: "10px 20px", borderRadius: 12,
-                    background: "rgba(0,0,0,0.3)", backdropFilter: "blur(8px)",
+                    background: "rgba(0,0,0,0.25)", backdropFilter: "blur(8px)",
                     color: "white", fontWeight: 700, fontSize: 14,
-                    border: "none",
                   }}>
                     Ver opções ›
                   </span>
                 </div>
-                {/* Decorative photo */}
-                <img
-                  className="cat-card-deco"
-                  src="https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400&q=85"
-                  alt=""
-                  aria-hidden
-                  style={{
-                    position: "absolute", right: -10, bottom: -10,
-                    height: "130%", objectFit: "contain",
-                    filter: "drop-shadow(0 8px 20px rgba(0,0,0,0.25))",
-                    pointerEvents: "none",
-                    display: isMobile ? "none" : undefined,
-                  }}
-                />
               </button>
 
-              {/* Mercadinho */}
+              {/* Mercados */}
               <button onClick={() => selectCat("Mercadinho")} style={{
-                position: "relative", borderRadius: 20, overflow: "visible",
-                minHeight: isMobile ? 160 : 200, cursor: "pointer", border: "none", textAlign: "left",
+                position: "relative", borderRadius: 20, overflow: "hidden",
+                height: isMobile ? 160 : 200, cursor: "pointer", border: "none", textAlign: "left",
                 boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
-                padding: 0,
+                background: "linear-gradient(135deg, #16a34a 0%, #15803d 100%)",
+                padding: 0, display: "block", width: "100%",
               }}
-              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-6px)"; e.currentTarget.style.boxShadow = "0 16px 48px rgba(0,0,0,0.2)" }}
+              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px)"; e.currentTarget.style.boxShadow = "0 16px 40px rgba(34,197,94,0.35)" }}
               onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = "0 8px 32px rgba(0,0,0,0.15)" }}>
-                <div style={{
-                  position: "absolute", inset: 0, borderRadius: 20, overflow: "hidden",
-                  background: "linear-gradient(135deg, #22C55E 0%, #16a34a 100%)",
-                }} />
-                <div style={{ position: "relative", padding: isMobile ? "28px 24px" : "30px 32px", display: "flex", flexDirection: "column", justifyContent: "space-between", height: isMobile ? 160 : 200 }}>
+                {!isMobile && (
+                  <>
+                    <div style={{
+                      position: "absolute", right: 0, top: 0, bottom: 0, width: "45%",
+                      backgroundImage: "url(https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=85)",
+                      backgroundSize: "cover", backgroundPosition: "center",
+                    }} />
+                    <div style={{
+                      position: "absolute", right: 0, top: 0, bottom: 0, width: "60%",
+                      background: "linear-gradient(to right, #15803d 0%, #15803d00 100%)",
+                    }} />
+                  </>
+                )}
+                <div style={{ position: "relative", zIndex: 1, padding: isMobile ? "28px 24px" : "30px 32px", display: "flex", flexDirection: "column", justifyContent: "space-between", height: "100%", width: isMobile ? "100%" : "65%" }}>
                   <div>
-                    <p style={{ color: "white", fontWeight: 900, fontSize: 26, lineHeight: 1, marginBottom: 8 }}>Mercadinho</p>
-                    <p style={{ color: "rgba(255,255,255,0.75)", fontSize: 14 }}>Produtos do dia a dia sem sair</p>
+                    <p style={{ color: "white", fontWeight: 900, fontSize: 26, lineHeight: 1, marginBottom: 8 }}>Mercados</p>
+                    <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 14 }}>Produtos do dia a dia sem sair</p>
                   </div>
                   <span style={{
                     display: "inline-flex", width: "fit-content",
                     padding: "10px 20px", borderRadius: 12,
-                    background: "rgba(0,0,0,0.3)", backdropFilter: "blur(8px)",
+                    background: "rgba(0,0,0,0.25)", backdropFilter: "blur(8px)",
                     color: "white", fontWeight: 700, fontSize: 14,
-                    border: "none",
                   }}>
                     Ver lojas ›
                   </span>
                 </div>
-                <img
-                  className="cat-card-deco"
-                  src="https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&q=85"
-                  alt=""
-                  aria-hidden
-                  style={{
-                    position: "absolute", right: -10, bottom: -10,
-                    height: "130%", objectFit: "contain",
-                    filter: "drop-shadow(0 8px 20px rgba(0,0,0,0.25))",
-                    pointerEvents: "none",
-                    display: isMobile ? "none" : undefined,
-                  }}
-                />
               </button>
             </div>
           </div>
