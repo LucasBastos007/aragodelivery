@@ -74,7 +74,7 @@ export default function Home() {
   const router   = useRouter()
   const storeRef = useRef<HTMLDivElement>(null)
   const { count, total } = useCart()
-  const { user, perfil }  = useClienteAuth()
+  const { user, perfil, logout } = useClienteAuth()
 
   const [lojas,      setLojas]      = useState<Loja[]>([])
   const [loading,    setLoading]    = useState(true)
@@ -82,6 +82,7 @@ export default function Home() {
   const [busca,      setBusca]      = useState("")
   const [splashVis,  setSplashVis]  = useState(true)
   const [splashFade, setSplashFade] = useState(false)
+  const [menuAberto, setMenuAberto] = useState(false)
   // step: 0=nenhum 1=hamburguer 2=carrinho 3=farmácia 4=logo
   const [step, setStep] = useState(0)
 
@@ -289,8 +290,8 @@ export default function Home() {
               <Link href="/carrinho" style={{
                 display: "flex", alignItems: "center", gap: 6,
                 padding: isMobile ? "8px 12px" : "8px 16px", borderRadius: 12,
-                background: "#FF6B00", color: "white", fontWeight: 700, fontSize: 13, textDecoration: "none",
-                boxShadow: "0 4px 12px rgba(255,107,0,0.3)",
+                background: "#DC2626", color: "white", fontWeight: 700, fontSize: 13, textDecoration: "none",
+                boxShadow: "0 4px 12px rgba(220,38,38,0.3)",
               }}>
                 🛒 {count}{!isMobile && ` · R$ ${total.toFixed(2)}`}
               </Link>
@@ -298,43 +299,99 @@ export default function Home() {
             {!user && !isMobile && (
               <Link href="/cadastro-loja" style={{
                 padding: "8px 16px", borderRadius: 12,
-                color: "#FF6B00", fontWeight: 600, fontSize: 14, textDecoration: "none",
+                color: "#DC2626", fontWeight: 600, fontSize: 14, textDecoration: "none",
               }}>
                 Anuncie sua loja
               </Link>
             )}
-            <Link href={user ? "/cliente/perfil" : "/cliente/entrar"}
-              style={{
+
+            {/* Usuário logado — botão + dropdown */}
+            {user ? (
+              <div style={{ position: "relative" }}
+                onMouseEnter={() => setMenuAberto(true)}
+                onMouseLeave={() => setMenuAberto(false)}>
+
+                <button onClick={() => setMenuAberto(v => !v)} style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  padding: "8px 14px", borderRadius: 12, cursor: "pointer",
+                  background: "#FFF3E0", border: "1px solid rgba(220,38,38,0.15)",
+                  color: "#DC2626", fontWeight: 600, fontSize: 13,
+                }}>
+                  {user.user_metadata?.avatar_url
+                    ? <img src={user.user_metadata.avatar_url} alt="" style={{ width: 26, height: 26, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                    : <span style={{ fontSize: 18, lineHeight: 1 }}>👤</span>}
+                  {!isMobile && <span>Minha conta</span>}
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <polyline points={menuAberto ? "18 15 12 9 6 15" : "6 9 12 15 18 9"} />
+                  </svg>
+                </button>
+
+                {/* Dropdown */}
+                <div style={{
+                  position: "absolute", top: "calc(100% + 6px)", right: 0,
+                  background: "white", borderRadius: 16,
+                  boxShadow: "0 12px 40px rgba(0,0,0,0.14)",
+                  border: "1px solid #f0f0f0",
+                  minWidth: 230, overflow: "hidden", zIndex: 200,
+                  opacity: menuAberto ? 1 : 0,
+                  transform: menuAberto ? "translateY(0) scale(1)" : "translateY(-8px) scale(0.97)",
+                  pointerEvents: menuAberto ? "all" : "none",
+                  transition: "opacity 0.18s ease, transform 0.18s ease",
+                }}>
+                  {/* Cabeçalho com avatar */}
+                  <div style={{ padding: "14px 16px", background: "#FFF8F5", borderBottom: "1px solid #f5ebe8", display: "flex", gap: 12, alignItems: "center" }}>
+                    {user.user_metadata?.avatar_url
+                      ? <img src={user.user_metadata.avatar_url} alt="" style={{ width: 42, height: 42, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                      : <div style={{ width: 42, height: 42, borderRadius: "50%", background: "#FFF0EB", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}>👤</div>}
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ fontWeight: 700, fontSize: 14, color: "#1a1a1a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {primeiroNome ?? "Meu perfil"}
+                      </p>
+                      <p style={{ fontSize: 12, color: "#9ca3af", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user.email}</p>
+                    </div>
+                  </div>
+
+                  {/* Itens do menu */}
+                  {[
+                    { icon: "✏️", label: "Alterar dados",          href: "/cliente/perfil" },
+                    { icon: "🖼️", label: "Ver meu perfil",          href: "/cliente/perfil" },
+                    { icon: "⚙️", label: "Configurações",           href: "/cliente/perfil" },
+                    { icon: "📦", label: "Histórico de pedidos",    href: "/cliente/perfil" },
+                    { icon: "🎁", label: "Convide e ganhe",         href: "/parceiros" },
+                    { icon: "🔔", label: "Notificações",            href: "/cliente/perfil" },
+                  ].map(({ icon, label, href }) => (
+                    <Link key={label} href={href}
+                      onClick={() => setMenuAberto(false)}
+                      style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 16px", textDecoration: "none", color: "#374151", fontSize: 14, fontWeight: 500, borderBottom: "1px solid #fafafa" }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = "#FFF8F5"; (e.currentTarget as HTMLAnchorElement).style.color = "#DC2626" }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = ""; (e.currentTarget as HTMLAnchorElement).style.color = "#374151" }}>
+                      <span style={{ fontSize: 16, flexShrink: 0 }}>{icon}</span>
+                      {label}
+                    </Link>
+                  ))}
+
+                  <button
+                    onClick={async () => { setMenuAberto(false); await logout(); router.push("/") }}
+                    style={{ width: "100%", padding: "12px 16px", border: "none", background: "none", textAlign: "left", color: "#ef4444", fontSize: 14, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}
+                    onMouseEnter={e => { e.currentTarget.style.background = "#fff5f5" }}
+                    onMouseLeave={e => { e.currentTarget.style.background = "" }}>
+                    <span style={{ fontSize: 16 }}>🚪</span> Sair da conta
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <Link href="/cliente/entrar" style={{
                 display: "flex", alignItems: "center", gap: 7,
                 padding: isMobile ? "8px 14px" : "8px 18px", borderRadius: 12,
-                background: user ? "#FFF3E0" : "#FF6B00",
-                border: user ? "1px solid rgba(255,107,0,0.2)" : "none",
-                color: user ? "#FF6B00" : "white", fontWeight: 600, fontSize: 13, textDecoration: "none",
-                boxShadow: user ? "none" : "0 4px 12px rgba(255,107,0,0.35)",
+                background: "#DC2626", border: "none",
+                color: "white", fontWeight: 600, fontSize: 13, textDecoration: "none",
+                boxShadow: "0 4px 12px rgba(220,38,38,0.35)",
               }}
-              onMouseEnter={e => {
-                if (!user) {
-                  (e.currentTarget as HTMLAnchorElement).style.background = "#E55A00"
-                  ;(e.currentTarget as HTMLAnchorElement).style.transform = "translateY(-1px)"
-                  ;(e.currentTarget as HTMLAnchorElement).style.boxShadow = "0 6px 16px rgba(255,107,0,0.45)"
-                }
-              }}
-              onMouseLeave={e => {
-                if (!user) {
-                  (e.currentTarget as HTMLAnchorElement).style.background = "#FF6B00"
-                  ;(e.currentTarget as HTMLAnchorElement).style.transform = ""
-                  ;(e.currentTarget as HTMLAnchorElement).style.boxShadow = "0 4px 12px rgba(255,107,0,0.35)"
-                }
-              }}>
-              {user ? (
-                <>
-                  {user.user_metadata?.avatar_url
-                    ? <img src={user.user_metadata.avatar_url} alt="" style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover" }} />
-                    : "👤"}
-                  {!isMobile && (primeiroNome ?? "Minha conta")}
-                </>
-              ) : "Entrar"}
-            </Link>
+              onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = "#B91C1C"; (e.currentTarget as HTMLAnchorElement).style.transform = "translateY(-1px)" }}
+              onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = "#DC2626"; (e.currentTarget as HTMLAnchorElement).style.transform = "" }}>
+                Entrar
+              </Link>
+            )}
           </div>
         </div>
       </nav>
@@ -388,11 +445,11 @@ export default function Home() {
             </div>
             <button onClick={scrollToLojas} style={{
               height: 60, padding: "0 28px", border: "none",
-              background: "#FF6B00", color: "white",
+              background: "#991B1B", color: "white",
               fontWeight: 700, fontSize: 16, cursor: "pointer", flexShrink: 0,
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = "#E55A00"; e.currentTarget.style.boxShadow = "inset -4px 0 16px rgba(0,0,0,0.1)" }}
-            onMouseLeave={e => { e.currentTarget.style.background = "#FF6B00"; e.currentTarget.style.boxShadow = "" }}>
+            onMouseEnter={e => { e.currentTarget.style.background = "#7F1D1D" }}
+            onMouseLeave={e => { e.currentTarget.style.background = "#991B1B" }}>
               Buscar
             </button>
           </div>
@@ -686,10 +743,25 @@ export default function Home() {
             <div>
               <p style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "rgba(255,255,255,0.4)", marginBottom: 16 }}>Redes sociais</p>
               <a href="https://instagram.com/ChegoAragyn" target="_blank" rel="noopener noreferrer"
-                style={{ display: "block", color: "rgba(255,255,255,0.75)", fontSize: 14, textDecoration: "none", marginBottom: 10 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = "#FF6B00" }}
-                onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = "rgba(255,255,255,0.75)" }}>
-                Instagram @ChegoAragyn
+                style={{ display: "inline-flex", alignItems: "center", gap: 10, textDecoration: "none", padding: "10px 14px", borderRadius: 12, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = "rgba(193,53,132,0.18)"; (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(193,53,132,0.4)" }}
+                onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = "rgba(255,255,255,0.06)"; (e.currentTarget as HTMLAnchorElement).style.borderColor = "rgba(255,255,255,0.1)" }}>
+                {/* Instagram logo SVG oficial com gradiente */}
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <defs>
+                    <radialGradient id="ig-grad" cx="30%" cy="107%" r="150%">
+                      <stop offset="0%" stopColor="#fdf497"/>
+                      <stop offset="5%" stopColor="#fdf497"/>
+                      <stop offset="45%" stopColor="#fd5949"/>
+                      <stop offset="60%" stopColor="#d6249f"/>
+                      <stop offset="90%" stopColor="#285AEB"/>
+                    </radialGradient>
+                  </defs>
+                  <rect x="2" y="2" width="20" height="20" rx="6" ry="6" fill="url(#ig-grad)"/>
+                  <circle cx="12" cy="12" r="4.5" fill="none" stroke="white" strokeWidth="1.8"/>
+                  <circle cx="17.5" cy="6.5" r="1.2" fill="white"/>
+                </svg>
+                <span style={{ color: "rgba(255,255,255,0.85)", fontSize: 14, fontWeight: 500 }}>@ChegoAragyn</span>
               </a>
             </div>
             <div>
