@@ -9,12 +9,11 @@ import { useClienteAuth } from "@/lib/auth-cliente"
 import { useIsMobile } from "@/lib/use-mobile"
 import type { Loja, CategoriaLoja } from "@/types"
 
-/* Remove fundo preto do JPG via canvas — sem dependências externas */
 function LogoClean({ height, style }: { height: number; style?: React.CSSProperties }) {
-  const [src, setSrc] = useState("/logo-chego.jpg")
+  const [src, setSrc] = useState<string | null>(null)
   useEffect(() => {
     const img = new Image()
-    img.src = "/logo-chego.jpg"
+    img.src = "/logo-original.jpg"
     img.onload = () => {
       const canvas = document.createElement("canvas")
       canvas.width = img.naturalWidth
@@ -24,13 +23,14 @@ function LogoClean({ height, style }: { height: number; style?: React.CSSPropert
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
       const px = imageData.data
       for (let i = 0; i < px.length; i += 4) {
-        if (px[i] < 55 && px[i + 1] < 55 && px[i + 2] < 55) px[i + 3] = 0
+        if ((px[i] + px[i + 1] + px[i + 2]) / 3 < 20) px[i + 3] = 0
       }
       ctx.putImageData(imageData, 0, 0)
       setSrc(canvas.toDataURL("image/png"))
     }
   }, [])
-  return <img src={src} alt="Chegô" style={{ height, objectFit: "contain", ...style }} />
+  if (!src) return <div style={{ height, width: height * 2.2, flexShrink: 0 }} />
+  return <img src={src} alt="Chegô" style={{ height, width: "auto", objectFit: "contain", display: "block", ...style }} />
 }
 
 const CAT_ICONS: Record<string, string> = {
@@ -58,15 +58,9 @@ const CATEGORIAS: CategoriaLoja[] = ["Restaurante", "Mercadinho", "Farmácia", "
 
 function playSound() {
   try {
-    const ctx  = new (window.AudioContext || (window as any).webkitAudioContext)()
-    const osc  = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.connect(gain); gain.connect(ctx.destination)
-    osc.frequency.setValueAtTime(880, ctx.currentTime)
-    osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.15)
-    gain.gain.setValueAtTime(0.3, ctx.currentTime)
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5)
-    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.5)
+    const audio = new Audio("/splash.mp3")
+    audio.volume = 0.85
+    audio.play().catch(() => {})
   } catch {}
 }
 
@@ -204,35 +198,40 @@ export default function Home() {
             {/* 4 — Logo Chegô (3D flip) */}
             <div style={{
               position: "absolute", inset: 0,
+              display: "flex", alignItems: "center", justifyContent: "center",
               transform: step === 4 ? "rotateY(0deg) scale(1)" : "rotateY(-90deg) scale(0.5)",
               opacity: step === 4 ? 1 : 0,
               transition: "transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.5s ease",
               transformStyle: "preserve-3d",
-              filter: step === 4 ? "drop-shadow(0 0 48px rgba(255,107,0,0.65))" : "none",
+              filter: step === 4 ? "drop-shadow(0 0 32px rgba(29,78,216,0.5))" : "none",
             }}>
-              <img src="/logo-chego.jpg" alt="Chegô" style={{
-                width: "100%", height: "100%", borderRadius: 40, objectFit: "contain",
-                border: "2px solid rgba(255,107,0,0.3)",
-              }} />
+              <img src="/logo-chego.png" alt="Chegô" style={{ width: 180, height: 180, objectFit: "contain" }} />
             </div>
           </div>
 
           {/* Label que muda a cada step */}
           <p style={{
-            marginTop: 32, fontSize: 13, fontWeight: 700, letterSpacing: 3,
-            textTransform: "uppercase",
+            marginTop: 32,
+            fontSize: step === 4 ? 15 : 13,
+            fontWeight: 700,
+            letterSpacing: step === 4 ? 1 : 3,
+            textTransform: step === 4 ? "none" : "uppercase",
+            textAlign: "center",
+            maxWidth: 280,
             opacity: step > 0 ? 1 : 0,
             transform: step > 0 ? "translateY(0px)" : "translateY(12px)",
-            transition: "opacity 0.35s ease, transform 0.35s ease",
+            transition: "opacity 0.35s ease, transform 0.35s ease, font-size 0.3s ease",
             color: step === 1 ? "#f97316"
                  : step === 2 ? "#22c55e"
                  : step === 3 ? "#60a5fa"
-                 : "rgba(255,255,255,0.45)",
+                 : step === 4 ? "rgba(255,255,255,0.75)"
+                 : "transparent",
           }}>
             {step === 1 ? "Restaurantes"
            : step === 2 ? "Mercados"
            : step === 3 ? "Farmácias"
-           : "Aragoiânia · GO"}
+           : step === 4 ? "O primeiro aplicativo delivery de Aragoiânia"
+           : ""}
           </p>
 
           <style>{`
@@ -257,8 +256,8 @@ export default function Home() {
           maxWidth: 1200, margin: "0 auto", padding: isMobile ? "0 16px" : "0 24px",
           height: isMobile ? 72 : 80, display: "flex", alignItems: "center", gap: 8,
         }}>
-          <Link href="/" style={{ textDecoration: "none", flexShrink: 0, marginRight: isMobile ? 8 : 20 }}>
-            <LogoClean height={isMobile ? 48 : 64} />
+          <Link href="/" style={{ textDecoration: "none", flexShrink: 0, marginRight: isMobile ? 8 : 20, display: "flex", alignItems: "center" }}>
+            <LogoClean height={isMobile ? 62 : 80} />
           </Link>
 
           {/* Nav links — hidden on mobile */}
@@ -286,7 +285,7 @@ export default function Home() {
 
           {/* Right */}
           <div style={{ display: "flex", gap: isMobile ? 8 : 10, alignItems: "center", flexShrink: 0 }}>
-            {count > 0 && (
+            {count > 0 && !!user && (
               <Link href="/carrinho" style={{
                 display: "flex", alignItems: "center", gap: 6,
                 padding: isMobile ? "8px 12px" : "8px 16px", borderRadius: 12,
@@ -708,7 +707,7 @@ export default function Home() {
         <div style={{ maxWidth: 1200, margin: "0 auto" }}>
           {/* Logo + tagline */}
           <div style={{ marginBottom: 40 }}>
-            <img src="/logo-chego.jpg" alt="Chegô" style={{ height: 44, borderRadius: 10, marginBottom: 12 }} />
+            <img src="/logo-chego.png" alt="Chegô" style={{ height: 60, objectFit: "contain", marginBottom: 12 }} />
             <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 14 }}>O delivery de Aragoiânia, GO</p>
           </div>
 
