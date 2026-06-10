@@ -71,7 +71,7 @@ const VANTAGENS = [
     span: 2,
   },
   {
-    img: "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=600&q=85",
+    img: "/aragoiania.jpg",
     titulo: "Seja o primeiro na cidade",
     descricao: "Aragoiânia tem um único app delivery. Chegue antes da concorrência e fideliza os clientes desde o início.",
     span: 1,
