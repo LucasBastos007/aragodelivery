@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { LogoClean } from "@/components/LogoClean"
 import { motion, AnimatePresence } from "framer-motion"
 import { supabase } from "@/lib/supabase"
 import { StepIndicator } from "@/components/cadastro/StepIndicator"
@@ -344,7 +345,7 @@ export default function CadastroLoja() {
           >
             <span style={{ fontSize: 40 }}>✅</span>
           </motion.div>
-          <img src="/logo-chego.png" alt="Chegô" style={{ height: 48, objectFit: "contain", margin: "0 auto 20px", display: "block" }} />
+          <LogoClean height={52} style={{ margin: "0 auto 20px" }} />
           <h2 style={{ fontSize: 22, fontWeight: 900, color: "#111", marginBottom: 8 }}>Cadastro enviado!</h2>
           <p style={{ fontSize: 14, color: "#6B7280", marginBottom: 8, lineHeight: 1.6 }}>
             Seu cadastro foi recebido e será analisado em até 48h.
@@ -385,7 +386,7 @@ export default function CadastroLoja() {
               ← Voltar
             </a>
             <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
-              <img src="/logo-chego.png" alt="Chegô" style={{ height: 48, objectFit: "contain" }} />
+              <LogoClean height={52} />
             </div>
             <div style={{ width: 70 }} />
           </div>
@@ -708,7 +709,7 @@ export default function CadastroLoja() {
 
         {/* CTA final */}
         <div style={{ background: "#111", padding: "56px 24px", textAlign: "center" }}>
-          <img src="/logo-chego.png" alt="Chegô" style={{ height: 52, objectFit: "contain", margin: "0 auto 24px", display: "block" }} />
+          <LogoClean height={56} style={{ margin: "0 auto 24px" }} />
           <h2 style={{ color: "white", fontWeight: 900, fontSize: "1.8rem", marginBottom: 12 }}>
             Pronto para começar?
           </h2>
@@ -790,7 +791,7 @@ export default function CadastroLoja() {
             ← Voltar
           </button>
           <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
-            <img src="/logo-chego.png" alt="Chegô" style={{ height: 48, objectFit: "contain" }} />
+            <LogoClean height={52} />
           </div>
           <div style={{ width: 70 }} />
         </div>
