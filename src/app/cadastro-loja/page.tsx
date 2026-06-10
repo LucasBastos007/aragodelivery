@@ -35,44 +35,52 @@ const DIAS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
 
 const VANTAGENS = [
   {
-    icon: "📈",
+    img: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=900&q=85",
     titulo: "Mais vendas todo dia",
     descricao: "Alcance centenas de clientes em Aragoiânia que já estão no app procurando restaurantes e lojas perto deles.",
+    span: 2,
   },
   {
-    icon: "🆓",
+    img: "https://images.unsplash.com/photo-1450101499163-c8848c66ca85?w=600&q=85",
     titulo: "Cadastro 100% gratuito",
     descricao: "Nenhum custo fixo mensal. Você só paga uma pequena comissão sobre as vendas que realmente acontecem.",
+    span: 1,
   },
   {
-    icon: "🛵",
+    img: "https://images.unsplash.com/photo-1526367790999-0150786686a2?w=600&q=85",
     titulo: "Entregadores inclusos",
     descricao: "Nossa rede de motoboys cuida de toda a logística. Você foca em preparar, a gente faz a entrega.",
+    span: 1,
   },
   {
-    icon: "📊",
+    img: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=600&q=85",
     titulo: "Painel de gestão completo",
-    descricao: "Gerencie pedidos em tempo real, atualize o cardápio, crie cupons e acompanhe seu financeiro num só lugar.",
+    descricao: "Pedidos em tempo real, cardápio digital, cupons e relatórios financeiros num único painel.",
+    span: 1,
   },
   {
-    icon: "💳",
+    img: "https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=600&q=85",
     titulo: "Pagamento garantido",
     descricao: "Repasse direto na sua conta, sem atrasos e sem risco de inadimplência. Você vende, você recebe.",
+    span: 1,
   },
   {
-    icon: "🏆",
+    img: "https://images.unsplash.com/photo-1512941937669-90a1b58e7e9c?w=900&q=85",
+    titulo: "Visibilidade garantida no site e no app",
+    descricao: "Anunciamos sua loja tanto no site aragodelivery.vercel.app quanto no app Chegô para aumentar sua demanda. Seu negócio aparece para todos os moradores de Aragoiânia que buscam delivery — mesmo aqueles que ainda não te conhecem.",
+    span: 2,
+  },
+  {
+    img: "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=600&q=85",
     titulo: "Seja o primeiro na cidade",
-    descricao: "Aragoiânia tem um único app delivery. Seja uma das primeiras lojas e conquiste os clientes antes da concorrência.",
+    descricao: "Aragoiânia tem um único app delivery. Chegue antes da concorrência e fideliza os clientes desde o início.",
+    span: 1,
   },
   {
-    icon: "🎯",
-    titulo: "Visibilidade local garantida",
-    descricao: "Seu negócio aparece para quem está procurando exatamente o que você vende, na hora certa.",
-  },
-  {
-    icon: "🤝",
+    img: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600&q=85",
     titulo: "Suporte próximo e real",
     descricao: "Time local em Aragoiânia. Não é call center — é o pessoal da cidade que entende o seu negócio.",
+    span: 1,
   },
 ]
 
@@ -386,7 +394,7 @@ export default function CadastroLoja() {
               color: "white", fontSize: 13, fontWeight: 700, padding: "6px 16px", borderRadius: 50,
               marginBottom: 20, letterSpacing: 0.5,
             }}>
-              🚀 O delivery de Aragoiânia
+              O delivery de Aragoiânia
             </span>
             <h1 style={{
               color: "white", fontSize: "clamp(2rem, 5vw, 3rem)", fontWeight: 900,
@@ -444,58 +452,93 @@ export default function CadastroLoja() {
         </div>
 
         {/* Vantagens */}
-        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "64px 24px" }}>
-          <div style={{ textAlign: "center", marginBottom: 48 }}>
-            <h2 style={{
-              fontSize: "clamp(1.6rem, 3vw, 2.2rem)", fontWeight: 900, color: "#111",
-              marginBottom: 12,
-            }}>
-              Por que vender no Chegô?
-            </h2>
-            <p style={{ color: "#6B7280", fontSize: 16, maxWidth: 480, margin: "0 auto" }}>
-              Tudo que o seu negócio precisa para crescer em Aragoiânia
-            </p>
-          </div>
+        <div style={{ background: "#F1F5F9", padding: "72px 24px" }}>
+          <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: 52 }}>
+              <h2 style={{
+                fontSize: "clamp(1.6rem, 3vw, 2.4rem)", fontWeight: 900, color: "#0F172A",
+                marginBottom: 12, letterSpacing: "-0.5px",
+              }}>
+                Por que vender no Chegô?
+              </h2>
+              <p style={{ color: "#64748B", fontSize: 16, maxWidth: 480, margin: "0 auto", lineHeight: 1.6 }}>
+                Tudo que o seu negócio precisa para crescer em Aragoiânia
+              </p>
+            </div>
 
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
-            gap: 20,
-          }}>
-            {VANTAGENS.map((v, i) => (
-              <motion.div
-                key={v.titulo}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.06 }}
-                style={{
-                  background: "white", borderRadius: 16, padding: "24px 22px",
-                  boxShadow: "0 4px 20px rgba(0,0,0,0.07)",
-                  border: "1.5px solid #f3f4f6",
-                  transition: "transform 0.15s, box-shadow 0.15s",
-                }}
-                onMouseEnter={e => {
-                  (e.currentTarget as HTMLDivElement).style.transform = "translateY(-4px)"
-                  ;(e.currentTarget as HTMLDivElement).style.boxShadow = "0 12px 32px rgba(220,38,38,0.12)"
-                  ;(e.currentTarget as HTMLDivElement).style.borderColor = "#fca5a5"
-                }}
-                onMouseLeave={e => {
-                  (e.currentTarget as HTMLDivElement).style.transform = ""
-                  ;(e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 20px rgba(0,0,0,0.07)"
-                  ;(e.currentTarget as HTMLDivElement).style.borderColor = "#f3f4f6"
-                }}
-              >
-                <div style={{
-                  width: 48, height: 48, borderRadius: 12,
-                  background: "#FEF2F2", display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 24, marginBottom: 14,
-                }}>
-                  {v.icon}
-                </div>
-                <h3 style={{ color: "#111", fontWeight: 800, fontSize: 15, marginBottom: 8 }}>{v.titulo}</h3>
-                <p style={{ color: "#6B7280", fontSize: 13, lineHeight: 1.65 }}>{v.descricao}</p>
-              </motion.div>
-            ))}
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: 16,
+            }}>
+              {VANTAGENS.map((v, i) => (
+                <motion.div
+                  key={v.titulo}
+                  initial={{ opacity: 0, y: 24 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.07 }}
+                  style={{
+                    gridColumn: `span ${v.span}`,
+                    background: "white",
+                    borderRadius: 20,
+                    overflow: "hidden",
+                    boxShadow: "0 2px 16px rgba(0,0,0,0.07)",
+                    border: "1px solid rgba(0,0,0,0.04)",
+                    cursor: "default",
+                    transition: "transform 0.2s ease, box-shadow 0.2s ease",
+                  }}
+                  onMouseEnter={e => {
+                    (e.currentTarget as HTMLDivElement).style.transform = "translateY(-5px)"
+                    ;(e.currentTarget as HTMLDivElement).style.boxShadow = "0 16px 40px rgba(220,38,38,0.13)"
+                  }}
+                  onMouseLeave={e => {
+                    (e.currentTarget as HTMLDivElement).style.transform = ""
+                    ;(e.currentTarget as HTMLDivElement).style.boxShadow = "0 2px 16px rgba(0,0,0,0.07)"
+                  }}
+                >
+                  {/* Imagem */}
+                  <div style={{
+                    height: v.span === 2 ? 260 : 190,
+                    position: "relative", overflow: "hidden",
+                  }}>
+                    <img
+                      src={v.img}
+                      alt={v.titulo}
+                      style={{
+                        width: "100%", height: "100%", objectFit: "cover",
+                        display: "block",
+                        transition: "transform 0.4s ease",
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.04)" }}
+                      onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)" }}
+                    />
+                    {/* Gradiente sutil no bottom da imagem */}
+                    <div style={{
+                      position: "absolute", bottom: 0, left: 0, right: 0, height: 60,
+                      background: "linear-gradient(to top, rgba(0,0,0,0.18), transparent)",
+                      pointerEvents: "none",
+                    }} />
+                  </div>
+
+                  {/* Texto */}
+                  <div style={{ padding: v.span === 2 ? "22px 28px 26px" : "18px 20px 22px" }}>
+                    <h3 style={{
+                      color: "#0F172A", fontWeight: 800,
+                      fontSize: v.span === 2 ? 18 : 15,
+                      marginBottom: 8, lineHeight: 1.3,
+                    }}>
+                      {v.titulo}
+                    </h3>
+                    <p style={{
+                      color: "#64748B", fontSize: v.span === 2 ? 14 : 13,
+                      lineHeight: 1.7,
+                    }}>
+                      {v.descricao}
+                    </p>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
           </div>
         </div>
 
