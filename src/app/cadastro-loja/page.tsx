@@ -159,6 +159,9 @@ export default function CadastroLoja() {
   const [sucesso, setSucesso] = useState(false)
   const [cnpjLoading, setCnpjLoading] = useState(false)
   const [pontoReferencia, setPontoReferencia] = useState("")
+  const [tipoCadastro, setTipoCadastro] = useState<"cnpj" | "cpf" | null>(null)
+  const [pixKey, setPixKey] = useState("")
+  const [pixTipo, setPixTipo] = useState("cpf")
 
   const [business, setBusiness] = useState<BusinessData>(emptyBusiness)
   const [address, setAddress] = useState<AddressData>(emptyAddress)
@@ -194,9 +197,15 @@ export default function CadastroLoja() {
   }
 
   function validateStep1(): boolean {
+    if (tipoCadastro === null) return false
     const e: Record<string, string> = {}
-    if (!validateCNPJ(business.cnpj)) e.cnpj = "CNPJ inválido"
-    if (!business.nomeFantasia.trim()) e.nomeFantasia = "Informe o nome da loja"
+    if (tipoCadastro === "cnpj") {
+      if (!validateCNPJ(business.cnpj)) e.cnpj = "CNPJ inválido"
+    } else {
+      if (!validateCPF(business.cnpj)) e.cnpj = "CPF inválido"
+      if (!business.razaoSocial.trim()) e.razaoSocial = "Informe o nome completo"
+    }
+    if (!business.nomeFantasia.trim()) e.nomeFantasia = "Informe o nome do estabelecimento"
     if (business.telefone.replace(/\D/g, "").length < 10) e.telefone = "Telefone inválido"
     setErrors(e)
     return Object.keys(e).length === 0
@@ -274,9 +283,12 @@ export default function CadastroLoja() {
       })
       authUserId = authData.user?.id ?? null
 
+      const pixKeyFinal = pixKey.trim()
+        || `${bank.banco} Ag:${bank.agencia} Cc:${bank.conta}`
+
       const payload = {
         nome: business.nomeFantasia.trim(),
-        descricao: business.razaoSocial.trim(),
+        descricao: tipoCadastro === "cpf" ? business.razaoSocial.trim() : business.razaoSocial.trim(),
         categoria: business.segmento as "Restaurante" | "Mercadinho" | "Farmácia" | "Outros",
         endereco: enderecoStr,
         telefone: business.telefone,
@@ -286,11 +298,11 @@ export default function CadastroLoja() {
         status: "pendente" as const,
         aberto: false,
         comissao: 10,
-        nome_responsavel: responsible.nome.trim(),
-        cpf_responsavel: responsible.cpf,
-        cnpj: business.cnpj,
+        nome_responsavel: tipoCadastro === "cpf" ? business.razaoSocial.trim() : responsible.nome.trim(),
+        cpf_responsavel: tipoCadastro === "cpf" ? business.cnpj : responsible.cpf,
+        cnpj: tipoCadastro === "cnpj" ? business.cnpj : "",
         email: responsible.email.trim().toLowerCase(),
-        pix_key: `${bank.banco} Ag:${bank.agencia} Cc:${bank.conta}`,
+        pix_key: pixKeyFinal,
         ...(authUserId ? { user_id: authUserId } : {}),
         valor_minimo: valorMinimoNum,
         aceita_retirada: config.aceitaRetirada,
@@ -616,7 +628,7 @@ export default function CadastroLoja() {
           height: 72, display: "flex", alignItems: "center", gap: 16,
         }}>
           <button
-            onClick={() => { setShowForm(false); setStep(1); setErrors({}) }}
+            onClick={() => { setShowForm(false); setStep(1); setErrors({}); setTipoCadastro(null) }}
             style={{
               display: "flex", alignItems: "center", gap: 8,
               color: "#6B7280", background: "none", border: "none",
@@ -657,85 +669,234 @@ export default function CadastroLoja() {
             {/* ── ETAPA 1 — Dados do Negócio ──────────────────────────── */}
             {step === 1 && (
               <div className="flex flex-col gap-4">
-                <div>
-                  <label htmlFor="cnpj-input" className="label">CNPJ *</label>
-                  <div className="relative">
-                    <input
-                      id="cnpj-input"
-                      className="input"
-                      placeholder="00.000.000/0000-00"
-                      value={business.cnpj}
-                      onChange={e => handleCNPJ(e.target.value)}
-                      maxLength={18}
-                      style={{ borderColor: errors.cnpj ? "#ef4444" : !errors.cnpj && validateCNPJ(business.cnpj) ? "#22c55e" : undefined }}
-                    />
-                    {cnpjLoading && (
-                      <div
-                        className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-t-transparent animate-spin"
-                        style={{ borderColor: "#DC2626", borderTopColor: "transparent" }}
+
+                {/* Escolha CNPJ ou CPF */}
+                {tipoCadastro === null && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div style={{
+                      background: "#FEF2F2", border: "1px solid #FECACA",
+                      borderRadius: 14, padding: "18px 20px", marginBottom: 4,
+                    }}>
+                      <p style={{ color: "#991B1B", fontWeight: 800, fontSize: 17, marginBottom: 4 }}>
+                        Você tem CNPJ ativo?
+                      </p>
+                      <p style={{ color: "#6B7280", fontSize: 13, lineHeight: 1.6 }}>
+                        Aceitamos MEI, CNPJ ou apenas CPF. Escolha abaixo:
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => { setTipoCadastro("cnpj"); setBusiness(b => ({ ...b, cnpj: "" })) }}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 16,
+                        padding: "18px 20px", borderRadius: 14, border: "1.5px solid #e5e7eb",
+                        background: "white", cursor: "pointer", textAlign: "left",
+                        transition: "border-color 0.15s, box-shadow 0.15s",
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = "#DC2626"; e.currentTarget.style.boxShadow = "0 4px 16px rgba(220,38,38,0.12)" }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.05)" }}
+                    >
+                      <div style={{ width: 44, height: 44, borderRadius: 12, background: "#FEF2F2", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 22 }}>
+                        🏢
+                      </div>
+                      <div>
+                        <p style={{ color: "#111", fontWeight: 700, fontSize: 15 }}>Sim, tenho CNPJ</p>
+                        <p style={{ color: "#6B7280", fontSize: 13 }}>Empresa, MEI ou CNPJ ativo</p>
+                      </div>
+                      <svg style={{ marginLeft: "auto", color: "#9ca3af", flexShrink: 0 }} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+
+                    <button
+                      onClick={() => { setTipoCadastro("cpf"); setBusiness(b => ({ ...b, cnpj: "" })) }}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 16,
+                        padding: "18px 20px", borderRadius: 14, border: "1.5px solid #e5e7eb",
+                        background: "white", cursor: "pointer", textAlign: "left",
+                        transition: "border-color 0.15s, box-shadow 0.15s",
+                        boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = "#DC2626"; e.currentTarget.style.boxShadow = "0 4px 16px rgba(220,38,38,0.12)" }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.05)" }}
+                    >
+                      <div style={{ width: 44, height: 44, borderRadius: 12, background: "#F0FDF4", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 22 }}>
+                        👤
+                      </div>
+                      <div>
+                        <p style={{ color: "#111", fontWeight: 700, fontSize: 15 }}>Não, vou usar meu CPF</p>
+                        <p style={{ color: "#6B7280", fontSize: 13 }}>Autônomo ou negócio informal</p>
+                      </div>
+                      <svg style={{ marginLeft: "auto", color: "#9ca3af", flexShrink: 0 }} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+                    </button>
+                  </div>
+                )}
+
+                {/* Formulário CNPJ */}
+                {tipoCadastro === "cnpj" && (<>
+                  <button
+                    onClick={() => { setTipoCadastro(null); setErrors({}) }}
+                    style={{ alignSelf: "flex-start", background: "none", border: "none", color: "#6B7280", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0 }}
+                  >
+                    ← Mudar tipo de cadastro
+                  </button>
+                  <div>
+                    <label htmlFor="cnpj-input" className="label">CNPJ *</label>
+                    <div className="relative">
+                      <input
+                        id="cnpj-input"
+                        className="input"
+                        placeholder="00.000.000/0000-00"
+                        value={business.cnpj}
+                        onChange={e => handleCNPJ(e.target.value)}
+                        maxLength={18}
+                        style={{ borderColor: errors.cnpj ? "#ef4444" : !errors.cnpj && validateCNPJ(business.cnpj) ? "#22c55e" : undefined }}
                       />
-                    )}
-                    {!cnpjLoading && validateCNPJ(business.cnpj) && !errors.cnpj && (
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm">✅</span>
-                    )}
+                      {cnpjLoading && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-t-transparent animate-spin"
+                          style={{ borderColor: "#DC2626", borderTopColor: "transparent" }} />
+                      )}
+                      {!cnpjLoading && validateCNPJ(business.cnpj) && !errors.cnpj && (
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm">✅</span>
+                      )}
+                    </div>
+                    {errors.cnpj && <p className="text-xs mt-1" style={{ color: "#ef4444" }}>❌ {errors.cnpj}</p>}
                   </div>
-                  {errors.cnpj && <p className="text-xs mt-1" style={{ color: "#ef4444" }}>❌ {errors.cnpj}</p>}
-                </div>
 
-                <FormInput
-                  label="Razão social"
-                  placeholder="Preenchida automaticamente via CNPJ"
-                  value={business.razaoSocial}
-                  onChange={e => setBusiness(b => ({ ...b, razaoSocial: e.target.value }))}
-                  hint="Preenchida automaticamente ao validar o CNPJ"
-                />
+                  <FormInput
+                    label="Razão social"
+                    placeholder="Preenchida automaticamente via CNPJ"
+                    value={business.razaoSocial}
+                    onChange={e => setBusiness(b => ({ ...b, razaoSocial: e.target.value }))}
+                    hint="Preenchida automaticamente ao validar o CNPJ"
+                  />
 
-                <FormInput
-                  label="Nome da loja / Nome fantasia"
-                  placeholder="Ex: Pizzaria do João"
-                  value={business.nomeFantasia}
-                  onChange={e => { setBusiness(b => ({ ...b, nomeFantasia: e.target.value })); clearErr("nomeFantasia") }}
-                  error={errors.nomeFantasia}
-                  valid={!errors.nomeFantasia && business.nomeFantasia.trim().length > 2}
-                  required
-                />
+                  <FormInput
+                    label="Nome da loja / Nome fantasia"
+                    placeholder="Ex: Pizzaria do João"
+                    value={business.nomeFantasia}
+                    onChange={e => { setBusiness(b => ({ ...b, nomeFantasia: e.target.value })); clearErr("nomeFantasia") }}
+                    error={errors.nomeFantasia}
+                    valid={!errors.nomeFantasia && business.nomeFantasia.trim().length > 2}
+                    required
+                  />
 
-                <div>
-                  <label className="label">Segmento *</label>
-                  <div className="grid grid-cols-4 gap-2 mt-1">
-                    {SEGMENTOS.map(s => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => setBusiness(b => ({ ...b, segmento: s.id }))}
-                        className="flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl text-xs font-semibold transition-all duration-200"
-                        style={{
-                          background: business.segmento === s.id ? "rgba(220,38,38,0.08)" : "white",
-                          border: `1.5px solid ${business.segmento === s.id ? "#DC2626" : "#e5e7eb"}`,
-                          color: business.segmento === s.id ? "#DC2626" : "#6B7280",
+                  <div>
+                    <label className="label">Segmento *</label>
+                    <div className="grid grid-cols-4 gap-2 mt-1">
+                      {SEGMENTOS.map(s => (
+                        <button key={s.id} type="button" onClick={() => setBusiness(b => ({ ...b, segmento: s.id }))}
+                          className="flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl text-xs font-semibold transition-all duration-200"
+                          style={{
+                            background: business.segmento === s.id ? "rgba(220,38,38,0.08)" : "white",
+                            border: `1.5px solid ${business.segmento === s.id ? "#DC2626" : "#e5e7eb"}`,
+                            color: business.segmento === s.id ? "#DC2626" : "#6B7280",
+                          }}>
+                          <span className="text-xl">{s.icon}</span>
+                          <span className="leading-tight text-center" style={{ fontSize: 10 }}>{s.id}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <FormInput
+                    label="Telefone comercial"
+                    placeholder="(00) 0000-0000"
+                    value={business.telefone}
+                    onChange={e => { setBusiness(b => ({ ...b, telefone: maskPhone(e.target.value) })); clearErr("telefone") }}
+                    error={errors.telefone}
+                    valid={!errors.telefone && business.telefone.replace(/\D/g, "").length >= 10}
+                    maxLength={15}
+                    required
+                  />
+                  <button onClick={next} className="btn-primary justify-center mt-2" style={{ padding: "14px" }}>
+                    Próximo →
+                  </button>
+                </>)}
+
+                {/* Formulário CPF */}
+                {tipoCadastro === "cpf" && (<>
+                  <button
+                    onClick={() => { setTipoCadastro(null); setErrors({}) }}
+                    style={{ alignSelf: "flex-start", background: "none", border: "none", color: "#6B7280", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: 0 }}
+                  >
+                    ← Mudar tipo de cadastro
+                  </button>
+
+                  <div>
+                    <label htmlFor="cpf-input" className="label">CPF *</label>
+                    <div className="relative">
+                      <input
+                        id="cpf-input"
+                        className="input"
+                        placeholder="000.000.000-00"
+                        value={business.cnpj}
+                        onChange={e => {
+                          const v = maskCPF(e.target.value)
+                          setBusiness(b => ({ ...b, cnpj: v }))
+                          clearErr("cnpj")
                         }}
-                      >
-                        <span className="text-xl">{s.icon}</span>
-                        <span className="leading-tight text-center" style={{ fontSize: 10 }}>{s.id}</span>
-                      </button>
-                    ))}
+                        maxLength={14}
+                        style={{ borderColor: errors.cnpj ? "#ef4444" : !errors.cnpj && validateCPF(business.cnpj) ? "#22c55e" : undefined }}
+                      />
+                      {validateCPF(business.cnpj) && !errors.cnpj && (
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm">✅</span>
+                      )}
+                    </div>
+                    {errors.cnpj && <p className="text-xs mt-1" style={{ color: "#ef4444" }}>❌ {errors.cnpj}</p>}
                   </div>
-                </div>
 
-                <FormInput
-                  label="Telefone comercial"
-                  placeholder="(00) 0000-0000"
-                  value={business.telefone}
-                  onChange={e => { setBusiness(b => ({ ...b, telefone: maskPhone(e.target.value) })); clearErr("telefone") }}
-                  error={errors.telefone}
-                  valid={!errors.telefone && business.telefone.replace(/\D/g, "").length >= 10}
-                  maxLength={15}
-                  required
-                />
+                  <FormInput
+                    label="Nome completo *"
+                    placeholder="Seu nome completo"
+                    value={business.razaoSocial}
+                    onChange={e => { setBusiness(b => ({ ...b, razaoSocial: e.target.value })); clearErr("razaoSocial") }}
+                    error={errors.razaoSocial}
+                    valid={!errors.razaoSocial && business.razaoSocial.trim().length > 3}
+                    required
+                  />
 
-                <button onClick={next} className="btn-primary justify-center mt-2" style={{ padding: "14px" }}>
-                  Próximo →
-                </button>
+                  <FormInput
+                    label="Nome do estabelecimento *"
+                    placeholder="Ex: Lanchonete da Maria"
+                    value={business.nomeFantasia}
+                    onChange={e => { setBusiness(b => ({ ...b, nomeFantasia: e.target.value })); clearErr("nomeFantasia") }}
+                    error={errors.nomeFantasia}
+                    valid={!errors.nomeFantasia && business.nomeFantasia.trim().length > 2}
+                    required
+                  />
+
+                  <div>
+                    <label className="label">Segmento *</label>
+                    <div className="grid grid-cols-4 gap-2 mt-1">
+                      {SEGMENTOS.map(s => (
+                        <button key={s.id} type="button" onClick={() => setBusiness(b => ({ ...b, segmento: s.id }))}
+                          className="flex flex-col items-center gap-1 py-2.5 px-1 rounded-xl text-xs font-semibold transition-all duration-200"
+                          style={{
+                            background: business.segmento === s.id ? "rgba(220,38,38,0.08)" : "white",
+                            border: `1.5px solid ${business.segmento === s.id ? "#DC2626" : "#e5e7eb"}`,
+                            color: business.segmento === s.id ? "#DC2626" : "#6B7280",
+                          }}>
+                          <span className="text-xl">{s.icon}</span>
+                          <span className="leading-tight text-center" style={{ fontSize: 10 }}>{s.id}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <FormInput
+                    label="Telefone comercial"
+                    placeholder="(00) 0000-0000"
+                    value={business.telefone}
+                    onChange={e => { setBusiness(b => ({ ...b, telefone: maskPhone(e.target.value) })); clearErr("telefone") }}
+                    error={errors.telefone}
+                    valid={!errors.telefone && business.telefone.replace(/\D/g, "").length >= 10}
+                    maxLength={15}
+                    required
+                  />
+                  <button onClick={next} className="btn-primary justify-center mt-2" style={{ padding: "14px" }}>
+                    Próximo →
+                  </button>
+                </>)}
               </div>
             )}
 
@@ -992,6 +1153,51 @@ export default function CadastroLoja() {
                     cpfTitular: errors.cpfTitular,
                   }}
                 />
+
+                {/* Chave PIX */}
+                <div style={{ borderTop: "1.5px solid #f3f4f6", paddingTop: 20 }}>
+                  <label className="label" style={{ marginBottom: 8, display: "block" }}>
+                    Chave PIX (opcional)
+                  </label>
+                  <p style={{ color: "#6B7280", fontSize: 12, marginBottom: 10, lineHeight: 1.5 }}>
+                    Se preferir receber por PIX, informe sua chave. Caso contrário, usaremos os dados bancários acima.
+                  </p>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+                    {[
+                      { id: "cpf",      label: "CPF" },
+                      { id: "cnpj",     label: "CNPJ" },
+                      { id: "email",    label: "E-mail" },
+                      { id: "telefone", label: "Telefone" },
+                      { id: "aleatoria",label: "Chave aleatória" },
+                    ].map(t => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => { setPixTipo(t.id); setPixKey("") }}
+                        style={{
+                          padding: "6px 14px", borderRadius: 50, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                          background: pixTipo === t.id ? "rgba(220,38,38,0.08)" : "white",
+                          border: `1.5px solid ${pixTipo === t.id ? "#DC2626" : "#e5e7eb"}`,
+                          color: pixTipo === t.id ? "#DC2626" : "#6B7280",
+                        }}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    className="input"
+                    placeholder={
+                      pixTipo === "cpf"       ? "000.000.000-00" :
+                      pixTipo === "cnpj"      ? "00.000.000/0000-00" :
+                      pixTipo === "email"     ? "seu@email.com" :
+                      pixTipo === "telefone"  ? "(00) 00000-0000" :
+                      "Chave aleatória (32 caracteres)"
+                    }
+                    value={pixKey}
+                    onChange={e => setPixKey(e.target.value)}
+                  />
+                </div>
 
                 {/* Resumo */}
                 <div className="rounded-xl p-4 mt-2" style={{ background: "#FFF8F5", border: "1.5px solid #FED7AA" }}>
