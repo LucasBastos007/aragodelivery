@@ -505,6 +505,116 @@ export default function CadastroLoja() {
           </div>
         </div>
 
+        {/* Dashboard — visão do negócio */}
+        <div style={{ background: "#0F172A", padding: "72px 24px", overflow: "hidden" }}>
+          <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 64, alignItems: "center" }}>
+
+            {/* Texto */}
+            <div>
+              <p style={{ color: "#F87171", fontWeight: 700, fontSize: 13, letterSpacing: 1, textTransform: "uppercase", marginBottom: 12 }}>
+                Gestão inteligente
+              </p>
+              <h2 style={{
+                color: "white", fontWeight: 900, fontSize: "clamp(1.6rem, 2.5vw, 2.2rem)",
+                lineHeight: 1.2, letterSpacing: "-0.5px", marginBottom: 16,
+              }}>
+                Visão completa do<br />seu negócio na palma<br />da mão
+              </h2>
+              <p style={{ color: "#94A3B8", fontSize: 15, lineHeight: 1.8, marginBottom: 36 }}>
+                Com o painel do Chegô você sabe exatamente o que está vendendo, o que está rendendo e onde focar para crescer. Sem planilha, sem complicação.
+              </p>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                {[
+                  {
+                    icon: "📦",
+                    titulo: "Pedidos em tempo real",
+                    sub: "Veja quantos pedidos saem por dia, por semana e por mês — tudo atualizado na hora.",
+                  },
+                  {
+                    icon: "🏆",
+                    titulo: "O que mais vende",
+                    sub: "Descubra quais produtos têm mais saída e ajuste seu cardápio para o que o cliente realmente quer.",
+                  },
+                  {
+                    icon: "💰",
+                    titulo: "O que dá mais dinheiro",
+                    sub: "Compare receita por produto e por período. Saiba o que vale a pena manter e o que pode melhorar.",
+                  },
+                  {
+                    icon: "📈",
+                    titulo: "Horários de pico",
+                    sub: "Identifique os melhores horários para se preparar e nunca perder um pedido por falta de estoque.",
+                  },
+                ].map(({ icon, titulo, sub }) => (
+                  <div key={titulo} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                    <div style={{
+                      width: 40, height: 40, borderRadius: 10, background: "rgba(220,38,38,0.15)",
+                      border: "1px solid rgba(220,38,38,0.3)", display: "flex", alignItems: "center",
+                      justifyContent: "center", fontSize: 18, flexShrink: 0,
+                    }}>
+                      {icon}
+                    </div>
+                    <div>
+                      <p style={{ color: "white", fontWeight: 700, fontSize: 14, marginBottom: 3 }}>{titulo}</p>
+                      <p style={{ color: "#64748B", fontSize: 13, lineHeight: 1.6 }}>{sub}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Imagem dashboard */}
+            <div style={{ position: "relative" }}>
+              <div style={{
+                borderRadius: 20, overflow: "hidden",
+                boxShadow: "0 32px 80px rgba(0,0,0,0.5)",
+                border: "1px solid rgba(255,255,255,0.06)",
+              }}>
+                <img
+                  src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=85"
+                  alt="Painel de gestão"
+                  style={{ width: "100%", display: "block", objectFit: "cover" }}
+                />
+                {/* Overlay gradient no bottom */}
+                <div style={{
+                  position: "absolute", bottom: 0, left: 0, right: 0, height: 100,
+                  background: "linear-gradient(to top, rgba(15,23,42,0.7), transparent)",
+                  borderRadius: "0 0 20px 20px",
+                  pointerEvents: "none",
+                }} />
+              </div>
+
+              {/* Card flutuante — métrica destaque */}
+              <div style={{
+                position: "absolute", bottom: -20, left: -24,
+                background: "white", borderRadius: 16, padding: "16px 20px",
+                boxShadow: "0 20px 48px rgba(0,0,0,0.35)",
+                minWidth: 200,
+              }}>
+                <p style={{ color: "#9CA3AF", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+                  Receita hoje
+                </p>
+                <p style={{ color: "#0F172A", fontWeight: 900, fontSize: 26, lineHeight: 1 }}>R$ 847,00</p>
+                <p style={{ color: "#22C55E", fontSize: 12, fontWeight: 700, marginTop: 4 }}>+23% vs ontem</p>
+              </div>
+
+              {/* Card flutuante — produto destaque */}
+              <div style={{
+                position: "absolute", top: -16, right: -16,
+                background: "white", borderRadius: 14, padding: "14px 18px",
+                boxShadow: "0 16px 40px rgba(0,0,0,0.3)",
+              }}>
+                <p style={{ color: "#9CA3AF", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>
+                  Mais vendido
+                </p>
+                <p style={{ color: "#0F172A", fontWeight: 800, fontSize: 14 }}>X-Burguer duplo</p>
+                <p style={{ color: "#6B7280", fontSize: 12, marginTop: 2 }}>47 pedidos hoje</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Vantagens */}
         <div style={{ background: "#F1F5F9", padding: "72px 24px" }}>
           <div style={{ maxWidth: 1100, margin: "0 auto" }}>
