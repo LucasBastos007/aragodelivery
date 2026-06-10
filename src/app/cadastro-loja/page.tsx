@@ -35,21 +35,21 @@ const DIAS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
 
 const VANTAGENS = [
   {
-    img: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=900&q=85",
+    img: "https://images.unsplash.com/photo-1547592166-23ac45744acd?w=900&q=85",
     titulo: "Mais vendas todo dia",
-    descricao: "Alcance centenas de clientes em Aragoiânia que já estão no app procurando restaurantes e lojas perto deles.",
+    descricao: "Alcance clientes em Aragoiânia que já estão no app procurando aquela comida caseira de todo dia, feita com carinho perto de casa.",
     span: 2,
   },
   {
     img: "https://images.unsplash.com/photo-1450101499163-c8848c66ca85?w=600&q=85",
     titulo: "Cadastro 100% gratuito",
-    descricao: "Nenhum custo fixo mensal. Você só paga uma pequena comissão sobre as vendas que realmente acontecem.",
+    descricao: "Cadastre sua loja em minutos, sem burocracia. Nossa equipe cuida de tudo para você começar a vender o mais rápido possível.",
     span: 1,
   },
   {
     img: "https://images.unsplash.com/photo-1526367790999-0150786686a2?w=600&q=85",
     titulo: "Entregadores inclusos",
-    descricao: "Nossa rede de motoboys cuida de toda a logística. Você foca em preparar, a gente faz a entrega.",
+    descricao: "Entregadores parceiros cuidam de toda a logística. Você foca em preparar os pedidos, eles levam até o cliente com segurança.",
     span: 1,
   },
   {
