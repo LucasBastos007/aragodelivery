@@ -417,7 +417,7 @@ export default function CadastroLoja() {
             </h1>
             <p style={{ color: "rgba(255,255,255,0.88)", fontSize: "1.1rem", lineHeight: 1.7, marginBottom: 36 }}>
               Cadastre seu negócio no Chegô e comece a receber pedidos hoje.<br />
-              Simples, sem custo fixo e com suporte local em Aragoiânia.
+              Rápido, simples e com suporte local em Aragoiânia.
             </p>
             <button
               onClick={() => setShowForm(true)}
@@ -444,22 +444,64 @@ export default function CadastroLoja() {
           </div>
         </div>
 
-        {/* Stats */}
-        <div style={{ background: "#DC2626", padding: "20px 24px" }}>
-          <div style={{
-            maxWidth: 800, margin: "0 auto",
-            display: "flex", justifyContent: "center", gap: 48, flexWrap: "wrap",
-          }}>
-            {[
-              { num: "100%", label: "Gratuito para cadastrar" },
-              { num: "48h", label: "Para ser aprovado" },
-              { num: "0", label: "Custo fixo mensal" },
-            ].map(({ num, label }) => (
-              <div key={label} style={{ textAlign: "center" }}>
-                <p style={{ color: "white", fontWeight: 900, fontSize: 26, lineHeight: 1 }}>{num}</p>
-                <p style={{ color: "rgba(255,255,255,0.75)", fontSize: 13, marginTop: 4 }}>{label}</p>
-              </div>
-            ))}
+        {/* Como funciona */}
+        <div style={{ background: "white", padding: "52px 24px 56px" }}>
+          <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+            <div style={{ textAlign: "center", marginBottom: 40 }}>
+              <p style={{ color: "#DC2626", fontWeight: 700, fontSize: 13, letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 }}>
+                Como funciona
+              </p>
+              <h2 style={{ color: "#0F172A", fontWeight: 900, fontSize: "clamp(1.4rem, 2.5vw, 2rem)", letterSpacing: "-0.3px" }}>
+                Do cadastro ao cliente final em 3 passos
+              </h2>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 24 }}>
+              {[
+                {
+                  step: "01",
+                  img: "https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=600&q=85",
+                  titulo: "Você cadastra sua loja",
+                  descricao: "Preencha os dados do seu negócio em minutos. Nossa equipe analisa e ativa sua loja em até 48h.",
+                },
+                {
+                  step: "02",
+                  img: "https://images.unsplash.com/photo-1526367790999-0150786686a2?w=600&q=85",
+                  titulo: "Entregador busca o pedido",
+                  descricao: "Entregadores parceiros retiram o pedido na sua loja com agilidade e levam direto ao cliente com segurança.",
+                },
+                {
+                  step: "03",
+                  img: "https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=600&q=85",
+                  titulo: "Cliente recebe e paga",
+                  descricao: "O cliente paga pela entrega no app. Você não precisa se preocupar com cobrança — a plataforma cuida de tudo.",
+                },
+              ].map(({ step, img, titulo, descricao }) => (
+                <div key={step} style={{ background: "#F8FAFC", borderRadius: 18, overflow: "hidden", border: "1px solid #E2E8F0" }}>
+                  <div style={{ height: 200, overflow: "hidden", position: "relative" }}>
+                    <img
+                      src={img}
+                      alt={titulo}
+                      style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                    />
+                    <div style={{
+                      position: "absolute", top: 14, left: 14,
+                      width: 36, height: 36, borderRadius: "50%",
+                      background: "#DC2626", color: "white",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontWeight: 900, fontSize: 13,
+                      boxShadow: "0 4px 12px rgba(220,38,38,0.4)",
+                    }}>
+                      {step}
+                    </div>
+                  </div>
+                  <div style={{ padding: "18px 20px 22px" }}>
+                    <h3 style={{ color: "#0F172A", fontWeight: 800, fontSize: 15, marginBottom: 8 }}>{titulo}</h3>
+                    <p style={{ color: "#64748B", fontSize: 13, lineHeight: 1.7 }}>{descricao}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
