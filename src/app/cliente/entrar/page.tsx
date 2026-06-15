@@ -7,8 +7,8 @@ import { useClienteAuth } from "@/lib/auth-cliente"
 
 const inp: React.CSSProperties = {
   width: "100%", padding: "12px 14px", borderRadius: 10, fontSize: 14,
-  background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-  color: "white", outline: "none", boxSizing: "border-box",
+  background: "#F9FAFB", border: "1px solid #E5E7EB",
+  color: "#111827", outline: "none", boxSizing: "border-box",
 }
 
 export default function ClienteEntrarPage() {
@@ -47,26 +47,30 @@ export default function ClienteEntrarPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0a0a0a", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+    <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div style={{ width: "100%", maxWidth: 400 }}>
 
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <Link href="/lojas" style={{ textDecoration: "none" }}>
-            <p style={{ fontSize: 36, marginBottom: 6 }}>🛵</p>
-            <p style={{ color: "#f97316", fontWeight: 900, fontSize: 22 }}>Arago Delivery</p>
+          <Link href="/" style={{ textDecoration: "none" }}>
+            <img
+              src="/logo-chego.png"
+              alt="Chegô"
+              style={{ width: 80, height: 80, borderRadius: 20, objectFit: "cover", marginBottom: 10, boxShadow: "0 4px 16px rgba(220,38,38,0.2)" }}
+            />
+            <p style={{ color: "#DC2626", fontWeight: 900, fontSize: 22, marginTop: 0 }}>Chegô Delivery</p>
           </Link>
-          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13, marginTop: 4 }}>Minha conta</p>
+          <p style={{ color: "#9CA3AF", fontSize: 13, marginTop: 4 }}>Minha conta</p>
         </div>
 
-        <div style={{ background: "#111", borderRadius: 20, border: "1px solid rgba(255,255,255,0.08)", padding: 28 }}>
+        <div style={{ background: "#ffffff", borderRadius: 20, border: "1px solid #e5e7eb", padding: 28 }}>
 
           {/* Google */}
           <button
             onClick={loginGoogle}
             style={{
               width: "100%", padding: "12px 16px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(255,255,255,0.05)", color: "white", fontWeight: 700, fontSize: 14,
+              background: "#F5F5F5", color: "#111827", fontWeight: 700, fontSize: 14,
               cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 20,
             }}>
             {/* Google G SVG */}
@@ -80,18 +84,18 @@ export default function ClienteEntrarPage() {
           </button>
 
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
-            <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 12 }}>ou</span>
-            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.08)" }} />
+            <div style={{ flex: 1, height: 1, background: "#E5E7EB" }} />
+            <span style={{ color: "#9CA3AF", fontSize: 12 }}>ou</span>
+            <div style={{ flex: 1, height: 1, background: "#E5E7EB" }} />
           </div>
 
           {/* Toggle */}
-          <div style={{ display: "flex", background: "rgba(255,255,255,0.05)", borderRadius: 10, padding: 3, marginBottom: 20, gap: 2 }}>
+          <div style={{ display: "flex", background: "#F5F5F5", borderRadius: 10, padding: 3, marginBottom: 20, gap: 2 }}>
             {(["entrar", "cadastrar"] as const).map(m => (
               <button key={m} onClick={() => { setModo(m); setErro(""); setSucesso("") }} style={{
                 flex: 1, padding: "8px", borderRadius: 8, border: "none", cursor: "pointer",
-                background: modo === m ? "#f97316" : "transparent",
-                color: modo === m ? "white" : "rgba(255,255,255,0.4)",
+                background: modo === m ? "#DC2626" : "transparent",
+                color: modo === m ? "white" : "#9CA3AF",
                 fontWeight: 700, fontSize: 13,
               }}>
                 {m === "entrar" ? "Entrar" : "Criar conta"}
@@ -103,21 +107,21 @@ export default function ClienteEntrarPage() {
             {modo === "cadastrar" && (
               <>
                 <div>
-                  <label style={{ display: "block", color: "rgba(255,255,255,0.4)", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Nome completo *</label>
+                  <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Nome completo *</label>
                   <input style={inp} value={nome} onChange={e => setNome(e.target.value)} placeholder="João Silva" />
                 </div>
                 <div>
-                  <label style={{ display: "block", color: "rgba(255,255,255,0.4)", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>WhatsApp</label>
+                  <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>WhatsApp</label>
                   <input style={inp} value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(64) 9 9999-1234" inputMode="tel" />
                 </div>
               </>
             )}
             <div>
-              <label style={{ display: "block", color: "rgba(255,255,255,0.4)", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>E-mail *</label>
+              <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>E-mail *</label>
               <input style={inp} type="email" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} placeholder="seu@email.com" autoComplete="email" />
             </div>
             <div>
-              <label style={{ display: "block", color: "rgba(255,255,255,0.4)", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Senha *</label>
+              <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Senha *</label>
               <input style={inp} type="password" value={senha} onChange={e => setSenha(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSubmit()} placeholder="••••••••" autoComplete={modo === "entrar" ? "current-password" : "new-password"} />
             </div>
 
@@ -134,7 +138,7 @@ export default function ClienteEntrarPage() {
 
             <button onClick={handleSubmit} disabled={loading} style={{
               width: "100%", padding: "13px", borderRadius: 12, border: "none",
-              background: loading ? "rgba(249,115,22,0.4)" : "#f97316",
+              background: loading ? "rgba(249,115,22,0.4)" : "#DC2626",
               color: "white", fontWeight: 800, fontSize: 15, cursor: loading ? "not-allowed" : "pointer", marginTop: 4,
             }}>
               {loading ? "Aguarde..." : modo === "entrar" ? "Entrar →" : "Criar conta →"}
@@ -142,8 +146,8 @@ export default function ClienteEntrarPage() {
           </div>
         </div>
 
-        <p style={{ textAlign: "center", marginTop: 16, color: "rgba(255,255,255,0.25)", fontSize: 12 }}>
-          <Link href="/lojas" style={{ color: "rgba(255,255,255,0.35)", textDecoration: "none" }}>← Voltar para as lojas</Link>
+        <p style={{ textAlign: "center", marginTop: 16, color: "#D1D5DB", fontSize: 12 }}>
+          <Link href="/lojas" style={{ color: "#9CA3AF", textDecoration: "none" }}>← Voltar para as lojas</Link>
         </p>
       </div>
     </div>

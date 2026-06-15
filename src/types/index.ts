@@ -1,7 +1,7 @@
 export type StatusLoja = "pendente" | "aprovado" | "contrato_assinado" | "ativo" | "suspenso"
 export type StatusMotoboy = "pendente" | "aprovado" | "contrato_assinado" | "ativo" | "suspenso" | "offline"
-export type StatusPedido = "pendente" | "aceito" | "preparando" | "pronto" | "coletado" | "entregue" | "cancelado"
-export type FormaPagamento = "pix" | "cartao" | "dinheiro" | "maquininha"
+export type StatusPedido = "pendente" | "aceito" | "preparando" | "pronto" | "aguardando_aceite" | "indo_para_loja" | "na_loja" | "em_rota" | "coletado" | "entregue" | "cancelado"
+export type FormaPagamento = "pix" | "cartao" | "dinheiro" | "maquininha" | "apple_pay" | "google_pay"
 export type CategoriaLoja = "Restaurante" | "Mercadinho" | "Farmácia" | "Outros"
 
 export interface Loja {
@@ -47,6 +47,7 @@ export interface Motoboy {
   contrato_assinado?: boolean
   contrato_assinado_em?: string
   motivo_rejeicao?: string
+  raio_km?: number
 }
 
 export interface Produto {
@@ -91,6 +92,9 @@ export interface Pedido {
   endereco_entrega: string
   observacao: string
   criado_em: string
+  nome_cliente?: string
+  telefone_cliente?: string
+  foto_entrega?: string
   loja?: Loja
   motoboy?: Motoboy
   itens?: ItemPedido[]

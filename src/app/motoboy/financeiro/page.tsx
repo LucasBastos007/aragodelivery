@@ -42,13 +42,14 @@ export default function MotoboyFinanceiroPage() {
     setPixInput(mb?.pix_chave ?? "")
 
     const { data: ped } = await supabase
-      .from("pedidos").select("id, codigo, taxa_entrega, criado_em, loja:lojas(nome)")
+      .from("pedidos").select("id, codigo, taxa_entrega, ganho_motoboy, criado_em, loja:lojas(nome)")
       .eq("motoboy_id", motoboy_id).eq("status", "entregue")
       .order("criado_em", { ascending: false })
     const pedList = ped ?? []
     setEntregas(pedList.slice(0, 30))
 
-    const ganhos = pedList.reduce((s, p) => s + (p.taxa_entrega ?? 0) * MOTOBOY_PCT, 0)
+    // Prefere ganho_motoboy (valor real pós-comissão) se disponível
+    const ganhos = pedList.reduce((s, p) => s + (p.ganho_motoboy ?? (p.taxa_entrega ?? 0) * MOTOBOY_PCT), 0)
     setTotalGanhos(ganhos)
 
     const { data: saq } = await supabase
@@ -96,7 +97,7 @@ export default function MotoboyFinanceiroPage() {
 
   return (
     <div style={{ maxWidth: 600, margin: "0 auto", padding: "24px 16px" }}>
-      <h1 style={{ color: "white", fontWeight: 900, fontSize: 20, marginBottom: 4 }}>💰 Meus ganhos</h1>
+      <h1 style={{ color: "white", fontWeight: 900, fontSize: 20, marginBottom: 4 }}>Meus ganhos</h1>
       <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13, marginBottom: 24 }}>
         80% da taxa de entrega de cada pedido entregue
       </p>
@@ -128,7 +129,7 @@ export default function MotoboyFinanceiroPage() {
             <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, fontWeight: 700, marginBottom: 4 }}>SUA CHAVE PIX</p>
             {!editandoPix && (
               <p style={{ color: motoboy?.pix_chave ? "white" : "#f87171", fontWeight: 700, fontSize: 14 }}>
-                {motoboy?.pix_chave ?? "⚠️ Não cadastrada"}
+                {motoboy?.pix_chave ?? "Não cadastrada"}
               </p>
             )}
           </div>

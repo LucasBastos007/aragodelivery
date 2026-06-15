@@ -8,6 +8,12 @@ export interface ClientePerfil {
   id: string
   nome: string
   telefone: string
+  endereco_rua?: string
+  endereco_numero?: string
+  endereco_bairro?: string
+  endereco_complemento?: string
+  endereco_cep?: string
+  endereco_cidade?: string
 }
 
 export function useClienteAuth() {
@@ -44,7 +50,7 @@ export function useClienteAuth() {
       provider: "google",
       options: {
         redirectTo: typeof window !== "undefined"
-          ? `${window.location.origin}/cliente/perfil`
+          ? `${window.location.origin}/cliente/meu-perfil`
           : undefined,
       },
     })
@@ -68,10 +74,29 @@ export function useClienteAuth() {
     return null
   }
 
-  async function salvarPerfil(nome: string, telefone: string) {
+  async function salvarPerfil(
+    nome: string,
+    telefone: string,
+    endereco?: {
+      rua?: string; numero?: string; bairro?: string
+      complemento?: string; cep?: string; cidade?: string
+    }
+  ) {
     if (!user) return
-    await supabase.from("clientes").upsert({ id: user.id, nome: nome.trim(), telefone: telefone.trim() })
-    setPerfil(p => p ? { ...p, nome, telefone } : { id: user.id, nome, telefone })
+    const payload: any = { id: user.id, nome: nome.trim(), telefone: telefone.trim() }
+    if (endereco) {
+      if (endereco.rua       !== undefined) payload.endereco_rua        = endereco.rua
+      if (endereco.numero    !== undefined) payload.endereco_numero     = endereco.numero
+      if (endereco.bairro    !== undefined) payload.endereco_bairro     = endereco.bairro
+      if (endereco.complemento !== undefined) payload.endereco_complemento = endereco.complemento
+      if (endereco.cep       !== undefined) payload.endereco_cep        = endereco.cep
+      if (endereco.cidade    !== undefined) payload.endereco_cidade     = endereco.cidade
+    }
+    await supabase.from("clientes").upsert(payload)
+    setPerfil(p => p
+      ? { ...p, nome, telefone, ...payload }
+      : { id: user.id, nome, telefone, ...payload }
+    )
   }
 
   async function logout() {

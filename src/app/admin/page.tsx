@@ -47,17 +47,25 @@ export default function AdminDashboard() {
     load()
   }, [])
 
-  const CARDS = [
-    { label: "Lojas Ativas",     value: stats.lojas_ativas,      icon: "🏪", color: "#f97316" },
-    { label: "Lojas Pendentes",  value: stats.lojas_pendentes,   icon: "⏳", color: "#eab308", alert: true },
-    { label: "Motoboys Ativos",  value: stats.motoboys_ativos,   icon: "🏍️", color: "#22c55e" },
-    { label: "Motoboys Pend.",   value: stats.motoboys_pendentes, icon: "⏳", color: "#eab308", alert: true },
-    { label: "Pedidos Hoje",     value: stats.pedidos_hoje,      icon: "📦", color: "#3b82f6" },
-    {
-      label: "Faturamento Hoje",
-      value: `R$ ${stats.faturamento_hoje.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
-      icon: "💰", color: "#22c55e",
-    },
+  const CARDS: { label: string; value: string | number; icon: React.ReactNode; color: string; alert?: boolean }[] = [
+    { label: "Lojas Ativas", value: stats.lojas_ativas, color: "#f97316", icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    )},
+    { label: "Lojas Pendentes", value: stats.lojas_pendentes, color: "#eab308", alert: true, icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    )},
+    { label: "Motoboys Ativos", value: stats.motoboys_ativos, color: "#22c55e", icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 17H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v9a2 2 0 0 1-2 2h-3"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
+    )},
+    { label: "Motoboys Pend.", value: stats.motoboys_pendentes, color: "#eab308", alert: true, icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    )},
+    { label: "Pedidos Hoje", value: stats.pedidos_hoje, color: "#3b82f6", icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l2-1.14"/><polyline points="16.5 9.4 7.55 4.24"/><line x1="3.29" y1="7" x2="12" y2="12"/><line x1="12" y1="22" x2="12" y2="12"/></svg>
+    )},
+    { label: "Faturamento Hoje", value: `R$ ${stats.faturamento_hoje.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`, color: "#22c55e", icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+    )},
   ]
 
   return (
@@ -74,7 +82,7 @@ export default function AdminDashboard() {
           <div key={c.label} className="card p-5"
             style={{ border: c.alert && (c.value as number) > 0 ? "1px solid rgba(234,179,8,0.3)" : undefined }}>
             <div className="flex items-center justify-between mb-3">
-              <span className="text-2xl">{c.icon}</span>
+              <span style={{ color: c.color }}>{c.icon}</span>
               {c.alert && (c.value as number) > 0 && (
                 <span className="badge badge-yellow">Requer ação</span>
               )}
@@ -89,7 +97,7 @@ export default function AdminDashboard() {
 
       {(stats.lojas_pendentes > 0 || stats.motoboys_pendentes > 0) && (
         <div className="card p-5" style={{ border: "1px solid rgba(234,179,8,0.3)", background: "rgba(234,179,8,0.04)" }}>
-          <p className="font-bold text-yellow-400 mb-1">⚠️ Ação necessária</p>
+          <p className="font-bold text-yellow-400 mb-1">Ação necessária</p>
           <p className="text-sm" style={{ color: "rgba(255,255,255,0.5)" }}>
             {stats.lojas_pendentes > 0 && `${stats.lojas_pendentes} loja(s) aguardando aprovação. `}
             {stats.motoboys_pendentes > 0 && `${stats.motoboys_pendentes} motoboy(s) aguardando aprovação.`}

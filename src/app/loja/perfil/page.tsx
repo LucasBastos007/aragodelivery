@@ -118,7 +118,7 @@ export default function PerfilPage() {
 
   if (loading) return (
     <div className="p-8">
-      <p style={{ color: "rgba(255,255,255,0.3)" }}>Carregando...</p>
+      <p style={{ color: "#9CA3AF" }}>Carregando...</p>
     </div>
   )
 
@@ -134,13 +134,13 @@ export default function PerfilPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-black text-white">Minha loja</h1>
+          <h1 className="text-2xl font-black" style={{ color: "#111827" }}>Minha loja</h1>
           <div className="flex items-center gap-2 mt-1">
             <span style={{
               display: "inline-block", width: 7, height: 7, borderRadius: "50%",
               background: statusColor[status] ?? "#888",
             }} />
-            <p className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.4)" }}>
+            <p className="text-sm font-semibold" style={{ color: "#6B7280" }}>
               {statusLabel[status] ?? status}
             </p>
           </div>
@@ -152,21 +152,21 @@ export default function PerfilPage() {
 
       {/* Foto/Banner da loja */}
       <div className="card p-5 mb-6">
-        <p className="font-black text-white mb-4">Foto da loja</p>
+        <p className="font-black mb-4" style={{ color: "#111827" }}>Foto da loja</p>
         <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
           <div style={{
             width: 110, height: 110, borderRadius: 16, overflow: "hidden", flexShrink: 0,
-            background: "rgba(255,255,255,0.04)", border: "2px dashed rgba(255,255,255,0.1)",
+            background: "#F3F4F6", border: "2px dashed #D1D5DB",
             display: "flex", alignItems: "center", justifyContent: "center",
           }}>
             {bannerPreview ? (
               <img src={bannerPreview} alt="Banner" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             ) : (
-              <span style={{ fontSize: 36, color: "rgba(255,255,255,0.12)" }}>🏪</span>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
             )}
           </div>
           <div style={{ flex: 1 }}>
-            <p className="text-sm mb-3" style={{ color: "rgba(255,255,255,0.4)" }}>
+            <p className="text-sm mb-3" style={{ color: "#6B7280" }}>
               Foto exibida na listagem de lojas e na página do seu estabelecimento.
             </p>
             <input
@@ -189,27 +189,27 @@ export default function PerfilPage() {
                 <button type="button"
                   onClick={() => { setBannerFile(null); setBannerPreview(""); setForm(f => ({ ...f, logo_url: "" })); if (bannerRef.current) bannerRef.current.value = "" }}
                   className="text-xs font-semibold"
-                  style={{ background: "none", border: "none", color: "rgba(255,255,255,0.3)", cursor: "pointer", padding: "7px 12px" }}>
+                  style={{ background: "none", border: "none", color: "#9CA3AF", cursor: "pointer", padding: "7px 12px" }}>
                   Remover
                 </button>
               )}
             </div>
-            <p className="text-xs mt-2" style={{ color: "rgba(255,255,255,0.2)" }}>JPG, PNG ou WEBP · recomendado 800×600px</p>
+            <p className="text-xs mt-2" style={{ color: "#D1D5DB" }}>JPG, PNG ou WEBP · recomendado 800×600px</p>
           </div>
         </div>
       </div>
 
       {/* Toggle Aberto/Fechado */}
       <div className="card p-5 mb-6" style={{
-        border: aberto ? "1px solid rgba(34,197,94,0.3)" : "1px solid rgba(255,255,255,0.08)",
+        border: aberto ? "1px solid rgba(34,197,94,0.3)" : "1px solid #e5e7eb",
         background: aberto ? "rgba(34,197,94,0.06)" : undefined,
       }}>
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-black text-white text-base">
+            <p className="font-black text-base" style={{ color: "#111827" }}>
               {aberto ? "🟢 Loja aberta" : "🔴 Loja fechada"}
             </p>
-            <p className="text-sm mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
+            <p className="text-sm mt-0.5" style={{ color: "#6B7280" }}>
               {aberto
                 ? "Clientes podem fazer pedidos agora"
                 : "Nenhum pedido será recebido enquanto fechada"}
@@ -220,7 +220,7 @@ export default function PerfilPage() {
             disabled={togglingAberto || status !== "ativo"}
             style={{
               width: 56, height: 30, borderRadius: 15, border: "none", cursor: status !== "ativo" ? "not-allowed" : "pointer",
-              background: aberto ? "#22c55e" : "rgba(255,255,255,0.12)",
+              background: aberto ? "#22c55e" : "#E5E7EB",
               position: "relative", transition: "background 0.25s", flexShrink: 0,
               opacity: togglingAberto ? 0.5 : 1,
             }}>
@@ -233,14 +233,14 @@ export default function PerfilPage() {
         </div>
         {status !== "ativo" && (
           <p className="text-xs mt-3 font-semibold" style={{ color: "#f59e0b" }}>
-            ⚠️ Só é possível abrir a loja após a aprovação pelo administrador.
+            Atenção: Só é possível abrir a loja após a aprovação pelo administrador.
           </p>
         )}
       </div>
 
       {/* Form: Dados da loja */}
       <div className="card p-6 mb-4">
-        <p className="font-black text-white mb-5">Dados da loja</p>
+        <p className="font-black mb-5" style={{ color: "#111827" }}>Dados da loja</p>
         <div className="flex flex-col gap-4">
           <div className="flex gap-3">
             <div style={{ flex: 2 }}>
@@ -274,7 +274,7 @@ export default function PerfilPage() {
 
       {/* Form: Entrega */}
       <div className="card p-6 mb-4">
-        <p className="font-black text-white mb-5">Entrega</p>
+        <p className="font-black mb-5" style={{ color: "#111827" }}>Entrega</p>
         <div className="grid grid-cols-3 gap-3">
           <div>
             <label className="label">Taxa de entrega (R$)</label>
@@ -296,7 +296,7 @@ export default function PerfilPage() {
 
       {/* Form: Conta */}
       <div className="card p-6 mb-4">
-        <p className="font-black text-white mb-5">Conta</p>
+        <p className="font-black mb-5" style={{ color: "#111827" }}>Conta</p>
         <div className="flex flex-col gap-4">
           <div>
             <label className="label">Nome do responsável</label>
@@ -306,7 +306,7 @@ export default function PerfilPage() {
             <label className="label">Email de acesso</label>
             <input className="input" type="email" value={form.email} disabled
               style={{ opacity: 0.5, cursor: "not-allowed" }} />
-            <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.25)" }}>
+            <p className="text-xs mt-1" style={{ color: "#9CA3AF" }}>
               Para alterar o email, entre em contato com o suporte.
             </p>
           </div>
@@ -315,8 +315,8 @@ export default function PerfilPage() {
 
       {/* Form: Financeiro */}
       <div className="card p-6 mb-6">
-        <p className="font-black text-white mb-2">Financeiro</p>
-        <p className="text-xs mb-5" style={{ color: "rgba(255,255,255,0.3)" }}>
+        <p className="font-black mb-2" style={{ color: "#111827" }}>Financeiro</p>
+        <p className="text-xs mb-5" style={{ color: "#9CA3AF" }}>
           Chave PIX usada para receber saques da plataforma.
         </p>
         <div>
@@ -325,7 +325,7 @@ export default function PerfilPage() {
             placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória" />
           {!form.pix_chave && (
             <p className="text-xs mt-2 font-semibold" style={{ color: "#f59e0b" }}>
-              ⚠️ Sem chave PIX você não poderá solicitar saques.
+              Atenção: sem chave PIX você não poderá solicitar saques.
             </p>
           )}
         </div>

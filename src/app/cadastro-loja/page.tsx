@@ -507,21 +507,21 @@ export default function CadastroLoja() {
         </div>
 
         {/* Dashboard — visão do negócio */}
-        <div style={{ background: "#0F172A", padding: "72px 24px", overflow: "hidden" }}>
+        <div style={{ background: "#F8FAFC", padding: "72px 24px", overflow: "hidden", borderTop: "1px solid #e5e7eb", borderBottom: "1px solid #e5e7eb" }}>
           <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 64, alignItems: "center" }}>
 
             {/* Texto */}
             <div>
-              <p style={{ color: "#F87171", fontWeight: 700, fontSize: 13, letterSpacing: 1, textTransform: "uppercase", marginBottom: 12 }}>
+              <p style={{ color: "#DC2626", fontWeight: 700, fontSize: 13, letterSpacing: 1, textTransform: "uppercase", marginBottom: 12 }}>
                 Gestão inteligente
               </p>
               <h2 style={{
-                color: "white", fontWeight: 900, fontSize: "clamp(1.6rem, 2.5vw, 2.2rem)",
+                color: "#111827", fontWeight: 900, fontSize: "clamp(1.6rem, 2.5vw, 2.2rem)",
                 lineHeight: 1.2, letterSpacing: "-0.5px", marginBottom: 16,
               }}>
                 Visão completa do<br />seu negócio na palma<br />da mão
               </h2>
-              <p style={{ color: "#94A3B8", fontSize: 15, lineHeight: 1.8, marginBottom: 36 }}>
+              <p style={{ color: "#6B7280", fontSize: 15, lineHeight: 1.8, marginBottom: 36 }}>
                 Com o painel do Chegô você sabe exatamente o que está vendendo, o que está rendendo e onde focar para crescer. Sem planilha, sem complicação.
               </p>
 
@@ -550,15 +550,15 @@ export default function CadastroLoja() {
                 ].map(({ icon, titulo, sub }) => (
                   <div key={titulo} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
                     <div style={{
-                      width: 40, height: 40, borderRadius: 10, background: "rgba(220,38,38,0.15)",
-                      border: "1px solid rgba(220,38,38,0.3)", display: "flex", alignItems: "center",
+                      width: 40, height: 40, borderRadius: 10, background: "rgba(220,38,38,0.08)",
+                      border: "1px solid rgba(220,38,38,0.2)", display: "flex", alignItems: "center",
                       justifyContent: "center", fontSize: 18, flexShrink: 0,
                     }}>
                       {icon}
                     </div>
                     <div>
-                      <p style={{ color: "white", fontWeight: 700, fontSize: 14, marginBottom: 3 }}>{titulo}</p>
-                      <p style={{ color: "#64748B", fontSize: 13, lineHeight: 1.6 }}>{sub}</p>
+                      <p style={{ color: "#111827", fontWeight: 700, fontSize: 14, marginBottom: 3 }}>{titulo}</p>
+                      <p style={{ color: "#6B7280", fontSize: 13, lineHeight: 1.6 }}>{sub}</p>
                     </div>
                   </div>
                 ))}
@@ -569,8 +569,8 @@ export default function CadastroLoja() {
             <div style={{ position: "relative" }}>
               <div style={{
                 borderRadius: 20, overflow: "hidden",
-                boxShadow: "0 32px 80px rgba(0,0,0,0.5)",
-                border: "1px solid rgba(255,255,255,0.06)",
+                boxShadow: "0 16px 48px rgba(0,0,0,0.12)",
+                border: "1px solid #e5e7eb",
               }}>
                 <img
                   src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&q=85"
@@ -580,7 +580,7 @@ export default function CadastroLoja() {
                 {/* Overlay gradient no bottom */}
                 <div style={{
                   position: "absolute", bottom: 0, left: 0, right: 0, height: 100,
-                  background: "linear-gradient(to top, rgba(15,23,42,0.7), transparent)",
+                  background: "linear-gradient(to top, rgba(0,0,0,0.12), transparent)",
                   borderRadius: "0 0 20px 20px",
                   pointerEvents: "none",
                 }} />
@@ -708,12 +708,12 @@ export default function CadastroLoja() {
         </div>
 
         {/* CTA final */}
-        <div style={{ background: "#111", padding: "56px 24px", textAlign: "center" }}>
+        <div style={{ background: "#fff7ed", borderTop: "1px solid rgba(249,115,22,0.15)", padding: "56px 24px", textAlign: "center" }}>
           <LogoClean height={56} style={{ margin: "0 auto 24px" }} />
-          <h2 style={{ color: "white", fontWeight: 900, fontSize: "1.8rem", marginBottom: 12 }}>
+          <h2 style={{ color: "#111827", fontWeight: 900, fontSize: "1.8rem", marginBottom: 12 }}>
             Pronto para começar?
           </h2>
-          <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 15, marginBottom: 32 }}>
+          <p style={{ color: "#6B7280", fontSize: 15, marginBottom: 32 }}>
             Preencha o formulário e nossa equipe entra em contato em até 48h.
           </p>
           <button

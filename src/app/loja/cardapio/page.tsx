@@ -16,11 +16,13 @@ type ProdutoForm = {
 const FORM_VAZIO: ProdutoForm = { nome: "", descricao: "", preco: "", categoria_id: "", disponivel: true, foto_url: "" }
 
 async function uploadFoto(file: File, path: string): Promise<string> {
+  const ext  = file.name.split(".").pop() || "jpg"
+  const safePath = path.replace(/\.[^.]+$/, `.${ext}`)
   const { data, error } = await supabase.storage
-    .from("imagens")
-    .upload(path, file, { upsert: true, contentType: file.type })
+    .from("entregas")
+    .upload(safePath, file, { upsert: true, contentType: file.type })
   if (error || !data) return ""
-  const { data: { publicUrl } } = supabase.storage.from("imagens").getPublicUrl(data.path)
+  const { data: { publicUrl } } = supabase.storage.from("entregas").getPublicUrl(data.path)
   return publicUrl
 }
 
@@ -161,8 +163,8 @@ export default function CardapioPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-black text-white">Cardápio</h1>
-          <p className="text-sm mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
+          <h1 className="text-2xl font-black" style={{ color: "#111827" }}>Cardápio</h1>
+          <p className="text-sm mt-0.5" style={{ color: "#6B7280" }}>
             {produtos.length} produto{produtos.length !== 1 ? "s" : ""} · {categorias.length} categoria{categorias.length !== 1 ? "s" : ""}
           </p>
         </div>
@@ -177,12 +179,12 @@ export default function CardapioPage() {
       </div>
 
       {loading ? (
-        <p style={{ color: "rgba(255,255,255,0.3)" }}>Carregando...</p>
+        <p style={{ color: "#9CA3AF" }}>Carregando...</p>
       ) : produtos.length === 0 && categorias.length === 0 ? (
         <div className="card p-12 text-center">
           <p className="text-4xl mb-4">🍽️</p>
-          <p className="text-lg font-black text-white mb-2">Cardápio vazio</p>
-          <p className="text-sm mb-6" style={{ color: "rgba(255,255,255,0.38)" }}>
+          <p className="text-lg font-black mb-2" style={{ color: "#111827" }}>Cardápio vazio</p>
+          <p className="text-sm mb-6" style={{ color: "#6B7280" }}>
             Crie categorias (ex: Lanches, Bebidas) e adicione seus produtos.
           </p>
           <div className="flex gap-3 justify-center">
@@ -195,19 +197,19 @@ export default function CardapioPage() {
           {porCategoria.map(({ cat, items }) => (
             <div key={cat.id}>
               <div className="flex items-center gap-3 mb-3">
-                <h2 className="text-base font-black text-white">{cat.nome}</h2>
+                <h2 className="text-base font-black" style={{ color: "#111827" }}>{cat.nome}</h2>
                 <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                  style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.35)" }}>
+                  style={{ background: "#F3F4F6", color: "#6B7280" }}>
                   {items.length}
                 </span>
                 <button onClick={() => deletarCategoria(cat.id)}
                   className="text-xs ml-auto"
-                  style={{ color: "rgba(255,255,255,0.2)" }}>
+                  style={{ color: "#9CA3AF" }}>
                   Deletar categoria
                 </button>
               </div>
               {items.length === 0 ? (
-                <p className="text-sm" style={{ color: "rgba(255,255,255,0.2)" }}>Nenhum produto nesta categoria.</p>
+                <p className="text-sm" style={{ color: "#9CA3AF" }}>Nenhum produto nesta categoria.</p>
               ) : (
                 <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
                   {items.map(p => <ProdutoCard key={p.id} p={p} onEdit={abrirEditarProduto} onToggle={toggleDisponivel} onDelete={deletarProduto} />)}
@@ -219,9 +221,9 @@ export default function CardapioPage() {
           {semCategoria.length > 0 && (
             <div>
               <div className="flex items-center gap-3 mb-3">
-                <h2 className="text-base font-black text-white">Sem categoria</h2>
+                <h2 className="text-base font-black" style={{ color: "#111827" }}>Sem categoria</h2>
                 <span className="text-xs font-bold px-2 py-0.5 rounded-full"
-                  style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.35)" }}>
+                  style={{ background: "#F3F4F6", color: "#6B7280" }}>
                   {semCategoria.length}
                 </span>
               </div>
@@ -244,13 +246,13 @@ export default function CardapioPage() {
               <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
                 <div style={{
                   width: 90, height: 90, borderRadius: 12, overflow: "hidden", flexShrink: 0,
-                  background: "rgba(255,255,255,0.04)", border: "2px dashed rgba(255,255,255,0.1)",
+                  background: "#F3F4F6", border: "2px dashed #D1D5DB",
                   display: "flex", alignItems: "center", justifyContent: "center",
                 }}>
                   {fotoPreview ? (
                     <img src={fotoPreview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                   ) : (
-                    <span style={{ fontSize: 28, color: "rgba(255,255,255,0.15)" }}>📷</span>
+                    <span style={{ fontSize: 28, color: "#D1D5DB" }}>📷</span>
                   )}
                 </div>
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -278,11 +280,11 @@ export default function CardapioPage() {
                         setFormProd(f => ({ ...f, foto_url: "" }))
                         if (fotoInputRef.current) fotoInputRef.current.value = ""
                       }}
-                      style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                      style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
                       Remover foto
                     </button>
                   )}
-                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.2)" }}>JPG, PNG ou WEBP · recomendado 400×400px</p>
+                  <p style={{ fontSize: 11, color: "#D1D5DB" }}>JPG, PNG ou WEBP · recomendado 400×400px</p>
                 </div>
               </div>
             </div>
@@ -317,7 +319,7 @@ export default function CardapioPage() {
                 onClick={() => setFormProd(f => ({ ...f, disponivel: !f.disponivel }))}
                 style={{
                   width: 40, height: 22, borderRadius: 11, transition: "background 0.2s",
-                  background: formProd.disponivel ? "#f97316" : "rgba(255,255,255,0.1)",
+                  background: formProd.disponivel ? "#f97316" : "#E5E7EB",
                   position: "relative", cursor: "pointer",
                 }}>
                 <div style={{
@@ -326,7 +328,7 @@ export default function CardapioPage() {
                   left: formProd.disponivel ? 20 : 2,
                 }} />
               </div>
-              <span className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.7)" }}>
+              <span className="text-sm font-semibold" style={{ color: "#374151" }}>
                 {formProd.disponivel ? "Disponível para pedidos" : "Indisponível (oculto no cardápio)"}
               </span>
             </label>
@@ -381,18 +383,18 @@ function ProdutoCard({ p, onEdit, onToggle, onDelete }: {
           <img src={p.foto_url} alt={p.nome} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         </div>
       ) : (
-        <div style={{ width: "100%", height: 80, background: "rgba(255,255,255,0.03)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <span style={{ fontSize: 28, color: "rgba(255,255,255,0.08)" }}>📷</span>
+        <div style={{ width: "100%", height: 80, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <span style={{ fontSize: 28, color: "#D1D5DB" }}>📷</span>
         </div>
       )}
 
       <div className="p-4 flex flex-col gap-3 flex-1">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <p className="font-bold text-white truncate">{p.nome}</p>
+            <p className="font-bold truncate" style={{ color: "#111827" }}>{p.nome}</p>
             {p.descricao && (
               <p className="text-xs mt-0.5 leading-relaxed"
-                style={{ color: "rgba(255,255,255,0.38)", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                style={{ color: "#6B7280", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                 {p.descricao}
               </p>
             )}
@@ -406,9 +408,9 @@ function ProdutoCard({ p, onEdit, onToggle, onDelete }: {
           <button onClick={() => onToggle(p)}
             className="flex items-center gap-2 text-xs font-bold px-3 py-1.5 rounded-lg flex-1 justify-center"
             style={{
-              background: p.disponivel ? "rgba(34,197,94,0.1)" : "rgba(255,255,255,0.05)",
-              color: p.disponivel ? "#22c55e" : "rgba(255,255,255,0.3)",
-              border: p.disponivel ? "1px solid rgba(34,197,94,0.25)" : "1px solid rgba(255,255,255,0.08)",
+              background: p.disponivel ? "rgba(34,197,94,0.1)" : "#F3F4F6",
+              color: p.disponivel ? "#22c55e" : "#9CA3AF",
+              border: p.disponivel ? "1px solid rgba(34,197,94,0.25)" : "1px solid #e5e7eb",
             }}>
             {p.disponivel ? "✓ Disponível" : "✕ Indisponível"}
           </button>
@@ -430,14 +432,14 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
   return (
     <div style={{
       position: "fixed", inset: 0, zIndex: 200,
-      background: "rgba(0,0,0,0.75)", backdropFilter: "blur(6px)",
+      background: "rgba(0,0,0,0.5)", backdropFilter: "blur(6px)",
       display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
       overflowY: "auto",
     }} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="card p-6 w-full" style={{ maxWidth: 480, margin: "auto" }}>
         <div className="flex items-center justify-between mb-5">
-          <p className="font-black text-white text-lg">{title}</p>
-          <button onClick={onClose} style={{ color: "rgba(255,255,255,0.3)", fontSize: 20, lineHeight: 1 }}>✕</button>
+          <p className="font-black text-lg" style={{ color: "#111827" }}>{title}</p>
+          <button onClick={onClose} style={{ color: "#9CA3AF", fontSize: 20, lineHeight: 1 }}>✕</button>
         </div>
         {children}
       </div>

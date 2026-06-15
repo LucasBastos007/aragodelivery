@@ -96,7 +96,7 @@ export default function AdminSaquesPage() {
   return (
     <div style={{ padding: "32px 36px", maxWidth: 980 }}>
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ color: "white", fontWeight: 900, fontSize: 22 }}>💸 Financeiro — Admin</h1>
+        <h1 style={{ color: "white", fontWeight: 900, fontSize: 22 }}>Financeiro — Admin</h1>
         <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13, marginTop: 3 }}>Saques, mensalidades e planos</p>
       </div>
 
@@ -127,7 +127,7 @@ export default function AdminSaquesPage() {
 
       {/* Abas */}
       <div style={{ display: "flex", gap: 4, marginBottom: 20 }}>
-        {([["saques", "💸 Saques"], ["mensalidades", "📅 Mensalidades"], ["planos", "⚙️ Planos das lojas"]] as const).map(([key, label]) => (
+        {([["saques", "Saques"], ["mensalidades", "Mensalidades"], ["planos", "Planos das lojas"]] as const).map(([key, label]) => (
           <button key={key} onClick={() => setAbaAtiva(key)} style={{
             padding: "8px 18px", borderRadius: 10, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13,
             background: abaAtiva === key ? "rgba(249,115,22,0.15)" : "rgba(255,255,255,0.05)",
@@ -188,7 +188,7 @@ export default function AdminSaquesPage() {
                         background: s.tipo === "lojista" ? "rgba(249,115,22,0.12)" : "rgba(96,165,250,0.12)",
                         color: s.tipo === "lojista" ? "#f97316" : "#60a5fa",
                       }}>
-                        {s.tipo === "lojista" ? "🏪 Lojista" : "🛵 Motoboy"}
+                        {s.tipo === "lojista" ? "Lojista" : "Motoboy"}
                       </span>
                       <p style={{ color: "white", fontWeight: 800, fontSize: 16 }}>
                         R$ {Number(s.valor).toFixed(2)}

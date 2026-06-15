@@ -7,8 +7,8 @@ import { useAuth } from "@/lib/auth"
 
 const inp: React.CSSProperties = {
   width: "100%", padding: "10px 13px", borderRadius: 10, fontSize: 14,
-  background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-  color: "white", outline: "none", boxSizing: "border-box",
+  background: "#F9FAFB", border: "1px solid #E5E7EB",
+  color: "#111827", outline: "none", boxSizing: "border-box",
 }
 
 export default function LojaFinanceiroPage() {
@@ -90,15 +90,15 @@ export default function LojaFinanceiroPage() {
     load()
   }
 
-  if (loading) return <div style={{ padding: 40 }}><p style={{ color: "rgba(255,255,255,0.3)" }}>Carregando...</p></div>
+  if (loading) return <div style={{ padding: 40 }}><p style={{ color: "#9CA3AF" }}>Carregando...</p></div>
 
   const liquida    = receitaBruta - totalComissao
   const pendentes  = saques.filter(s => s.status === "solicitado")
 
   return (
     <div style={{ padding: "32px 36px", maxWidth: 860 }}>
-      <h1 style={{ color: "white", fontWeight: 900, fontSize: 22, marginBottom: 4 }}>💰 Financeiro</h1>
-      <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13, marginBottom: 28 }}>
+      <h1 style={{ color: "#111827", fontWeight: 900, fontSize: 22, marginBottom: 4 }}>Financeiro</h1>
+      <p style={{ color: "#9CA3AF", fontSize: 13, marginBottom: 28 }}>
         Extrato e saques da sua loja
       </p>
 
@@ -110,7 +110,7 @@ export default function LojaFinanceiroPage() {
           display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
         }}>
           <p style={{ color: "#f59e0b", fontSize: 13, fontWeight: 600 }}>
-            ⚠️ Você não tem chave PIX cadastrada — sem ela não é possível solicitar saques.
+            Atenção: você não tem chave PIX cadastrada — sem ela não é possível solicitar saques.
           </p>
           <Link href="/loja/perfil" style={{ color: "#f97316", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap", textDecoration: "none" }}>
             Cadastrar →
@@ -128,31 +128,31 @@ export default function LojaFinanceiroPage() {
       {/* Cards de resumo */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
         {[
-          { label: "Saldo disponível", value: saldo, color: saldo > 0 ? "#22c55e" : "white", big: true },
+          { label: "Saldo disponível", value: saldo, color: saldo > 0 ? "#22c55e" : "#111827", big: true },
           { label: "Receita líquida",  value: liquida, color: "#60a5fa" },
-          { label: "Comissão paga",    value: totalComissao, color: "rgba(255,255,255,0.6)" },
-          { label: "Total sacado",     value: totalSaquesPagos, color: "rgba(255,255,255,0.6)" },
+          { label: "Comissão paga",    value: totalComissao, color: "#6B7280" },
+          { label: "Total sacado",     value: totalSaquesPagos, color: "#6B7280" },
         ].map(c => (
-          <div key={c.label} style={{ background: "#111", borderRadius: 16, padding: "18px 20px", border: "1px solid rgba(255,255,255,0.07)" }}>
-            <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, fontWeight: 700, marginBottom: 8, textTransform: "uppercase" }}>{c.label}</p>
+          <div key={c.label} style={{ background: "#ffffff", borderRadius: 16, padding: "18px 20px", border: "1px solid #e5e7eb" }}>
+            <p style={{ color: "#6B7280", fontSize: 11, fontWeight: 700, marginBottom: 8, textTransform: "uppercase" }}>{c.label}</p>
             <p style={{ color: c.color, fontWeight: 900, fontSize: c.big ? 26 : 20 }}>R$ {c.value.toFixed(2)}</p>
           </div>
         ))}
       </div>
 
       {/* Plano atual */}
-      <div style={{ background: "#111", borderRadius: 14, padding: "14px 18px", marginBottom: 20, border: "1px solid rgba(255,255,255,0.07)", display: "flex", gap: 24 }}>
+      <div style={{ background: "#ffffff", borderRadius: 14, padding: "14px 18px", marginBottom: 20, border: "1px solid #e5e7eb", display: "flex", gap: 24 }}>
         <div>
-          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, fontWeight: 700, marginBottom: 4 }}>COMISSÃO POR PEDIDO</p>
+          <p style={{ color: "#9CA3AF", fontSize: 11, fontWeight: 700, marginBottom: 4 }}>COMISSÃO POR PEDIDO</p>
           <p style={{ color: "#f97316", fontWeight: 900, fontSize: 18 }}>{loja?.comissao ?? 0}%</p>
         </div>
         <div>
-          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, fontWeight: 700, marginBottom: 4 }}>MENSALIDADE</p>
+          <p style={{ color: "#9CA3AF", fontSize: 11, fontWeight: 700, marginBottom: 4 }}>MENSALIDADE</p>
           <p style={{ color: "#f97316", fontWeight: 900, fontSize: 18 }}>R$ {Number(loja?.plano_mensalidade ?? 0).toFixed(2)}</p>
         </div>
         <div>
-          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, fontWeight: 700, marginBottom: 4 }}>PIX CADASTRADO</p>
-          <p style={{ color: loja?.pix_chave ? "white" : "#f87171", fontWeight: 700, fontSize: 14 }}>
+          <p style={{ color: "#9CA3AF", fontSize: 11, fontWeight: 700, marginBottom: 4 }}>PIX CADASTRADO</p>
+          <p style={{ color: loja?.pix_chave ? "#111827" : "#f87171", fontWeight: 700, fontSize: 14 }}>
             {loja?.pix_chave ?? "Não cadastrado"}
           </p>
         </div>
@@ -163,16 +163,16 @@ export default function LojaFinanceiroPage() {
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
           {/* Solicitar saque */}
-          <div style={{ background: "#111", borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", overflow: "hidden" }}>
-            <div style={{ padding: "16px 18px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <p style={{ color: "white", fontWeight: 700 }}>Solicitar saque</p>
+          <div style={{ background: "#ffffff", borderRadius: 16, border: "1px solid #e5e7eb", overflow: "hidden" }}>
+            <div style={{ padding: "16px 18px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <p style={{ color: "#111827", fontWeight: 700 }}>Solicitar saque</p>
               {!solicitando && (
                 <button onClick={() => { setSolicitando(true); setErroSaque("") }}
                   disabled={saldo <= 0 || !loja?.pix_chave}
                   style={{
                     padding: "7px 16px", borderRadius: 10, border: "none", cursor: saldo <= 0 || !loja?.pix_chave ? "not-allowed" : "pointer",
-                    background: saldo > 0 && loja?.pix_chave ? "#f97316" : "rgba(255,255,255,0.08)",
-                    color: saldo > 0 && loja?.pix_chave ? "white" : "rgba(255,255,255,0.25)",
+                    background: saldo > 0 && loja?.pix_chave ? "#f97316" : "#F3F4F6",
+                    color: saldo > 0 && loja?.pix_chave ? "white" : "#9CA3AF",
                     fontWeight: 700, fontSize: 13,
                   }}>
                   + Novo saque
@@ -182,15 +182,15 @@ export default function LojaFinanceiroPage() {
             {solicitando ? (
               <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 12 }}>
                 <div>
-                  <label style={{ display: "block", color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: "uppercase" }}>
+                  <label style={{ display: "block", color: "#6B7280", fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: "uppercase" }}>
                     Valor (saldo: R$ {saldo.toFixed(2)})
                   </label>
                   <input style={inp} type="number" step="0.01" min="0.01" placeholder="0,00"
                     value={valorSaque} onChange={e => setValorSaque(e.target.value)} />
                 </div>
-                <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: "10px 14px" }}>
-                  <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}>PIX: <strong style={{ color: "white" }}>{loja?.pix_chave}</strong></p>
-                  <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, marginTop: 3 }}>Prazo: até 2 dias úteis</p>
+                <div style={{ background: "#F9FAFB", borderRadius: 10, padding: "10px 14px" }}>
+                  <p style={{ color: "#6B7280", fontSize: 12 }}>PIX: <strong style={{ color: "#111827" }}>{loja?.pix_chave}</strong></p>
+                  <p style={{ color: "#9CA3AF", fontSize: 11, marginTop: 3 }}>Prazo: até 2 dias úteis</p>
                 </div>
                 {erroSaque && <p style={{ color: "#f87171", fontSize: 13, fontWeight: 600 }}>{erroSaque}</p>}
                 <div style={{ display: "flex", gap: 8 }}>
@@ -202,22 +202,22 @@ export default function LojaFinanceiroPage() {
                     {enviandoSaque ? "Enviando..." : "Confirmar saque"}
                   </button>
                   <button onClick={() => { setSolicitando(false); setErroSaque("") }} style={{
-                    padding: "11px 16px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)",
-                    background: "transparent", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 13,
+                    padding: "11px 16px", borderRadius: 10, border: "1px solid #E5E7EB",
+                    background: "transparent", color: "#6B7280", cursor: "pointer", fontSize: 13,
                   }}>Cancelar</button>
                 </div>
               </div>
             ) : (
               <div style={{ padding: "14px 18px" }}>
                 {pendentes.length === 0 ? (
-                  <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13 }}>Nenhum saque pendente</p>
+                  <p style={{ color: "#9CA3AF", fontSize: 13 }}>Nenhum saque pendente</p>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {pendentes.map(s => (
                       <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <div>
-                          <p style={{ color: "white", fontWeight: 700, fontSize: 14 }}>R$ {Number(s.valor).toFixed(2)}</p>
-                          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12 }}>
+                          <p style={{ color: "#111827", fontWeight: 700, fontSize: 14 }}>R$ {Number(s.valor).toFixed(2)}</p>
+                          <p style={{ color: "#9CA3AF", fontSize: 12 }}>
                             {new Date(s.criado_em).toLocaleDateString("pt-BR")} · {s.pix_chave}
                           </p>
                         </div>
@@ -233,18 +233,18 @@ export default function LojaFinanceiroPage() {
           </div>
 
           {/* Histórico de saques */}
-          <div style={{ background: "#111", borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", overflow: "hidden" }}>
-            <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-              <p style={{ color: "white", fontWeight: 700 }}>Histórico de saques</p>
+          <div style={{ background: "#ffffff", borderRadius: 16, border: "1px solid #e5e7eb", overflow: "hidden" }}>
+            <div style={{ padding: "14px 18px", borderBottom: "1px solid #e5e7eb" }}>
+              <p style={{ color: "#111827", fontWeight: 700 }}>Histórico de saques</p>
             </div>
             <div style={{ padding: "12px 18px", display: "flex", flexDirection: "column", gap: 8 }}>
               {saques.filter(s => s.status !== "solicitado").length === 0 ? (
-                <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13 }}>Nenhum saque realizado ainda</p>
+                <p style={{ color: "#9CA3AF", fontSize: 13 }}>Nenhum saque realizado ainda</p>
               ) : saques.filter(s => s.status !== "solicitado").map(s => (
-                <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #e5e7eb" }}>
                   <div>
-                    <p style={{ color: "white", fontWeight: 700, fontSize: 14 }}>R$ {Number(s.valor).toFixed(2)}</p>
-                    <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12 }}>
+                    <p style={{ color: "#111827", fontWeight: 700, fontSize: 14 }}>R$ {Number(s.valor).toFixed(2)}</p>
+                    <p style={{ color: "#9CA3AF", fontSize: 12 }}>
                       {new Date(s.criado_em).toLocaleDateString("pt-BR")}
                       {s.pago_em && ` · Pago em ${new Date(s.pago_em).toLocaleDateString("pt-BR")}`}
                     </p>
@@ -263,16 +263,16 @@ export default function LojaFinanceiroPage() {
 
           {/* Mensalidades */}
           {mensalidades.length > 0 && (
-            <div style={{ background: "#111", borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", overflow: "hidden" }}>
-              <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                <p style={{ color: "white", fontWeight: 700 }}>Mensalidades</p>
+            <div style={{ background: "#ffffff", borderRadius: 16, border: "1px solid #e5e7eb", overflow: "hidden" }}>
+              <div style={{ padding: "14px 18px", borderBottom: "1px solid #e5e7eb" }}>
+                <p style={{ color: "#111827", fontWeight: 700 }}>Mensalidades</p>
               </div>
               <div style={{ padding: "12px 18px", display: "flex", flexDirection: "column", gap: 6 }}>
                 {mensalidades.map(m => (
                   <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
-                      <p style={{ color: "white", fontWeight: 600, fontSize: 13 }}>R$ {Number(m.valor).toFixed(2)}</p>
-                      <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12 }}>Ref. {m.referencia}</p>
+                      <p style={{ color: "#111827", fontWeight: 600, fontSize: 13 }}>R$ {Number(m.valor).toFixed(2)}</p>
+                      <p style={{ color: "#9CA3AF", fontSize: 12 }}>Ref. {m.referencia}</p>
                     </div>
                     <span style={{
                       fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999,
@@ -289,25 +289,25 @@ export default function LojaFinanceiroPage() {
         </div>
 
         {/* Coluna direita — Extrato de pedidos */}
-        <div style={{ background: "#111", borderRadius: 16, border: "1px solid rgba(255,255,255,0.08)", overflow: "hidden" }}>
-          <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-            <p style={{ color: "white", fontWeight: 700 }}>Extrato de pedidos</p>
-            <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, marginTop: 2 }}>Últimos {pedidos.length} entregues</p>
+        <div style={{ background: "#ffffff", borderRadius: 16, border: "1px solid #e5e7eb", overflow: "hidden" }}>
+          <div style={{ padding: "14px 18px", borderBottom: "1px solid #e5e7eb" }}>
+            <p style={{ color: "#111827", fontWeight: 700 }}>Extrato de pedidos</p>
+            <p style={{ color: "#9CA3AF", fontSize: 12, marginTop: 2 }}>Últimos {pedidos.length} entregues</p>
           </div>
           <div style={{ maxHeight: 520, overflowY: "auto" }}>
             {pedidos.length === 0 ? (
               <div style={{ padding: "24px 18px", textAlign: "center" }}>
-                <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13 }}>Nenhum pedido entregue ainda</p>
+                <p style={{ color: "#9CA3AF", fontSize: 13 }}>Nenhum pedido entregue ainda</p>
               </div>
             ) : pedidos.map(p => {
               const comissao_pct = loja?.comissao ?? 0
               const comissaoValor = p.subtotal * comissao_pct / 100
               const liquido = p.subtotal - comissaoValor
               return (
-                <div key={p.id} style={{ padding: "12px 18px", borderBottom: "1px solid rgba(255,255,255,0.04)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div key={p.id} style={{ padding: "12px 18px", borderBottom: "1px solid #e5e7eb", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
-                    <p style={{ color: "rgba(255,255,255,0.6)", fontWeight: 700, fontSize: 13 }}>#{p.codigo}</p>
-                    <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 11 }}>
+                    <p style={{ color: "#374151", fontWeight: 700, fontSize: 13 }}>#{p.codigo}</p>
+                    <p style={{ color: "#9CA3AF", fontSize: 11 }}>
                       {new Date(p.criado_em).toLocaleDateString("pt-BR")} · Bruto R$ {Number(p.subtotal).toFixed(2)}
                     </p>
                   </div>

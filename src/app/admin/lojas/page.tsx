@@ -119,7 +119,7 @@ export default function LojasPage() {
                 style={{ border: selecionada?.id === l.id ? "1px solid rgba(249,115,22,0.4)" : undefined }}>
                 <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
                   style={{ background: "rgba(249,115,22,0.1)" }}>
-                  {l.categoria === "Restaurante" ? "🍔" : l.categoria === "Mercadinho" ? "🛒" : l.categoria === "Farmácia" ? "💊" : "🏪"}
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">

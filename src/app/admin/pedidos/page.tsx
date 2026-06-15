@@ -5,25 +5,33 @@ import { supabase } from "@/lib/supabase"
 import type { Pedido, StatusPedido } from "@/types"
 
 const STATUS_LABEL: Record<StatusPedido, string> = {
-  pendente:   "Pendente",
-  aceito:     "Aceito",
-  preparando: "Preparando",
-  pronto:     "Pronto",
-  coletado:   "Coletado",
-  entregue:   "Entregue",
-  cancelado:  "Cancelado",
+  pendente:          "Pendente",
+  aceito:            "Aceito",
+  preparando:        "Preparando",
+  pronto:            "Pronto",
+  aguardando_aceite: "Aguard. motoboy",
+  indo_para_loja:    "Indo à loja",
+  na_loja:           "Na loja",
+  em_rota:           "Em rota",
+  coletado:          "Coletado",
+  entregue:          "Entregue",
+  cancelado:         "Cancelado",
 }
 const STATUS_BADGE: Record<StatusPedido, string> = {
-  pendente:   "badge-yellow",
-  aceito:     "badge-blue",
-  preparando: "badge-orange",
-  pronto:     "badge-blue",
-  coletado:   "badge-blue",
-  entregue:   "badge-green",
-  cancelado:  "badge-red",
+  pendente:          "badge-yellow",
+  aceito:            "badge-blue",
+  preparando:        "badge-orange",
+  pronto:            "badge-blue",
+  aguardando_aceite: "badge-orange",
+  indo_para_loja:    "badge-blue",
+  na_loja:           "badge-blue",
+  em_rota:           "badge-orange",
+  coletado:          "badge-blue",
+  entregue:          "badge-green",
+  cancelado:         "badge-red",
 }
 const PAGAMENTO_ICON: Record<string, string> = {
-  pix: "💠", cartao: "💳", dinheiro: "💵", maquininha: "📱",
+  pix: "PIX", cartao: "Cartão", dinheiro: "Dinheiro", maquininha: "Maquininha",
 }
 
 export default function PedidosPage() {
