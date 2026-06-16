@@ -97,15 +97,32 @@ function MapaMotoboy({
   const followRef      = useRef(true)
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null)
 
-  // Pan quando posição muda
+  // Pan para seguir o motoboy apenas quando não há destino ativo
   useEffect(() => {
     if (!mapInstanceRef.current || !followRef.current) return
     mapInstanceRef.current.panTo({ lat: myLat, lng: myLng })
   }, [myLat, myLng])
 
-  // Rota via Directions Service
+  // Quando destino ou loja mudam: reposiciona o mapa E recalcula a rota
   useEffect(() => {
-    if (!isLoaded || !destinoLat || !destinoLng) { setDirections(null); return }
+    if (!isLoaded || !destinoLat || !destinoLng) {
+      setDirections(null)
+      return
+    }
+
+    // Ajusta o mapa imediatamente para mostrar motoboy + destino + loja (se houver)
+    // antes mesmo da rota carregar, para o usuário ver os marcadores
+    if (mapInstanceRef.current) {
+      followRef.current = false
+      const b = new google.maps.LatLngBounds()
+      b.extend({ lat: myLat,      lng: myLng      })
+      b.extend({ lat: destinoLat, lng: destinoLng })
+      if (lojaLat && lojaLng) b.extend({ lat: lojaLat, lng: lojaLng })
+      // bottom: 320 garante que a rota fique acima do painel CorridaAtivaPanel (45% da tela)
+      mapInstanceRef.current.fitBounds(b, { top: 60, right: 24, bottom: 320, left: 24 })
+    }
+
+    // Calcula a rota de navegação
     const svc = new google.maps.DirectionsService()
     svc.route({
       origin:      { lat: myLat,      lng: myLng      },
@@ -114,10 +131,15 @@ function MapaMotoboy({
     }, (result, status) => {
       if (status === "OK" && result) {
         setDirections(result)
-        followRef.current = false
+        // Reposiciona com os bounds reais da rota calculada
+        if (mapInstanceRef.current && result.routes[0]?.bounds) {
+          mapInstanceRef.current.fitBounds(result.routes[0].bounds, {
+            top: 60, right: 24, bottom: 320, left: 24,
+          })
+        }
       }
     })
-  }, [isLoaded, destinoLat, destinoLng, myLat, myLng])
+  }, [isLoaded, destinoLat, destinoLng, lojaLat, lojaLng, myLat, myLng])
 
   if (loadError) return (
     <div style={{ position: "absolute", inset: 0, background: "#1a1a2e", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
@@ -373,13 +395,16 @@ export default function MotoboyPage() {
   // ── Pedidos ────────────────────────────────────────────────────────────────
   async function loadPedidos() {
     if (!motoboy_id) return
-    const [{ data: prontosData }, { data: andamentoData }] = await Promise.all([
+    const [
+      { data: prontosData },
+      { data: andamentoData, error: andamentoError },
+    ] = await Promise.all([
       supabase.from("pedidos")
         .select("*, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone)")
         .eq("status", "pronto").is("motoboy_id", null)
         .order("criado_em", { ascending: true }),
       supabase.from("pedidos")
-        .select("*, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng), nome_cliente, telefone_cliente")
+        .select("*, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone), nome_cliente, telefone_cliente")
         .in("status", ["indo_para_loja", "na_loja", "em_rota", "coletado"])
         .eq("motoboy_id", motoboy_id)
         .order("criado_em", { ascending: true }),
@@ -394,7 +419,10 @@ export default function MotoboyPage() {
     prevProntosRef.current = novosIds
     isFirstLoad.current    = false
     setProntos(novosProntos)
-    setEmAndamento((andamentoData as Pedido[]) ?? [])
+    // Só atualiza emAndamento se a query não retornou erro (evita limpar estado otimista)
+    if (!andamentoError) {
+      setEmAndamento((andamentoData as Pedido[]) ?? [])
+    }
     setPedidosLoading(false)
     // Auto-expande o sheet quando há pedidos
     if (novosProntos.length > 0 || (andamentoData ?? []).length > 0) {
@@ -480,7 +508,6 @@ export default function MotoboyPage() {
       return
     }
     const p = emAndamento[0]
-    const loja = (p as any).loja
 
     // Destino do cliente: usa coords salvas no pedido, senão geocoda o endereço
     if ((p as any).lat_entrega && (p as any).lng_entrega) {
@@ -492,14 +519,20 @@ export default function MotoboyPage() {
       })
     }
 
-    // Localização da loja: usa lat/lng da tabela lojas, senão geocoda o endereço
-    if (loja?.lat && loja?.lng) {
-      setLojaLat(loja.lat)
-      setLojaLng(loja.lng)
-    } else if (loja?.endereco) {
-      geocodeAddress(loja.endereco).then(ll => {
-        if (ll) { setLojaLat(ll[0]); setLojaLng(ll[1]) }
-      })
+    // Localização da loja: busca lat/lng diretamente da tabela para não interferir na query principal
+    const lojaId = (p as any).loja_id
+    if (lojaId) {
+      supabase.from("lojas").select("lat, lng, endereco").eq("id", lojaId).single()
+        .then(({ data: loja }) => {
+          if (loja?.lat && loja?.lng) {
+            setLojaLat(loja.lat)
+            setLojaLng(loja.lng)
+          } else if (loja?.endereco) {
+            geocodeAddress(loja.endereco).then(ll => {
+              if (ll) { setLojaLat(ll[0]); setLojaLng(ll[1]) }
+            })
+          }
+        })
     }
 
     setSheetH(SHEET_MID)
@@ -607,19 +640,22 @@ export default function MotoboyPage() {
   async function aceitarCorrida() {
     if (!pedidoOferta || !motoboy_id) return
     setAceitandoCorrida(true)
-    const { data: updated, error } = await supabase
+    const { error } = await supabase
       .from("pedidos")
       .update({ status: "indo_para_loja", motoboy_id })
       .eq("id", pedidoOferta.id)
       .eq("status", "aguardando_aceite")
-      .select("id")
     setAceitandoCorrida(false)
-    if (error || !updated || updated.length === 0) {
-      setToastMsg("Corrida não disponível — já foi aceita por outro motoboy")
+    if (error) {
+      setToastMsg("Erro ao aceitar corrida. Tente novamente.")
       setPedidoOferta(null)
       setTimeout(() => setToastMsg(null), 3500)
       return
     }
+    // Atualiza estado local imediatamente (optimistic) enquanto loadPedidos confirma
+    const pedidoAceito = { ...pedidoOferta, status: "indo_para_loja" as any, motoboy_id }
+    setEmAndamento([pedidoAceito])
+    setSheetH(SHEET_MID)
     setPedidoOferta(null)
     await loadPedidos()
   }
