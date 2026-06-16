@@ -25,6 +25,24 @@ function beep() {
   } catch {}
 }
 
+type DiaSemana = "dom" | "seg" | "ter" | "qua" | "qui" | "sex" | "sab"
+type DiaConfig = { aberto: boolean; inicio: string; fim: string }
+type Horarios = { tipo: "sempre_aberto" | "por_horario"; dias: Record<DiaSemana, DiaConfig> }
+
+function deveEstarAberto(horarios: Horarios | null): boolean | null {
+  if (!horarios) return null
+  if (horarios.tipo === "sempre_aberto") return true
+  const diasSemana: DiaSemana[] = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"]
+  const agora = new Date()
+  const diaAtual = diasSemana[agora.getDay()]
+  const config = horarios.dias?.[diaAtual]
+  if (!config || !config.aberto) return false
+  const [hIni, mIni] = config.inicio.split(":").map(Number)
+  const [hFim, mFim] = config.fim.split(":").map(Number)
+  const minutos = agora.getHours() * 60 + agora.getMinutes()
+  return minutos >= hIni * 60 + mIni && minutos < hFim * 60 + mFim
+}
+
 function imprimirPedido(pedido: Pedido) {
   const now  = new Date(pedido.criado_em)
   const data = now.toLocaleDateString("pt-BR")
@@ -140,6 +158,7 @@ export default function LojaDashboard() {
   const [atualizando, setAtualizando] = useState<string | null>(null)
   const prevPendentesRef = useRef<Set<string>>(new Set())
   const isFirstLoad = useRef(true)
+  const horariosRef = useRef<Horarios | null>(null)
 
   async function load() {
     if (!loja_id) return
@@ -164,6 +183,28 @@ export default function LojaDashboard() {
     setPedidos(resultado)
     setLoading(false)
   }
+
+  // Carregar horários e sincronizar aberto/fechado automaticamente
+  useEffect(() => {
+    if (!loja_id) return
+
+    async function sincronizarHorario() {
+      const { data } = await supabase.from("lojas").select("horarios, status").eq("id", loja_id!).single()
+      if (!data || data.status !== "ativo") return
+      const horarios: Horarios | null = data.horarios as any
+      horariosRef.current = horarios
+      if (!horarios || horarios.tipo === "sempre_aberto") return
+      const deveria = deveEstarAberto(horarios)
+      if (deveria !== null) {
+        await supabase.from("lojas").update({ aberto: deveria }).eq("id", loja_id!)
+      }
+    }
+
+    sincronizarHorario()
+    // Verificar a cada 5 minutos
+    const horarioInterval = setInterval(sincronizarHorario, 5 * 60 * 1000)
+    return () => clearInterval(horarioInterval)
+  }, [loja_id])
 
   useEffect(() => {
     load()
@@ -259,12 +300,12 @@ export default function LojaDashboard() {
   }
 
   return (
-    <div className="min-h-screen p-6" style={{ maxWidth: 600, margin: "0 auto" }}>
+    <div style={{ minHeight: "100vh", padding: "20px 16px", maxWidth: 600, margin: "0 auto" }}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div>
-          <h1 className="text-xl font-black" style={{ color: "#111827" }}>Pedidos de hoje</h1>
-          <p className="text-xs mt-0.5" style={{ color: "#9CA3AF" }}>Atualiza a cada 15 segundos</p>
+          <h1 style={{ fontSize: 20, fontWeight: 900, color: "#111827", margin: 0 }}>Pedidos de hoje</h1>
+          <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>Atualiza a cada 15 segundos</p>
         </div>
         <button onClick={() => { setLoading(true); load() }} className="btn-ghost" style={{ fontSize: 12, padding: "8px 14px" }}>
           ↻ Atualizar
@@ -272,33 +313,32 @@ export default function LojaDashboard() {
       </div>
 
       {loading ? (
-        <p className="text-center mt-12" style={{ color: "#9CA3AF" }}>Carregando pedidos...</p>
+        <p style={{ textAlign: "center", marginTop: 48, color: "#9CA3AF" }}>Carregando pedidos...</p>
       ) : pedidos.length === 0 ? (
-        <div className="text-center mt-16">
+        <div style={{ textAlign: "center", marginTop: 64 }}>
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: "0 auto 16px" }}><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>
-          <p className="font-bold" style={{ color: "#111827" }}>Nenhum pedido hoje</p>
-          <p className="text-sm mt-1" style={{ color: "#9CA3AF" }}>Novos pedidos aparecerão aqui automaticamente</p>
+          <p style={{ fontWeight: 700, color: "#111827" }}>Nenhum pedido hoje</p>
+          <p style={{ fontSize: 13, color: "#9CA3AF", marginTop: 4 }}>Novos pedidos aparecerão aqui automaticamente</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
-          {/* Novos pedidos — destaque */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {/* Novos pedidos - destaque */}
           {pendentes.map(p => (
-            <div key={p.id} className="card p-5"
-              style={{ border: "1px solid rgba(249,115,22,0.5)", background: "rgba(249,115,22,0.05)", animation: "pulse 2s infinite" }}>
-              <div className="flex items-center justify-between mb-3">
+            <div key={p.id} className="card" style={{ padding: "18px 16px", border: "1px solid rgba(249,115,22,0.5)", background: "rgba(249,115,22,0.05)", animation: "pulse 2s infinite" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                 <div>
                   <span className="badge badge-orange" style={{ fontSize: 11 }}>NOVO PEDIDO</span>
-                  <p className="text-xs mt-1" style={{ color: "#9CA3AF" }}>
+                  <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 4 }}>
                     #{p.codigo} · {new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                   </p>
                 </div>
-                <p className="text-2xl font-black" style={{ color: "#111827" }}>R$ {p.total.toFixed(2)}</p>
+                <p style={{ fontSize: 22, fontWeight: 900, color: "#111827" }}>R$ {p.total.toFixed(2)}</p>
               </div>
 
               {p.itens && p.itens.length > 0 && (
-                <div className="mb-3 flex flex-col gap-1">
+                <div style={{ marginBottom: 12, display: "flex", flexDirection: "column", gap: 4 }}>
                   {p.itens.map((item: any) => (
-                    <div key={item.id} className="flex justify-between text-sm">
+                    <div key={item.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
                       <span style={{ color: "#374151" }}>{item.quantidade}x {item.nome}</span>
                       <span style={{ color: "#9CA3AF" }}>R$ {(item.preco * item.quantidade).toFixed(2)}</span>
                     </div>
@@ -306,7 +346,7 @@ export default function LojaDashboard() {
                 </div>
               )}
 
-              <div className="flex items-center gap-2 mb-3 text-xs" style={{ color: "#9CA3AF" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, fontSize: 12, color: "#9CA3AF" }}>
                 <span>{PAGAMENTO_ICON[p.forma_pagamento] ?? p.forma_pagamento}</span>
                 <span>·</span>
                 <span>📍 {p.endereco_entrega}</span>
@@ -319,21 +359,19 @@ export default function LojaDashboard() {
               )}
 
               {p.observacao && (
-                <p className="text-xs italic mb-3 px-3 py-2 rounded-lg"
-                  style={{ background: "#F3F4F6", color: "#6B7280" }}>
+                <p style={{ fontSize: 12, fontStyle: "italic", marginBottom: 14, padding: "8px 12px", borderRadius: 10, background: "#F3F4F6", color: "#6B7280" }}>
                   💬 {p.observacao}
                 </p>
               )}
 
-              <div className="flex gap-2">
+              <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={() => avancarStatus(p.id, p.status)} disabled={!!atualizando}
-                  className="btn-primary flex-1 justify-center">
+                  className="btn-primary" style={{ flex: 1, justifyContent: "center" }}>
                   {atualizando === p.id ? "..." : PROXIMO_LABEL[p.status]}
                 </button>
                 <BotaoImprimir pedido={p} />
                 <button onClick={() => cancelar(p.id)} disabled={!!atualizando}
-                  className="btn-ghost justify-center"
-                  style={{ color: "#ef4444", borderColor: "rgba(239,68,68,0.3)", padding: "11px 16px" }}>
+                  className="btn-ghost" style={{ color: "#ef4444", borderColor: "rgba(239,68,68,0.3)", padding: "11px 16px" }}>
                   ✕
                 </button>
               </div>
@@ -342,36 +380,32 @@ export default function LojaDashboard() {
 
           {/* Em andamento */}
           {emAndamento.map(p => (
-            <div key={p.id} className="card p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
+            <div key={p.id} className="card" style={{ padding: "14px 16px" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span className="badge badge-blue">{STATUS_LABEL[p.status]}</span>
-                  <span className="text-xs" style={{ color: "#9CA3AF" }}>#{p.codigo}</span>
+                  <span style={{ fontSize: 12, color: "#9CA3AF" }}>#{p.codigo}</span>
                 </div>
-                <p className="font-bold" style={{ color: "#111827" }}>R$ {p.total.toFixed(2)}</p>
+                <p style={{ fontWeight: 700, color: "#111827" }}>R$ {p.total.toFixed(2)}</p>
               </div>
 
               {p.itens && (
-                <p className="text-xs mb-3" style={{ color: "#9CA3AF" }}>
+                <p style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 12 }}>
                   {p.itens.map((i: any) => `${i.quantidade}x ${i.nome}`).join(", ")}
                 </p>
               )}
 
-              <div className="flex gap-2 flex-wrap">
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {PROXIMO_STATUS[p.status] && (
                   <button onClick={() => avancarStatus(p.id, p.status)} disabled={!!atualizando}
-                    className="btn-ghost flex-1 justify-center" style={{ fontSize: 12 }}>
+                    className="btn-ghost" style={{ flex: 1, justifyContent: "center", fontSize: 12 }}>
                     {atualizando === p.id ? "..." : PROXIMO_LABEL[p.status]}
                   </button>
                 )}
 
                 {p.status === "pronto" && !p.motoboy_id && (
-                  <button
-                    onClick={() => chamarMotoboy(p.id)}
-                    disabled={!!atualizando}
-                    className="btn-primary flex-1 justify-center"
-                    style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 7 }}
-                  >
+                  <button onClick={() => chamarMotoboy(p.id)} disabled={!!atualizando}
+                    className="btn-primary" style={{ flex: 1, justifyContent: "center", fontSize: 13, display: "flex", alignItems: "center", gap: 7 }}>
                     {atualizando === p.id ? "Chamando..." : (
                       <>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
