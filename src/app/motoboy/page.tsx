@@ -1436,7 +1436,7 @@ function CorridaAtivaPanel({
   myLat?: number
   myLng?: number
 }) {
-  const [navDestino, setNavDestino] = useState<string | null>(null)
+  const [navDestino, setNavDestino] = useState<{ texto: string; lat?: number; lng?: number } | null>(null)
   const [fotoModal,  setFotoModal]  = useState(false)
   const [sosModal,   setSOSModal]   = useState(false)
 
@@ -1573,7 +1573,7 @@ function CorridaAtivaPanel({
             }}>
               {avancando ? "Salvando..." : "Cheguei na loja"}
             </button>
-            <button onClick={() => setNavDestino(loja?.endereco ?? loja?.nome ?? "")} style={{
+            <button onClick={() => setNavDestino({ texto: loja?.endereco ?? loja?.nome ?? "", lat: (p as any).loja_lat ?? undefined, lng: (p as any).loja_lng ?? undefined })} style={{
               width: "100%", padding: "13px", borderRadius: 14,
               border: "1.5px solid rgba(255,255,255,0.18)", background: "transparent",
               color: "rgba(255,255,255,0.7)", fontWeight: 700, fontSize: 13, cursor: "pointer",
@@ -1644,7 +1644,7 @@ function CorridaAtivaPanel({
               }}>
                 {avancando ? "Salvando..." : "Confirmar entrega"}
               </button>
-              <button onClick={() => setNavDestino(p?.endereco_entrega ?? "")} style={{
+              <button onClick={() => setNavDestino({ texto: p?.endereco_entrega ?? "", lat: (p as any).lat_entrega ?? undefined, lng: (p as any).lng_entrega ?? undefined })} style={{
                 padding: "14px 16px", borderRadius: 14,
                 border: "1.5px solid rgba(255,255,255,0.18)", background: "transparent",
                 color: "rgba(255,255,255,0.7)", fontSize: 12, cursor: "pointer", fontWeight: 700,
@@ -1983,8 +1983,9 @@ function FotoModal({
 }
 
 // Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Modal de seleÃÂ§ÃÂ£o de app de navegaÃÂ§ÃÂ£o (TÃÂ³pico 04) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
-function NavModal({ destino, onClose }: { destino: string; onClose: () => void }) {
-  const enc = encodeURIComponent(destino)
+function NavModal({ destino, onClose }: { destino: { texto: string; lat?: number; lng?: number }; onClose: () => void }) {
+  const coords = destino.lat && destino.lng ? `${destino.lat},${destino.lng}` : null
+  const enc    = encodeURIComponent(destino.texto)
   const APPS = [
     {
       label: "Google Maps",
@@ -1994,7 +1995,9 @@ function NavModal({ destino, onClose }: { destino: string; onClose: () => void }
           <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
         </svg>
       ),
-      url: `https://www.google.com/maps/dir/?api=1&destination=${enc}`,
+      url: coords
+        ? `https://www.google.com/maps/dir/?api=1&destination=${coords}`
+        : `https://www.google.com/maps/dir/?api=1&destination=${enc}`,
     },
     {
       label: "Waze",
@@ -2004,7 +2007,9 @@ function NavModal({ destino, onClose }: { destino: string; onClose: () => void }
           <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
         </svg>
       ),
-      url: `https://waze.com/ul?q=${enc}&navigate=yes`,
+      url: coords
+        ? `https://waze.com/ul?ll=${coords}&navigate=yes`
+        : `https://waze.com/ul?q=${enc}&navigate=yes`,
     },
     {
       label: "Apple Maps",
@@ -2014,7 +2019,9 @@ function NavModal({ destino, onClose }: { destino: string; onClose: () => void }
           <path d="M3 11l19-9-9 19-2-8-8-2z"/>
         </svg>
       ),
-      url: `https://maps.apple.com/?daddr=${enc}`,
+      url: coords
+        ? `https://maps.apple.com/?daddr=${coords}`
+        : `https://maps.apple.com/?daddr=${enc}`,
     },
   ]
 
@@ -2034,7 +2041,7 @@ function NavModal({ destino, onClose }: { destino: string; onClose: () => void }
       >
         <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.12)", margin: "0 auto 20px" }} />
         <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>Navegar atÃÂ©</p>
-        <p style={{ color: "white", fontWeight: 700, fontSize: 14, marginBottom: 20, lineHeight: 1.3 }}>{destino}</p>
+        <p style={{ color: "white", fontWeight: 700, fontSize: 14, marginBottom: 20, lineHeight: 1.3 }}>{destino.texto}</p>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {APPS.map(app => (
             <a
