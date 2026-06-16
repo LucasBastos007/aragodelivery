@@ -731,14 +731,19 @@ export default function MotoboyPage() {
     }
 
     const { error } = await supabase.from("pedidos").update(updates).eq("id", ativa.id)
-    if (error) await supabase.from("pedidos").update({ status: nextStatus }).eq("id", ativa.id)
+    if (error) { setAvancandoEtapa(false); return }
 
+    // Atualiza emAndamento imediatamente sem esperar loadPedidos
     if (nextStatus === "entregue") {
       setCorridaConcluida(ativa)
+      setEmAndamento([])
       enviarPush(ativa.id, "entregue", ativa.codigo)
+    } else {
+      setEmAndamento(prev => prev.map(p => p.id === ativa.id ? { ...p, status: nextStatus as any } : p))
     }
-    await loadPedidos()
+
     setAvancandoEtapa(false)
+    loadPedidos()
   }
 
   function confirmarCodigo(pedido: Pedido) {
