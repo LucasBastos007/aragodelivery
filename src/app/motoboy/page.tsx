@@ -1089,7 +1089,7 @@ export default function MotoboyPage() {
                   </span>
                   <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 12 }}>#{p.codigo}</span>
                 </div>
-                <p style={{ color: "white", fontWeight: 900, fontSize: 18 }}>R$ {p.total.toFixed(2)}</p>
+                <p style={{ color: "white", fontWeight: 900, fontSize: 18 }}>R$ {(p.taxa_entrega ?? 0).toFixed(2)}</p>
               </div>
 
               <div style={{ padding: "12px 16px" }}>
@@ -1248,7 +1248,7 @@ export default function MotoboyPage() {
                         #{p.codigo} ÃÂ· {new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
-                    <p style={{ color: "white", fontWeight: 900, fontSize: 17 }}>R$ {p.total.toFixed(2)}</p>
+                    <p style={{ color: "white", fontWeight: 900, fontSize: 17 }}>R$ {(p.taxa_entrega ?? 0).toFixed(2)}</p>
                   </div>
                   <div style={{ padding: "12px 16px" }}>
                     <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 12 }}>
