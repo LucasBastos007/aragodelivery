@@ -284,8 +284,9 @@ export default function MotoboyPage() {
   const dragStartH  = useRef(0)
   const isDragging  = useRef(false)
 
-  const prevProntosRef = useRef<Set<string>>(new Set())
-  const isFirstLoad    = useRef(true)
+  const prevProntosRef  = useRef<Set<string>>(new Set())
+  const isFirstLoad     = useRef(true)
+  const justAcceptedRef = useRef(false)
 
   // Ã¢ÂÂÃ¢ÂÂ Oferta de corrida (TÃÂ³pico 02) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   const [pedidoOferta,    setPedidoOferta]    = useState<any | null>(null)
@@ -404,7 +405,7 @@ export default function MotoboyPage() {
         .eq("status", "pronto").is("motoboy_id", null)
         .order("criado_em", { ascending: true }),
       supabase.from("pedidos")
-        .select("*, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone), nome_cliente, telefone_cliente")
+        .select("*, loja_lat, loja_lng, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone), nome_cliente, telefone_cliente")
         .in("status", ["indo_para_loja", "na_loja", "em_rota", "coletado"])
         .eq("motoboy_id", motoboy_id)
         .order("criado_em", { ascending: true }),
@@ -419,9 +420,12 @@ export default function MotoboyPage() {
     prevProntosRef.current = novosIds
     isFirstLoad.current    = false
     setProntos(novosProntos)
-    // Só atualiza emAndamento se a query não retornou erro (evita limpar estado otimista)
+    // Só atualiza emAndamento se não retornou erro E (tem dados OU não acabamos de aceitar)
     if (!andamentoError) {
-      setEmAndamento((andamentoData as Pedido[]) ?? [])
+      const dados = (andamentoData as Pedido[]) ?? []
+      if (dados.length > 0 || !justAcceptedRef.current) {
+        setEmAndamento(dados)
+      }
     }
     setPedidosLoading(false)
     // Auto-expande o sheet quando hÃÂ¡ pedidos
@@ -443,7 +447,7 @@ export default function MotoboyPage() {
 
     // Verifica oferta pendente jÃÂ¡ existente ao entrar
     supabase.from("pedidos")
-      .select("*, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
+      .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
       .eq("motoboy_id", motoboy_id)
       .eq("status", "aguardando_aceite")
       .limit(1)
@@ -458,7 +462,7 @@ export default function MotoboyPage() {
         const novo = payload.new as any
         if (novo?.motoboy_id === motoboy_id && novo?.status === "aguardando_aceite") {
           supabase.from("pedidos")
-            .select("*, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
+            .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
             .eq("id", novo.id).single()
             .then(({ data }) => {
               if (data) { beep(); setPedidoOferta(data); setTimerOferta(30); setDistKmOferta(null) }
@@ -519,24 +523,30 @@ export default function MotoboyPage() {
       })
     }
 
-    // Localização da loja: busca lat/lng diretamente da tabela para não interferir na query principal
-    const lojaId = (p as any).loja_id
-    if (lojaId) {
-      supabase.from("lojas").select("lat, lng, endereco").eq("id", lojaId).single()
-        .then(({ data: loja }) => {
-          if (loja?.lat && loja?.lng) {
-            setLojaLat(loja.lat)
-            setLojaLng(loja.lng)
-          } else if (loja?.endereco) {
-            geocodeAddress(loja.endereco).then(ll => {
-              if (ll) { setLojaLat(ll[0]); setLojaLng(ll[1]) }
-            })
-          }
-        })
+    // Localização da loja: usa loja_lat/loja_lng gravados no pedido pela escalada
+    if ((p as any).loja_lat && (p as any).loja_lng) {
+      setLojaLat((p as any).loja_lat)
+      setLojaLng((p as any).loja_lng)
+    } else {
+      // Fallback: busca direto na tabela lojas (pedidos antigos sem loja_lat/loja_lng)
+      const lojaId = (p as any).loja_id
+      if (lojaId) {
+        supabase.from("lojas").select("lat, lng, endereco").eq("id", lojaId).single()
+          .then(({ data: loja }) => {
+            if (loja?.lat && loja?.lng) {
+              setLojaLat(loja.lat)
+              setLojaLng(loja.lng)
+            } else if (loja?.endereco) {
+              geocodeAddress(loja.endereco).then(ll => {
+                if (ll) { setLojaLat(ll[0]); setLojaLng(ll[1]) }
+              })
+            }
+          })
+      }
     }
 
     setSheetH(SHEET_MID)
-  }, [emAndamento.length])
+  }, [emAndamento[0]?.id])
 
   // Ã¢ÂÂÃ¢ÂÂ GPS tracking Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   const iniciarRastreamento = useCallback(() => {
@@ -622,8 +632,14 @@ export default function MotoboyPage() {
   async function aceitarEntrega(pedido: Pedido) {
     if (!motoboy_id) return
     setAtualizando(pedido.id)
-    await supabase.from("pedidos").update({ status: "indo_para_loja", motoboy_id }).eq("id", pedido.id)
-    await loadPedidos()
+    const { error } = await supabase.from("pedidos").update({ status: "indo_para_loja", motoboy_id }).eq("id", pedido.id)
+    if (!error) {
+      justAcceptedRef.current = true
+      setTimeout(() => { justAcceptedRef.current = false }, 30_000)
+      setEmAndamento([{ ...pedido, status: "indo_para_loja" as any, motoboy_id }])
+      setSheetH(SHEET_MID)
+    }
+    loadPedidos()
     setAtualizando(null)
   }
 
@@ -652,12 +668,15 @@ export default function MotoboyPage() {
       setTimeout(() => setToastMsg(null), 3500)
       return
     }
-    // Atualiza estado local imediatamente (optimistic) enquanto loadPedidos confirma
+    // Atualiza estado local imediatamente (optimistic)
+    justAcceptedRef.current = true
+    setTimeout(() => { justAcceptedRef.current = false }, 30_000)
     const pedidoAceito = { ...pedidoOferta, status: "indo_para_loja" as any, motoboy_id }
     setEmAndamento([pedidoAceito])
     setSheetH(SHEET_MID)
     setPedidoOferta(null)
-    await loadPedidos()
+    // loadPedidos() em background sem await — o intervalo de 15s já cobre o re-fetch
+    loadPedidos()
   }
 
   // Ã¢ÂÂÃ¢ÂÂ Recusar corrida Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
@@ -749,8 +768,8 @@ export default function MotoboyPage() {
   ) ?? null
 
   // Quando indo ÃÂ  loja, rota aponta para a loja; nas demais etapas, para o cliente
-  const efetDestinoLat = corridaAtiva?.status === "indo_para_loja" ? lojaLat : destinoLat
-  const efetDestinoLng = corridaAtiva?.status === "indo_para_loja" ? lojaLng : destinoLng
+  const efetDestinoLat = corridaAtiva?.status === "indo_para_loja" ? (lojaLat ?? destinoLat) : destinoLat
+  const efetDestinoLng = corridaAtiva?.status === "indo_para_loja" ? (lojaLng ?? destinoLng) : destinoLng
 
   return (
     <div style={{ position: "fixed", top: 52, left: 0, right: 0, bottom: 60, background: "#1a1a2e" }}>

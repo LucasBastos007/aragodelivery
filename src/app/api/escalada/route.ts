@@ -122,6 +122,7 @@ export async function POST(req: NextRequest) {
     motoboy_id: escolhido.id,
     status: "aguardando_aceite",
     historico_atribuicao: historico,
+    ...(lojaLat != null && lojaLng != null ? { loja_lat: lojaLat, loja_lng: lojaLng } : {}),
   }).eq("id", pedido_id)
 
   // Envia push para o motoboy escalado
