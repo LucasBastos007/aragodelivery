@@ -1,4 +1,50 @@
-"use client"
+{/* ── Banner de status no mapa ── */}
+      {corridaAtiva && !corridaConcluida && (
+        <div style={{
+          position: "absolute",
+          bottom: sheetH + 12, left: 12, right: 12, zIndex: 30,
+          borderRadius: 16, padding: "14px 18px",
+          background: corridaAtiva.status === "indo_para_loja"
+            ? "rgba(30,15,0,0.88)"
+            : corridaAtiva.status === "na_loja"
+            ? "rgba(0,30,10,0.88)"
+            : "rgba(10,5,30,0.88)",
+          border: `1.5px solid ${corridaAtiva.status === "indo_para_loja" ? "rgba(249,115,22,0.6)" : corridaAtiva.status === "na_loja" ? "rgba(34,197,94,0.6)" : "rgba(99,102,241,0.6)"}`,
+          backdropFilter: "blur(12px)",
+          display: "flex", alignItems: "center", gap: 12,
+          boxShadow: "0 4px 24px rgba(0,0,0,0.6)",
+          animation: "slideUpCard 0.3s ease-out",
+        }}>
+          <div style={{
+            width: 42, height: 42, borderRadius: "50%", flexShrink: 0,
+            background: corridaAtiva.status === "indo_para_loja" ? "rgba(249,115,22,0.2)" : corridaAtiva.status === "na_loja" ? "rgba(34,197,94,0.2)" : "rgba(99,102,241,0.2)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 22,
+          }}>
+            {corridaAtiva.status === "indo_para_loja" ? "🏪" : corridaAtiva.status === "na_loja" ? "📦" : "🏠"}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ color: "white", fontWeight: 900, fontSize: 14, margin: 0 }}>
+              {corridaAtiva.status === "indo_para_loja" && "Indo buscar o pedido"}
+              {corridaAtiva.status === "na_loja" && "Na loja — pegue o pedido"}
+              {corridaAtiva.status === "em_rota" && "Em rota de entrega"}
+            </p>
+            <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 12, margin: 0, marginTop: 2 }}>
+              {corridaAtiva.status === "indo_para_loja" && "Rota até a loja exibida no mapa"}
+              {corridaAtiva.status === "na_loja" && "Deslize para cima e clique no botão"}
+              {corridaAtiva.status === "em_rota" && "Rota até o cliente exibida no mapa"}
+            </p>
+          </div>
+          <div style={{
+            color: corridaAtiva.status === "indo_para_loja" ? "#f97316" : corridaAtiva.status === "na_loja" ? "#22c55e" : "#818cf8",
+            fontSize: 11, fontWeight: 800, flexShrink: 0,
+          }}>
+            #{corridaAtiva.codigo}
+          </div>
+        </div>
+      )}
+
+      "use client"
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import { supabase } from "@/lib/supabase"
@@ -27,7 +73,7 @@ const DARK_MAP_STYLE = [
 ]
 
 const PGTO: Record<string, string> = {
-  pix: "PIX", cartao: "CartÃ£o", dinheiro: "Dinheiro", maquininha: "Maquininha",
+  pix: "PIX", cartao: "CartÃÂ£o", dinheiro: "Dinheiro", maquininha: "Maquininha",
 }
 const PGTO_COLOR: Record<string, string> = {
   pix: "#818cf8", cartao: "#60a5fa", dinheiro: "#34d399", maquininha: "#f472b6",
@@ -53,7 +99,7 @@ function urlBase64ToUint8Array(base64String: string) {
 async function geocodeAddress(address: string): Promise<[number, number] | null> {
   try {
     const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY
-    const q   = encodeURIComponent(`${address}, AragoiÃ¢nia, GO, Brasil`)
+    const q   = encodeURIComponent(`${address}, AragoiÃÂ¢nia, GO, Brasil`)
     const res  = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${q}&key=${key}`)
     const data = await res.json()
     if (data.status === "OK" && data.results[0]) {
@@ -73,9 +119,9 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
-const CIRCUM = 2 * Math.PI * 40 // circunferÃªncia do timer circular â 251.3
+const CIRCUM = 2 * Math.PI * 40 // circunferÃÂªncia do timer circular Ã¢ÂÂ 251.3
 
-// âââ Mapa fullscreen com rota (Google Maps) âââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Mapa fullscreen com rota (Google Maps) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function MapaMotoboy({
   myLat, myLng,
   destinoLat, destinoLng,
@@ -97,7 +143,7 @@ function MapaMotoboy({
   const followRef      = useRef(true)
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null)
 
-  // Pan quando posiÃ§Ã£o muda
+  // Pan quando posiÃÂ§ÃÂ£o muda
   useEffect(() => {
     if (!mapInstanceRef.current || !followRef.current) return
     mapInstanceRef.current.panTo({ lat: myLat, lng: myLng })
@@ -124,7 +170,7 @@ function MapaMotoboy({
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(249,115,22,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
       </svg>
-      <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 12 }}>Mapa indisponÃ­vel</p>
+      <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 12 }}>Mapa indisponÃÂ­vel</p>
     </div>
   )
 
@@ -152,7 +198,7 @@ function MapaMotoboy({
       onLoad={m => { mapInstanceRef.current = m }}
       onDragStart={() => { followRef.current = false }}
     >
-      {/* Marcador do motoboy â ponto azul estilo Google Maps */}
+      {/* Marcador do motoboy Ã¢ÂÂ ponto azul estilo Google Maps */}
       <OverlayView position={{ lat: myLat, lng: myLng }} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}>
         <div style={{ transform: "translate(-50%,-50%)", position: "relative", width: 24, height: 24 }}>
           <style>{`@keyframes gpsPulse{0%{transform:translate(-50%,-50%) scale(1);opacity:.6}100%{transform:translate(-50%,-50%) scale(2.8);opacity:0}}`}</style>
@@ -208,7 +254,7 @@ function MapaMotoboy({
         />
       )}
 
-      {/* CÃ­rculo de raio */}
+      {/* CÃÂ­rculo de raio */}
       {raioKm && raioKm > 0 && (
         <Circle
           center={{ lat: myLat, lng: myLng }}
@@ -223,7 +269,7 @@ function MapaMotoboy({
   )
 }
 
-// âââ PÃ¡gina principal âââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ PÃÂ¡gina principal Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 export default function MotoboyPage() {
   const { sessao } = useAuth()
   const motoboy_id = sessao?.role === "motoboy" ? sessao.motoboy_id : null
@@ -265,7 +311,7 @@ export default function MotoboyPage() {
   const prevProntosRef = useRef<Set<string>>(new Set())
   const isFirstLoad    = useRef(true)
 
-  // ââ Oferta de corrida (TÃ³pico 02) âââââââââââââââââââââââââââââââââââââââââ
+  // Ã¢ÂÂÃ¢ÂÂ Oferta de corrida (TÃÂ³pico 02) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   const [pedidoOferta,    setPedidoOferta]    = useState<any | null>(null)
   const [timerOferta,     setTimerOferta]     = useState(30)
   const [distKmOferta,    setDistKmOferta]    = useState<number | null>(null)
@@ -277,7 +323,7 @@ export default function MotoboyPage() {
   const [salvandoRaio,     setSalvandoRaio]     = useState(false)
   const [fotoMotoboy,      setFotoMotoboy]      = useState<string | null>(null)
 
-  // ââ Carrega motoboy ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // Ã¢ÂÂÃ¢ÂÂ Carrega motoboy Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   useEffect(() => {
     if (!motoboy_id) return
     supabase.from("motoboys").select("disponivel, lat, lng, raio_km, foto").eq("id", motoboy_id).single()
@@ -293,7 +339,7 @@ export default function MotoboyPage() {
       })
   }, [motoboy_id])
 
-  // ââ Ganhos do dia ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // Ã¢ÂÂÃ¢ÂÂ Ganhos do dia Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   useEffect(() => {
     if (!motoboy_id) return
     const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
@@ -307,7 +353,7 @@ export default function MotoboyPage() {
       })
   }, [motoboy_id, emAndamento.length])
 
-  // ââ Injeta CSS de animaÃ§Ã£o pulse (uma vez) ââââââââââââââââââââââââââââââââ
+  // Ã¢ÂÂÃ¢ÂÂ Injeta CSS de animaÃÂ§ÃÂ£o pulse (uma vez) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   useEffect(() => {
     if (document.getElementById("moto-pulse-css")) return
     const s = document.createElement("style")
@@ -330,7 +376,7 @@ export default function MotoboyPage() {
     document.head.appendChild(s)
   }, [])
 
-  // ââ Marca offline ao fechar o browser âââââââââââââââââââââââââââââââââââââ
+  // Ã¢ÂÂÃ¢ÂÂ Marca offline ao fechar o browser Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   useEffect(() => {
     if (!motoboy_id) return
     const handle = () => {
@@ -341,7 +387,7 @@ export default function MotoboyPage() {
     return () => window.removeEventListener("beforeunload", handle)
   }, [motoboy_id])
 
-  // ââ Raio de atuaÃ§Ã£o ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // Ã¢ÂÂÃ¢ÂÂ Raio de atuaÃÂ§ÃÂ£o Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   async function salvarRaio(km: number) {
     if (!motoboy_id) return
     setSalvandoRaio(true)
@@ -350,19 +396,19 @@ export default function MotoboyPage() {
     setSalvandoRaio(false)
   }
 
-  // ââ Toggle disponÃ­vel ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // Ã¢ÂÂÃ¢ÂÂ Toggle disponÃÂ­vel Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   async function toggleDisponivel() {
     if (!motoboy_id) return
     setTogglingDisp(true)
     const novo = !disponivel
     const now  = new Date().toISOString()
-    // Tenta salvar last_seen junto; se a coluna nÃ£o existir, faz update separado
+    // Tenta salvar last_seen junto; se a coluna nÃÂ£o existir, faz update separado
     const { error } = await supabase
       .from("motoboys")
       .update({ disponivel: novo, last_seen: now })
       .eq("id", motoboy_id)
     if (error) {
-      // Coluna last_seen pode nÃ£o existir â salva sÃ³ disponivel
+      // Coluna last_seen pode nÃÂ£o existir Ã¢ÂÂ salva sÃÂ³ disponivel
       await supabase.from("motoboys").update({ disponivel: novo }).eq("id", motoboy_id)
     }
     setDisponivel(novo)
@@ -370,7 +416,7 @@ export default function MotoboyPage() {
     if (novo) setSheetH(SHEET_PEEK)
   }
 
-  // ââ Pedidos ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // Ã¢ÂÂÃ¢ÂÂ Pedidos Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   async function loadPedidos() {
     if (!motoboy_id) return
     const [{ data: prontosData }, { data: andamentoData }] = await Promise.all([
@@ -396,7 +442,7 @@ export default function MotoboyPage() {
     setProntos(novosProntos)
     setEmAndamento((andamentoData as Pedido[]) ?? [])
     setPedidosLoading(false)
-    // Auto-expande o sheet quando hÃ¡ pedidos
+    // Auto-expande o sheet quando hÃÂ¡ pedidos
     if (novosProntos.length > 0 || (andamentoData ?? []).length > 0) {
       setSheetH(h => Math.max(h, SHEET_MID))
     }
@@ -409,11 +455,11 @@ export default function MotoboyPage() {
     return () => clearInterval(iv)
   }, [motoboy_id])
 
-  // ââ Supabase Realtime â escuta oferta de corrida âââââââââââââââââââââââââââ
+  // Ã¢ÂÂÃ¢ÂÂ Supabase Realtime Ã¢ÂÂ escuta oferta de corrida Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   useEffect(() => {
     if (!motoboy_id || !disponivel) return
 
-    // Verifica oferta pendente jÃ¡ existente ao entrar
+    // Verifica oferta pendente jÃÂ¡ existente ao entrar
     supabase.from("pedidos")
       .select("*, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
       .eq("motoboy_id", motoboy_id)
@@ -442,11 +488,11 @@ export default function MotoboyPage() {
     return () => { supabase.removeChannel(ch) }
   }, [motoboy_id, disponivel])
 
-  // ââ Timer regressivo da oferta âââââââââââââââââââââââââââââââââââââââââââââ
+  // Ã¢ÂÂÃ¢ÂÂ Timer regressivo da oferta Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   useEffect(() => {
     if (!pedidoOferta) return
     if (timerOferta <= 0) {
-      // Timeout â escalada para prÃ³ximo motoboy
+      // Timeout Ã¢ÂÂ escalada para prÃÂ³ximo motoboy
       const ofertaId = pedidoOferta.id
       setPedidoOferta(null)
       fetch("/api/escalada", {
@@ -464,7 +510,7 @@ export default function MotoboyPage() {
     return () => clearInterval(iv)
   }, [pedidoOferta, timerOferta])
 
-  // ââ Geocoding da entrega para calcular distÃ¢ncia âââââââââââââââââââââââââââ
+  // Ã¢ÂÂÃ¢ÂÂ Geocoding da entrega para calcular distÃÂ¢ncia Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   useEffect(() => {
     if (!pedidoOferta || !myLat || !myLng) return
     geocodeAddress(pedidoOferta.endereco_entrega ?? "").then(ll => {
@@ -472,7 +518,7 @@ export default function MotoboyPage() {
     })
   }, [pedidoOferta?.id])
 
-  // ââ Coordenadas do destino e da loja ââââââââââââââââââââââââââââââââââââââ
+  // Ã¢ÂÂÃ¢ÂÂ Coordenadas do destino e da loja Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   useEffect(() => {
     if (emAndamento.length === 0) {
       setDestinoLat(null); setDestinoLng(null)
@@ -482,7 +528,7 @@ export default function MotoboyPage() {
     const p = emAndamento[0]
     const loja = (p as any).loja
 
-    // Destino do cliente: usa coords salvas no pedido, senÃ£o geocoda o endereÃ§o
+    // Destino do cliente: usa coords salvas no pedido, senÃÂ£o geocoda o endereÃÂ§o
     if ((p as any).lat_entrega && (p as any).lng_entrega) {
       setDestinoLat((p as any).lat_entrega)
       setDestinoLng((p as any).lng_entrega)
@@ -492,7 +538,7 @@ export default function MotoboyPage() {
       })
     }
 
-    // LocalizaÃ§Ã£o da loja: usa lat/lng da tabela lojas, senÃ£o geocoda o endereÃ§o
+    // LocalizaÃÂ§ÃÂ£o da loja: usa lat/lng da tabela lojas, senÃÂ£o geocoda o endereÃÂ§o
     if (loja?.lat && loja?.lng) {
       setLojaLat(loja.lat)
       setLojaLng(loja.lng)
@@ -505,7 +551,7 @@ export default function MotoboyPage() {
     setSheetH(SHEET_MID)
   }, [emAndamento.length])
 
-  // ââ GPS tracking âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // Ã¢ÂÂÃ¢ÂÂ GPS tracking Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   const iniciarRastreamento = useCallback(() => {
     if (!motoboy_id || !navigator.geolocation) return
     if (watchIdRef.current !== null) return
@@ -531,7 +577,7 @@ export default function MotoboyPage() {
     if (motoboy_id) supabase.from("motoboys").update({ lat: null, lng: null }).eq("id", motoboy_id)
   }, [motoboy_id])
 
-  // Pede localizaÃ§Ã£o imediatamente ao carregar â centraliza o mapa na posiÃ§Ã£o real
+  // Pede localizaÃÂ§ÃÂ£o imediatamente ao carregar Ã¢ÂÂ centraliza o mapa na posiÃÂ§ÃÂ£o real
   useEffect(() => {
     if (!navigator.geolocation) return
     navigator.geolocation.getCurrentPosition(
@@ -551,7 +597,7 @@ export default function MotoboyPage() {
 
   useEffect(() => () => pararRastreamento(), [pararRastreamento])
 
-  // ââ Push â registrar SW + salvar subscription do motoboy âââââââââââââââââ
+  // Ã¢ÂÂÃ¢ÂÂ Push Ã¢ÂÂ registrar SW + salvar subscription do motoboy Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   useEffect(() => {
     if (!motoboy_id) return
     async function registerPush() {
@@ -575,7 +621,7 @@ export default function MotoboyPage() {
     registerPush()
   }, [motoboy_id])
 
-  // ââ Push â enviar notificaÃ§Ã£o ao cliente ââââââââââââââââââââââââââââââââââ
+  // Ã¢ÂÂÃ¢ÂÂ Push Ã¢ÂÂ enviar notificaÃÂ§ÃÂ£o ao cliente Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   async function enviarPush(pedido_id: string, status: string, codigo: string) {
     try {
       await fetch("/api/push", {
@@ -585,7 +631,7 @@ export default function MotoboyPage() {
     } catch {}
   }
 
-  // ââ Aceitar / Entregar âââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // Ã¢ÂÂÃ¢ÂÂ Aceitar / Entregar Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   async function aceitarEntrega(pedido: Pedido) {
     if (!motoboy_id) return
     setAtualizando(pedido.id)
@@ -603,7 +649,7 @@ export default function MotoboyPage() {
     setConfirmandoId(null); setCodigoInput(""); setErroConfirm("")
   }
 
-  // ââ Aceitar corrida (atÃ´mico â protege contra dois motoboys) ââââââââââââââ
+  // Ã¢ÂÂÃ¢ÂÂ Aceitar corrida (atÃÂ´mico Ã¢ÂÂ protege contra dois motoboys) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   async function aceitarCorrida() {
     if (!pedidoOferta || !motoboy_id) return
     setAceitandoCorrida(true)
@@ -615,7 +661,7 @@ export default function MotoboyPage() {
       .select("id")
     setAceitandoCorrida(false)
     if (error || !updated || updated.length === 0) {
-      setToastMsg("Corrida nÃ£o disponÃ­vel â jÃ¡ foi aceita por outro motoboy")
+      setToastMsg("Corrida nÃÂ£o disponÃÂ­vel Ã¢ÂÂ jÃÂ¡ foi aceita por outro motoboy")
       setPedidoOferta(null)
       setTimeout(() => setToastMsg(null), 3500)
       return
@@ -624,12 +670,12 @@ export default function MotoboyPage() {
     await loadPedidos()
   }
 
-  // ââ Recusar corrida ââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // Ã¢ÂÂÃ¢ÂÂ Recusar corrida Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   async function recusarCorrida() {
     if (!pedidoOferta || !motoboy_id) return
     const ofertaId = pedidoOferta.id
     setPedidoOferta(null)
-    // Escalada: tenta prÃ³ximo motoboy (ou fila geral se atingiu limite)
+    // Escalada: tenta prÃÂ³ximo motoboy (ou fila geral se atingiu limite)
     try {
       await fetch("/api/escalada", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -648,9 +694,9 @@ export default function MotoboyPage() {
     } catch {}
   }
 
-  // ââ AvanÃ§ar etapa da corrida ativa (TÃ³pico 03) ââââââââââââââââââââââââââââ
+  // Ã¢ÂÂÃ¢ÂÂ AvanÃÂ§ar etapa da corrida ativa (TÃÂ³pico 03) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   async function avancarEtapa(fotoUrl?: string) {
-    // Se jÃ¡ estÃ¡ concluÃ­da, volta para o estado normal
+    // Se jÃÂ¡ estÃÂ¡ concluÃÂ­da, volta para o estado normal
     if (corridaConcluida) {
       setCorridaConcluida(null)
       setSheetH(SHEET_PEEK)
@@ -688,13 +734,13 @@ export default function MotoboyPage() {
 
   function confirmarCodigo(pedido: Pedido) {
     if (codigoInput.trim().toUpperCase() !== pedido.codigo.toUpperCase()) {
-      setErroConfirm("CÃ³digo incorreto. PeÃ§a ao cliente para mostrar o cÃ³digo na tela.")
+      setErroConfirm("CÃÂ³digo incorreto. PeÃÂ§a ao cliente para mostrar o cÃÂ³digo na tela.")
       return
     }
     marcarEntregue(pedido)
   }
 
-  // ââ Bottom sheet drag ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // Ã¢ÂÂÃ¢ÂÂ Bottom sheet drag Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
   function onDragStart(y: number) { isDragging.current = true; dragStartY.current = y; dragStartH.current = sheetH }
   function onDragMove(y: number) {
     if (!isDragging.current) return
@@ -712,7 +758,7 @@ export default function MotoboyPage() {
     ["indo_para_loja","na_loja","em_rota","coletado"].includes(p.status)
   ) ?? null
 
-  // Quando indo Ã  loja, rota aponta para a loja; nas demais etapas, para o cliente
+  // Quando indo ÃÂ  loja, rota aponta para a loja; nas demais etapas, para o cliente
   const efetDestinoLat = corridaAtiva?.status === "indo_para_loja" ? lojaLat : destinoLat
   const efetDestinoLng = corridaAtiva?.status === "indo_para_loja" ? lojaLng : destinoLng
 
@@ -727,7 +773,50 @@ export default function MotoboyPage() {
         raioKm={raioKm}
       />
 
-      {/* ââ Toast de erro ââ */}
+      {/* Ã¢ÂÂÃ¢ÂÂ Toast de erro Ã¢ÂÂÃ¢ÂÂ */}
+      {/* ── Banner de status no mapa ── */}
+      {corridaAtiva && !corridaConcluida && (
+        <div style={{
+          position: "absolute",
+          bottom: sheetH + 12, left: 12, right: 12, zIndex: 30,
+          borderRadius: 16, padding: "14px 18px",
+          background: corridaAtiva.status === "indo_para_loja"
+            ? "rgba(30,15,0,0.88)"
+            : corridaAtiva.status === "na_loja"
+            ? "rgba(0,30,10,0.88)"
+            : "rgba(10,5,30,0.88)",
+          border: `1.5px solid ${corridaAtiva.status === "indo_para_loja" ? "rgba(249,115,22,0.6)" : corridaAtiva.status === "na_loja" ? "rgba(34,197,94,0.6)" : "rgba(99,102,241,0.6)"}`,
+          backdropFilter: "blur(12px)",
+          display: "flex", alignItems: "center", gap: 12,
+          boxShadow: "0 4px 24px rgba(0,0,0,0.6)",
+          animation: "slideUpCard 0.3s ease-out",
+        }}>
+          <div style={{
+            width: 42, height: 42, borderRadius: "50%", flexShrink: 0,
+            background: corridaAtiva.status === "indo_para_loja" ? "rgba(249,115,22,0.2)" : corridaAtiva.status === "na_loja" ? "rgba(34,197,94,0.2)" : "rgba(99,102,241,0.2)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 22,
+          }}>
+            {corridaAtiva.status === "indo_para_loja" ? "🏪" : corridaAtiva.status === "na_loja" ? "📦" : "🏠"}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ color: "white", fontWeight: 900, fontSize: 14, margin: 0 }}>
+              {corridaAtiva.status === "indo_para_loja" && "Indo buscar o pedido"}
+              {corridaAtiva.status === "na_loja" && "Na loja — pegue o pedido"}
+              {corridaAtiva.status === "em_rota" && "Em rota de entrega"}
+            </p>
+            <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 12, margin: 0, marginTop: 2 }}>
+              {corridaAtiva.status === "indo_para_loja" && "Rota até a loja exibida no mapa"}
+              {corridaAtiva.status === "na_loja" && "Deslize para cima e clique no botão"}
+              {corridaAtiva.status === "em_rota" && "Rota até o cliente exibida no mapa"}
+            </p>
+          </div>
+          <div style={{ color: corridaAtiva.status === "indo_para_loja" ? "#f97316" : corridaAtiva.status === "na_loja" ? "#22c55e" : "#818cf8", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
+            #{corridaAtiva.codigo}
+          </div>
+        </div>
+      )}
+
       {toastMsg && (
         <div style={{
           position: "absolute", top: 60, left: 12, right: 12, zIndex: 60,
@@ -740,7 +829,7 @@ export default function MotoboyPage() {
         </div>
       )}
 
-      {/* ââ Card de oferta de corrida (TÃ³pico 02) ââ */}
+      {/* Ã¢ÂÂÃ¢ÂÂ Card de oferta de corrida (TÃÂ³pico 02) Ã¢ÂÂÃ¢ÂÂ */}
       {pedidoOferta && (
         <CardCorrida
           pedido={pedidoOferta}
@@ -752,7 +841,7 @@ export default function MotoboyPage() {
         />
       )}
 
-      {/* ââ Ganhos do dia â badge central no topo ââ */}
+      {/* Ã¢ÂÂÃ¢ÂÂ Ganhos do dia Ã¢ÂÂ badge central no topo Ã¢ÂÂÃ¢ÂÂ */}
       <div style={{
         position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 20,
         background: "rgba(0,0,0,0.78)", backdropFilter: "blur(10px)",
@@ -771,7 +860,7 @@ export default function MotoboyPage() {
         <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, fontWeight: 600 }}>hoje</span>
       </div>
 
-      {/* ââ Toggle online/offline â canto superior direito ââ */}
+      {/* Ã¢ÂÂÃ¢ÂÂ Toggle online/offline Ã¢ÂÂ canto superior direito Ã¢ÂÂÃ¢ÂÂ */}
       <div
         onClick={!dispLoading && !togglingDisp && !corridaAtiva && !corridaConcluida ? toggleDisponivel : undefined}
         style={{
@@ -787,7 +876,7 @@ export default function MotoboyPage() {
           userSelect: "none",
         }}
       >
-        {/* Ãcone: raio (online) ou lua (offline) */}
+        {/* ÃÂcone: raio (online) ou lua (offline) */}
         {disponivel ? (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="#22c55e">
             <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
@@ -822,7 +911,7 @@ export default function MotoboyPage() {
         </span>
       </div>
 
-      {/* ââ GPS badge â canto superior esquerdo ââ */}
+      {/* Ã¢ÂÂÃ¢ÂÂ GPS badge Ã¢ÂÂ canto superior esquerdo Ã¢ÂÂÃ¢ÂÂ */}
       {compartilhando && (
         <div style={{
           position: "absolute", top: 12, left: 12, zIndex: 20,
@@ -836,7 +925,7 @@ export default function MotoboyPage() {
         </div>
       )}
 
-      {/* ââ Legenda rota (sÃ³ quando NÃO tem corrida ativa no painel) ââ */}
+      {/* Ã¢ÂÂÃ¢ÂÂ Legenda rota (sÃÂ³ quando NÃÂO tem corrida ativa no painel) Ã¢ÂÂÃ¢ÂÂ */}
       {!corridaAtiva && !corridaConcluida && entregaAtiva && destinoLat && (
         <div style={{
           position: "absolute", bottom: sheetH + 12, left: 12, zIndex: 20,
@@ -846,13 +935,13 @@ export default function MotoboyPage() {
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
             <div style={{ width: 16, height: 3, borderRadius: 2, background: "#f97316", borderTop: "2px dashed #f97316" }} />
-            <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 10, fontWeight: 700 }}>Rota atÃ© o cliente</span>
+            <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 10, fontWeight: 700 }}>Rota atÃÂ© o cliente</span>
           </div>
           <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 10 }}>{entregaAtiva.endereco_entrega?.split(",")[0]}</p>
         </div>
       )}
 
-      {/* ââ Painel de corrida ativa (TÃ³pico 03) ââ */}
+      {/* Ã¢ÂÂÃ¢ÂÂ Painel de corrida ativa (TÃÂ³pico 03) Ã¢ÂÂÃ¢ÂÂ */}
       {(corridaAtiva || corridaConcluida) && (
         <CorridaAtivaPanel
           pedido={corridaAtiva}
@@ -866,7 +955,7 @@ export default function MotoboyPage() {
         />
       )}
 
-      {/* ââ Bottom Sheet (sÃ³ quando sem corrida ativa) ââ */}
+      {/* Ã¢ÂÂÃ¢ÂÂ Bottom Sheet (sÃÂ³ quando sem corrida ativa) Ã¢ÂÂÃ¢ÂÂ */}
       {!corridaAtiva && !corridaConcluida && <div
         style={{
           position: "absolute", left: 0, right: 0, bottom: 0,
@@ -892,14 +981,14 @@ export default function MotoboyPage() {
           <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.15)", margin: "0 auto" }} />
         </div>
 
-        {/* Header sheet â clicÃ¡vel para expandir/recolher */}
+        {/* Header sheet Ã¢ÂÂ clicÃÂ¡vel para expandir/recolher */}
         <div
           onClick={() => setSheetH(h => h === SHEET_PEEK ? SHEET_MID : h === SHEET_MID ? SHEET_FULL : SHEET_PEEK)}
           style={{ padding: "0 20px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, cursor: "pointer", userSelect: "none" }}
         >
           <div>
             {!disponivel ? (
-              <p style={{ color: "rgba(255,255,255,0.4)", fontWeight: 700, fontSize: 14 }}>VocÃª estÃ¡ offline</p>
+              <p style={{ color: "rgba(255,255,255,0.4)", fontWeight: 700, fontSize: 14 }}>VocÃÂª estÃÂ¡ offline</p>
             ) : pedidosLoading ? (
               <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 14 }}>Carregando...</p>
             ) : emAndamento.length > 0 ? (
@@ -908,7 +997,7 @@ export default function MotoboyPage() {
               </p>
             ) : prontos.length > 0 ? (
               <p style={{ color: "#f97316", fontWeight: 800, fontSize: 14 }}>
-                {prontos.length} pedido{prontos.length > 1 ? "s" : ""} disponÃ­ve{prontos.length > 1 ? "is" : "l"}
+                {prontos.length} pedido{prontos.length > 1 ? "s" : ""} disponÃÂ­ve{prontos.length > 1 ? "is" : "l"}
               </p>
             ) : (
               <p style={{ color: "rgba(255,255,255,0.3)", fontWeight: 600, fontSize: 14 }}>Aguardando pedidos...</p>
@@ -917,13 +1006,13 @@ export default function MotoboyPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             {disponivel && (prontos.length > 0 || emAndamento.length > 0) && (
               <span style={{ background: "rgba(255,255,255,0.06)", borderRadius: 8, color: "rgba(255,255,255,0.4)", fontSize: 11, padding: "4px 10px" }}>
-                {sheetH <= SHEET_PEEK ? "Ver â²" : sheetH >= SHEET_FULL ? "Recolher â¼" : "â²"}
+                {sheetH <= SHEET_PEEK ? "Ver Ã¢ÂÂ²" : sheetH >= SHEET_FULL ? "Recolher Ã¢ÂÂ¼" : "Ã¢ÂÂ²"}
               </span>
             )}
           </div>
         </div>
 
-        {/* ConteÃºdo scrollÃ¡vel */}
+        {/* ConteÃÂºdo scrollÃÂ¡vel */}
         <div style={{ flex: 1, overflowY: "auto", padding: "0 14px 14px", WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
 
           {/* Offline */}
@@ -960,10 +1049,10 @@ export default function MotoboyPage() {
                 {togglingDisp ? "..." : "Ficar Online"}
               </button>
 
-              {/* Controle de raio de atuaÃ§Ã£o */}
+              {/* Controle de raio de atuaÃÂ§ÃÂ£o */}
               <div style={{ marginTop: 16 }}>
                 <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 8 }}>
-                  Raio de atuaÃ§Ã£o
+                  Raio de atuaÃÂ§ÃÂ£o
                   {salvandoRaio && <span style={{ color: "#f97316", marginLeft: 8 }}>salvando...</span>}
                 </p>
                 <div style={{ display: "flex", gap: 6 }}>
@@ -979,7 +1068,7 @@ export default function MotoboyPage() {
                   ))}
                 </div>
                 <p style={{ color: "rgba(255,255,255,0.18)", fontSize: 10, marginTop: 6 }}>
-                  Pedidos dentro de {raioKm}km serÃ£o priorizados para vocÃª
+                  Pedidos dentro de {raioKm}km serÃÂ£o priorizados para vocÃÂª
                 </p>
               </div>
             </div>
@@ -993,7 +1082,7 @@ export default function MotoboyPage() {
                   <circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/>
                 </svg>
               </div>
-              <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 13 }}>Novos pedidos aparecerÃ£o aqui</p>
+              <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 13 }}>Novos pedidos aparecerÃÂ£o aqui</p>
             </div>
           )}
 
@@ -1019,7 +1108,7 @@ export default function MotoboyPage() {
                     <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#f97316", flexShrink: 0, marginTop: 5 }} />
                     <p style={{ color: "rgba(255,255,255,0.55)", fontSize: 13, lineHeight: 1.4 }}>
                       <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 11 }}>Coletar em </span>
-                      <strong style={{ color: "white" }}>{(p as any).loja?.nome ?? "â"}</strong>
+                      <strong style={{ color: "white" }}>{(p as any).loja?.nome ?? "Ã¢ÂÂ"}</strong>
                     </p>
                   </div>
                   <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
@@ -1041,53 +1130,104 @@ export default function MotoboyPage() {
                   )}
                 </div>
 
-                {confirmandoId === p.id ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, fontWeight: 600 }}>PeÃ§a o cÃ³digo ao cliente:</p>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <input
-                        value={codigoInput}
-                        onChange={e => { setCodigoInput(e.target.value.toUpperCase()); setErroConfirm("") }}
-                        onKeyDown={e => e.key === "Enter" && confirmarCodigo(p)}
-                        placeholder="0000" maxLength={8} autoFocus
-                        style={{
-                          flex: 1, padding: "12px 14px", borderRadius: 12, fontSize: 26,
-                          fontWeight: 900, letterSpacing: 10, textAlign: "center",
-                          background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.18)",
-                          color: "white", outline: "none",
-                        }}
-                      />
-                      <button onClick={() => confirmarCodigo(p)} disabled={!codigoInput.trim() || !!atualizando} style={{
-                        padding: "12px 18px", borderRadius: 12, border: "none", fontSize: 22,
-                        background: codigoInput.trim() ? "#22c55e" : "rgba(34,197,94,0.15)",
-                        color: "white", fontWeight: 900, cursor: codigoInput.trim() ? "pointer" : "not-allowed",
-                      }}>
-                        {atualizando === p.id ? "..." : "â"}
-                      </button>
-                      <button onClick={() => setConfirmandoId(null)} style={{
-                        padding: "12px 14px", borderRadius: 12,
-                        background: "transparent", border: "1px solid rgba(255,255,255,0.1)",
-                        color: "rgba(255,255,255,0.3)", cursor: "pointer", fontSize: 16,
-                      }}>â</button>
+                {/* ── Botão de ação baseado no status ── */}
+                {p.status === "indo_para_loja" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ padding: "10px 14px", borderRadius: 12, background: "rgba(249,115,22,0.12)", border: "1px solid rgba(249,115,22,0.3)", display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f97316", flexShrink: 0, animation: "gpsPulse 1.5s ease-out infinite" }} />
+                      <p style={{ color: "#f97316", fontSize: 13, fontWeight: 700 }}>🏪 A caminho da loja — rota no mapa</p>
                     </div>
-                    {erroConfirm && (
-                      <p style={{ color: "#f87171", fontSize: 12, fontWeight: 600, padding: "8px 12px", background: "rgba(239,68,68,0.08)", borderRadius: 10, border: "1px solid rgba(239,68,68,0.15)" }}>
-                        {erroConfirm}
-                      </p>
+                    <button
+                      onClick={() => avancarEtapa()}
+                      disabled={!!atualizando}
+                      style={{
+                        width: "100%", padding: "16px", borderRadius: 14, border: "none",
+                        background: atualizando === p.id ? "rgba(249,115,22,0.4)" : "#f97316",
+                        color: "white", fontWeight: 900, fontSize: 16, cursor: atualizando ? "not-allowed" : "pointer",
+                        display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                        boxShadow: "0 4px 16px rgba(249,115,22,0.35)",
+                      }}>
+                      {atualizando === p.id ? "..." : "📦 Cheguei na loja — Pedido recebido"}
+                    </button>
+                  </div>
+                )}
+
+                {p.status === "na_loja" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ padding: "10px 14px", borderRadius: 12, background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.3)", display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", flexShrink: 0 }} />
+                      <p style={{ color: "#22c55e", fontSize: 13, fontWeight: 700 }}>✅ Na loja — pegue o pedido e clique abaixo</p>
+                    </div>
+                    <button
+                      onClick={() => avancarEtapa()}
+                      disabled={!!atualizando}
+                      style={{
+                        width: "100%", padding: "16px", borderRadius: 14, border: "none",
+                        background: atualizando === p.id ? "rgba(34,197,94,0.4)" : "#22c55e",
+                        color: "white", fontWeight: 900, fontSize: 16, cursor: atualizando ? "not-allowed" : "pointer",
+                        display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                        boxShadow: "0 4px 16px rgba(34,197,94,0.35)",
+                      }}>
+                      {atualizando === p.id ? "..." : "🛵 Peguei o pedido — Saindo para entrega"}
+                    </button>
+                  </div>
+                )}
+
+                {(p.status === "em_rota" || p.status === "coletado") && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div style={{ padding: "10px 14px", borderRadius: 12, background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.3)", display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#818cf8", flexShrink: 0, animation: "gpsPulse 1.5s ease-out infinite" }} />
+                      <p style={{ color: "#818cf8", fontSize: 13, fontWeight: 700 }}>🏠 A caminho do cliente — rota no mapa</p>
+                    </div>
+                    {confirmandoId === p.id ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, fontWeight: 600 }}>Peça o código ao cliente:</p>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <input
+                            value={codigoInput}
+                            onChange={e => { setCodigoInput(e.target.value.toUpperCase()); setErroConfirm("") }}
+                            onKeyDown={e => e.key === "Enter" && confirmarCodigo(p)}
+                            placeholder="0000" maxLength={8} autoFocus
+                            style={{
+                              flex: 1, padding: "12px 14px", borderRadius: 12, fontSize: 26,
+                              fontWeight: 900, letterSpacing: 10, textAlign: "center",
+                              background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.18)",
+                              color: "white", outline: "none",
+                            }}
+                          />
+                          <button onClick={() => confirmarCodigo(p)} disabled={!codigoInput.trim() || !!atualizando} style={{
+                            padding: "12px 18px", borderRadius: 12, border: "none", fontSize: 22,
+                            background: codigoInput.trim() ? "#22c55e" : "rgba(34,197,94,0.15)",
+                            color: "white", fontWeight: 900, cursor: codigoInput.trim() ? "pointer" : "not-allowed",
+                          }}>
+                            {atualizando === p.id ? "..." : "✓"}
+                          </button>
+                          <button onClick={() => setConfirmandoId(null)} style={{
+                            padding: "12px 14px", borderRadius: 12,
+                            background: "transparent", border: "1px solid rgba(255,255,255,0.1)",
+                            color: "rgba(255,255,255,0.3)", cursor: "pointer", fontSize: 16,
+                          }}>×</button>
+                        </div>
+                        {erroConfirm && (
+                          <p style={{ color: "#f87171", fontSize: 12, fontWeight: 600, padding: "8px 12px", background: "rgba(239,68,68,0.08)", borderRadius: 10, border: "1px solid rgba(239,68,68,0.15)" }}>
+                            {erroConfirm}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => { setConfirmandoId(p.id); setCodigoInput(""); setErroConfirm("") }}
+                        disabled={!!atualizando}
+                        style={{
+                          width: "100%", padding: "14px", borderRadius: 14, border: "none",
+                          background: atualizando === p.id ? "rgba(34,197,94,0.3)" : "#22c55e",
+                          color: "white", fontWeight: 900, fontSize: 15, cursor: "pointer",
+                        }}>
+                        {atualizando === p.id ? "..." : "✓ Confirmar entrega com código"}
+                      </button>
                     )}
                   </div>
-                ) : (
-                  <button
-                    onClick={() => { setConfirmandoId(p.id); setCodigoInput(""); setErroConfirm("") }}
-                    disabled={!!atualizando}
-                    style={{
-                      width: "100%", padding: "14px", borderRadius: 14, border: "none",
-                      background: atualizando === p.id ? "rgba(34,197,94,0.3)" : "#22c55e",
-                      color: "white", fontWeight: 900, fontSize: 15, cursor: "pointer",
-                    }}>
-                    {atualizando === p.id ? "..." : "â Confirmar entrega com cÃ³digo"}
-                  </button>
-                )}
+                )}                )}
               </div>
             </div>
           ))}
@@ -1099,7 +1239,7 @@ export default function MotoboyPage() {
                 <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "4px 0 10px" }}>
                   <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
                   <span style={{ color: "rgba(255,255,255,0.2)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>
-                    DisponÃ­veis
+                    DisponÃÂ­veis
                   </span>
                   <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
                 </div>
@@ -1112,10 +1252,10 @@ export default function MotoboyPage() {
                   <div style={{ background: "rgba(249,115,22,0.08)", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <span style={{ fontSize: 11, fontWeight: 800, padding: "3px 10px", borderRadius: 999, background: "rgba(249,115,22,0.18)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)" }}>
-                        DisponÃ­vel
+                        DisponÃÂ­vel
                       </span>
                       <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 12 }}>
-                        #{p.codigo} Â· {new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                        #{p.codigo} ÃÂ· {new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
                     <p style={{ color: "white", fontWeight: 900, fontSize: 17 }}>R$ {p.total.toFixed(2)}</p>
@@ -1125,7 +1265,7 @@ export default function MotoboyPage() {
                       <div style={{ display: "flex", gap: 8 }}>
                         <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#f97316", flexShrink: 0, marginTop: 4 }} />
                         <p style={{ color: "rgba(255,255,255,0.55)", fontSize: 13 }}>
-                          {(p as any).loja?.nome ?? "â"}
+                          {(p as any).loja?.nome ?? "Ã¢ÂÂ"}
                           {(p as any).loja?.endereco && (
                             <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, display: "block" }}>{(p as any).loja.endereco}</span>
                           )}
@@ -1141,7 +1281,7 @@ export default function MotoboyPage() {
                       </div>
                       {p.itens && p.itens.length > 0 && (
                         <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 11, marginLeft: 21 }}>
-                          {p.itens.map((i: any) => `${i.quantidade}x ${i.nome}`).join(" Â· ")}
+                          {p.itens.map((i: any) => `${i.quantidade}x ${i.nome}`).join(" ÃÂ· ")}
                         </p>
                       )}
                     </div>
@@ -1163,7 +1303,7 @@ export default function MotoboyPage() {
   )
 }
 
-// âââ Modal SOS de emergÃªncia ââââââââââââââââââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Modal SOS de emergÃÂªncia Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function SOSModal({
   motoboyId, pedidoId, lat, lng, onClose,
 }: {
@@ -1216,7 +1356,7 @@ function SOSModal({
               </svg>
             </div>
             <p style={{ color: "#ef4444", fontWeight: 900, fontSize: 18, marginBottom: 6 }}>SOS enviado!</p>
-            <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 13, marginBottom: 24 }}>O administrador foi alertado com sua localizaÃ§Ã£o atual.</p>
+            <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 13, marginBottom: 24 }}>O administrador foi alertado com sua localizaÃÂ§ÃÂ£o atual.</p>
             <button onClick={onClose} style={{
               width: "100%", padding: "15px", borderRadius: 14, border: "none",
               background: "rgba(239,68,68,0.15)", color: "#ef4444",
@@ -1236,14 +1376,14 @@ function SOSModal({
                 </svg>
               </div>
               <div>
-                <p style={{ color: "#ef4444", fontWeight: 900, fontSize: 17 }}>Acionar SOS de emergÃªncia?</p>
-                <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 12, marginTop: 2 }}>Seu admin serÃ¡ alertado com sua localizaÃ§Ã£o</p>
+                <p style={{ color: "#ef4444", fontWeight: 900, fontSize: 17 }}>Acionar SOS de emergÃÂªncia?</p>
+                <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 12, marginTop: 2 }}>Seu admin serÃÂ¡ alertado com sua localizaÃÂ§ÃÂ£o</p>
               </div>
             </div>
 
             <div style={{ background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 12, padding: "12px 16px", marginBottom: 20 }}>
               <p style={{ color: "rgba(255,255,255,0.55)", fontSize: 13, lineHeight: 1.5 }}>
-                Pressione o botÃ£o abaixo para enviar um alerta de emergÃªncia com sua posiÃ§Ã£o GPS atual. Use somente em situaÃ§Ãµes de risco real.
+                Pressione o botÃÂ£o abaixo para enviar um alerta de emergÃÂªncia com sua posiÃÂ§ÃÂ£o GPS atual. Use somente em situaÃÂ§ÃÂµes de risco real.
               </p>
             </div>
 
@@ -1273,7 +1413,7 @@ function SOSModal({
   )
 }
 
-// âââ Painel de corrida ativa â stepper 4 etapas (TÃ³pico 03) âââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Painel de corrida ativa Ã¢ÂÂ stepper 4 etapas (TÃÂ³pico 03) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function CorridaAtivaPanel({
   pedido, corridaConcluida, avancando, onAvancar, onConcluir,
   motoboyId, myLat, myLng,
@@ -1297,7 +1437,7 @@ function CorridaAtivaPanel({
     "indo_para_loja": 0, "na_loja": 1, "em_rota": 2, "coletado": 2, "entregue": 3,
   }
   const etapa  = corridaConcluida ? 3 : (STATUS_TO_ETAPA[pedido?.status ?? ""] ?? 0)
-  const ETAPAS = ["Indo Ã  loja", "Na loja", "Em rota", "Entregue!"]
+  const ETAPAS = ["Indo ÃÂ  loja", "Na loja", "Em rota", "Entregue!"]
 
   return (
     <div style={{
@@ -1308,7 +1448,7 @@ function CorridaAtivaPanel({
       zIndex: 35, display: "flex", flexDirection: "column",
       overflow: "hidden",
     }}>
-      {/* Modal de navegaÃ§Ã£o */}
+      {/* Modal de navegaÃÂ§ÃÂ£o */}
       {navDestino && <NavModal destino={navDestino} onClose={() => setNavDestino(null)} />}
 
       {/* Modal SOS */}
@@ -1379,10 +1519,10 @@ function CorridaAtivaPanel({
         </div>
       </div>
 
-      {/* ConteÃºdo */}
+      {/* ConteÃÂºdo */}
       <div style={{ flex: 1, overflowY: "auto", padding: "10px 20px 16px" }}>
 
-        {/* ETAPA 4 â Entregue */}
+        {/* ETAPA 4 Ã¢ÂÂ Entregue */}
         {etapa === 3 && (
           <div style={{ textAlign: "center", paddingTop: 4 }}>
             <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
@@ -1409,12 +1549,12 @@ function CorridaAtivaPanel({
           </div>
         )}
 
-        {/* ETAPA 1 â Indo Ã  loja */}
+        {/* ETAPA 1 Ã¢ÂÂ Indo ÃÂ  loja */}
         {etapa === 0 && (
           <>
             <div style={{ marginBottom: 12 }}>
               <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>Buscar pedido em</p>
-              <p style={{ color: "white", fontWeight: 800, fontSize: 16 }}>{loja?.nome ?? "â"}</p>
+              <p style={{ color: "white", fontWeight: 800, fontSize: 16 }}>{loja?.nome ?? "Ã¢ÂÂ"}</p>
               {loja?.endereco && <p style={{ color: "#888", fontSize: 12, marginTop: 2 }}>{loja.endereco}</p>}
             </div>
             <button onClick={() => onAvancar()} disabled={avancando} style={{
@@ -1429,12 +1569,12 @@ function CorridaAtivaPanel({
               border: "1.5px solid rgba(255,255,255,0.18)", background: "transparent",
               color: "rgba(255,255,255,0.7)", fontWeight: 700, fontSize: 13, cursor: "pointer",
             }}>
-              Navegar atÃ© a loja
+              Navegar atÃÂ© a loja
             </button>
           </>
         )}
 
-        {/* ETAPA 2 â Na loja */}
+        {/* ETAPA 2 Ã¢ÂÂ Na loja */}
         {etapa === 1 && (
           <>
             <div style={{ marginBottom: 12 }}>
@@ -1453,7 +1593,7 @@ function CorridaAtivaPanel({
                 <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: "10px 12px" }}>
                   {p.itens.map((item: any, i: number) => (
                     <p key={item.id ?? i} style={{ color: "rgba(255,255,255,0.65)", fontSize: 13, marginBottom: i < p.itens.length - 1 ? 4 : 0 }}>
-                      {item.quantidade}Ã {item.nome}
+                      {item.quantidade}ÃÂ {item.nome}
                     </p>
                   ))}
                 </div>
@@ -1469,7 +1609,7 @@ function CorridaAtivaPanel({
           </>
         )}
 
-        {/* ETAPA 3 â Em rota */}
+        {/* ETAPA 3 Ã¢ÂÂ Em rota */}
         {etapa === 2 && (
           <>
             {/* Modal de foto comprovante */}
@@ -1520,7 +1660,7 @@ function CorridaAtivaPanel({
                       {mascaraTelefone(p.telefone_cliente)}
                     </a>
                     <a
-                      href={`https://wa.me/55${p.telefone_cliente.replace(/\D/g, "")}?text=${encodeURIComponent(`OlÃ¡! Sou o entregador do pedido #${p?.codigo}. Estou a caminho!`)}`}
+                      href={`https://wa.me/55${p.telefone_cliente.replace(/\D/g, "")}?text=${encodeURIComponent(`OlÃÂ¡! Sou o entregador do pedido #${p?.codigo}. Estou a caminho!`)}`}
                       target="_blank" rel="noreferrer"
                       style={{
                         padding: "9px 14px", borderRadius: 10,
@@ -1565,7 +1705,7 @@ function CorridaAtivaPanel({
   )
 }
 
-// âââ Card de aceitar corrida â estilo iFood âââââââââââââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Card de aceitar corrida Ã¢ÂÂ estilo iFood Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function CardCorrida({
   pedido, timer, distKm, onAceitar, onRecusar, carregando,
 }: {
@@ -1594,7 +1734,7 @@ function CardCorrida({
           <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.12)" }} />
         </div>
 
-        {/* Header: tÃ­tulo + valor + timer */}
+        {/* Header: tÃÂ­tulo + valor + timer */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "14px 20px 14px" }}>
           <div>
             <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, fontWeight: 600, marginBottom: 6, letterSpacing: 0.3 }}>
@@ -1605,7 +1745,7 @@ function CardCorrida({
             </p>
             {pedido.itens?.length > 0 && (
               <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, marginTop: 6 }}>
-                {pedido.itens.length} iten{pedido.itens.length > 1 ? "s" : ""} Â· {pedido.forma_pagamento?.toUpperCase()}
+                {pedido.itens.length} iten{pedido.itens.length > 1 ? "s" : ""} ÃÂ· {pedido.forma_pagamento?.toUpperCase()}
               </p>
             )}
           </div>
@@ -1655,12 +1795,12 @@ function CardCorrida({
           </div>
           <div style={{ flex: 1 }}>
             <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>Coleta</p>
-            <p style={{ color: "white", fontSize: 15, fontWeight: 700 }}>{loja?.nome ?? "â"}</p>
+            <p style={{ color: "white", fontSize: 15, fontWeight: 700 }}>{loja?.nome ?? "Ã¢ÂÂ"}</p>
             {loja?.endereco && <p style={{ color: "#888", fontSize: 12, marginTop: 2, lineHeight: 1.3 }}>{loja.endereco}</p>}
           </div>
         </div>
 
-        {/* Seta intermediÃ¡ria */}
+        {/* Seta intermediÃÂ¡ria */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "0 20px", marginBottom: 12 }}>
           <div style={{ width: 38, display: "flex", justifyContent: "center" }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1687,8 +1827,8 @@ function CardCorrida({
             <p style={{ color: "white", fontSize: 15, fontWeight: 700 }}>{pedido.endereco_entrega}</p>
             <p style={{ color: "#888", fontSize: 12, marginTop: 2 }}>
               {distKm !== null
-                ? `~${distKm.toFixed(1).replace(".", ",")} km de vocÃª`
-                : "Calculando distÃ¢ncia..."}
+                ? `~${distKm.toFixed(1).replace(".", ",")} km de vocÃÂª`
+                : "Calculando distÃÂ¢ncia..."}
             </p>
           </div>
         </div>
@@ -1696,7 +1836,7 @@ function CardCorrida({
         {/* Separator */}
         <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0 20px 16px" }} />
 
-        {/* BotÃµes */}
+        {/* BotÃÂµes */}
         <div style={{ display: "flex", gap: 10, padding: "0 20px 20px" }}>
           <button
             onClick={onRecusar} disabled={carregando}
@@ -1727,7 +1867,7 @@ function CardCorrida({
   )
 }
 
-// âââ Modal de foto comprovante de entrega (TÃ³pico 07) ââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Modal de foto comprovante de entrega (TÃÂ³pico 07) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function FotoModal({
   pedidoId, onConfirmar, onPular,
 }: {
@@ -1775,7 +1915,7 @@ function FotoModal({
           <p style={{ color: "white", fontWeight: 900, fontSize: 16 }}>Comprovante de entrega</p>
           <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, marginTop: 2 }}>Foto do local (opcional)</p>
         </div>
-        <button onClick={onPular} style={{ width: 32, height: 32, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "rgba(255,255,255,0.5)", fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>â</button>
+        <button onClick={onPular} style={{ width: 32, height: 32, borderRadius: "50%", border: "1px solid rgba(255,255,255,0.15)", background: "transparent", color: "rgba(255,255,255,0.5)", fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>Ã¢ÂÂ</button>
       </div>
 
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 20px" }}>
@@ -1796,7 +1936,7 @@ function FotoModal({
               <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
               <circle cx="12" cy="13" r="4"/>
             </svg>
-            <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 14, fontWeight: 700 }}>Toque para abrir cÃ¢mera</p>
+            <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 14, fontWeight: 700 }}>Toque para abrir cÃÂ¢mera</p>
           </div>
         )}
         <input ref={inputRef} type="file" accept="image/*" capture="environment" onChange={handleFile} style={{ display: "none" }} />
@@ -1833,7 +1973,7 @@ function FotoModal({
   )
 }
 
-// âââ Modal de seleÃ§Ã£o de app de navegaÃ§Ã£o (TÃ³pico 04) ââââââââââââââââââââââââ
+// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Modal de seleÃÂ§ÃÂ£o de app de navegaÃÂ§ÃÂ£o (TÃÂ³pico 04) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
 function NavModal({ destino, onClose }: { destino: string; onClose: () => void }) {
   const enc = encodeURIComponent(destino)
   const APPS = [
@@ -1884,7 +2024,7 @@ function NavModal({ destino, onClose }: { destino: string; onClose: () => void }
         }}
       >
         <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.12)", margin: "0 auto 20px" }} />
-        <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>Navegar atÃ©</p>
+        <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>Navegar atÃÂ©</p>
         <p style={{ color: "white", fontWeight: 700, fontSize: 14, marginBottom: 20, lineHeight: 1.3 }}>{destino}</p>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {APPS.map(app => (
