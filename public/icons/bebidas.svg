@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80">
+  <defs>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3.5" flood-color="rgba(0,0,0,0.28)"/>
+    </filter>
+    <linearGradient id="cupG" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0277BD"/>
+      <stop offset="40%" stop-color="#0288D1"/>
+      <stop offset="70%" stop-color="#03A9F4"/>
+      <stop offset="100%" stop-color="#0277BD"/>
+    </linearGradient>
+    <linearGradient id="liquidG" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4FC3F7"/>
+      <stop offset="50%" stop-color="#0288D1"/>
+      <stop offset="100%" stop-color="#01579B"/>
+    </linearGradient>
+    <radialGradient id="iceG" cx="35%" cy="25%" r="65%">
+      <stop offset="0%" stop-color="#E3F2FD"/>
+      <stop offset="100%" stop-color="#90CAF9"/>
+    </radialGradient>
+    <radialGradient id="gloss" cx="25%" cy="20%" r="50%">
+      <stop offset="0%" stop-color="white" stop-opacity="0.75"/>
+      <stop offset="100%" stop-color="white" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <g filter="url(#sh)">
+    <!-- Cup body outline/shadow -->
+    <path d="M18 16 L22 72 L58 72 L62 16 Z" rx="3" fill="#01579B"/>
+    <!-- Cup body -->
+    <path d="M17 15 L21 71 L59 71 L63 15 Z" fill="url(#cupG)"/>
+    <!-- Liquid inside -->
+    <path d="M20 28 L22 71 L58 71 L60 28 Z" fill="url(#liquidG)" opacity="0.9"/>
+    <!-- Liquid surface -->
+    <ellipse cx="40" cy="27" rx="20" ry="3.5" fill="#29B6F6"/>
+    <ellipse cx="40" cy="26.5" rx="19" ry="2.5" fill="#4FC3F7"/>
+    <!-- Ice cube 1 -->
+    <rect x="23" y="35" width="12" height="11" rx="2.5" fill="url(#iceG)" opacity="0.85"/>
+    <rect x="23" y="35" width="12" height="11" rx="2.5" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="0.8"/>
+    <line x1="29" y1="35" x2="29" y2="46" stroke="rgba(255,255,255,0.4)" stroke-width="0.6"/>
+    <ellipse cx="26" cy="38" rx="3" ry="1.5" fill="rgba(255,255,255,0.5)"/>
+    <!-- Ice cube 2 -->
+    <rect x="37" y="40" width="11" height="10" rx="2.5" fill="url(#iceG)" opacity="0.8"/>
+    <rect x="37" y="40" width="11" height="10" rx="2.5" fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="0.8"/>
+    <ellipse cx="40" cy="43" rx="2.5" ry="1.2" fill="rgba(255,255,255,0.45)"/>
+    <!-- Ice cube 3 -->
+    <rect x="25" y="50" width="10" height="9" rx="2" fill="url(#iceG)" opacity="0.75"/>
+    <ellipse cx="28" cy="53" rx="2" ry="1" fill="rgba(255,255,255,0.4)"/>
+    <!-- Condensation drops on cup exterior -->
+    <circle cx="15" cy="38" r="1.5" fill="rgba(255,255,255,0.4)"/>
+    <circle cx="13" cy="47" r="1.2" fill="rgba(255,255,255,0.35)"/>
+    <circle cx="16" cy="55" r="1" fill="rgba(255,255,255,0.3)"/>
+    <circle cx="65" cy="42" r="1.5" fill="rgba(255,255,255,0.35)"/>
+    <circle cx="66" cy="52" r="1.2" fill="rgba(255,255,255,0.3)"/>
+    <!-- Bubbles in liquid -->
+    <circle cx="30" cy="31" r="1.5" fill="rgba(255,255,255,0.55)"/>
+    <circle cx="40" cy="29" r="1.2" fill="rgba(255,255,255,0.5)"/>
+    <circle cx="50" cy="31" r="1" fill="rgba(255,255,255,0.45)"/>
+    <circle cx="45" cy="33" r="0.8" fill="rgba(255,255,255,0.4)"/>
+    <!-- Straw -->
+    <rect x="52" y="4" width="5" height="58" rx="2.5" fill="#FFFFFF"/>
+    <rect x="52" y="4"  width="5" height="8"  rx="2.5" fill="#F44336"/>
+    <rect x="52" y="18" width="5" height="8"  rx="0"   fill="#F44336"/>
+    <rect x="52" y="34" width="5" height="8"  rx="0"   fill="#F44336"/>
+    <rect x="52" y="50" width="5" height="8"  rx="0"   fill="#F44336"/>
+    <!-- Straw gloss -->
+    <rect x="53" y="4" width="1.5" height="58" rx="0.75" fill="rgba(255,255,255,0.5)"/>
+    <!-- Cup lid -->
+    <path d="M17 15 Q40 20 63 15 Q63 10 40 8 Q17 10 17 15 Z" fill="#0277BD"/>
+    <path d="M18 14 Q40 19 62 14 Q62 10 40 9 Q18 10 18 14 Z" fill="#039BE5"/>
+    <!-- Lid dome -->
+    <ellipse cx="40" cy="12" rx="20" ry="5" fill="#0288D1"/>
+    <ellipse cx="40" cy="11" rx="19" ry="4" fill="#03A9F4"/>
+    <!-- Lid straw hole -->
+    <ellipse cx="52.5" cy="11" rx="3.5" ry="2" fill="#0277BD"/>
+    <!-- Cup gloss -->
+    <path d="M21 17 L23 60" stroke="rgba(255,255,255,0.35)" stroke-width="3" stroke-linecap="round"/>
+    <ellipse cx="25" cy="22" rx="4" ry="10" fill="url(#gloss)"/>
+  </g>
+</svg>

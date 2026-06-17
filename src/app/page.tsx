@@ -38,7 +38,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; img?: string; bg: strin
   {
     label: "Restaurantes",
     bg: "linear-gradient(145deg,#FF5722,#E64A19)",
-    img: "/icons/restaurantes.png",
+    img: "/icons/restaurantes.svg",
     cat: "Restaurante", badge: null, action: "filter",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -78,7 +78,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; img?: string; bg: strin
   {
     label: "Mercados",
     bg: "linear-gradient(145deg,#E53935,#C62828)",
-    img: "/icons/mercados.png",
+    img: "/icons/mercados.svg",
     cat: "Mercadinho", badge: null, action: "filter",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -109,7 +109,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; img?: string; bg: strin
   {
     label: "Farmácias",
     bg: "linear-gradient(145deg,#1E88E5,#1565C0)",
-    img: "/icons/farmacias.png",
+    img: "/icons/farmacias.svg",
     cat: "Farmácia", badge: null, action: "filter",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -136,7 +136,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; img?: string; bg: strin
   {
     label: "Gourmet",
     bg: "linear-gradient(145deg,#4E342E,#6D4C41)",
-    img: "/icons/gourmet.png",
+    img: "/icons/gourmet.svg",
     cat: "Restaurante", badge: "Novo", action: "filter",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -172,7 +172,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; img?: string; bg: strin
   {
     label: "Pet Shops",
     bg: "linear-gradient(145deg,#AD1457,#E91E63)",
-    img: "/icons/petshops.png",
+    img: "/icons/petshops.svg",
     cat: "Outros", badge: null, action: "filter",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -200,7 +200,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; img?: string; bg: strin
   {
     label: "Bebidas",
     bg: "linear-gradient(145deg,#0288D1,#0277BD)",
-    img: "/icons/bebidas.png",
+    img: "/icons/bebidas.svg",
     cat: "Outros", badge: null, action: "filter",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -236,7 +236,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; img?: string; bg: strin
   {
     label: "Massas",
     bg: "linear-gradient(145deg,#F57F17,#E65100)",
-    img: "/icons/massas.png",
+    img: "/icons/massas.svg",
     cat: "Restaurante", badge: null, action: "filter",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -268,7 +268,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; img?: string; bg: strin
   {
     label: "Lanches",
     bg: "linear-gradient(145deg,#6D4C41,#4E342E)",
-    img: "/icons/lanches.png",
+    img: "/icons/lanches.svg",
     cat: "Restaurante", badge: null, action: "filter",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -301,7 +301,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; img?: string; bg: strin
   {
     label: "Pizzarias",
     bg: "linear-gradient(145deg,#C62828,#B71C1C)",
-    img: "/icons/pizzarias.png",
+    img: "/icons/pizzarias.svg",
     cat: "Restaurante", badge: null, action: "filter",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -342,7 +342,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; img?: string; bg: strin
   {
     label: "Ver mais",
     bg: "linear-gradient(145deg,#546E7A,#78909C)",
-    img: "/icons/ver-mais.png",
+    img: "/icons/ver-mais.svg",
     cat: null, badge: null, action: "busca",
     icon: (
       <svg width="28" height="28" viewBox="0 0 28 28" fill="white" xmlns="http://www.w3.org/2000/svg" opacity={0.9}>

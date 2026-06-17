@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80">
+  <defs>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3.5" flood-color="rgba(0,0,0,0.28)"/>
+    </filter>
+    <radialGradient id="padG" cx="35%" cy="28%" r="65%">
+      <stop offset="0%" stop-color="#FFAD60"/>
+      <stop offset="55%" stop-color="#E07820"/>
+      <stop offset="100%" stop-color="#A04A00"/>
+    </radialGradient>
+    <radialGradient id="toeG" cx="35%" cy="28%" r="65%">
+      <stop offset="0%" stop-color="#FFB870"/>
+      <stop offset="60%" stop-color="#D97020"/>
+      <stop offset="100%" stop-color="#9A4500"/>
+    </radialGradient>
+    <radialGradient id="gloss" cx="32%" cy="22%" r="50%">
+      <stop offset="0%" stop-color="white" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="white" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="boneG" cx="35%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="#FFFDE7"/>
+      <stop offset="100%" stop-color="#D4C070"/>
+    </radialGradient>
+  </defs>
+  <g filter="url(#sh)">
+    <!-- Main central pad -->
+    <ellipse cx="40" cy="52" rx="18" ry="16" fill="#A04A00"/>
+    <ellipse cx="40" cy="51" rx="18" ry="15.5" fill="#C06010"/>
+    <ellipse cx="40" cy="50" rx="17" ry="14.5" fill="url(#padG)"/>
+    <!-- Central pad inner darker area -->
+    <ellipse cx="40" cy="51" rx="12" ry="10" fill="#C06820"/>
+    <ellipse cx="40" cy="50.5" rx="11" ry="9" fill="#D07830"/>
+    <!-- Central pad gloss -->
+    <ellipse cx="34" cy="43" rx="9" ry="6" fill="url(#gloss)"/>
+    <!-- Central pad highlight stripe -->
+    <path d="M30 44 Q35 41 40 42 Q45 41 50 44" stroke="rgba(255,255,255,0.25)" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <!-- Top-left toe -->
+    <ellipse cx="20" cy="32" rx="7.5" ry="9.5" fill="#9A4500"/>
+    <ellipse cx="20" cy="31" rx="7" ry="9" fill="#B85800"/>
+    <ellipse cx="20" cy="30" rx="6.5" ry="8.5" fill="url(#toeG)"/>
+    <ellipse cx="18" cy="25" rx="3.5" ry="3" fill="rgba(255,255,255,0.2)"/>
+    <!-- Top center-left toe -->
+    <ellipse cx="32" cy="26" rx="7.5" ry="9.5" fill="#9A4500"/>
+    <ellipse cx="32" cy="25" rx="7" ry="9" fill="#B85800"/>
+    <ellipse cx="32" cy="24" rx="6.5" ry="8.5" fill="url(#toeG)"/>
+    <ellipse cx="30" cy="19" rx="3.5" ry="3" fill="rgba(255,255,255,0.2)"/>
+    <!-- Top center-right toe -->
+    <ellipse cx="48" cy="26" rx="7.5" ry="9.5" fill="#9A4500"/>
+    <ellipse cx="48" cy="25" rx="7" ry="9" fill="#B85800"/>
+    <ellipse cx="48" cy="24" rx="6.5" ry="8.5" fill="url(#toeG)"/>
+    <ellipse cx="46" cy="19" rx="3.5" ry="3" fill="rgba(255,255,255,0.2)"/>
+    <!-- Top-right toe -->
+    <ellipse cx="60" cy="32" rx="7.5" ry="9.5" fill="#9A4500"/>
+    <ellipse cx="60" cy="31" rx="7" ry="9" fill="#B85800"/>
+    <ellipse cx="60" cy="30" rx="6.5" ry="8.5" fill="url(#toeG)"/>
+    <ellipse cx="58" cy="25" rx="3.5" ry="3" fill="rgba(255,255,255,0.2)"/>
+  </g>
+</svg>

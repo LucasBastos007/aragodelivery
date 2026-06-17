@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80">
+  <defs>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3.5" flood-color="rgba(0,0,0,0.28)"/>
+    </filter>
+    <radialGradient id="bunG" cx="38%" cy="25%" r="65%">
+      <stop offset="0%" stop-color="#FFD580"/>
+      <stop offset="55%" stop-color="#E09010"/>
+      <stop offset="100%" stop-color="#A05800"/>
+    </radialGradient>
+    <radialGradient id="frankG" cx="40%" cy="28%" r="60%">
+      <stop offset="0%" stop-color="#E07060"/>
+      <stop offset="55%" stop-color="#C44030"/>
+      <stop offset="100%" stop-color="#8A1A10"/>
+    </radialGradient>
+    <radialGradient id="gloss" cx="30%" cy="20%" r="50%">
+      <stop offset="0%" stop-color="white" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="white" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <g filter="url(#sh)">
+    <!-- Bun top shadow -->
+    <path d="M8 36 Q8 14 40 12 Q72 14 72 36 L72 40 L8 40 Z" fill="#9A5000"/>
+    <!-- Bun top body -->
+    <path d="M8 36 Q8 15 40 13 Q72 15 72 36 L70 38 L10 38 Z" fill="#C07010"/>
+    <!-- Bun top surface -->
+    <path d="M9 36 Q9 16 40 14 Q71 16 71 36" fill="url(#bunG)"/>
+    <!-- Sesame seeds on bun top -->
+    <ellipse cx="24" cy="22" rx="3" ry="1.5" fill="#C07010" transform="rotate(-18 24 22)"/>
+    <ellipse cx="36" cy="17" rx="3" ry="1.5" fill="#C07010"/>
+    <ellipse cx="48" cy="19" rx="3" ry="1.5" fill="#C07010" transform="rotate(12 48 19)"/>
+    <ellipse cx="57" cy="26" rx="2.8" ry="1.4" fill="#C07010" transform="rotate(20 57 26)"/>
+    <ellipse cx="30" cy="28" rx="2.5" ry="1.2" fill="#C07010" transform="rotate(-8 30 28)"/>
+    <!-- Bun gloss -->
+    <ellipse cx="28" cy="20" rx="15" ry="7" fill="url(#gloss)"/>
+    <!-- Bun split line -->
+    <rect x="8" y="38" width="64" height="5" rx="2" fill="#D09020"/>
+    <rect x="8" y="40" width="64" height="3" rx="1.5" fill="#E8B040"/>
+    <!-- Lettuce peeking out -->
+    <path d="M8 41 Q14 37 20 41 Q26 37 32 41 Q38 37 44 41 Q50 37 56 41 Q62 37 68 41 Q70 43 72 45 L8 45 Z" fill="#2DB34A"/>
+    <path d="M10 43 Q16 39 22 43 Q28 39 34 43 Q40 39 46 43 Q52 39 58 43 Q64 39 70 43" stroke="#1A8A35" stroke-width="0.7" fill="none"/>
+    <!-- Tomato slice -->
+    <rect x="9" y="44" width="62" height="6" rx="2" fill="#CC2200"/>
+    <rect x="9" y="44" width="62" height="5" rx="2" fill="#E83A1A"/>
+    <circle cx="22" cy="47" r="4" fill="rgba(255,100,50,0.4)"/>
+    <circle cx="40" cy="47" r="4" fill="rgba(255,100,50,0.4)"/>
+    <circle cx="58" cy="47" r="4" fill="rgba(255,100,50,0.4)"/>
+    <!-- Sausage / frank -->
+    <path d="M10 50 Q10 44 40 44 Q70 44 70 50 Q70 60 40 60 Q10 60 10 50 Z" fill="#8A1A10"/>
+    <path d="M11 49 Q11 44 40 44 Q69 44 69 49 Q69 59 40 59 Q11 59 11 49 Z" fill="url(#frankG)"/>
+    <!-- Frank grill line -->
+    <path d="M12 54 Q40 57 68 54" stroke="rgba(120,0,0,0.4)" stroke-width="1.5" fill="none"/>
+    <!-- Frank gloss -->
+    <ellipse cx="35" cy="47" rx="20" ry="3" fill="rgba(255,255,255,0.22)"/>
+    <!-- Mustard zigzag -->
+    <path d="M12 52 Q16 48 20 52 Q24 56 28 52 Q32 48 36 52 Q40 56 44 52 Q48 48 52 52 Q56 56 60 52 Q64 48 68 52" stroke="#FFD700" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Ketchup drip -->
+    <path d="M66 58 Q70 60 69 65 Q68 68 66 68" stroke="#E53935" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+    <circle cx="66.5" cy="68.5" r="3" fill="#E53935"/>
+    <!-- Bun bottom -->
+    <path d="M8 60 Q8 72 40 73 Q72 72 72 60 L70 62 L10 62 Z" fill="#A05800"/>
+    <path d="M9 61 Q9 72 40 73 Q71 72 71 61" fill="#D09020"/>
+    <!-- Bun bottom gloss -->
+    <ellipse cx="28" cy="66" rx="10" ry="3" fill="rgba(255,255,255,0.2)"/>
+  </g>
+</svg>
