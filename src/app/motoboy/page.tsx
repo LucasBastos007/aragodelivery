@@ -792,42 +792,25 @@ export default function MotoboyPage() {
       {corridaAtiva && !corridaConcluida && (
         <div style={{
           position: "absolute",
-          bottom: sheetH + 12, left: 12, right: 12, zIndex: 30,
-          borderRadius: 16, padding: "14px 18px",
-          background: corridaAtiva.status === "indo_para_loja"
-            ? "rgba(30,15,0,0.88)"
-            : corridaAtiva.status === "na_loja"
-            ? "rgba(0,30,10,0.88)"
-            : "rgba(10,5,30,0.88)",
-          border: "1.5px solid " + (corridaAtiva.status === "indo_para_loja" ? "rgba(249,115,22,0.6)" : corridaAtiva.status === "na_loja" ? "rgba(34,197,94,0.6)" : "rgba(99,102,241,0.6)"),
-          backdropFilter: "blur(12px)",
-          display: "flex", alignItems: "center", gap: 12,
-          boxShadow: "0 4px 24px rgba(0,0,0,0.6)",
-          animation: "slideUpCard 0.3s ease-out",
+          top: 12, left: 12, right: 12, zIndex: 30,
+          borderRadius: 12, padding: "8px 12px",
+          background: "rgba(0,0,0,0.72)",
+          border: "1px solid " + (corridaAtiva.status === "indo_para_loja" ? "rgba(249,115,22,0.5)" : corridaAtiva.status === "na_loja" ? "rgba(34,197,94,0.5)" : "rgba(99,102,241,0.5)"),
+          backdropFilter: "blur(10px)",
+          display: "flex", alignItems: "center", gap: 8,
+          boxShadow: "0 2px 12px rgba(0,0,0,0.5)",
         }}>
-          <div style={{
-            width: 42, height: 42, borderRadius: "50%", flexShrink: 0,
-            background: corridaAtiva.status === "indo_para_loja" ? "rgba(249,115,22,0.2)" : corridaAtiva.status === "na_loja" ? "rgba(34,197,94,0.2)" : "rgba(99,102,241,0.2)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 22,
-          }}>
+          <span style={{ fontSize: 16 }}>
             {corridaAtiva.status === "indo_para_loja" ? "🏪" : corridaAtiva.status === "na_loja" ? "📦" : "🏠"}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ color: "white", fontWeight: 900, fontSize: 14, margin: 0 }}>
-              {corridaAtiva.status === "indo_para_loja" && "Indo buscar o pedido"}
-              {corridaAtiva.status === "na_loja" && "Na loja — pegue o pedido"}
-              {corridaAtiva.status === "em_rota" && "Em rota de entrega"}
-            </p>
-            <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 12, margin: 0, marginTop: 2 }}>
-              {corridaAtiva.status === "indo_para_loja" && "Rota até a loja exibida no mapa"}
-              {corridaAtiva.status === "na_loja" && "Deslize para cima e clique no botão"}
-              {corridaAtiva.status === "em_rota" && "Rota até o cliente exibida no mapa"}
-            </p>
-          </div>
-          <div style={{ color: corridaAtiva.status === "indo_para_loja" ? "#f97316" : corridaAtiva.status === "na_loja" ? "#22c55e" : "#818cf8", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
+          </span>
+          <p style={{ color: "white", fontWeight: 700, fontSize: 13, margin: 0, flex: 1 }}>
+            {corridaAtiva.status === "indo_para_loja" && "Indo buscar o pedido"}
+            {corridaAtiva.status === "na_loja" && "Na loja — pegue o pedido"}
+            {corridaAtiva.status === "em_rota" && "Em rota de entrega"}
+          </p>
+          <span style={{ color: corridaAtiva.status === "indo_para_loja" ? "#f97316" : corridaAtiva.status === "na_loja" ? "#22c55e" : "#818cf8", fontSize: 11, fontWeight: 800 }}>
             #{corridaAtiva.codigo}
-          </div>
+          </span>
         </div>
       )}
 
