@@ -398,7 +398,13 @@ export default function CheckoutPage() {
   if (items.length === 0 && !pedidoCodigo) {
     return (
       <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
-        <p style={{ fontSize: 40 }}>🛒</p>
+        <svg width="72" height="72" viewBox="0 0 72 72" fill="none">
+          <circle cx="36" cy="36" r="34" fill="#f3f4f6" stroke="#e5e7eb" strokeWidth="2"/>
+          <path d="M 20 24 L 24 24 L 30 46 L 50 46 L 54 30 L 28 30" stroke="#9CA3AF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+          <circle cx="31" cy="50" r="3" fill="#9CA3AF"/>
+          <circle cx="47" cy="50" r="3" fill="#9CA3AF"/>
+          <line x1="24" y1="24" x2="19" y2="20" stroke="#9CA3AF" strokeWidth="2.5" strokeLinecap="round"/>
+        </svg>
         <p style={{ color: "#6B7280", fontWeight: 600 }}>Seu carrinho está vazio</p>
         <Link href="/lojas" style={{ color: "#DC2626", fontWeight: 700 }}>← Ver lojas</Link>
       </div>
@@ -408,37 +414,171 @@ export default function CheckoutPage() {
   if (pedidoCodigo) {
     return (
       <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+        <style>{`
+          @keyframes confettiFall0{0%{transform:translateY(-10px) rotate(0deg);opacity:1}100%{transform:translateY(80px) rotate(360deg);opacity:0}}
+          @keyframes confettiFall1{0%{transform:translateY(-10px) rotate(0deg);opacity:1}100%{transform:translateY(70px) rotate(-270deg);opacity:0}}
+          @keyframes confettiFall2{0%{transform:translateY(-8px) rotate(0deg);opacity:1}100%{transform:translateY(90px) rotate(400deg);opacity:0}}
+          @keyframes confettiFall3{0%{transform:translateY(-12px) rotate(45deg);opacity:1}100%{transform:translateY(75px) rotate(-330deg);opacity:0}}
+          @keyframes confettiFall4{0%{transform:translateY(-6px) rotate(20deg);opacity:1}100%{transform:translateY(85px) rotate(300deg);opacity:0}}
+          @keyframes floatIcon{0%,100%{transform:translateY(0px) rotate(-5deg)}50%{transform:translateY(-8px) rotate(3deg)}}
+          @keyframes successPulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,0.3)}50%{box-shadow:0 0 0 12px rgba(220,38,38,0)}}
+        `}</style>
         <div style={{ maxWidth: 400, width: "100%", textAlign: "center" }}>
-          <div style={{ fontSize: 64, marginBottom: 16 }}>🎉</div>
-          <h1 style={{ color: "#111827", fontWeight: 900, fontSize: 24, marginBottom: 8 }}>Pedido realizado!</h1>
-          <p style={{ color: "#6B7280", marginBottom: 24 }}>
+
+          {/* Ícone de celebração — confete + corneta ultrarrealista */}
+          <div style={{ position: "relative", display: "inline-block", marginBottom: 20 }}>
+            {/* Partículas de confete animadas */}
+            {[
+              { color: "#f97316", shape: "rect", x: -28, delay: "0s", dur: "2.2s", anim: 0 },
+              { color: "#3b82f6", shape: "circle", x: 30, delay: "0.3s", dur: "2.5s", anim: 1 },
+              { color: "#a855f7", shape: "rect", x: -42, delay: "0.6s", dur: "1.9s", anim: 2 },
+              { color: "#ec4899", shape: "star", x: 48, delay: "0.1s", dur: "2.8s", anim: 3 },
+              { color: "#22c55e", shape: "rect", x: 14, delay: "0.8s", dur: "2.1s", anim: 4 },
+              { color: "#eab308", shape: "circle", x: -16, delay: "0.4s", dur: "2.4s", anim: 1 },
+              { color: "#DC2626", shape: "rect", x: 38, delay: "0.9s", dur: "2.3s", anim: 0 },
+            ].map((p, i) => (
+              <div key={i} style={{
+                position: "absolute", top: 0, left: "50%",
+                marginLeft: p.x, marginTop: -18,
+                animation: `confettiFall${p.anim} ${p.dur} ${p.delay} ease-in infinite`,
+                pointerEvents: "none",
+              }}>
+                {p.shape === "rect" && <div style={{ width: 7, height: 10, background: p.color, borderRadius: 2, transform: `rotate(${i * 37}deg)` }} />}
+                {p.shape === "circle" && <div style={{ width: 8, height: 8, background: p.color, borderRadius: "50%" }} />}
+                {p.shape === "star" && (
+                  <svg width="10" height="10" viewBox="0 0 10 10"><polygon points="5,1 6.2,4 9.5,4 7,6 8,9 5,7 2,9 3,6 0.5,4 3.8,4" fill={p.color}/></svg>
+                )}
+              </div>
+            ))}
+
+            {/* Corneta de festa SVG ultrarrealista */}
+            <div style={{ animation: "floatIcon 3s ease-in-out infinite", display: "inline-block" }}>
+              <svg width="96" height="96" viewBox="0 0 100 100" fill="none">
+                <defs>
+                  <linearGradient id="coneGold" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#FFD700"/>
+                    <stop offset="40%" stopColor="#FFC107"/>
+                    <stop offset="100%" stopColor="#F59E0B"/>
+                  </linearGradient>
+                  <linearGradient id="coneShad" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="rgba(0,0,0,0.18)"/>
+                    <stop offset="100%" stopColor="transparent"/>
+                  </linearGradient>
+                  <linearGradient id="ribbonBlue" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#60a5fa"/>
+                    <stop offset="100%" stopColor="#2563eb"/>
+                  </linearGradient>
+                  <linearGradient id="ribbonPink" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#f472b6"/>
+                    <stop offset="100%" stopColor="#db2777"/>
+                  </linearGradient>
+                </defs>
+
+                {/* Sombra da corneta */}
+                <ellipse cx="42" cy="88" rx="20" ry="5" fill="rgba(0,0,0,0.12)"/>
+
+                {/* Corpo da corneta (cone) */}
+                <path d="M 18 78 L 62 32 L 72 42 Z" fill="url(#coneGold)"/>
+                {/* Listras da corneta */}
+                <path d="M 24 72 L 58 38" stroke="#B8860B" strokeWidth="3.5" strokeLinecap="round" opacity="0.4"/>
+                <path d="M 32 80 L 66 46" stroke="#B8860B" strokeWidth="3.5" strokeLinecap="round" opacity="0.4"/>
+                <path d="M 40 85 L 70 55" stroke="#B8860B" strokeWidth="3" strokeLinecap="round" opacity="0.3"/>
+                {/* Sombra lateral */}
+                <path d="M 18 78 L 62 32 L 72 42 Z" fill="url(#coneShad)"/>
+                {/* Boca da corneta */}
+                <ellipse cx="67" cy="37" rx="8" ry="8" fill="#E6B800" stroke="#B8860B" strokeWidth="1.5"/>
+                <ellipse cx="67" cy="37" rx="5" ry="5" fill="#FFD700"/>
+                {/* Ponta da corneta */}
+                <circle cx="19" cy="79" r="4" fill="#F59E0B" stroke="#D97706" strokeWidth="1"/>
+                <circle cx="19" cy="79" r="2" fill="#FFD700"/>
+
+                {/* Fitas saindo */}
+                {/* Fita azul */}
+                <path d="M 62 28 Q 50 15 58 5 Q 66 -2 72 8" stroke="url(#ribbonBlue)" strokeWidth="3.5" fill="none" strokeLinecap="round"/>
+                {/* Fita rosa */}
+                <path d="M 68 32 Q 82 18 76 8 Q 70 0 80 5" stroke="url(#ribbonPink)" strokeWidth="3" fill="none" strokeLinecap="round"/>
+                {/* Fita laranja */}
+                <path d="M 72 38 Q 88 28 85 16 Q 83 8 92 12" stroke="#f97316" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
+
+                {/* Confetes explodindo da boca */}
+                {/* Quadrado laranja */}
+                <rect x="55" y="14" width="7" height="7" rx="1" fill="#f97316" transform="rotate(25 58 17)"/>
+                {/* Círculo verde */}
+                <circle cx="76" cy="16" r="4.5" fill="#22c55e"/>
+                {/* Losango azul */}
+                <rect x="82" y="22" width="6" height="6" rx="1" fill="#3b82f6" transform="rotate(45 85 25)"/>
+                {/* Círculo rosa */}
+                <circle cx="52" cy="8" r="3.5" fill="#ec4899"/>
+                {/* Estrela amarela */}
+                <polygon points="88,8 89.5,12.5 94,12.5 90.5,15 92,19.5 88,17 84,19.5 85.5,15 82,12.5 86.5,12.5" fill="#eab308"/>
+                {/* Pontinhos de brilho */}
+                <circle cx="46" cy="20" r="2" fill="white" opacity="0.9"/>
+                <circle cx="79" cy="28" r="2" fill="white" opacity="0.8"/>
+                <circle cx="60" cy="6" r="1.5" fill="white" opacity="0.7"/>
+              </svg>
+            </div>
+          </div>
+
+          <h1 style={{ color: "#111827", fontWeight: 900, fontSize: 26, marginBottom: 8 }}>Pedido realizado!</h1>
+          <p style={{ color: "#6B7280", marginBottom: 28, fontSize: 15 }}>
             Aguarde a confirmação da loja.
           </p>
-          <div style={{ background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: 16, padding: "20px 24px", marginBottom: 20 }}>
-            <p style={{ color: "#6B7280", fontSize: 12, marginBottom: 4 }}>Código do pedido</p>
-            <p style={{ color: "#DC2626", fontWeight: 900, fontSize: "clamp(24px, 8vw, 36px)", letterSpacing: "clamp(2px, 1vw, 6px)", overflowWrap: "break-word" }}>#{pedidoCodigo}</p>
-            <p style={{ color: "#D1D5DB", fontSize: 11, marginTop: 6 }}>Guarde este código para rastrear e confirmar a entrega</p>
-          </div>
-          <Link href={`/pedido/${pedidoCodigo}`} style={{
-            display: "block", padding: "14px 24px", borderRadius: 14, background: "#DC2626",
-            color: "white", fontWeight: 700, textDecoration: "none", fontSize: 15, marginBottom: 12,
+
+          {/* Card do código */}
+          <div style={{
+            background: "linear-gradient(135deg, rgba(220,38,38,0.05), rgba(220,38,38,0.08))",
+            border: "1.5px solid rgba(220,38,38,0.2)", borderRadius: 20,
+            padding: "22px 28px", marginBottom: 20,
+            boxShadow: "0 4px 20px rgba(220,38,38,0.08)",
           }}>
-            📍 Acompanhar pedido →
+            <p style={{ color: "#9CA3AF", fontSize: 12, fontWeight: 600, letterSpacing: 0.5, marginBottom: 6, textTransform: "uppercase" }}>Código do pedido</p>
+            <p style={{ color: "#DC2626", fontWeight: 900, fontSize: "clamp(28px, 9vw, 42px)", letterSpacing: "clamp(4px, 2vw, 10px)", lineHeight: 1, marginBottom: 8 }}>#{pedidoCodigo}</p>
+            <div style={{ height: 1, background: "rgba(220,38,38,0.12)", marginBottom: 10 }} />
+            <p style={{ color: "#D1D5DB", fontSize: 11 }}>Guarde este código para rastrear e confirmar a entrega</p>
+          </div>
+
+          {/* Botão acompanhar */}
+          <Link href={`/pedido/${pedidoCodigo}`} style={{
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+            padding: "15px 24px", borderRadius: 16, background: "#DC2626",
+            color: "white", fontWeight: 800, textDecoration: "none", fontSize: 15, marginBottom: 10,
+            boxShadow: "0 4px 16px rgba(220,38,38,0.35)",
+            animation: "successPulse 2.5s ease-in-out infinite",
+          }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/>
+              <circle cx="12" cy="10" r="3" fill="white" stroke="none"/>
+            </svg>
+            Acompanhar pedido →
           </Link>
+
           {user && (
             <Link href="/cliente/perfil" style={{
-              display: "block", padding: "13px 24px", borderRadius: 14,
-              background: "#F9FAFB", border: "1px solid #e5e7eb",
-              color: "#6B7280", fontWeight: 700, textDecoration: "none", fontSize: 14, marginBottom: 12,
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+              padding: "14px 24px", borderRadius: 16,
+              background: "#ffffff", border: "1.5px solid #e5e7eb",
+              color: "#374151", fontWeight: 700, textDecoration: "none", fontSize: 14, marginBottom: 10,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
             }}>
-              👤 Ver meu perfil
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="8" r="4"/>
+                <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+              </svg>
+              Ver meu perfil
             </Link>
           )}
+
           <Link href="/lojas" style={{
-            display: "block", padding: "13px 24px", borderRadius: 14,
-            background: "#F9FAFB", border: "1px solid #e5e7eb",
-            color: "#9CA3AF", fontWeight: 700, textDecoration: "none", fontSize: 14,
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+            padding: "14px 24px", borderRadius: 16,
+            background: "#F9FAFB", border: "1.5px solid #e5e7eb",
+            color: "#9CA3AF", fontWeight: 600, textDecoration: "none", fontSize: 14,
           }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z"/>
+              <path d="M3 9V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2"/>
+              <line x1="12" y1="12" x2="12" y2="19"/>
+            </svg>
             Fazer novo pedido
           </Link>
         </div>
