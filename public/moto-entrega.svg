@@ -1,0 +1,128 @@
+<svg viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg" fill="none">
+  <!-- Ground shadow -->
+  <ellipse cx="160" cy="172" rx="110" ry="9" fill="rgba(0,0,0,0.12)"/>
+
+  <!-- REAR WHEEL -->
+  <circle cx="62" cy="134" r="36" fill="#111827"/>
+  <circle cx="62" cy="134" r="28" fill="#1e2a3a"/>
+  <circle cx="62" cy="134" r="20" fill="#263340"/>
+  <circle cx="62" cy="134" r="6" fill="#4b5563"/>
+  <!-- Rear tire tread details -->
+  <circle cx="62" cy="134" r="33" stroke="#0f172a" strokeWidth="2" strokeDasharray="8 4"/>
+  <!-- Rear spokes -->
+  <line x1="62" y1="98" x2="62" y2="170" stroke="#374151" strokeWidth="1.5" opacity="0.8"/>
+  <line x1="26" y1="134" x2="98" y2="134" stroke="#374151" strokeWidth="1.5" opacity="0.8"/>
+  <line x1="37" y1="109" x2="87" y2="159" stroke="#374151" strokeWidth="1.5" opacity="0.8"/>
+  <line x1="87" y1="109" x2="37" y2="159" stroke="#374151" strokeWidth="1.5" opacity="0.8"/>
+  <line x1="28" y1="121" x2="96" y2="147" stroke="#374151" strokeWidth="1" opacity="0.5"/>
+  <line x1="96" y1="121" x2="28" y2="147" stroke="#374151" strokeWidth="1" opacity="0.5"/>
+  <!-- Hub cap -->
+  <circle cx="62" cy="134" r="10" fill="#374151"/>
+  <circle cx="62" cy="134" r="6" fill="#4b5563"/>
+  <circle cx="62" cy="134" r="3" fill="#6b7280"/>
+
+  <!-- FRONT WHEEL -->
+  <circle cx="258" cy="134" r="36" fill="#111827"/>
+  <circle cx="258" cy="134" r="28" fill="#1e2a3a"/>
+  <circle cx="258" cy="134" r="20" fill="#263340"/>
+  <circle cx="258" cy="134" r="6" fill="#4b5563"/>
+  <!-- Front tire tread -->
+  <circle cx="258" cy="134" r="33" stroke="#0f172a" strokeWidth="2" strokeDasharray="8 4"/>
+  <!-- Front spokes -->
+  <line x1="258" y1="98" x2="258" y2="170" stroke="#374151" strokeWidth="1.5" opacity="0.8"/>
+  <line x1="222" y1="134" x2="294" y2="134" stroke="#374151" strokeWidth="1.5" opacity="0.8"/>
+  <line x1="233" y1="109" x2="283" y2="159" stroke="#374151" strokeWidth="1.5" opacity="0.8"/>
+  <line x1="283" y1="109" x2="233" y2="159" stroke="#374151" strokeWidth="1.5" opacity="0.8"/>
+  <line x1="224" y1="121" x2="292" y2="147" stroke="#374151" strokeWidth="1" opacity="0.5"/>
+  <line x1="292" y1="121" x2="224" y2="147" stroke="#374151" strokeWidth="1" opacity="0.5"/>
+  <!-- Hub cap -->
+  <circle cx="258" cy="134" r="10" fill="#374151"/>
+  <circle cx="258" cy="134" r="6" fill="#4b5563"/>
+  <circle cx="258" cy="134" r="3" fill="#6b7280"/>
+
+  <!-- CHAIN / BELT -->
+  <path d="M 88 140 Q 160 148 230 140" stroke="#374151" strokeWidth="2" strokeDasharray="4 3"/>
+
+  <!-- EXHAUST pipe -->
+  <path d="M 90 134 Q 72 140 60 148 Q 52 152 46 154" stroke="#6b7280" strokeWidth="4" strokeLinecap="round" fill="none"/>
+  <path d="M 90 134 Q 72 138 60 144 Q 52 148 44 150" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" fill="none"/>
+
+  <!-- MAIN FRAME / ENGINE AREA -->
+  <path d="M 96 118 L 108 88 L 192 82 L 200 98 L 205 118 L 100 118 Z" fill="#DC2626"/>
+  <!-- Engine detail -->
+  <rect x="118" y="100" width="58" height="20" rx="4" fill="#b91c1c"/>
+  <rect x="122" y="104" width="14" height="12" rx="2" fill="#991b1b"/>
+  <rect x="140" y="104" width="14" height="12" rx="2" fill="#991b1b"/>
+  <rect x="158" y="104" width="14" height="12" rx="2" fill="#991b1b"/>
+
+  <!-- LOWER BODY / FOOTBOARD -->
+  <path d="M 96 118 L 205 118 L 208 128 L 90 128 Z" fill="#b91c1c"/>
+  <rect x="90" y="126" width="118" height="6" rx="2" fill="#991b1b"/>
+
+  <!-- FUEL TANK -->
+  <path d="M 140 82 Q 170 72 192 78 L 192 92 Q 168 86 140 94 Z" fill="#DC2626"/>
+  <path d="M 148 82 Q 174 74 190 80" stroke="#ef4444" strokeWidth="1" strokeLinecap="round" fill="none"/>
+
+  <!-- SEAT -->
+  <path d="M 138 82 Q 178 68 202 76 L 202 84 Q 176 78 138 90 Z" fill="#1f2937"/>
+  <!-- Seat highlight -->
+  <path d="M 143 83 Q 175 71 198 78" stroke="#374151" strokeWidth="1" strokeLinecap="round" fill="none"/>
+
+  <!-- DELIVERY BAÚ / BOX -->
+  <!-- Box shadow -->
+  <rect x="30" y="42" width="90" height="70" rx="8" fill="rgba(0,0,0,0.2)" transform="translate(3,3)"/>
+  <!-- Main box body -->
+  <rect x="30" y="42" width="90" height="70" rx="8" fill="#b91c1c"/>
+  <!-- Box gradient overlay -->
+  <rect x="30" y="42" width="90" height="35" rx="8" fill="#DC2626"/>
+  <!-- Box lid line -->
+  <rect x="30" y="72" width="90" height="4" fill="#991b1b"/>
+  <!-- Box vertical divider -->
+  <rect x="73" y="42" width="3" height="70" fill="#991b1b" opacity="0.6"/>
+  <!-- Box horizontal line -->
+  <line x1="30" y1="58" x2="120" y2="58" stroke="#991b1b" strokeWidth="1.5" opacity="0.5"/>
+  <!-- Lock detail -->
+  <rect x="69" y="68" width="12" height="10" rx="2" fill="#7f1d1d"/>
+  <circle cx="75" cy="72" r="3" fill="#dc2626"/>
+  <!-- Box handle top -->
+  <rect x="55" y="35" width="30" height="10" rx="5" fill="#6b7280"/>
+  <rect x="59" y="37" width="22" height="6" rx="3" fill="#9ca3af"/>
+  <!-- Chegô logo on box -->
+  <text x="52" y="65" textAnchor="middle" fill="white" fontSize="12" fontWeight="900" fontFamily="Arial, sans-serif" opacity="0.9">CHEGÔ</text>
+  <!-- Straps holding box to bike -->
+  <path d="M 30 80 Q 24 82 22 90 L 30 92" stroke="#374151" strokeWidth="2" fill="none"/>
+  <path d="M 120 80 Q 128 82 130 90 L 120 92" stroke="#374151" strokeWidth="2" fill="none"/>
+
+  <!-- FRONT FAIRING / BODY -->
+  <path d="M 196 88 L 228 72 L 248 92 L 240 102 L 200 105 Z" fill="#DC2626"/>
+  <path d="M 198 90 L 226 76 L 244 93" stroke="#ef4444" strokeWidth="1" fill="none"/>
+
+  <!-- FRONT FORK -->
+  <path d="M 236 96 L 242 134" stroke="#4b5563" strokeWidth="6" strokeLinecap="round"/>
+  <path d="M 242 96 L 248 134" stroke="#374151" strokeWidth="6" strokeLinecap="round"/>
+  <!-- Fork detail -->
+  <rect x="234" y="108" width="16" height="5" rx="2" fill="#6b7280"/>
+  <rect x="234" y="120" width="16" height="5" rx="2" fill="#6b7280"/>
+
+  <!-- HANDLEBARS -->
+  <path d="M 232 80 L 258 62" stroke="#374151" strokeWidth="5" strokeLinecap="round"/>
+  <!-- Left handlebar -->
+  <path d="M 250 58 L 268 56" stroke="#374151" strokeWidth="4.5" strokeLinecap="round"/>
+  <!-- Right side / throttle -->
+  <circle cx="268" cy="56" r="5" fill="#4b5563"/>
+  <!-- Mirror -->
+  <circle cx="255" cy="58" r="6" fill="#4b5563" stroke="#374151" strokeWidth="1"/>
+  <circle cx="255" cy="58" r="4" fill="#6b7280" opacity="0.6"/>
+
+  <!-- HEADLIGHT -->
+  <path d="M 246 86 L 262 80 L 266 90 L 250 96 Z" fill="#fde68a" opacity="0.9"/>
+  <path d="M 248 87 L 260 82 L 264 89 L 252 94 Z" fill="white" opacity="0.6"/>
+
+  <!-- Tail light -->
+  <circle cx="200" cy="104" r="4" fill="#ef4444" opacity="0.9"/>
+  <circle cx="200" cy="104" r="2" fill="#fca5a5"/>
+
+  <!-- RIDER (optional: helmet behind handlebars area) -->
+  <!-- Windshield -->
+  <path d="M 232 78 L 256 62 L 260 68 L 236 86 Z" fill="rgba(147,197,253,0.25)" stroke="rgba(147,197,253,0.4)" strokeWidth="1"/>
+</svg>

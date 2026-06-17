@@ -141,14 +141,69 @@ function MapaRastreamento({
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ETAPAS: { status: StatusPedido; label: string }[] = [
-  { status: "pendente",       label: "Pedido recebido"      },
-  { status: "aceito",         label: "Confirmado pela loja"  },
-  { status: "preparando",     label: "Preparando"            },
-  { status: "pronto",         label: "Pronto para entrega"   },
-  { status: "coletado",       label: "Saiu para entrega"     },
-  { status: "entregue",       label: "Entregue!"             },
+const ETAPAS: { status: StatusPedido; label: string; descricao: string }[] = [
+  { status: "pendente",   label: "Pedido recebido",    descricao: "Seu pedido chegou! A loja está sendo notificada." },
+  { status: "aceito",     label: "Confirmado pela loja", descricao: "A loja confirmou seu pedido e vai começar a preparar em breve." },
+  { status: "preparando", label: "Preparando",          descricao: "A cozinha está preparando seu pedido com todo cuidado." },
+  { status: "pronto",     label: "Pronto para entrega", descricao: "Pedido pronto! Estamos aguardando o entregador retirar." },
+  { status: "coletado",   label: "Saiu para entrega",   descricao: "O motoboy pegou seu pedido e está a caminho da sua casa!" },
+  { status: "entregue",   label: "Entregue!",           descricao: "Pedido entregue com sucesso. Bom apetite!" },
 ]
+
+function EtapaIcon({ index, size = 56 }: { index: number; size?: number }) {
+  if (index === 4) {
+    return (
+      <img
+        src="/moto-entrega.svg"
+        alt="Motoboy em rota"
+        width={size * 1.8}
+        height={size}
+        style={{ objectFit: "contain", filter: "drop-shadow(0 4px 12px rgba(220,38,38,0.3))" }}
+      />
+    )
+  }
+  if (index === 5) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 56 56" fill="none">
+        <circle cx="28" cy="28" r="26" fill="#dcfce7" stroke="#22c55e" strokeWidth="2"/>
+        <path d="M 14 28 L 24 38 L 42 20" stroke="#16a34a" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    )
+  }
+  const icons = [
+    // 0 pendente — documento
+    <svg key={0} width={size} height={size} viewBox="0 0 56 56" fill="none">
+      <circle cx="28" cy="28" r="26" fill="#F3F4F6" stroke="#E5E7EB" strokeWidth="2"/>
+      <rect x="16" y="14" width="24" height="28" rx="3" fill="white" stroke="#D1D5DB" strokeWidth="1.5"/>
+      <line x1="21" y1="21" x2="35" y2="21" stroke="#9CA3AF" strokeWidth="1.5" strokeLinecap="round"/>
+      <line x1="21" y1="26" x2="35" y2="26" stroke="#9CA3AF" strokeWidth="1.5" strokeLinecap="round"/>
+      <line x1="21" y1="31" x2="29" y2="31" stroke="#9CA3AF" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>,
+    // 1 aceito — loja com check
+    <svg key={1} width={size} height={size} viewBox="0 0 56 56" fill="none">
+      <circle cx="28" cy="28" r="26" fill="#dbeafe" stroke="#3b82f6" strokeWidth="2"/>
+      <path d="M 16 38 L 16 26 L 28 18 L 40 26 L 40 38 Z" fill="white" stroke="#3b82f6" strokeWidth="1.5"/>
+      <path d="M 23 38 L 23 31 L 33 31 L 33 38" fill="#dbeafe" stroke="#3b82f6" strokeWidth="1.5"/>
+      <path d="M 20 29 L 26 35 L 36 25" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>,
+    // 2 preparando — chama/fogo
+    <svg key={2} width={size} height={size} viewBox="0 0 56 56" fill="none">
+      <circle cx="28" cy="28" r="26" fill="#fef9c3" stroke="#eab308" strokeWidth="2"/>
+      <path d="M 28 38 Q 20 32 22 24 Q 25 26 26 29 Q 28 22 24 16 Q 32 20 34 28 Q 35 26 34 22 Q 40 28 38 35 Q 36 38 28 38 Z" fill="#f97316" stroke="#ea580c" strokeWidth="1"/>
+      <path d="M 28 36 Q 24 32 25 27 Q 27 28 27 30 Q 29 26 28 23 Q 32 26 32 30 Q 33 28 32 26 Q 36 30 34 34 Q 32 36 28 36 Z" fill="#fbbf24"/>
+    </svg>,
+    // 3 pronto — caixa
+    <svg key={3} width={size} height={size} viewBox="0 0 56 56" fill="none">
+      <circle cx="28" cy="28" r="26" fill="#ede9fe" stroke="#8b5cf6" strokeWidth="2"/>
+      <rect x="16" y="26" width="24" height="16" rx="2" fill="#8b5cf6"/>
+      <path d="M 14 22 L 42 22 L 40 26 L 16 26 Z" fill="#7c3aed"/>
+      <line x1="28" y1="22" x2="28" y2="16" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round"/>
+      <rect x="24" y="14" width="8" height="6" rx="1" fill="#7c3aed"/>
+      <line x1="24" y1="31" x2="32" y2="31" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+    </svg>,
+  ]
+  return icons[index] ?? null
+}
 
 const STATUS_INDEX: Partial<Record<StatusPedido, number>> = {
   pendente: 0, aceito: 1, preparando: 2, pronto: 3,
@@ -259,6 +314,7 @@ export default function AcompanhamentoPedido() {
   const [loading,  setLoading]  = useState(true)
   const [notFound, setNotFound] = useState(false)
 
+  const [etapaExpandida, setEtapaExpandida] = useState<number | null>(null)
   const [modalAvaliacao, setModalAvaliacao] = useState(false)
   const [jaAvaliou,      setJaAvaliou]      = useState(false)
   const [notaLoja,       setNotaLoja]       = useState(0)
@@ -475,24 +531,58 @@ export default function AcompanhamentoPedido() {
             {/* Progresso */}
             <div style={{ background: "#ffffff", borderRadius: 20, padding: "24px 20px", marginBottom: 20, border: entregue ? "1px solid rgba(34,197,94,0.3)" : "1px solid #e5e7eb", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
               <div style={{ textAlign: "center", marginBottom: 28 }}>
-                <p style={{ fontSize: 44, marginBottom: 8 }}>{entregue ? "🎉" : ["📋","✅","👨‍🍳","📦","🛵","🎉"][etapaAtual]}</p>
+                <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: 12, minHeight: 64 }}>
+                  <EtapaIcon index={etapaAtual} size={56} />
+                </div>
                 <p style={{ color: "#111827", fontWeight: 800, fontSize: 18 }}>{ETAPAS[etapaAtual]?.label}</p>
-                <p style={{ color: "#9CA3AF", fontSize: 12, marginTop: 4 }}>Atualiza em tempo real</p>
+                <p style={{ color: "#9CA3AF", fontSize: 12, marginTop: 4 }}>Atualiza em tempo real · toque para detalhes</p>
               </div>
+              <style>{`
+                @keyframes stepPulse { 0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,0.4)} 50%{box-shadow:0 0 0 8px rgba(220,38,38,0)} }
+                @keyframes descFade { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
+              `}</style>
               <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                 {ETAPAS.map((etapa, i) => {
                   const feita = i < etapaAtual, atual = i === etapaAtual
+                  const clicavel = feita || atual
+                  const expandida = etapaExpandida === i
                   return (
-                    <div key={etapa.status} style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, width: 20 }}>
-                        <div style={{ width: 20, height: 20, borderRadius: "50%", flexShrink: 0, background: feita ? "#22c55e" : atual ? "#DC2626" : "#E5E7EB", border: atual ? "2px solid rgba(220,38,38,0.4)" : "none", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "white" }}>
-                          {feita ? "✓" : ""}
+                    <div key={etapa.status}>
+                      <div
+                        onClick={() => clicavel && setEtapaExpandida(expandida ? null : i)}
+                        style={{ display: "flex", alignItems: "flex-start", gap: 14, cursor: clicavel ? "pointer" : "default", borderRadius: 10, padding: "3px 8px", margin: "0 -8px", background: expandida ? "rgba(220,38,38,0.05)" : "transparent", transition: "background 0.2s" }}
+                      >
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, width: 22 }}>
+                          <div style={{
+                            width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
+                            background: feita ? "#22c55e" : atual ? "#DC2626" : "#E5E7EB",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 10, color: "white", fontWeight: 700,
+                            animation: atual ? "stepPulse 2s ease-in-out infinite" : "none",
+                          }}>
+                            {feita ? "✓" : atual ? "●" : ""}
+                          </div>
+                          {i < ETAPAS.length - 1 && (
+                            <div style={{ width: 2, height: expandida ? 36 : 28, marginTop: 2, background: feita ? "#22c55e" : "#E5E7EB", transition: "height 0.25s, background 0.4s" }} />
+                          )}
                         </div>
-                        {i < ETAPAS.length - 1 && <div style={{ width: 2, height: 28, marginTop: 2, background: feita ? "#22c55e" : "#E5E7EB" }} />}
+                        <div style={{ flex: 1, paddingBottom: i < ETAPAS.length - 1 ? (expandida ? 0 : 0) : 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 2 }}>
+                            <p style={{ fontSize: 13, fontWeight: atual ? 700 : feita ? 600 : 500, color: feita ? "#16a34a" : atual ? "#111827" : "#9CA3AF" }}>
+                              {etapa.label}
+                            </p>
+                            {clicavel && (
+                              <span style={{ color: "#D1D5DB", fontSize: 11, marginLeft: 6, transition: "transform 0.2s", display: "inline-block", transform: expandida ? "rotate(180deg)" : "rotate(0deg)" }}>▾</span>
+                            )}
+                          </div>
+                          {expandida && (
+                            <p style={{ fontSize: 12, color: "#6B7280", marginTop: 4, marginBottom: 4, lineHeight: 1.5, animation: "descFade 0.2s ease" }}>
+                              {etapa.descricao}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                      <p style={{ fontSize: 13, fontWeight: atual ? 700 : 500, color: feita ? "#16a34a" : atual ? "#111827" : "#9CA3AF", paddingTop: 1, paddingBottom: i < ETAPAS.length - 1 ? 28 : 0 }}>
-                        {etapa.label}
-                      </p>
+                      {i < ETAPAS.length - 1 && <div style={{ height: expandida ? 4 : 0 }} />}
                     </div>
                   )
                 })}
