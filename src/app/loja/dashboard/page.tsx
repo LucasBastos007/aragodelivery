@@ -138,7 +138,17 @@ export default function DashboardPage() {
   return (
     <div style={{ padding: "24px 16px", maxWidth: 900, margin: "0 auto" }}>
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ color: "#111827", fontWeight: 900, fontSize: 20 }}>📊 Dashboard</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 2 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, #f97316, #ea580c)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 10px rgba(249,115,22,0.35)", flexShrink: 0 }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="4" y="10" width="4" height="10" rx="1"/>
+              <rect x="10" y="6" width="4" height="14" rx="1"/>
+              <rect x="16" y="2" width="4" height="18" rx="1"/>
+              <line x1="2" y1="21" x2="22" y2="21" strokeWidth="1.5"/>
+            </svg>
+          </div>
+          <h1 style={{ color: "#111827", fontWeight: 900, fontSize: 20 }}>Dashboard</h1>
+        </div>
         <p style={{ color: "#9CA3AF", fontSize: 13, marginTop: 4 }}>Somente pedidos entregues</p>
       </div>
 
@@ -184,16 +194,73 @@ export default function DashboardPage() {
             {periodoLabel}
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 14, marginBottom: 24 }}>
-            <StatCard color="#22c55e" label="Vendas" value={`R$ ${vendas.toFixed(2)}`} sub={`${numPedidos} pedido${numPedidos !== 1 ? "s" : ""}`} icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>} />
-            <StatCard color="#60a5fa" label="Ticket médio" value={`R$ ${ticketMedio.toFixed(2)}`} sub="por pedido" icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>} />
-            <StatCard color="#a78bfa" label="Total histórico" value={`R$ ${vendasTotal.toFixed(2)}`} sub={`${pedidosTotal} pedidos`} icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>} />
-            <StatCard color="#f97316" label="Pedidos no período" value={String(numPedidos)} sub="entregues" icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l2-1.14"/><line x1="3.29" y1="7" x2="12" y2="12"/><line x1="12" y1="22" x2="12" y2="12"/></svg>} />
+            <StatCard color="#22c55e" label="Vendas" value={`R$ ${vendas.toFixed(2)}`} sub={`${numPedidos} pedido${numPedidos !== 1 ? "s" : ""}`} icon={
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                {/* Coin circle */}
+                <circle cx="12" cy="12" r="9"/>
+                <circle cx="12" cy="12" r="6.5" strokeWidth="1" strokeOpacity="0.4"/>
+                {/* Dollar vertical bar */}
+                <line x1="12" y1="7.5" x2="12" y2="16.5" strokeWidth="1.8"/>
+                {/* Dollar S curves */}
+                <path d="M14.5 9.2 Q14.5 7.5 12 7.5 Q9.5 7.5 9.5 9.8 Q9.5 12 12 12 Q14.5 12 14.5 14.2 Q14.5 16.5 12 16.5 Q9.5 16.5 9.5 14.8" strokeWidth="1.8"/>
+              </svg>
+            } />
+            <StatCard color="#60a5fa" label="Ticket médio" value={`R$ ${ticketMedio.toFixed(2)}`} sub="por pedido" icon={
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                {/* Card body */}
+                <rect x="2" y="5" width="20" height="14" rx="2"/>
+                {/* Magnetic stripe */}
+                <line x1="2" y1="10" x2="22" y2="10" strokeWidth="3"/>
+                {/* EMV chip */}
+                <rect x="5" y="13" width="5" height="3.5" rx="0.8" strokeWidth="1.5"/>
+                {/* Chip inner lines */}
+                <line x1="7.5" y1="13" x2="7.5" y2="16.5" strokeWidth="1"/>
+                <line x1="5" y1="14.8" x2="10" y2="14.8" strokeWidth="1"/>
+                {/* Contactless dots */}
+                <path d="M14 13.5 Q15.5 14.7 14 15.9" strokeWidth="1.5"/>
+                <path d="M16 12.5 Q18.5 14.7 16 16.9" strokeWidth="1.5"/>
+              </svg>
+            } />
+            <StatCard color="#a78bfa" label="Total histórico" value={`R$ ${vendasTotal.toFixed(2)}`} sub={`${pedidosTotal} pedidos`} icon={
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                {/* Grid dots below */}
+                <circle cx="4" cy="18" r="0.8" fill="currentColor" stroke="none"/>
+                <circle cx="4" cy="14" r="0.8" fill="currentColor" stroke="none"/>
+                <circle cx="4" cy="10" r="0.8" fill="currentColor" stroke="none"/>
+                <circle cx="9" cy="18" r="0.8" fill="currentColor" stroke="none"/>
+                <circle cx="9" cy="14" r="0.8" fill="currentColor" stroke="none"/>
+                <circle cx="14" cy="18" r="0.8" fill="currentColor" stroke="none"/>
+                {/* Rising trend line */}
+                <polyline points="3 19 8 13 13 15 20 6" strokeWidth="2.2"/>
+                {/* Arrow head */}
+                <polyline points="16 5 20 6 19 10"/>
+              </svg>
+            } />
+            <StatCard color="#f97316" label="Pedidos no período" value={String(numPedidos)} sub="entregues" icon={
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                {/* 3D box top face */}
+                <path d="M12 2 L20 6 L12 10 L4 6 Z"/>
+                {/* Front face */}
+                <path d="M4 6 L4 16 L12 20 L12 10 Z"/>
+                {/* Right face (lighter by using lower opacity) */}
+                <path d="M20 6 L20 16 L12 20 L12 10 Z" strokeOpacity="0.6"/>
+                {/* Depth highlight on top edge */}
+                <line x1="12" y1="10" x2="12" y2="20" strokeOpacity="0.4"/>
+              </svg>
+            } />
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16, marginBottom: 16 }}>
             {/* Top produtos */}
             <div className="card" style={{ padding: "20px 22px" }}>
-              <p style={{ color: "#111827", fontWeight: 900, fontSize: 14, marginBottom: 18 }}>🔥 Mais pedidos no período</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg, #f97316, #dc2626)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 22c5 0 8-3.5 8-8 0-3-1.5-5.5-3-7.5-1 2.5-2 3.5-3.5 3.5C14.5 6.5 12 3 10 2c0 3-2 5-4 7-1 1.5-2 3-2 5 0 4.5 3.5 8 8 8z"/>
+                  </svg>
+                </div>
+                <p style={{ color: "#111827", fontWeight: 900, fontSize: 14 }}>Mais pedidos no período</p>
+              </div>
               {topProds.length === 0 ? (
                 <p style={{ color: "#9CA3AF", fontSize: 13 }}>Sem dados para o período</p>
               ) : topProds.map((p, i) => (
@@ -217,7 +284,14 @@ export default function DashboardPage() {
 
             {/* Últimas entregas */}
             <div className="card" style={{ padding: "20px 22px" }}>
-              <p style={{ color: "#111827", fontWeight: 900, fontSize: 14, marginBottom: 18 }}>✅ Últimas entregas</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
+                <div style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg, #22c55e, #16a34a)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                </div>
+                <p style={{ color: "#111827", fontWeight: 900, fontSize: 14 }}>Últimas entregas</p>
+              </div>
               {ultimos.length === 0 ? (
                 <p style={{ color: "#9CA3AF", fontSize: 13 }}>Nenhuma entrega ainda</p>
               ) : (

@@ -12,9 +12,21 @@ const NAV = [
     label: "Corridas",
     icon: (active: boolean) => (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2.2 : 1.8} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-        <path d="M2 17l10 5 10-5"/>
-        <path d="M2 12l10 5 10-5"/>
+        {/* Motorcycle side profile */}
+        {/* Rear wheel */}
+        <circle cx="6" cy="17" r="3.5"/>
+        {/* Front wheel */}
+        <circle cx="18" cy="17" r="3.5"/>
+        {/* Frame body */}
+        <path d="M6 17 L9 10 L14 10 L18 17"/>
+        {/* Engine/body block */}
+        <path d="M9 10 L11 7 L16 7 L18 10 L14 10"/>
+        {/* Handlebar */}
+        <path d="M16 7 L20 6"/>
+        {/* Seat */}
+        <path d="M10 9 Q12 8 14 9"/>
+        {/* Exhaust */}
+        <path d="M9 14 L6 14"/>
       </svg>
     ),
   },
@@ -22,15 +34,18 @@ const NAV = [
     href: "/motoboy/dashboard",
     label: "Início",
     icon: (active: boolean) => (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth={active ? 0 : 1.8} strokeLinecap="round" strokeLinejoin="round">
-        {active ? (
-          <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
-        ) : (
-          <>
-            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-            <polyline points="9 22 9 12 15 12 15 22"/>
-          </>
-        )}
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2.2 : 1.8} strokeLinecap="round" strokeLinejoin="round">
+        {/* Triangular roof */}
+        <polyline points="2 11 12 3 22 11"/>
+        {/* House body */}
+        <rect x="4" y="11" width="16" height="11" rx="1" fill={active ? "currentColor" : "none"} fillOpacity={active ? 0.15 : 0}/>
+        <path d="M4 11 L4 22 L20 22 L20 11"/>
+        {/* Door arch */}
+        <path d="M9 22 L9 17 Q9 15 12 15 Q15 15 15 17 L15 22"/>
+        {/* Left window */}
+        <rect x="5.5" y="13" width="3" height="2.5" rx="0.5"/>
+        {/* Right window */}
+        <rect x="15.5" y="13" width="3" height="2.5" rx="0.5"/>
       </svg>
     ),
   },
@@ -39,7 +54,16 @@ const NAV = [
     label: "Histórico",
     icon: (active: boolean) => (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2.2 : 1.8} strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        {/* Document rectangle */}
+        <rect x="4" y="2" width="14" height="18" rx="2"/>
+        {/* Text lines of varying widths */}
+        <line x1="7" y1="7" x2="15" y2="7"/>
+        <line x1="7" y1="11" x2="13" y2="11"/>
+        <line x1="7" y1="15" x2="11" y2="15"/>
+        {/* Small clock overlay bottom-right */}
+        <circle cx="16.5" cy="17.5" r="3.5" fill="#0a0a0a" stroke="currentColor" strokeWidth={active ? 2 : 1.6}/>
+        <line x1="16.5" y1="15.8" x2="16.5" y2="17.5" strokeWidth="1.5"/>
+        <line x1="16.5" y1="17.5" x2="17.8" y2="18.3" strokeWidth="1.5"/>
       </svg>
     ),
   },
@@ -48,9 +72,17 @@ const NAV = [
     label: "Ganhos",
     icon: (active: boolean) => (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2.2 : 1.8} strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="5" width="20" height="14" rx="2"/>
-        <line x1="2" y1="10" x2="22" y2="10"/>
-        <circle cx="12" cy="15" r="2" fill={active ? "currentColor" : "none"}/>
+        {/* Wallet body */}
+        <rect x="2" y="6" width="18" height="14" rx="2"/>
+        {/* Wallet flap */}
+        <path d="M2 10 L20 10"/>
+        {/* Card edges sticking out from top */}
+        <rect x="5" y="3" width="10" height="4" rx="1" strokeWidth="1.5" strokeOpacity="0.7"/>
+        <rect x="7" y="1.5" width="7" height="2.5" rx="0.8" strokeWidth="1.3" strokeOpacity="0.4"/>
+        {/* Coin slot / amount circle */}
+        <circle cx="16" cy="17" r="2.5"/>
+        {/* $ symbol inside */}
+        <line x1="16" y1="15.5" x2="16" y2="18.5" strokeWidth="1.2"/>
       </svg>
     ),
   },
@@ -136,19 +168,51 @@ export default function MotoboyLayout({ children }: { children: React.ReactNode 
                   href: "/motoboy/perfil",
                   label: "Meu perfil",
                   sub: "Foto, dados pessoais e PIX",
-                  icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+                  icon: (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      {/* Face circle */}
+                      <circle cx="12" cy="7" r="4"/>
+                      {/* Neck */}
+                      <line x1="12" y1="11" x2="12" y2="13" strokeWidth="2.5"/>
+                      {/* Shoulders - wider arc */}
+                      <path d="M4 21 Q4 16 8 15 Q10 14.5 12 14.5 Q14 14.5 16 15 Q20 16 20 21"/>
+                    </svg>
+                  ),
                 },
                 {
                   href: "/motoboy/dashboard",
                   label: "Meus ganhos",
                   sub: "Estatísticas e histórico",
-                  icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
+                  icon: (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      {/* Rising bars chart */}
+                      <rect x="3" y="14" width="4" height="7" rx="1"/>
+                      <rect x="10" y="9" width="4" height="12" rx="1"/>
+                      <rect x="17" y="4" width="4" height="17" rx="1"/>
+                      {/* Trend arrow going up-right */}
+                      <polyline points="2 13 7 8 13 10 21 3"/>
+                      <polyline points="17 3 21 3 21 7"/>
+                    </svg>
+                  ),
                 },
                 {
                   href: "/motoboy/historico",
                   label: "Histórico de corridas",
                   sub: "Todas as suas entregas",
-                  icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+                  icon: (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      {/* Road with dotted center line */}
+                      <path d="M4 20 L10 4 L14 4 L20 20 Z"/>
+                      {/* Center dashes */}
+                      <line x1="12" y1="8" x2="12" y2="10" strokeWidth="1.5"/>
+                      <line x1="12" y1="12" x2="12" y2="14" strokeWidth="1.5"/>
+                      <line x1="12" y1="16" x2="12" y2="18" strokeWidth="1.5"/>
+                      {/* Checkered flag at top */}
+                      <rect x="10" y="1" width="2" height="2" fill="currentColor" stroke="none"/>
+                      <rect x="12" y="2" width="2" height="2" fill="currentColor" stroke="none"/>
+                      <rect x="10" y="3" width="2" height="1" fill="currentColor" stroke="none"/>
+                    </svg>
+                  ),
                 },
               ].map(item => (
                 <Link key={item.href} href={item.href} onClick={() => setPerfilOpen(false)} style={{

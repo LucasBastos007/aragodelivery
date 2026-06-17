@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import type React from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
@@ -33,17 +34,320 @@ const CAT_COLORS: Record<string, { bg: string; text: string; accent: string }> =
 const CATEGORIAS: CategoriaLoja[] = ["Restaurante", "Mercadinho", "Farmácia", "Outros"]
 
 type HomeCatAction = "filter" | "busca" | "breve"
-const CATS_HOME: { label: string; img: string | null; bg: string; cat: CategoriaLoja | null; badge: string | null; action: HomeCatAction }[] = [
-  { label: "Restaurantes", img: "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f354.svg", bg: "linear-gradient(145deg,#FF5722,#E64A19)", cat: "Restaurante", badge: null,   action: "filter" },
-  { label: "Mercados",     img: "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f6d2.svg", bg: "linear-gradient(145deg,#E53935,#C62828)", cat: "Mercadinho",  badge: null,   action: "filter" },
-  { label: "Farmácias",   img: "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f48a.svg", bg: "linear-gradient(145deg,#1E88E5,#1565C0)", cat: "Farmácia",   badge: null,   action: "filter" },
-  { label: "Gourmet",     img: "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f37d.svg", bg: "linear-gradient(145deg,#4E342E,#6D4C41)", cat: "Restaurante", badge: "Novo", action: "filter" },
-  { label: "Pet Shops",   img: "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f43e.svg", bg: "linear-gradient(145deg,#AD1457,#E91E63)", cat: "Outros",     badge: null,   action: "filter" },
-  { label: "Bebidas",     img: "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f964.svg", bg: "linear-gradient(145deg,#0288D1,#0277BD)", cat: "Outros",     badge: null,   action: "filter" },
-  { label: "Massas",      img: "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f35d.svg", bg: "linear-gradient(145deg,#F57F17,#E65100)", cat: "Restaurante", badge: null,   action: "filter" },
-  { label: "Lanches",     img: "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f32d.svg", bg: "linear-gradient(145deg,#6D4C41,#4E342E)", cat: "Restaurante", badge: null,   action: "filter" },
-  { label: "Pizzarias",   img: "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/1f355.svg", bg: "linear-gradient(145deg,#C62828,#B71C1C)", cat: "Restaurante", badge: null,   action: "filter" },
-  { label: "Ver mais",    img: null,                                                                       bg: "linear-gradient(145deg,#546E7A,#78909C)", cat: null,         badge: null,   action: "busca"  },
+const CATS_HOME: { label: string; icon: React.ReactNode; bg: string; cat: CategoriaLoja | null; badge: string | null; action: HomeCatAction }[] = [
+  {
+    label: "Restaurantes",
+    bg: "linear-gradient(145deg,#FF5722,#E64A19)",
+    cat: "Restaurante", badge: null, action: "filter",
+    icon: (
+      <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* Sesame bun top */}
+        <ellipse cx="18" cy="10" rx="13" ry="7" fill="#D4A055"/>
+        <ellipse cx="18" cy="9" rx="13" ry="6.5" fill="#E8B96A"/>
+        <ellipse cx="18" cy="8.5" rx="12" ry="5.5" fill="#F5CA82"/>
+        {/* Sesame seeds */}
+        <ellipse cx="13" cy="7" rx="1.5" ry="0.9" fill="#C08040" transform="rotate(-15 13 7)"/>
+        <ellipse cx="18" cy="6" rx="1.5" ry="0.9" fill="#C08040"/>
+        <ellipse cx="23" cy="7" rx="1.5" ry="0.9" fill="#C08040" transform="rotate(15 23 7)"/>
+        <ellipse cx="15.5" cy="9.5" rx="1.2" ry="0.7" fill="#C08040" transform="rotate(-10 15.5 9.5)"/>
+        <ellipse cx="20.5" cy="9.5" rx="1.2" ry="0.7" fill="#C08040" transform="rotate(10 20.5 9.5)"/>
+        {/* Lettuce layer */}
+        <path d="M5 17 Q9 14 12 16 Q15 13 18 16 Q21 13 24 16 Q27 14 31 17 L31 19 Q27 17 24 19 Q21 16 18 19 Q15 16 12 19 Q9 17 5 19 Z" fill="#4CAF50"/>
+        <path d="M5 17 Q9 15 12 17 Q15 14 18 17 Q21 14 24 17 Q27 15 31 17" fill="none" stroke="#388E3C" strokeWidth="0.5"/>
+        {/* Tomato layer */}
+        <rect x="5" y="18.5" width="26" height="3.5" rx="1.5" fill="#E53935"/>
+        <ellipse cx="10" cy="20.2" rx="2" ry="1.5" fill="#EF5350"/>
+        <ellipse cx="18" cy="20.2" rx="2" ry="1.5" fill="#EF5350"/>
+        <ellipse cx="26" cy="20.2" rx="2" ry="1.5" fill="#EF5350"/>
+        {/* Cheese slice */}
+        <rect x="4" y="21.5" width="28" height="2.5" rx="1" fill="#FDD835"/>
+        <path d="M29 21.5 L32 24 L29 24 Z" fill="#F9A825"/>
+        <path d="M7 21.5 L4 24 L7 24 Z" fill="#F9A825"/>
+        {/* Beef patty */}
+        <ellipse cx="18" cy="26" rx="13" ry="3.5" fill="#4E342E"/>
+        <ellipse cx="18" cy="25.5" rx="12.5" ry="3" fill="#5D4037"/>
+        <ellipse cx="14" cy="25" rx="2" ry="1.2" fill="#4E342E"/>
+        <ellipse cx="21" cy="25" rx="2.5" ry="1.2" fill="#4E342E"/>
+        {/* Bun bottom */}
+        <ellipse cx="18" cy="29.5" rx="13" ry="4" fill="#D4A055"/>
+        <ellipse cx="18" cy="29" rx="12.5" ry="3.2" fill="#E8B96A"/>
+      </svg>
+    ),
+  },
+  {
+    label: "Mercados",
+    bg: "linear-gradient(145deg,#E53935,#C62828)",
+    cat: "Mercadinho", badge: null, action: "filter",
+    icon: (
+      <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* Cart body frame */}
+        <path d="M4 8 L7 8 L10 22 L28 22 L31 12 L10 12" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+        {/* Cart basket fill */}
+        <path d="M10 12 L10 22 L28 22 L31 12 Z" fill="rgba(255,255,255,0.2)" stroke="white" strokeWidth="1.5"/>
+        {/* Item: green pack */}
+        <rect x="13" y="14" width="4" height="6" rx="1" fill="#4CAF50"/>
+        <rect x="13.5" y="14.5" width="3" height="1.5" rx="0.5" fill="#81C784"/>
+        {/* Item: red box */}
+        <rect x="18" y="14.5" width="4" height="5.5" rx="1" fill="#EF5350"/>
+        <rect x="18.5" y="15" width="3" height="1.2" rx="0.4" fill="#EF9A9A"/>
+        {/* Item: yellow bag */}
+        <path d="M23 16 Q23 14 25 14 Q27 14 27 16 L27 20 L23 20 Z" fill="#FDD835"/>
+        <path d="M24 14.5 Q25 13 26 14.5" stroke="#F9A825" strokeWidth="1" fill="none"/>
+        {/* Wheels */}
+        <circle cx="14" cy="25" r="2.5" fill="white" stroke="#BDBDBD" strokeWidth="1"/>
+        <circle cx="14" cy="25" r="1" fill="#9E9E9E"/>
+        <circle cx="26" cy="25" r="2.5" fill="white" stroke="#BDBDBD" strokeWidth="1"/>
+        <circle cx="26" cy="25" r="1" fill="#9E9E9E"/>
+        {/* Handle */}
+        <path d="M4 8 L7 8" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+        <circle cx="4" cy="8" r="1.5" fill="#ECEFF1"/>
+      </svg>
+    ),
+  },
+  {
+    label: "Farmácias",
+    bg: "linear-gradient(145deg,#1E88E5,#1565C0)",
+    cat: "Farmácia", badge: null, action: "filter",
+    icon: (
+      <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* Large capsule pill — left half red, right half white */}
+        <rect x="4" y="14" width="28" height="12" rx="6" fill="white" stroke="#90CAF9" strokeWidth="1"/>
+        <path d="M4 14 Q4 26 10 26 L10 14 Q7 14 4 17 Z" fill="#E53935"/>
+        <path d="M4 20 Q4 14 10 14 L10 26 Q4 26 4 20 Z" fill="#E53935"/>
+        {/* Dividing line between halves */}
+        <line x1="10" y1="14" x2="10" y2="26" stroke="#90CAF9" strokeWidth="0.8"/>
+        {/* Highlight on pill */}
+        <ellipse cx="17" cy="16.5" rx="6" ry="1.5" fill="rgba(255,255,255,0.5)"/>
+        {/* Medical cross above */}
+        <rect x="15" y="3" width="6" height="10" rx="1.5" fill="#4CAF50"/>
+        <rect x="12" y="6" width="12" height="4" rx="1.5" fill="#4CAF50"/>
+        <rect x="16" y="4" width="4" height="8" rx="1" fill="#81C784"/>
+        <rect x="13" y="7" width="10" height="2" rx="1" fill="#81C784"/>
+        {/* Reflection on capsule */}
+        <ellipse cx="23" cy="16.5" rx="3.5" ry="1.2" fill="rgba(255,255,255,0.4)"/>
+        {/* Bottom dots / label lines */}
+        <line x1="13" y1="22" x2="28" y2="22" stroke="#90CAF9" strokeWidth="0.8" strokeDasharray="2,2"/>
+      </svg>
+    ),
+  },
+  {
+    label: "Gourmet",
+    bg: "linear-gradient(145deg,#4E342E,#6D4C41)",
+    cat: "Restaurante", badge: "Novo", action: "filter",
+    icon: (
+      <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* Plate shadow */}
+        <ellipse cx="18" cy="30" rx="13" ry="2.5" fill="rgba(0,0,0,0.25)"/>
+        {/* Plate */}
+        <circle cx="18" cy="22" r="13" fill="#F5F5F5"/>
+        <circle cx="18" cy="22" r="11.5" fill="white"/>
+        <circle cx="18" cy="22" r="7" fill="#FAFAFA" stroke="#E0E0E0" strokeWidth="0.5"/>
+        {/* Decorative food center — herb + red berry */}
+        <circle cx="18" cy="22" r="3" fill="#E8F5E9"/>
+        <ellipse cx="18" cy="22" rx="2" ry="1" fill="#A5D6A7"/>
+        {/* Herb sprigs */}
+        <path d="M16 21 Q17 19 18 21" stroke="#388E3C" strokeWidth="1" fill="none"/>
+        <path d="M18 21 Q19 19 20 21" stroke="#388E3C" strokeWidth="1" fill="none"/>
+        <circle cx="16.5" cy="20.2" r="0.8" fill="#4CAF50"/>
+        <circle cx="19.5" cy="20.2" r="0.8" fill="#4CAF50"/>
+        {/* Red berry / garnish */}
+        <circle cx="18" cy="20.5" r="1.2" fill="#E53935"/>
+        <path d="M18 19.3 Q18.3 18.5 18.8 19" stroke="#4CAF50" strokeWidth="0.7" fill="none"/>
+        {/* Fork on left */}
+        <line x1="7" y1="12" x2="7" y2="29" stroke="#9E9E9E" strokeWidth="1.5" strokeLinecap="round"/>
+        <line x1="5.5" y1="12" x2="5.5" y2="17" stroke="#9E9E9E" strokeWidth="1" strokeLinecap="round"/>
+        <line x1="8.5" y1="12" x2="8.5" y2="17" stroke="#9E9E9E" strokeWidth="1" strokeLinecap="round"/>
+        <path d="M5.5 17 Q7 19 8.5 17" stroke="#9E9E9E" strokeWidth="1" fill="none"/>
+        {/* Knife on right */}
+        <line x1="29" y1="12" x2="29" y2="29" stroke="#BDBDBD" strokeWidth="1.5" strokeLinecap="round"/>
+        <path d="M29 12 Q32 14 31 18 Q30 20 29 20 L29 12 Z" fill="#BDBDBD"/>
+        <path d="M29 13 Q31 15 30.5 18 Q30 19.5 29 19.5" stroke="#E0E0E0" strokeWidth="0.5" fill="none"/>
+      </svg>
+    ),
+  },
+  {
+    label: "Pet Shops",
+    bg: "linear-gradient(145deg,#AD1457,#E91E63)",
+    cat: "Outros", badge: null, action: "filter",
+    icon: (
+      <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* Large central pad */}
+        <rect x="10" y="18" width="16" height="14" rx="8" fill="#D7A87A"/>
+        <rect x="11" y="19" width="14" height="11" rx="7" fill="#E8C49A"/>
+        {/* Top left toe */}
+        <ellipse cx="9" cy="14" rx="3.5" ry="4.5" fill="#D7A87A"/>
+        <ellipse cx="9" cy="14" rx="2.8" ry="3.8" fill="#E8C49A"/>
+        {/* Top center-left toe */}
+        <ellipse cx="14.5" cy="11" rx="3.5" ry="4.5" fill="#D7A87A"/>
+        <ellipse cx="14.5" cy="11" rx="2.8" ry="3.8" fill="#E8C49A"/>
+        {/* Top center-right toe */}
+        <ellipse cx="21.5" cy="11" rx="3.5" ry="4.5" fill="#D7A87A"/>
+        <ellipse cx="21.5" cy="11" rx="2.8" ry="3.8" fill="#E8C49A"/>
+        {/* Top right toe */}
+        <ellipse cx="27" cy="14" rx="3.5" ry="4.5" fill="#D7A87A"/>
+        <ellipse cx="27" cy="14" rx="2.8" ry="3.8" fill="#E8C49A"/>
+        {/* Central pad inner detail */}
+        <ellipse cx="18" cy="24" rx="5" ry="4" fill="#C49060"/>
+        <ellipse cx="18" cy="23.5" rx="4" ry="3" fill="#D7A87A"/>
+      </svg>
+    ),
+  },
+  {
+    label: "Bebidas",
+    bg: "linear-gradient(145deg,#0288D1,#0277BD)",
+    cat: "Outros", badge: null, action: "filter",
+    icon: (
+      <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* Glass body */}
+        <path d="M10 8 L12 30 L24 30 L26 8 Z" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" strokeLinejoin="round"/>
+        {/* Liquid fill — amber/cola color */}
+        <path d="M10.8 14 L12 30 L24 30 L25.2 14 Z" fill="#B8860B" opacity="0.85"/>
+        <path d="M10.8 14 L25.2 14" stroke="rgba(255,255,255,0.3)" strokeWidth="0.8"/>
+        {/* Liquid surface highlight */}
+        <ellipse cx="18" cy="14" rx="7.2" ry="1" fill="rgba(255,255,255,0.3)"/>
+        {/* Ice cubes */}
+        <rect x="12.5" y="16" width="4.5" height="4.5" rx="1" fill="rgba(200,235,255,0.7)" stroke="rgba(255,255,255,0.6)" strokeWidth="0.5"/>
+        <rect x="18" y="18" width="4" height="4" rx="1" fill="rgba(200,235,255,0.6)" stroke="rgba(255,255,255,0.5)" strokeWidth="0.5"/>
+        <rect x="13" y="21" width="3.5" height="3.5" rx="0.8" fill="rgba(200,235,255,0.5)" stroke="rgba(255,255,255,0.4)" strokeWidth="0.5"/>
+        {/* Bubbles */}
+        <circle cx="15" cy="15.5" r="0.8" fill="rgba(255,255,255,0.6)"/>
+        <circle cx="20" cy="15" r="0.6" fill="rgba(255,255,255,0.5)"/>
+        <circle cx="22" cy="15.8" r="0.5" fill="rgba(255,255,255,0.4)"/>
+        {/* Straw — red/white striped */}
+        <rect x="21.5" y="4" width="2.5" height="24" rx="1.25" fill="white"/>
+        <rect x="21.5" y="4" width="2.5" height="3" rx="1.25" fill="#E53935"/>
+        <rect x="21.5" y="10" width="2.5" height="3" rx="0" fill="#E53935"/>
+        <rect x="21.5" y="17" width="2.5" height="3" rx="0" fill="#E53935"/>
+        <rect x="21.5" y="24" width="2.5" height="3" rx="0" fill="#E53935"/>
+        {/* Glass highlights */}
+        <path d="M11.5 9 L12.5 26" stroke="rgba(255,255,255,0.4)" strokeWidth="1" strokeLinecap="round"/>
+        <path d="M13 9 L13.5 14" stroke="rgba(255,255,255,0.3)" strokeWidth="0.7" strokeLinecap="round"/>
+        {/* Base */}
+        <path d="M12 30 L24 30" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+    ),
+  },
+  {
+    label: "Massas",
+    bg: "linear-gradient(145deg,#F57F17,#E65100)",
+    cat: "Restaurante", badge: null, action: "filter",
+    icon: (
+      <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* Bowl shadow */}
+        <ellipse cx="18" cy="31.5" rx="12" ry="2" fill="rgba(0,0,0,0.2)"/>
+        {/* Bowl outer */}
+        <path d="M5 19 Q5 32 18 32 Q31 32 31 19 Z" fill="#E3F2FD"/>
+        <path d="M5 19 Q5 32 18 32 Q31 32 31 19 Z" fill="white"/>
+        {/* Bowl rim */}
+        <path d="M5 19 Q18 22 31 19" stroke="#90CAF9" strokeWidth="1.5" fill="none"/>
+        <ellipse cx="18" cy="19" rx="13" ry="2.5" fill="#F5F5F5" stroke="#BBDEFB" strokeWidth="1"/>
+        {/* Tomato sauce base */}
+        <ellipse cx="18" cy="23" rx="10" ry="6" fill="#E53935" opacity="0.9"/>
+        <ellipse cx="18" cy="23" rx="8.5" ry="5" fill="#EF5350"/>
+        {/* Pasta swirls — golden spaghetti */}
+        <path d="M10 22 Q12 18 14 22 Q16 26 18 22 Q20 18 22 22 Q24 26 26 22" stroke="#F5CA82" strokeWidth="2" fill="none" strokeLinecap="round"/>
+        <path d="M9 25 Q12 21 15 25 Q17 28 19 25 Q21 21 24 25 Q26 28 27 25" stroke="#E8B96A" strokeWidth="1.8" fill="none" strokeLinecap="round"/>
+        <path d="M11 20 Q13 17 15 20 Q17 23 19 20 Q21 17 23 20 Q25 23 26 20" stroke="#F5CA82" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+        {/* Basil leaf on top */}
+        <ellipse cx="18" cy="19.5" rx="3.5" ry="2" fill="#4CAF50" transform="rotate(-20 18 19.5)"/>
+        <ellipse cx="18" cy="19.5" rx="2.8" ry="1.5" fill="#66BB6A" transform="rotate(-20 18 19.5)"/>
+        <line x1="16.5" y1="20" x2="19.5" y2="19" stroke="#388E3C" strokeWidth="0.6"/>
+        {/* Sauce drips */}
+        <circle cx="13" cy="21" r="1.2" fill="#C62828"/>
+        <circle cx="23" cy="21" r="1" fill="#C62828"/>
+      </svg>
+    ),
+  },
+  {
+    label: "Lanches",
+    bg: "linear-gradient(145deg,#6D4C41,#4E342E)",
+    cat: "Restaurante", badge: null, action: "filter",
+    icon: (
+      <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* Bun top */}
+        <path d="M6 18 Q6 11 18 11 Q30 11 30 18 L30 20 L6 20 Z" fill="#D4A055"/>
+        <path d="M6 18 Q6 12 18 12 Q30 12 30 18" fill="#E8B96A"/>
+        <path d="M7 18 Q7 13 18 13 Q29 13 29 18" fill="#F5CA82" opacity="0.6"/>
+        {/* Bun split / opening */}
+        <rect x="5" y="19.5" width="26" height="2.5" rx="1" fill="#E8B96A"/>
+        {/* Sausage / frank */}
+        <path d="M7 20.5 Q7 17 18 17 Q29 17 29 20.5 Q29 24 18 24 Q7 24 7 20.5 Z" fill="#C44D33"/>
+        <path d="M7.5 20 Q7.5 17.5 18 17.5 Q28.5 17.5 28.5 20" fill="#D4614A"/>
+        {/* Sausage sheen */}
+        <ellipse cx="18" cy="18.5" rx="8" ry="1.2" fill="rgba(255,255,255,0.2)"/>
+        {/* Mustard zigzag */}
+        <path d="M8 20 Q10 18 12 20 Q14 22 16 20 Q18 18 20 20 Q22 22 24 20 Q26 18 28 20" stroke="#FDD835" strokeWidth="1.8" fill="none" strokeLinecap="round"/>
+        {/* Ketchup drip on side */}
+        <path d="M27 23 Q28.5 24 28 26 Q27.5 27.5 27 27" stroke="#E53935" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+        <circle cx="27.2" cy="27.3" r="1.2" fill="#E53935"/>
+        {/* Bun bottom */}
+        <path d="M5 22 Q5 28 18 28 Q31 28 31 22 L31 22.5 L5 22.5 Z" fill="#D4A055"/>
+        <path d="M5.5 23 Q5.5 28 18 28 Q30.5 28 30.5 23" fill="#E8B96A"/>
+        {/* Sesame on bun top */}
+        <ellipse cx="13" cy="14.5" rx="1.3" ry="0.7" fill="#C08040" transform="rotate(-10 13 14.5)"/>
+        <ellipse cx="18" cy="13" rx="1.3" ry="0.7" fill="#C08040"/>
+        <ellipse cx="23" cy="14.5" rx="1.3" ry="0.7" fill="#C08040" transform="rotate(10 23 14.5)"/>
+      </svg>
+    ),
+  },
+  {
+    label: "Pizzarias",
+    bg: "linear-gradient(145deg,#C62828,#B71C1C)",
+    cat: "Restaurante", badge: null, action: "filter",
+    icon: (
+      <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+        {/* Pizza slice — triangle pointing down */}
+        <path d="M18 32 L4 10 L32 10 Z" fill="#FDD835"/>
+        {/* Crust edge at top */}
+        <path d="M4 10 Q18 5 32 10" fill="#D4A055"/>
+        <path d="M4 10 Q18 6 32 10 Q18 8 4 10" fill="#E8B96A"/>
+        {/* Tomato sauce red base */}
+        <path d="M18 30 L6 12 L30 12 Z" fill="#E53935"/>
+        {/* Cheese layer */}
+        <path d="M18 28 L7.5 13.5 L28.5 13.5 Z" fill="#FDD835"/>
+        <path d="M18 26 L9 15 L27 15 Z" fill="#F9CB40"/>
+        {/* Cheese bubbles / texture */}
+        <circle cx="16" cy="18" r="1.5" fill="#F9A825"/>
+        <circle cx="21" cy="17" r="1.2" fill="#F9A825"/>
+        <circle cx="14" cy="21" r="1" fill="#F9A825"/>
+        <circle cx="20" cy="22" r="1.3" fill="#F9A825"/>
+        {/* Pepperoni circles */}
+        <circle cx="18" cy="19" r="2.8" fill="#8B1A1A"/>
+        <circle cx="18" cy="19" r="2.4" fill="#C62828"/>
+        <circle cx="18" cy="19" r="1" fill="#9B2335" opacity="0.6"/>
+        <circle cx="13" cy="23" r="2.5" fill="#8B1A1A"/>
+        <circle cx="13" cy="23" r="2.1" fill="#C62828"/>
+        <circle cx="23" cy="23" r="2.5" fill="#8B1A1A"/>
+        <circle cx="23" cy="23" r="2.1" fill="#C62828"/>
+        <circle cx="18" cy="27" r="2" fill="#8B1A1A"/>
+        <circle cx="18" cy="27" r="1.6" fill="#C62828"/>
+        {/* Crust texture */}
+        <path d="M6 11 Q18 7.5 30 11" stroke="#C08040" strokeWidth="0.8" fill="none"/>
+        {/* Green herb dots */}
+        <circle cx="15.5" cy="16.5" r="0.7" fill="#4CAF50"/>
+        <circle cx="21" cy="20" r="0.7" fill="#4CAF50"/>
+        <circle cx="17" cy="24" r="0.6" fill="#4CAF50"/>
+      </svg>
+    ),
+  },
+  {
+    label: "Ver mais",
+    bg: "linear-gradient(145deg,#546E7A,#78909C)",
+    cat: null, badge: null, action: "busca",
+    icon: (
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="white" xmlns="http://www.w3.org/2000/svg" opacity={0.9}>
+        <rect x="3.5"  y="3.5"  width="6" height="6" rx="1.5"/>
+        <rect x="11"   y="3.5"  width="6" height="6" rx="1.5"/>
+        <rect x="18.5" y="3.5"  width="6" height="6" rx="1.5"/>
+        <rect x="3.5"  y="11"   width="6" height="6" rx="1.5"/>
+        <rect x="11"   y="11"   width="6" height="6" rx="1.5"/>
+        <rect x="18.5" y="11"   width="6" height="6" rx="1.5"/>
+        <rect x="3.5"  y="18.5" width="6" height="6" rx="1.5"/>
+        <rect x="11"   y="18.5" width="6" height="6" rx="1.5"/>
+        <rect x="18.5" y="18.5" width="6" height="6" rx="1.5"/>
+      </svg>
+    ),
+  },
 ]
 
 function playSound() {
@@ -632,22 +936,7 @@ export default function Home() {
                         outline: isActive ? "2.5px solid rgba(255,255,255,0.8)" : "none",
                         outlineOffset: 1,
                       }}>
-                        {c.img ? (
-                          <img src={c.img} alt={c.label} style={{ width: 34, height: 34, objectFit: "contain" }} />
-                        ) : (
-                          /* Ver mais: grid de pontos */
-                          <svg width="28" height="28" viewBox="0 0 28 28" fill="white" opacity={0.9}>
-                            <circle cx="7"  cy="7"  r="3.5"/>
-                            <circle cx="14" cy="7"  r="3.5"/>
-                            <circle cx="21" cy="7"  r="3.5"/>
-                            <circle cx="7"  cy="14" r="3.5"/>
-                            <circle cx="14" cy="14" r="3.5"/>
-                            <circle cx="21" cy="14" r="3.5"/>
-                            <circle cx="7"  cy="21" r="3.5"/>
-                            <circle cx="14" cy="21" r="3.5"/>
-                            <circle cx="21" cy="21" r="3.5"/>
-                          </svg>
-                        )}
+                        {c.icon}
                       </div>
                       {c.badge && (
                         <span style={{
