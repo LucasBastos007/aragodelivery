@@ -60,7 +60,8 @@ function ProdutoModal({ prod, loja, qtdInCart, onClose, onConfirm }: {
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          background: "#ffffff", borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 520,
+          background: "#ffffff", borderRadius: "24px 24px 0 0", width: "100%",
+          maxWidth: "min(520px, 100vw)",
           border: "1px solid #e5e7eb", overflow: "hidden",
           animation: "slideUp 0.22s ease-out",
         }}>
@@ -257,7 +258,7 @@ export default function RestaurantePage() {
   )
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc", paddingBottom: cartCount > 0 ? 90 : 0 }}>
+    <div style={{ minHeight: "100vh", background: "#f8fafc", paddingBottom: cartCount > 0 ? 90 : 0, overflowX: "hidden" }}>
 
       {/* Modal produto */}
       {modalProd && (
@@ -278,7 +279,7 @@ export default function RestaurantePage() {
           display: "flex", alignItems: "center", justifyContent: "center", padding: 24,
         }}>
           <div onClick={e => e.stopPropagation()} style={{
-            background: "#ffffff", borderRadius: 24, padding: "32px 28px", maxWidth: 360, width: "100%",
+            background: "#ffffff", borderRadius: 24, padding: "28px 20px", maxWidth: "min(360px, calc(100vw - 32px))", width: "100%",
             border: "1px solid #e5e7eb", textAlign: "center",
           }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>🔐</div>
@@ -394,7 +395,7 @@ export default function RestaurantePage() {
                 Mais pedidos
               </span>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: 10 }}>
               {destaques.map((prod, idx) => (
                 <DestaqueProdCard
                   key={prod.id}
@@ -465,15 +466,16 @@ export default function RestaurantePage() {
         }}>
           <div style={{ maxWidth: 720, margin: "0 auto" }}>
             <button onClick={() => router.push("/carrinho")} style={{
-              width: "100%", padding: "14px 20px", borderRadius: 14, border: "none", cursor: "pointer",
-              background: "#DC2626", color: "#111827", fontWeight: 800, fontSize: 15,
+              width: "100%", padding: "14px 12px", borderRadius: 14, border: "none", cursor: "pointer",
+              background: "#DC2626", color: "#111827", fontWeight: 800, fontSize: 14,
               display: "flex", alignItems: "center", justifyContent: "space-between",
+              gap: 8,
             }}>
-              <span style={{ background: "rgba(255,255,255,0.25)", borderRadius: 8, padding: "2px 10px", fontSize: 13, fontWeight: 700 }}>
+              <span style={{ background: "rgba(255,255,255,0.25)", borderRadius: 8, padding: "2px 8px", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
                 {cartCount} {cartCount === 1 ? "item" : "itens"}
               </span>
-              <span>Ver carrinho →</span>
-              <span>R$ {cartTotal.toFixed(2)}</span>
+              <span style={{ flex: 1, textAlign: "center" }}>Ver carrinho →</span>
+              <span style={{ flexShrink: 0 }}>R$ {cartTotal.toFixed(2)}</span>
             </button>
           </div>
         </div>
@@ -606,15 +608,15 @@ function ProdutoRow({ prod, loja, qtd, onOpen, onAdd, onRemove }: {
         ) : (
           <div
             onClick={e => e.stopPropagation()}
-            style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <button onClick={onRemove} style={{
-              width: 32, height: 32, borderRadius: 8, border: "1px solid #E5E7EB",
+              width: 30, height: 30, borderRadius: 8, border: "1px solid #E5E7EB",
               background: "transparent", color: "#111827", fontSize: 18, cursor: "pointer",
               display: "flex", alignItems: "center", justifyContent: "center",
             }}>−</button>
             <span style={{ color: "#111827", fontWeight: 700, minWidth: 16, textAlign: "center" }}>{qtd}</span>
             <button onClick={onAdd} style={{
-              width: 32, height: 32, borderRadius: 8, border: "none",
+              width: 30, height: 30, borderRadius: 8, border: "none",
               background: "#DC2626", color: "#111827", fontSize: 18, cursor: "pointer",
               display: "flex", alignItems: "center", justifyContent: "center",
             }}>+</button>

@@ -40,7 +40,7 @@ export default function CarrinhoPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
+    <div style={{ minHeight: "100vh", background: "#f8fafc", overflowX: "hidden" }}>
       {/* Nav */}
       <nav style={{ background: "#ffffff", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 0, zIndex: 40 }}>
         <div style={{ maxWidth: 680, margin: "0 auto", padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
@@ -69,44 +69,43 @@ export default function CarrinhoPage() {
         <div style={{ background: "#ffffff", borderRadius: 16, border: "1px solid #e5e7eb", overflow: "hidden" }}>
           {items.map((item, i) => (
             <div key={item.id} style={{
-              display: "flex", alignItems: "center", gap: 14, padding: "16px 18px",
+              display: "flex", alignItems: "center", gap: 10, padding: "14px 14px",
               borderBottom: i < items.length - 1 ? "1px solid #F3F4F6" : "none",
+              flexWrap: "wrap",
             }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ color: "#111827", fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{item.nome}</p>
                 <p style={{ color: "#DC2626", fontWeight: 700, fontSize: 13 }}>R$ {item.preco.toFixed(2)} / un.</p>
               </div>
 
-              {/* Qty controls */}
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+              {/* Qty controls + Subtotal */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                 <button
                   onClick={() => remove(item.id)}
                   style={{
-                    width: 32, height: 32, borderRadius: 8, border: "1px solid #E5E7EB",
+                    width: 30, height: 30, borderRadius: 8, border: "1px solid #E5E7EB",
                     background: item.quantidade === 1 ? "rgba(239,68,68,0.08)" : "transparent",
                     color: item.quantidade === 1 ? "#EF4444" : "#374151",
                     fontSize: 18, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                   }}>
                   −
                 </button>
-                <span style={{ color: "#111827", fontWeight: 800, fontSize: 16, minWidth: 20, textAlign: "center" }}>
+                <span style={{ color: "#111827", fontWeight: 800, fontSize: 15, minWidth: 18, textAlign: "center" }}>
                   {item.quantidade}
                 </span>
                 <button
                   onClick={() => add({ id: item.id, nome: item.nome, preco: item.preco, loja_id: item.loja_id, loja_nome: item.loja_nome })}
                   style={{
-                    width: 32, height: 32, borderRadius: 8, border: "none",
+                    width: 30, height: 30, borderRadius: 8, border: "none",
                     background: "#DC2626", color: "white", fontSize: 18, cursor: "pointer",
                     display: "flex", alignItems: "center", justifyContent: "center",
                   }}>
                   +
                 </button>
+                <p style={{ color: "#6B7280", fontWeight: 700, fontSize: 13, flexShrink: 0, minWidth: 56, textAlign: "right" }}>
+                  R$ {(item.preco * item.quantidade).toFixed(2)}
+                </p>
               </div>
-
-              {/* Subtotal */}
-              <p style={{ color: "#6B7280", fontWeight: 700, fontSize: 14, flexShrink: 0, minWidth: 64, textAlign: "right" }}>
-                R$ {(item.preco * item.quantidade).toFixed(2)}
-              </p>
             </div>
           ))}
         </div>
@@ -144,15 +143,16 @@ export default function CarrinhoPage() {
         <button
           onClick={() => router.push("/checkout")}
           style={{
-            width: "100%", padding: "16px", borderRadius: 14, border: "none",
-            background: "#DC2626", color: "white", fontWeight: 800, fontSize: 16, cursor: "pointer",
+            width: "100%", padding: "16px 12px", borderRadius: 14, border: "none",
+            background: "#DC2626", color: "white", fontWeight: 800, fontSize: 15, cursor: "pointer",
             display: "flex", alignItems: "center", justifyContent: "space-between",
+            gap: 8,
           }}>
-          <span style={{ background: "rgba(255,255,255,0.2)", borderRadius: 8, padding: "3px 10px", fontSize: 13 }}>
+          <span style={{ background: "rgba(255,255,255,0.2)", borderRadius: 8, padding: "3px 8px", fontSize: 12, flexShrink: 0 }}>
             {count} {count === 1 ? "item" : "itens"}
           </span>
-          <span>Finalizar pedido →</span>
-          <span>R$ {totalFinal.toFixed(2)}</span>
+          <span style={{ flex: 1, textAlign: "center" }}>Finalizar pedido →</span>
+          <span style={{ flexShrink: 0 }}>R$ {totalFinal.toFixed(2)}</span>
         </button>
 
         <Link href="/" style={{

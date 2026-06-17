@@ -64,7 +64,7 @@ export default function BuscaPage() {
   const mostraResultados = !!(busca || filtro)
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc", paddingBottom: 80 }}>
+    <div style={{ minHeight: "100vh", background: "#f8fafc", paddingBottom: 80, overflowX: "hidden" }}>
 
       {/* Header fixo */}
       <div style={{

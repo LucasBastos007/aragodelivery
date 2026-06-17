@@ -29,13 +29,13 @@ function StatCard({ icon, label, value, sub, color }: {
   icon: React.ReactNode; label: string; value: string; sub: string; color: string
 }) {
   return (
-    <div style={{ background: "#111", borderRadius: 16, padding: "18px 20px", border: "1px solid rgba(255,255,255,0.07)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+    <div style={{ background: "#111", borderRadius: 16, padding: "14px 12px", border: "1px solid rgba(255,255,255,0.07)", minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
         {icon}
-        <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</p>
+        <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</p>
       </div>
-      <p style={{ color, fontWeight: 900, fontSize: 26, lineHeight: 1, marginBottom: 4 }}>{value}</p>
-      <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 12 }}>{sub}</p>
+      <p style={{ color, fontWeight: 900, fontSize: 20, lineHeight: 1, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</p>
+      <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 11 }}>{sub}</p>
     </div>
   )
 }
@@ -60,13 +60,13 @@ function GraficoSemanal({ pedidos }: { pedidos: any[] }) {
   const labels = dias.map(d => d.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "").slice(0, 3))
 
   return (
-    <div style={{ background: "#111", borderRadius: 16, padding: "18px 20px", marginBottom: 16, border: "1px solid rgba(255,255,255,0.07)" }}>
-      <p style={{ color: "white", fontWeight: 900, fontSize: 14, marginBottom: 18 }}>Ganhos — últimos 7 dias</p>
-      <div style={{ display: "flex", alignItems: "flex-end", gap: 6, height: 90 }}>
+    <div style={{ background: "#111", borderRadius: 16, padding: "14px 12px", marginBottom: 16, border: "1px solid rgba(255,255,255,0.07)" }}>
+      <p style={{ color: "white", fontWeight: 900, fontSize: 13, marginBottom: 14 }}>Ganhos — 7 dias</p>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 80 }}>
         {valores.map((v, i) => (
           <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
-            <p style={{ color: v > 0 ? "rgba(249,115,22,0.8)" : "transparent", fontSize: 8, fontWeight: 700 }}>
-              {v > 0 ? `R$${v.toFixed(0)}` : ""}
+            <p style={{ color: v > 0 ? "rgba(249,115,22,0.8)" : "transparent", fontSize: 7, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "100%" }}>
+              {v > 0 ? `${v.toFixed(0)}` : ""}
             </p>
             <div style={{
               width: "100%", borderRadius: "4px 4px 0 0",
@@ -144,7 +144,7 @@ export default function MotoboyDashboardPage() {
   const periodoLabel = { hoje: "Hoje", semana: "Últimos 7 dias", mes: "Este mês", total: "Todo período" }[periodo]
 
   return (
-    <div style={{ maxWidth: 600, margin: "0 auto", padding: "24px 16px" }}>
+    <div style={{ maxWidth: 600, margin: "0 auto", padding: "20px 14px", overflowX: "hidden" }}>
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ color: "white", fontWeight: 900, fontSize: 20 }}>Dashboard</h1>
         <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13, marginTop: 3 }}>Seus ganhos e corridas</p>
@@ -194,19 +194,19 @@ export default function MotoboyDashboardPage() {
 
           {/* Card de avaliação */}
           {notaMedia !== null && (
-            <div style={{ background: "#111", borderRadius: 16, padding: "18px 20px", marginBottom: 16, border: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div>
-                <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Sua avaliação</p>
-                <p style={{ color: "#f59e0b", fontWeight: 900, fontSize: 28, lineHeight: 1 }}>{notaMedia.toFixed(1)}</p>
-                <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 12, marginTop: 4 }}>{totalAvals} avaliação{totalAvals !== 1 ? "ões" : ""}</p>
+            <div style={{ background: "#111", borderRadius: 16, padding: "16px", marginBottom: 16, border: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Avaliação</p>
+                <p style={{ color: "#f59e0b", fontWeight: 900, fontSize: 26, lineHeight: 1 }}>{notaMedia.toFixed(1)}</p>
+                <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 12, marginTop: 4 }}>{totalAvals} aval.</p>
               </div>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
                 {[5, 4, 3, 2, 1].map(s => (
-                  <div key={s} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <div style={{ width: 60, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.05)", overflow: "hidden" }}>
+                  <div key={s} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                    <div style={{ width: 44, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.05)", overflow: "hidden" }}>
                       <div style={{ height: "100%", borderRadius: 2, background: notaMedia >= s ? "#f59e0b" : "transparent", width: notaMedia >= s ? "100%" : `${Math.max(0, (notaMedia - (s - 1)) * 100)}%` }} />
                     </div>
-                    <span style={{ color: "#f59e0b", fontSize: 10 }}>{"★".repeat(s)}</span>
+                    <span style={{ color: "#f59e0b", fontSize: 9 }}>{"★".repeat(s)}</span>
                   </div>
                 ))}
               </div>

@@ -98,7 +98,7 @@ export default function LojaHistoricoPage() {
   const statusColor = (s: string) => STATUS_COLOR[s] ?? { bg: "#F3F4F6", text: "#6B7280" }
 
   return (
-    <div style={{ maxWidth: 680, margin: "0 auto", padding: "28px 20px" }}>
+    <div style={{ maxWidth: 680, margin: "0 auto", padding: "24px 16px" }}>
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ color: "#111827", fontWeight: 900, fontSize: 20 }}>Histórico de pedidos</h1>
         {total > 0 && (

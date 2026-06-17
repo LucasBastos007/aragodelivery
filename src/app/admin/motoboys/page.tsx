@@ -38,8 +38,8 @@ function ModalRejeicao({
       background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center",
     }}>
       <div style={{
-        background: "#1C1C1E", borderRadius: 20, padding: "28px 24px", width: "100%", maxWidth: 440,
-        boxShadow: "0 8px 48px rgba(0,0,0,0.8)",
+        background: "#1C1C1E", borderRadius: 20, padding: "24px 16px", width: "calc(100% - 32px)", maxWidth: 440,
+        boxShadow: "0 8px 48px rgba(0,0,0,0.8)", boxSizing: "border-box",
       }}>
         <p style={{ color: "white", fontWeight: 900, fontSize: 16, marginBottom: 4 }}>Rejeitar cadastro</p>
         <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 13, marginBottom: 20 }}>
@@ -91,7 +91,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13 }}>
       <span style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }}>{label}</span>
-      <span style={{ color: "white", fontWeight: 600, textAlign: "right", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={value}>{value}</span>
+      <span style={{ color: "white", fontWeight: 600, textAlign: "right", maxWidth: "60%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={value}>{value}</span>
     </div>
   )
 }
@@ -178,7 +178,7 @@ export default function MotoboyPage() {
   const onlines    = motoboys.filter(m => m.disponivel && m.status === "ativo")
 
   return (
-    <div style={{ padding: "28px 32px" }}>
+    <div style={{ padding: "16px", overflowX: "hidden" }}>
 
       {/* Modal de rejeição */}
       {modalRejeicao && selecionado && (
@@ -193,10 +193,10 @@ export default function MotoboyPage() {
       {/* Toast de aprovação com WhatsApp */}
       {aprovadoWhats && (
         <div style={{
-          position: "fixed", bottom: 24, right: 24, zIndex: 100,
+          position: "fixed", bottom: 16, left: 16, right: 16, zIndex: 100,
           background: "#1C1C1E", border: "1px solid rgba(34,197,94,0.3)",
-          borderRadius: 16, padding: "16px 20px", boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
-          maxWidth: 320,
+          borderRadius: 16, padding: "16px", boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
+          maxWidth: 360, margin: "0 auto",
         }}>
           <p style={{ color: "#22c55e", fontWeight: 900, fontSize: 14, marginBottom: 4 }}>Aprovado!</p>
           <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, marginBottom: 12 }}>
@@ -227,15 +227,15 @@ export default function MotoboyPage() {
       )}
 
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
-        <div>
-          <h1 style={{ color: "white", fontWeight: 900, fontSize: 22 }}>Motoboys</h1>
-          <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 13, marginTop: 4 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, gap: 10 }}>
+        <div style={{ minWidth: 0 }}>
+          <h1 style={{ color: "white", fontWeight: 900, fontSize: 20 }}>Motoboys</h1>
+          <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 12, marginTop: 4 }}>
             {motoboys.length} cadastrados · {onlines.length} online agora
           </p>
         </div>
         <button onClick={load} style={{
-          padding: "8px 16px", borderRadius: 10,
+          padding: "8px 12px", borderRadius: 10, flexShrink: 0,
           border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)",
           color: "rgba(255,255,255,0.4)", fontSize: 12, fontWeight: 700, cursor: "pointer",
         }}>
@@ -294,7 +294,7 @@ export default function MotoboyPage() {
         ))}
       </div>
 
-      <div style={{ display: "flex", gap: 20 }}>
+      <div style={{ display: "flex", gap: 20, flexDirection: "column" }}>
         {/* Lista */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
           {loading ? (
@@ -364,8 +364,8 @@ export default function MotoboyPage() {
         {/* Painel de detalhe */}
         {selecionado && (
           <div style={{
-            width: 340, flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: 20,
-            background: "#111", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 18, padding: "22px 20px",
+            width: "100%", maxWidth: 400, flexShrink: 0, alignSelf: "flex-start", boxSizing: "border-box",
+            background: "#111", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 18, padding: "20px 16px",
             display: "flex", flexDirection: "column", gap: 16,
           }}>
             {/* Header */}

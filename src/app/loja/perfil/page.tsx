@@ -313,12 +313,12 @@ export default function PerfilPage() {
       <div className="card p-4 mb-4">
         <p className="font-black mb-4" style={{ color: "#111827", fontSize: 14 }}>Dados da loja</p>
         <div className="flex flex-col gap-3">
-          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12 }}>
-            <div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
+            <div style={{ minWidth: 0 }}>
               <label className="label">Nome da loja</label>
               <input className="input" value={form.nome} onChange={e => set("nome", e.target.value)} />
             </div>
-            <div style={{ minWidth: 130 }}>
+            <div>
               <label className="label">Categoria</label>
               <select className="input" value={form.categoria} onChange={e => set("categoria", e.target.value)}>
                 <option>Restaurante</option>
@@ -346,7 +346,7 @@ export default function PerfilPage() {
         <p className="font-black mb-4" style={{ color: "#111827", fontSize: 14 }}>Endereço</p>
         <div className="flex flex-col gap-3">
           {/* CEP */}
-          <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", gap: 12, alignItems: "end" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 12, alignItems: "end" }}>
             <div>
               <label className="label">CEP</label>
               <div style={{ position: "relative" }}>
@@ -366,14 +366,14 @@ export default function PerfilPage() {
           <div style={{ display: "grid", gridTemplateColumns: "100px 1fr", gap: 12 }}>
             <div>
               <label className="label">Número</label>
-              <input className="input" value={form.numero} onChange={e => set("numero", e.target.value)} placeholder="123" />
+              <input className="input" value={form.numero} onChange={e => set("numero", e.target.value)} placeholder="123" style={{ width: "100%" }} />
             </div>
             <div>
               <label className="label">Complemento</label>
-              <input className="input" value={form.complemento} onChange={e => set("complemento", e.target.value)} placeholder="Apto, Bloco..." />
+              <input className="input" value={form.complemento} onChange={e => set("complemento", e.target.value)} placeholder="Apto, Bloco..." style={{ width: "100%" }} />
             </div>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 80px", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 70px", gap: 12 }}>
             <div>
               <label className="label">Bairro</label>
               <input className="input" value={form.bairro} onChange={e => set("bairro", e.target.value)} />
@@ -460,7 +460,7 @@ export default function PerfilPage() {
       {/* Entrega */}
       <div className="card p-4 mb-4">
         <p className="font-black mb-4" style={{ color: "#111827", fontSize: 14 }}>Entrega</p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: 12 }}>
           <div>
             <label className="label">Taxa (R$)</label>
             <input className="input" type="number" step="0.50" min="0" value={form.taxa_entrega} onChange={e => set("taxa_entrega", e.target.value)} />

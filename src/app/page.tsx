@@ -180,7 +180,7 @@ export default function Home() {
   const fechadas = filtradas.filter(l => !l.aberto)
 
   return (
-    <div style={{ minHeight: "100vh", background: "#F9FAFB" }}>
+    <div style={{ minHeight: "100vh", background: "#F9FAFB", overflowX: "hidden" }}>
 
       {/* ── SPLASH ─────────────────────────────────────────── */}
       {splashVis && (
@@ -318,11 +318,11 @@ export default function Home() {
                     </button>
                     {/* Mobile dropdown */}
                     <div style={{
-                      position: "absolute", top: "calc(100% + 6px)", right: 0,
+                      position: "fixed", top: 64, right: 8,
                       background: "white", borderRadius: 16,
                       boxShadow: "0 12px 40px rgba(0,0,0,0.14)",
                       border: "1px solid #f0f0f0",
-                      minWidth: 220, overflow: "hidden", zIndex: 200,
+                      width: "calc(100vw - 16px)", maxWidth: 300, overflow: "hidden", zIndex: 200,
                       opacity: menuAberto ? 1 : 0,
                       transform: menuAberto ? "translateY(0) scale(1)" : "translateY(-8px) scale(0.97)",
                       pointerEvents: menuAberto ? "all" : "none",
@@ -1037,6 +1037,7 @@ export default function Home() {
           fontSize: 13, fontWeight: 700,
           boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
           zIndex: 9999, whiteSpace: "nowrap",
+          maxWidth: "calc(100vw - 32px)",
           animation: "fadeInUp 0.2s ease",
         }}>
           🚀 Em breve no Chegô!

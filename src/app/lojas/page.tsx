@@ -35,10 +35,10 @@ export default function LojasPage() {
   })
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
+    <div style={{ minHeight: "100vh", background: "#f8fafc", overflowX: "hidden" }}>
       {/* Navbar */}
       <nav style={{ background: "#ffffff", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 0, zIndex: 40 }}>
-        <div style={{ maxWidth: 960, margin: "0 auto", padding: "14px 20px", display: "flex", alignItems: "center", gap: 16 }}>
+        <div style={{ maxWidth: 960, margin: "0 auto", padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <Link href="/" style={{ color: "#f97316", fontWeight: 900, fontSize: 18, textDecoration: "none", flexShrink: 0 }}>
             🛵 Arago
           </Link>
@@ -48,7 +48,7 @@ export default function LojasPage() {
             onChange={e => setBusca(e.target.value)}
             placeholder="Buscar restaurante..."
             style={{
-              flex: 1, maxWidth: 300, padding: "9px 14px", borderRadius: 10, fontSize: 14, fontWeight: 500,
+              flex: 1, minWidth: 0, padding: "9px 14px", borderRadius: 10, fontSize: 14, fontWeight: 500,
               background: "#F9FAFB", border: "1px solid #E5E7EB",
               color: "#111827", outline: "none",
             }}
@@ -56,10 +56,10 @@ export default function LojasPage() {
           {/* Carrinho */}
           {count > 0 && (
             <Link href="/carrinho" style={{
-              display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 10,
+              display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 10,
               background: "#f97316", color: "white", fontWeight: 800, fontSize: 13, textDecoration: "none", flexShrink: 0,
             }}>
-              🛒 {count} · R$ {total.toFixed(2)}
+              🛒 {count}
             </Link>
           )}
           {/* Perfil / Login */}
@@ -81,14 +81,14 @@ export default function LojasPage() {
         </div>
       </nav>
 
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "28px 20px" }}>
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: "20px 16px" }}>
         <h1 style={{ color: "#111827", fontWeight: 900, fontSize: 22, marginBottom: 16 }}>
           Lojas em Aragoiânia
         </h1>
 
         {/* Rastrear pedido */}
-        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 20, background: "#ffffff", borderRadius: 12, padding: "10px 14px", border: "1px solid #e5e7eb" }}>
-          <span style={{ color: "#6B7280", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" }}>📍 Rastrear pedido:</span>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 20, background: "#ffffff", borderRadius: 12, padding: "10px 12px", border: "1px solid #e5e7eb", flexWrap: "wrap" }}>
+          <span style={{ color: "#6B7280", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap", flexShrink: 0 }}>📍 Rastrear:</span>
           <input
             value={rastrear}
             onChange={e => setRastrear(e.target.value.toUpperCase())}
@@ -96,7 +96,7 @@ export default function LojasPage() {
             placeholder="Código (ex: 9234)"
             maxLength={8}
             style={{
-              flex: 1, padding: "7px 12px", borderRadius: 8, fontSize: 13, fontWeight: 700,
+              flex: 1, minWidth: 80, padding: "7px 12px", borderRadius: 8, fontSize: 13, fontWeight: 700,
               background: "#F9FAFB", border: "1px solid #E5E7EB",
               color: "#111827", outline: "none", letterSpacing: 2,
             }}
@@ -104,9 +104,10 @@ export default function LojasPage() {
           <button
             onClick={() => rastrear.trim() && router.push(`/pedido/${rastrear.trim()}`)}
             style={{
-              padding: "7px 16px", borderRadius: 8, border: "none", fontWeight: 700, fontSize: 13,
+              padding: "7px 14px", borderRadius: 8, border: "none", fontWeight: 700, fontSize: 13,
               background: rastrear.trim() ? "#f97316" : "rgba(249,115,22,0.2)",
               color: rastrear.trim() ? "white" : "rgba(249,115,22,0.4)", cursor: rastrear.trim() ? "pointer" : "default",
+              flexShrink: 0,
             }}>
             Ir →
           </button>
@@ -128,7 +129,7 @@ export default function LojasPage() {
         </div>
 
         {loading ? (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 16 }}>
             {[1, 2, 3, 4].map(i => (
               <div key={i} style={{ background: "#f3f4f6", borderRadius: 16, height: 180, border: "1px solid #e5e7eb", animation: "pulse 1.5s infinite" }} />
             ))}
@@ -139,7 +140,7 @@ export default function LojasPage() {
             <p style={{ color: "#6B7280", fontWeight: 600 }}>Nenhuma loja encontrada</p>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 16 }}>
             {filtradas.map(loja => (
               <Link key={loja.id} href={`/restaurante/${loja.id}`} style={{ textDecoration: "none" }}>
                 <div style={{

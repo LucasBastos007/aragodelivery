@@ -133,7 +133,7 @@ export default function EntrarPage() {
     : null
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+    <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 16px", overflowX: "hidden" }}>
       <div style={{ width: "100%", maxWidth: 400 }}>
         <div style={{ textAlign: "center", marginBottom: 36 }}>
           <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
@@ -143,7 +143,7 @@ export default function EntrarPage() {
           <p style={{ color: "#9CA3AF", fontSize: 13, marginTop: 4 }}>Área de parceiros</p>
         </div>
 
-        <div style={{ background: "#ffffff", borderRadius: 20, border: "1px solid #e5e7eb", padding: 28 }}>
+        <div style={{ background: "#ffffff", borderRadius: 20, border: "1px solid #e5e7eb", padding: "24px 20px" }}>
           {/* Role toggle */}
           <div style={{ display: "flex", background: "rgba(0,0,0,0.05)", borderRadius: 12, padding: 4, marginBottom: 24, gap: 2 }}>
             {ROLES.map(r => (

@@ -69,25 +69,25 @@ export default function AdminDashboard() {
   ]
 
   return (
-    <div className="p-8">
-      <div className="mb-8">
+    <div className="p-4 sm:p-8">
+      <div className="mb-6 sm:mb-8">
         <h1 className="text-2xl font-black text-white">Dashboard</h1>
         <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.35)" }}>
           {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}
         </p>
       </div>
 
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8">
         {CARDS.map(c => (
-          <div key={c.label} className="card p-5"
+          <div key={c.label} className="card p-4 sm:p-5"
             style={{ border: c.alert && (c.value as number) > 0 ? "1px solid rgba(234,179,8,0.3)" : undefined }}>
             <div className="flex items-center justify-between mb-3">
               <span style={{ color: c.color }}>{c.icon}</span>
               {c.alert && (c.value as number) > 0 && (
-                <span className="badge badge-yellow">Requer ação</span>
+                <span className="badge badge-yellow" style={{ fontSize: 10, padding: "2px 6px" }}>Ação</span>
               )}
             </div>
-            <p className="text-3xl font-black" style={{ color: c.color }}>
+            <p className="text-2xl sm:text-3xl font-black" style={{ color: c.color }}>
               {loading ? "—" : c.value}
             </p>
             <p className="text-xs mt-1" style={{ color: "rgba(255,255,255,0.35)" }}>{c.label}</p>
@@ -96,13 +96,13 @@ export default function AdminDashboard() {
       </div>
 
       {(stats.lojas_pendentes > 0 || stats.motoboys_pendentes > 0) && (
-        <div className="card p-5" style={{ border: "1px solid rgba(234,179,8,0.3)", background: "rgba(234,179,8,0.04)" }}>
+        <div className="card p-4 sm:p-5" style={{ border: "1px solid rgba(234,179,8,0.3)", background: "rgba(234,179,8,0.04)" }}>
           <p className="font-bold text-yellow-400 mb-1">Ação necessária</p>
           <p className="text-sm" style={{ color: "rgba(255,255,255,0.5)" }}>
             {stats.lojas_pendentes > 0 && `${stats.lojas_pendentes} loja(s) aguardando aprovação. `}
             {stats.motoboys_pendentes > 0 && `${stats.motoboys_pendentes} motoboy(s) aguardando aprovação.`}
           </p>
-          <div className="flex gap-3 mt-3">
+          <div className="flex gap-2 mt-3 flex-wrap">
             {stats.lojas_pendentes > 0 && (
               <a href="/admin/lojas" className="btn-primary" style={{ fontSize: 12, padding: "8px 14px" }}>Ver lojas →</a>
             )}

@@ -87,7 +87,7 @@ export default function HistoricoPage() {
         )}
       </nav>
 
-      <div style={{ maxWidth: 600, margin: "0 auto", padding: "4px 16px 90px" }}>
+      <div style={{ maxWidth: 600, margin: "0 auto", padding: "4px 14px 90px", overflowX: "hidden" }}>
 
         {loadingPedidos ? (
           <div style={{ textAlign: "center", padding: "60px 0" }}>
@@ -218,8 +218,8 @@ export default function HistoricoPage() {
                     <button
                       onClick={() => router.push(`/pedido/${p.codigo}`)}
                       style={{
-                        flex: 1, padding: "13px", background: "none", border: "none",
-                        color: "#DC2626", fontWeight: 700, fontSize: 14, cursor: "pointer",
+                        flex: 1, padding: "12px 8px", background: "none", border: "none",
+                        color: "#DC2626", fontWeight: 700, fontSize: 13, cursor: "pointer",
                         borderRight: "1px solid #F3F4F6",
                       }}>
                       Ajuda
@@ -228,11 +228,11 @@ export default function HistoricoPage() {
                       onClick={() => handleReorder(p)}
                       disabled={reordenadoId === p.id}
                       style={{
-                        flex: 1, padding: "13px", background: "none", border: "none",
+                        flex: 1, padding: "12px 8px", background: "none", border: "none",
                         color: reordenadoId === p.id ? "#22c55e" : "#DC2626",
-                        fontWeight: 700, fontSize: 14, cursor: reordenadoId === p.id ? "default" : "pointer",
+                        fontWeight: 700, fontSize: 13, cursor: reordenadoId === p.id ? "default" : "pointer",
                       }}>
-                      {reordenadoId === p.id ? "✓ Adicionado!" : "Adicione à sacola"}
+                      {reordenadoId === p.id ? "Adicionado!" : "Pedir de novo"}
                     </button>
                   </div>
                 </div>

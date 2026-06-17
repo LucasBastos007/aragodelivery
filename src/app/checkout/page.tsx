@@ -416,7 +416,7 @@ export default function CheckoutPage() {
           </p>
           <div style={{ background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: 16, padding: "20px 24px", marginBottom: 20 }}>
             <p style={{ color: "#6B7280", fontSize: 12, marginBottom: 4 }}>Código do pedido</p>
-            <p style={{ color: "#DC2626", fontWeight: 900, fontSize: 36, letterSpacing: 6 }}>#{pedidoCodigo}</p>
+            <p style={{ color: "#DC2626", fontWeight: 900, fontSize: "clamp(24px, 8vw, 36px)", letterSpacing: "clamp(2px, 1vw, 6px)", overflowWrap: "break-word" }}>#{pedidoCodigo}</p>
             <p style={{ color: "#D1D5DB", fontSize: 11, marginTop: 6 }}>Guarde este código para rastrear e confirmar a entrega</p>
           </div>
           <Link href={`/pedido/${pedidoCodigo}`} style={{
@@ -623,7 +623,7 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
+    <div style={{ minHeight: "100vh", background: "#f8fafc", overflowX: "hidden" }}>
       {/* Navbar */}
       <nav style={{ background: "#ffffff", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 0, zIndex: 40 }}>
         <div style={{ maxWidth: 680, margin: "0 auto", padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
@@ -642,18 +642,18 @@ export default function CheckoutPage() {
         {/* Toggle Retirada / Entrega */}
         <div style={{ background: "#ffffff", borderRadius: 16, border: "1px solid #e5e7eb", padding: "18px" }}>
           <p style={{ color: "#6B7280", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 12 }}>Como você quer receber?</p>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
             {([
               { value: "entrega", label: "🛵 Receber em casa", sub: "Motoboy leva até você" },
               { value: "retirada", label: "🏪 Retirar na loja", sub: "Você busca no local · Grátis" },
             ] as const).map(opt => (
               <button key={opt.value} onClick={() => setTipoEntrega(opt.value)} style={{
-                padding: "14px", borderRadius: 12, cursor: "pointer", textAlign: "left", transition: "all 0.15s",
+                padding: "12px", borderRadius: 12, cursor: "pointer", textAlign: "left", transition: "all 0.15s",
                 background: tipoEntrega === opt.value ? "rgba(220,38,38,0.08)" : "#F9FAFB",
                 border: tipoEntrega === opt.value ? "1px solid rgba(220,38,38,0.4)" : "1px solid #E5E7EB",
               }}>
-                <p style={{ color: tipoEntrega === opt.value ? "#DC2626" : "#111827", fontWeight: 700, fontSize: 14 }}>{opt.label}</p>
-                <p style={{ color: tipoEntrega === opt.value ? "rgba(220,38,38,0.7)" : "#6B7280", fontSize: 12, marginTop: 3 }}>{opt.sub}</p>
+                <p style={{ color: tipoEntrega === opt.value ? "#DC2626" : "#111827", fontWeight: 700, fontSize: 13 }}>{opt.label}</p>
+                <p style={{ color: tipoEntrega === opt.value ? "rgba(220,38,38,0.7)" : "#6B7280", fontSize: 11, marginTop: 3 }}>{opt.sub}</p>
               </button>
             ))}
           </div>
@@ -673,14 +673,14 @@ export default function CheckoutPage() {
           </div>
           <div style={{ padding: "12px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
             {items.map(i => (
-              <div key={i.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <span style={{ background: "rgba(220,38,38,0.10)", color: "#DC2626", fontWeight: 700, fontSize: 12, padding: "2px 8px", borderRadius: 6 }}>
+              <div key={i.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0, flex: 1 }}>
+                  <span style={{ background: "rgba(220,38,38,0.10)", color: "#DC2626", fontWeight: 700, fontSize: 12, padding: "2px 8px", borderRadius: 6, flexShrink: 0 }}>
                     {i.quantidade}×
                   </span>
-                  <span style={{ color: "#374151", fontSize: 14 }}>{i.nome}</span>
+                  <span style={{ color: "#374151", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{i.nome}</span>
                 </div>
-                <span style={{ color: "#6B7280", fontSize: 14 }}>R$ {(i.preco * i.quantidade).toFixed(2)}</span>
+                <span style={{ color: "#6B7280", fontSize: 14, flexShrink: 0 }}>R$ {(i.preco * i.quantidade).toFixed(2)}</span>
               </div>
             ))}
           </div>

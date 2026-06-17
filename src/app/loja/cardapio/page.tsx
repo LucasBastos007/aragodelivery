@@ -207,7 +207,7 @@ export default function CardapioPage() {
               {items.length === 0 ? (
                 <p style={{ fontSize: 13, color: "#9CA3AF" }}>Nenhum produto nesta categoria.</p>
               ) : (
-                <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
+                <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))" }}>
                   {items.map(p => <ProdutoCard key={p.id} p={p} onEdit={abrirEditarProduto} onToggle={toggleDisponivel} onDelete={deletarProduto} />)}
                 </div>
               )}
@@ -222,7 +222,7 @@ export default function CardapioPage() {
                   {semCategoria.length}
                 </span>
               </div>
-              <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
+              <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))" }}>
                 {semCategoria.map(p => <ProdutoCard key={p.id} p={p} onEdit={abrirEditarProduto} onToggle={toggleDisponivel} onDelete={deletarProduto} />)}
               </div>
             </div>
@@ -398,7 +398,7 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(6px)", display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 0, overflowY: "auto" }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="card" style={{ width: "100%", maxWidth: 520, margin: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, padding: "20px 20px 32px", maxHeight: "90vh", overflowY: "auto" }}>
+      <div className="card" style={{ width: "100%", maxWidth: "min(520px, 100vw)", margin: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, padding: "20px 16px 32px", maxHeight: "90vh", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <p style={{ fontWeight: 900, fontSize: 16, color: "#111827", margin: 0 }}>{title}</p>
           <button onClick={onClose} style={{ color: "#9CA3AF", fontSize: 20, lineHeight: 1, background: "none", border: "none", cursor: "pointer" }}>✕</button>

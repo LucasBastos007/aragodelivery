@@ -150,10 +150,10 @@ export default function MotoboyPerfilPage() {
 
       {sucesso && (
         <div style={{
-          position: "fixed", bottom: 90, left: "50%", transform: "translateX(-50%)",
+          position: "fixed", bottom: 90, left: 16, right: 16,
           background: "#22c55e", color: "white", fontWeight: 700, fontSize: 13,
-          padding: "12px 24px", borderRadius: 999, boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
-          whiteSpace: "nowrap",
+          padding: "12px 20px", borderRadius: 14, boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+          textAlign: "center",
         }}>
           Perfil atualizado com sucesso
         </div>

@@ -331,14 +331,14 @@ export default function LojaDashboard() {
           {/* Novos pedidos - destaque */}
           {pendentes.map(p => (
             <div key={p.id} className="card" style={{ padding: "18px 16px", border: "1px solid rgba(249,115,22,0.5)", background: "rgba(249,115,22,0.05)", animation: "pulse 2s infinite" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                <div>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12, gap: 8 }}>
+                <div style={{ minWidth: 0 }}>
                   <span className="badge badge-orange" style={{ fontSize: 11 }}>NOVO PEDIDO</span>
                   <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 4 }}>
                     #{p.codigo} · {new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                   </p>
                 </div>
-                <p style={{ fontSize: 22, fontWeight: 900, color: "#111827" }}>R$ {p.total.toFixed(2)}</p>
+                <p style={{ fontSize: 20, fontWeight: 900, color: "#111827", flexShrink: 0 }}>R$ {p.total.toFixed(2)}</p>
               </div>
 
               {p.itens && p.itens.length > 0 && (
@@ -352,10 +352,10 @@ export default function LojaDashboard() {
                 </div>
               )}
 
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, fontSize: 12, color: "#9CA3AF" }}>
-                <span>{PAGAMENTO_ICON[p.forma_pagamento] ?? p.forma_pagamento}</span>
-                <span>·</span>
-                <span>📍 {p.endereco_entrega}</span>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 14, fontSize: 12, color: "#9CA3AF", flexWrap: "wrap" }}>
+                <span style={{ flexShrink: 0 }}>{PAGAMENTO_ICON[p.forma_pagamento] ?? p.forma_pagamento}</span>
+                <span style={{ flexShrink: 0 }}>·</span>
+                <span style={{ wordBreak: "break-word" }}>📍 {p.endereco_entrega}</span>
               </div>
 
               {p.nome_cliente && (

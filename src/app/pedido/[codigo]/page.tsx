@@ -394,13 +394,13 @@ export default function AcompanhamentoPedido() {
   const motoboy    = (pedido as any).motoboy
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc" }}>
+    <div style={{ minHeight: "100vh", background: "#f8fafc", overflowX: "hidden" }}>
 
       {/* Modal de Avaliação */}
       {modalAvaliacao && (
         <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
           onClick={() => setModalAvaliacao(false)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: "#ffffff", borderRadius: "24px 24px 0 0", border: "1px solid #e5e7eb", padding: "28px 24px 40px", width: "100%", maxWidth: 520, animation: "slideUp 0.3s ease" }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "#ffffff", borderRadius: "24px 24px 0 0", border: "1px solid #e5e7eb", padding: "24px 16px 36px", width: "100%", maxWidth: "min(520px, 100vw)", animation: "slideUp 0.3s ease" }}>
             {avaliacaoOk ? (
               <div style={{ textAlign: "center", padding: "24px 0" }}>
                 <p style={{ fontSize: 56, marginBottom: 12 }}>🎉</p>
@@ -438,7 +438,7 @@ export default function AcompanhamentoPedido() {
 
       {/* Botão flutuante avaliar */}
       {entregue && !jaAvaliou && !avaliacaoOk && !modalAvaliacao && (
-        <button onClick={() => setModalAvaliacao(true)} style={{ position: "fixed", bottom: 24, right: 20, zIndex: 50, background: "#DC2626", border: "none", borderRadius: 16, padding: "12px 20px", color: "white", fontWeight: 800, fontSize: 14, cursor: "pointer", boxShadow: "0 4px 20px rgba(220,38,38,0.35)" }}>
+        <button onClick={() => setModalAvaliacao(true)} style={{ position: "fixed", bottom: 24, right: 16, zIndex: 50, background: "#DC2626", border: "none", borderRadius: 16, padding: "12px 16px", color: "white", fontWeight: 800, fontSize: 13, cursor: "pointer", boxShadow: "0 4px 20px rgba(220,38,38,0.35)", maxWidth: "calc(100vw - 32px)" }}>
           ⭐ Avaliar pedido
         </button>
       )}
@@ -501,9 +501,9 @@ export default function AcompanhamentoPedido() {
 
             {/* Código p/ motoboy */}
             {coletado && (
-              <div style={{ background: "#ffffff", border: "2px solid rgba(220,38,38,0.35)", borderRadius: 20, padding: "24px 20px", marginBottom: 16, textAlign: "center", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
+              <div style={{ background: "#ffffff", border: "2px solid rgba(220,38,38,0.35)", borderRadius: 20, padding: "24px 16px", marginBottom: 16, textAlign: "center", boxShadow: "0 2px 12px rgba(0,0,0,0.06)", overflowX: "hidden" }}>
                 <p style={{ color: "#6B7280", fontSize: 13, marginBottom: 10 }}>Mostre este código ao entregador:</p>
-                <p style={{ color: "#DC2626", fontWeight: 900, fontSize: 64, letterSpacing: 12, lineHeight: 1, marginBottom: 8 }}>{pedido.codigo}</p>
+                <p style={{ color: "#DC2626", fontWeight: 900, fontSize: "clamp(36px, 14vw, 64px)", letterSpacing: "clamp(4px, 2vw, 12px)", lineHeight: 1, marginBottom: 8 }}>{pedido.codigo}</p>
                 <p style={{ color: "#9CA3AF", fontSize: 12 }}>O motoboy digita este código ao chegar para confirmar a entrega</p>
               </div>
             )}

@@ -142,7 +142,7 @@ export default function ClientePerfilPage() {
         </button>
       </nav>
 
-      <div style={{ maxWidth: 520, margin: "0 auto", padding: "28px 20px", display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={{ maxWidth: 520, margin: "0 auto", padding: "20px 16px 32px", display: "flex", flexDirection: "column", gap: 16 }}>
 
         {/* Avatar + email */}
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -167,7 +167,7 @@ export default function ClientePerfilPage() {
         </div>
 
         {/* Dados pessoais */}
-        <div style={{ background: "#ffffff", borderRadius: 16, border: "1px solid #e5e7eb", padding: "18px", display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ background: "#ffffff", borderRadius: 16, border: "1px solid #e5e7eb", padding: "16px", display: "flex", flexDirection: "column", gap: 12 }}>
           <p style={{ color: "#111827", fontWeight: 700, fontSize: 14 }}>Dados pessoais</p>
           <div>
             <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Nome</label>
@@ -181,35 +181,35 @@ export default function ClientePerfilPage() {
             <input style={inp} value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(64) 9 9999-1234" inputMode="tel" />
           </div>
           <button onClick={handleSalvar} disabled={salvando} style={{
-            padding: "12px", borderRadius: 12, border: "none",
+            padding: "12px", borderRadius: 12, border: "none", width: "100%",
             background: salvo ? "#22c55e" : salvando ? "rgba(220,38,38,0.4)" : "#DC2626",
             color: "white", fontWeight: 800, fontSize: 14, cursor: salvando ? "not-allowed" : "pointer",
           }}>
-            {salvo ? "✓ Salvo!" : salvando ? "Salvando..." : "Salvar dados"}
+            {salvo ? "Salvo!" : salvando ? "Salvando..." : "Salvar dados"}
           </button>
         </div>
 
         {/* Endereço de entrega */}
-        <div style={{ background: "#ffffff", borderRadius: 16, border: "1px solid #e5e7eb", padding: "18px", display: "flex", flexDirection: "column", gap: 14 }}>
-          <p style={{ color: "#111827", fontWeight: 700, fontSize: 14 }}>📍 Endereço de entrega</p>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10 }}>
-            <div>
+        <div style={{ background: "#ffffff", borderRadius: 16, border: "1px solid #e5e7eb", padding: "16px", display: "flex", flexDirection: "column", gap: 12 }}>
+          <p style={{ color: "#111827", fontWeight: 700, fontSize: 14 }}>Endereco de entrega</p>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ flex: "0 0 calc(35% - 5px)", minWidth: 100 }}>
               <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>CEP</label>
               <input style={inp} value={endCep} onChange={e => setEndCep(e.target.value)} placeholder="74000-000" inputMode="numeric" />
             </div>
-            <div>
+            <div style={{ flex: "1 1 calc(65% - 5px)", minWidth: 140 }}>
               <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Rua / Avenida</label>
               <input style={inp} value={endRua} onChange={e => setEndRua(e.target.value)} placeholder="Rua das Flores" />
             </div>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10 }}>
-            <div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <div style={{ flex: "0 0 calc(35% - 5px)", minWidth: 90 }}>
               <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Número</label>
               <input style={inp} value={endNumero} onChange={e => setEndNumero(e.target.value)} placeholder="42" inputMode="numeric" />
             </div>
-            <div>
+            <div style={{ flex: "1 1 calc(65% - 5px)", minWidth: 140 }}>
               <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Complemento</label>
-              <input style={inp} value={endCompl} onChange={e => setEndCompl(e.target.value)} placeholder="Apto 3, casa dos fundos..." />
+              <input style={inp} value={endCompl} onChange={e => setEndCompl(e.target.value)} placeholder="Apto 3, fundos..." />
             </div>
           </div>
           <div>
@@ -217,11 +217,11 @@ export default function ClientePerfilPage() {
             <input style={inp} value={endBairro} onChange={e => setEndBairro(e.target.value)} placeholder="Centro" />
           </div>
           <button onClick={handleSalvar} disabled={salvando} style={{
-            padding: "12px", borderRadius: 12, border: "none",
+            padding: "12px", borderRadius: 12, border: "none", width: "100%",
             background: salvo ? "#22c55e" : salvando ? "rgba(220,38,38,0.4)" : "#DC2626",
             color: "white", fontWeight: 800, fontSize: 14, cursor: salvando ? "not-allowed" : "pointer",
           }}>
-            {salvo ? "✓ Endereço salvo!" : salvando ? "Salvando..." : "Salvar endereço"}
+            {salvo ? "Endereco salvo!" : salvando ? "Salvando..." : "Salvar endereco"}
           </button>
         </div>
 
@@ -275,9 +275,9 @@ export default function ClientePerfilPage() {
                       {itens.length > 0 && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                           {itens.map((i: any, idx: number) => (
-                            <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                              <span style={{ color: "#374151" }}>{i.quantidade}× {i.nome}</span>
-                              <span style={{ color: "#9CA3AF" }}>R$ {(i.preco * i.quantidade).toFixed(2)}</span>
+                            <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, gap: 6 }}>
+                              <span style={{ color: "#374151", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{i.quantidade}× {i.nome}</span>
+                              <span style={{ color: "#9CA3AF", flexShrink: 0 }}>R$ {(i.preco * i.quantidade).toFixed(2)}</span>
                             </div>
                           ))}
                         </div>
@@ -286,11 +286,11 @@ export default function ClientePerfilPage() {
                       <div style={{ display: "flex", gap: 8 }}>
                         {p.status !== "entregue" && p.status !== "cancelado" && (
                           <Link href={`/pedido/${p.codigo}`} style={{
-                            flex: 1, padding: "9px", borderRadius: 10,
+                            flex: 1, padding: "9px 6px", borderRadius: 10,
                             background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.2)",
-                            color: "#DC2626", fontWeight: 700, fontSize: 13, textDecoration: "none", textAlign: "center",
+                            color: "#DC2626", fontWeight: 700, fontSize: 12, textDecoration: "none", textAlign: "center",
                           }}>
-                            📍 Rastrear
+                            Rastrear
                           </Link>
                         )}
                         {p.status === "entregue" && loja && itens.length > 0 && (
@@ -298,12 +298,12 @@ export default function ClientePerfilPage() {
                             onClick={() => handleReorder(p)}
                             disabled={reordenadoId === p.id}
                             style={{
-                              flex: 1, padding: "9px", borderRadius: 10,
+                              flex: 1, padding: "9px 6px", borderRadius: 10,
                               background: reordenadoId === p.id ? "rgba(34,197,94,0.2)" : "rgba(34,197,94,0.1)",
                               border: "1px solid rgba(34,197,94,0.25)", color: "#22c55e",
-                              fontWeight: 700, fontSize: 13, cursor: "pointer",
+                              fontWeight: 700, fontSize: 12, cursor: "pointer",
                             }}>
-                            {reordenadoId === p.id ? "✓ Adicionado!" : "🔄 Pedir de novo"}
+                            {reordenadoId === p.id ? "Adicionado!" : "Pedir de novo"}
                           </button>
                         )}
                       </div>

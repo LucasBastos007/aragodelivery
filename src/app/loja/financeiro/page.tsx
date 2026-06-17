@@ -96,9 +96,9 @@ export default function LojaFinanceiroPage() {
   const pendentes  = saques.filter(s => s.status === "solicitado")
 
   return (
-    <div style={{ padding: "32px 36px", maxWidth: 860 }}>
-      <h1 style={{ color: "#111827", fontWeight: 900, fontSize: 22, marginBottom: 4 }}>Financeiro</h1>
-      <p style={{ color: "#9CA3AF", fontSize: 13, marginBottom: 28 }}>
+    <div style={{ padding: "24px 16px", maxWidth: 860, margin: "0 auto" }}>
+      <h1 style={{ color: "#111827", fontWeight: 900, fontSize: 20, marginBottom: 4 }}>Financeiro</h1>
+      <p style={{ color: "#9CA3AF", fontSize: 13, marginBottom: 24 }}>
         Extrato e saques da sua loja
       </p>
 
@@ -106,10 +106,10 @@ export default function LojaFinanceiroPage() {
       {!loja?.pix_chave && (
         <div style={{
           background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)",
-          borderRadius: 14, padding: "14px 18px", marginBottom: 20,
-          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+          borderRadius: 14, padding: "14px 16px", marginBottom: 20,
+          display: "flex", alignItems: "flex-start", flexWrap: "wrap", justifyContent: "space-between", gap: 10,
         }}>
-          <p style={{ color: "#f59e0b", fontSize: 13, fontWeight: 600 }}>
+          <p style={{ color: "#f59e0b", fontSize: 13, fontWeight: 600, flex: 1, minWidth: 200 }}>
             Atenção: você não tem chave PIX cadastrada — sem ela não é possível solicitar saques.
           </p>
           <Link href="/loja/perfil" style={{ color: "#f97316", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap", textDecoration: "none" }}>
@@ -126,22 +126,22 @@ export default function LojaFinanceiroPage() {
       )}
 
       {/* Cards de resumo */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12, marginBottom: 24 }}>
         {[
           { label: "Saldo disponível", value: saldo, color: saldo > 0 ? "#22c55e" : "#111827", big: true },
           { label: "Receita líquida",  value: liquida, color: "#60a5fa" },
           { label: "Comissão paga",    value: totalComissao, color: "#6B7280" },
           { label: "Total sacado",     value: totalSaquesPagos, color: "#6B7280" },
         ].map(c => (
-          <div key={c.label} style={{ background: "#ffffff", borderRadius: 16, padding: "18px 20px", border: "1px solid #e5e7eb" }}>
-            <p style={{ color: "#6B7280", fontSize: 11, fontWeight: 700, marginBottom: 8, textTransform: "uppercase" }}>{c.label}</p>
-            <p style={{ color: c.color, fontWeight: 900, fontSize: c.big ? 26 : 20 }}>R$ {c.value.toFixed(2)}</p>
+          <div key={c.label} style={{ background: "#ffffff", borderRadius: 16, padding: "14px 16px", border: "1px solid #e5e7eb" }}>
+            <p style={{ color: "#6B7280", fontSize: 10, fontWeight: 700, marginBottom: 6, textTransform: "uppercase" }}>{c.label}</p>
+            <p style={{ color: c.color, fontWeight: 900, fontSize: c.big ? 20 : 16, wordBreak: "break-all" }}>R$ {c.value.toFixed(2)}</p>
           </div>
         ))}
       </div>
 
       {/* Plano atual */}
-      <div style={{ background: "#ffffff", borderRadius: 14, padding: "14px 18px", marginBottom: 20, border: "1px solid #e5e7eb", display: "flex", gap: 24 }}>
+      <div style={{ background: "#ffffff", borderRadius: 14, padding: "14px 16px", marginBottom: 20, border: "1px solid #e5e7eb", display: "flex", flexWrap: "wrap", gap: 20 }}>
         <div>
           <p style={{ color: "#9CA3AF", fontSize: 11, fontWeight: 700, marginBottom: 4 }}>COMISSÃO POR PEDIDO</p>
           <p style={{ color: "#f97316", fontWeight: 900, fontSize: 18 }}>{loja?.comissao ?? 0}%</p>
@@ -158,7 +158,7 @@ export default function LojaFinanceiroPage() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 20 }}>
         {/* Coluna esquerda */}
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 

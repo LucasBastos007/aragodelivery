@@ -170,9 +170,9 @@ function ModalDespacho({
       background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center",
     }}>
       <div style={{
-        background: "#1C1C1E", borderRadius: 20, padding: "24px 20px", width: "100%", maxWidth: 420,
-        maxHeight: "80vh", display: "flex", flexDirection: "column",
-        boxShadow: "0 8px 48px rgba(0,0,0,0.8)",
+        background: "#1C1C1E", borderRadius: 20, padding: "20px 16px", width: "calc(100% - 32px)", maxWidth: 420,
+        maxHeight: "85vh", display: "flex", flexDirection: "column",
+        boxShadow: "0 8px 48px rgba(0,0,0,0.8)", boxSizing: "border-box",
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
           <div>
@@ -302,18 +302,18 @@ export default function AdminDespachoPage() {
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "#0a0a0a" }}>
       {/* Header */}
-      <div style={{ padding: "20px 24px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div>
-          <h1 style={{ color: "white", fontWeight: 900, fontSize: 20 }}>Despacho ao Vivo</h1>
-          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13, marginTop: 3 }}>
-            {mbOnline.length} motoboy{mbOnline.length !== 1 ? "s" : ""} online · {pedidos.length} pedido{pedidos.length !== 1 ? "s" : ""} na fila
+      <div style={{ padding: "16px 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 10 }}>
+        <div style={{ minWidth: 0 }}>
+          <h1 style={{ color: "white", fontWeight: 900, fontSize: 18 }}>Despacho ao Vivo</h1>
+          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, marginTop: 3 }}>
+            {mbOnline.length} online · {pedidos.length} na fila
             {alertas.length > 0 && <span style={{ color: "#ef4444", fontWeight: 700 }}> · {alertas.length} SOS</span>}
           </p>
         </div>
         <button onClick={() => load()} style={{
           background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-          borderRadius: 10, color: "rgba(255,255,255,0.6)", padding: "8px 14px",
-          fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
+          borderRadius: 10, color: "rgba(255,255,255,0.6)", padding: "8px 12px",
+          fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
         }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
             <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
@@ -374,7 +374,7 @@ export default function AdminDespachoPage() {
       </div>
 
       {/* Conteúdo */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px" }}>
 
         {/* ── Aba: Fila de pedidos ── */}
         {aba === "pedidos" && (

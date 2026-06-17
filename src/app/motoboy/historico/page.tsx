@@ -82,7 +82,7 @@ export default function MotoboyHistoricoPage() {
   }
 
   return (
-    <div style={{ maxWidth: 600, margin: "0 auto", padding: "24px 16px" }}>
+    <div style={{ maxWidth: 600, margin: "0 auto", padding: "20px 14px", overflowX: "hidden" }}>
       {/* Foto ampliada */}
       {fotoAmpliada && (
         <div
@@ -132,8 +132,8 @@ export default function MotoboyHistoricoPage() {
                 background: "#111", borderRadius: 14, padding: "14px 16px",
                 border: "1px solid rgba(255,255,255,0.07)",
               }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                  <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                       <p style={{ color: "white", fontSize: 14, fontWeight: 800 }}>#{p.codigo}</p>
                       <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 999, background: "rgba(34,197,94,0.12)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.2)" }}>

@@ -70,8 +70,8 @@ export default function LojasPage() {
   })
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="p-4 sm:p-8">
+      <div className="flex items-center justify-between mb-4 sm:mb-6">
         <div>
           <h1 className="text-2xl font-black text-white">Lojas</h1>
           <p className="text-sm mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>{lojas.length} cadastradas</p>
@@ -79,8 +79,8 @@ export default function LojasPage() {
       </div>
 
       {/* Filtros */}
-      <div className="flex gap-3 mb-6 flex-wrap">
-        <select className="input" style={{ width: "auto" }} value={status} onChange={e => setStatus(e.target.value)}>
+      <div className="flex gap-2 mb-4 sm:mb-6 flex-wrap">
+        <select className="input" style={{ width: "auto", fontSize: 13 }} value={status} onChange={e => setStatus(e.target.value)}>
           <option value="todos">Todos os status</option>
           <option value="pendente">Pendentes</option>
           <option value="aprovado">Aprovados</option>
@@ -88,12 +88,12 @@ export default function LojasPage() {
           <option value="ativo">Ativos</option>
           <option value="suspenso">Suspensos</option>
         </select>
-        <div className="flex gap-1">
+        <div className="flex gap-1 flex-wrap">
           {CATEGORIAS.map(c => (
             <button key={c} onClick={() => setFiltro(c)}
               className="btn-ghost"
               style={{
-                fontSize: 12, padding: "8px 12px",
+                fontSize: 11, padding: "6px 10px",
                 background: filtro === c ? "rgba(249,115,22,0.12)" : undefined,
                 color:      filtro === c ? "#f97316" : undefined,
                 border:     filtro === c ? "1px solid rgba(249,115,22,0.3)" : undefined,
@@ -104,9 +104,9 @@ export default function LojasPage() {
         </div>
       </div>
 
-      <div className="flex gap-5">
+      <div style={{ display: "flex", gap: 20, flexDirection: selecionada ? "column" : "row" }}>
         {/* Lista */}
-        <div className="flex-1 flex flex-col gap-3">
+        <div className="flex-1 flex flex-col gap-3" style={{ minWidth: 0 }}>
           {loading ? (
             <p className="text-white/30 text-sm">Carregando...</p>
           ) : filtradas.length === 0 ? (
@@ -115,14 +115,14 @@ export default function LojasPage() {
             filtradas.map(l => (
               <div key={l.id}
                 onClick={() => setSelecionada(l)}
-                className="card p-4 cursor-pointer transition-all flex items-center gap-4"
+                className="card p-4 cursor-pointer transition-all flex items-center gap-3"
                 style={{ border: selecionada?.id === l.id ? "1px solid rgba(249,115,22,0.4)" : undefined }}>
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0"
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
                   style={{ background: "rgba(249,115,22,0.1)" }}>
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-bold text-white truncate">{l.nome}</p>
                     <span className={`badge ${STATUS_BADGE[l.status] ?? "badge-gray"}`}>{STATUS_LABEL[l.status] ?? l.status}</span>
                   </div>
@@ -132,7 +132,7 @@ export default function LojasPage() {
                 </div>
                 <div className="text-right flex-shrink-0">
                   <p className="text-xs font-bold" style={{ color: "#f97316" }}>R$ {l.taxa_entrega?.toFixed(2)}</p>
-                  <p className="text-[10px] mt-0.5" style={{ color: "rgba(255,255,255,0.25)" }}>taxa entrega</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: "rgba(255,255,255,0.25)" }}>taxa</p>
                 </div>
               </div>
             ))
@@ -141,7 +141,7 @@ export default function LojasPage() {
 
         {/* Painel lateral */}
         {selecionada && (
-          <div className="card p-6 flex flex-col gap-4" style={{ width: 340, flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: 20 }}>
+          <div className="card p-5 flex flex-col gap-4" style={{ width: "100%", maxWidth: 400, flexShrink: 0, alignSelf: "flex-start", boxSizing: "border-box" }}>
             <div className="flex items-center justify-between">
               <p className="font-black text-white text-lg truncate pr-2">{selecionada.nome}</p>
               <button onClick={() => setSelecionada(null)} className="text-white/30 hover:text-white/60 text-lg flex-shrink-0">✕</button>
@@ -235,8 +235,8 @@ export default function LojasPage() {
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-2">
-      <span style={{ color: "rgba(255,255,255,0.3)" }}>{label}</span>
-      <span className="font-semibold text-white text-right truncate max-w-[180px]" title={value}>{value}</span>
+      <span style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }}>{label}</span>
+      <span className="font-semibold text-white text-right truncate" style={{ maxWidth: "60%", minWidth: 0 }} title={value}>{value}</span>
     </div>
   )
 }
