@@ -959,6 +959,10 @@ export default function MotoboyPage() {
           motoboyId={motoboy_id ?? undefined}
           myLat={myLat}
           myLng={myLng}
+          lojaLat={lojaLat ?? undefined}
+          lojaLng={lojaLng ?? undefined}
+          destinoLat={destinoLat ?? undefined}
+          destinoLng={destinoLng ?? undefined}
         />
       )}
 
@@ -1423,7 +1427,7 @@ function SOSModal({
 // ─── Painel de corrida ativa — stepper 4 etapas (Tópico 03) ─────────────────
 function CorridaAtivaPanel({
   pedido, corridaConcluida, avancando, onAvancar, onConcluir,
-  motoboyId, myLat, myLng,
+  motoboyId, myLat, myLng, lojaLat, lojaLng, destinoLat, destinoLng,
 }: {
   pedido: any | null
   corridaConcluida: any | null
@@ -1433,6 +1437,10 @@ function CorridaAtivaPanel({
   motoboyId?: string
   myLat?: number
   myLng?: number
+  lojaLat?: number
+  lojaLng?: number
+  destinoLat?: number
+  destinoLng?: number
 }) {
   const [navDestino, setNavDestino] = useState<{ texto: string; lat?: number; lng?: number } | null>(null)
   const [fotoModal,  setFotoModal]  = useState(false)
@@ -1571,7 +1579,7 @@ function CorridaAtivaPanel({
             }}>
               {avancando ? "Salvando..." : "Cheguei na loja"}
             </button>
-            <button onClick={() => setNavDestino({ texto: loja?.endereco ?? loja?.nome ?? "", lat: (p as any).loja_lat ?? undefined, lng: (p as any).loja_lng ?? undefined })} style={{
+            <button onClick={() => setNavDestino({ texto: loja?.endereco ?? loja?.nome ?? "", lat: lojaLat ?? (p as any).loja_lat ?? undefined, lng: lojaLng ?? (p as any).loja_lng ?? undefined })} style={{
               width: "100%", padding: "13px", borderRadius: 14,
               border: "1.5px solid rgba(255,255,255,0.18)", background: "transparent",
               color: "rgba(255,255,255,0.7)", fontWeight: 700, fontSize: 13, cursor: "pointer",
@@ -1642,7 +1650,7 @@ function CorridaAtivaPanel({
               }}>
                 {avancando ? "Salvando..." : "Confirmar entrega"}
               </button>
-              <button onClick={() => setNavDestino({ texto: p?.endereco_entrega ?? "", lat: (p as any).lat_entrega ?? undefined, lng: (p as any).lng_entrega ?? undefined })} style={{
+              <button onClick={() => setNavDestino({ texto: p?.endereco_entrega ?? "", lat: destinoLat ?? (p as any).lat_entrega ?? undefined, lng: destinoLng ?? (p as any).lng_entrega ?? undefined })} style={{
                 padding: "14px 16px", borderRadius: 14,
                 border: "1.5px solid rgba(255,255,255,0.18)", background: "transparent",
                 color: "rgba(255,255,255,0.7)", fontSize: 12, cursor: "pointer", fontWeight: 700,
@@ -1982,7 +1990,9 @@ function FotoModal({
 
 // ─── Modal de seleção de app de navegação (Tópico 04) ────────────────────────
 function NavModal({ destino, onClose }: { destino: { texto: string; lat?: number; lng?: number }; onClose: () => void }) {
-  const coords = destino.lat && destino.lng ? `${destino.lat},${destino.lng}` : null
+  const lat    = destino.lat
+  const lng    = destino.lng
+  const coords = lat && lng ? `${lat},${lng}` : null
   const enc    = encodeURIComponent(destino.texto)
   const APPS = [
     {
@@ -1994,8 +2004,8 @@ function NavModal({ destino, onClose }: { destino: { texto: string; lat?: number
         </svg>
       ),
       url: coords
-        ? `https://www.google.com/maps/dir/?api=1&destination=${coords}`
-        : `https://www.google.com/maps/search/?api=1&query=${enc}`,
+        ? `https://maps.google.com/?daddr=${lat},${lng}&directionsmode=driving`
+        : `https://maps.google.com/?q=${enc}`,
     },
     {
       label: "Waze",
@@ -2006,8 +2016,8 @@ function NavModal({ destino, onClose }: { destino: { texto: string; lat?: number
         </svg>
       ),
       url: coords
-        ? `https://waze.com/ul?ll=${coords}&navigate=yes`
-        : `https://waze.com/ul?q=${enc}&navigate=yes&zoom=17`,
+        ? `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`
+        : `https://waze.com/ul?q=${enc}&navigate=yes`,
     },
     {
       label: "Apple Maps",
