@@ -266,8 +266,14 @@ export default function LojaDashboard() {
   }
 
   // Pendentes primeiro, depois os em andamento (ambos já vêm do DB ordenados por criado_em DESC)
+  const STATUS_PRIORITY: Record<string, number> = {
+    pendente: 0, aceito: 1, preparando: 2, pronto: 3,
+    aguardando_aceite: 4, indo_para_loja: 5, na_loja: 6, em_rota: 7, coletado: 8,
+  }
   const pendentes   = pedidos.filter(p => p.status === "pendente")
-  const emAndamento = pedidos.filter(p => p.status !== "pendente")
+  const emAndamento = pedidos
+    .filter(p => p.status !== "pendente")
+    .sort((a, b) => (STATUS_PRIORITY[a.status] ?? 9) - (STATUS_PRIORITY[b.status] ?? 9))
 
   useEffect(() => {
     if (pendentes.length === 0) return
