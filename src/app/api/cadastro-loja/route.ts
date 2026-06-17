@@ -1,12 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
-function adminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  return createClient(url, key, { auth: { persistSession: false } })
-}
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -16,23 +10,47 @@ export async function POST(req: NextRequest) {
       cpf_responsavel, cnpj, pix_key, valor_minimo, aceita_retirada,
     } = body
 
-    const supabase = adminClient()
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-    // Criar usuário no Auth
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email: email.trim().toLowerCase(),
-      password: senha,
-      email_confirm: true,
+    // Cliente com service role para bypassar RLS
+    const admin = createClient(url, serviceKey || anonKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
     })
 
-    if (authError && authError.message !== "User already registered") {
-      return NextResponse.json({ error: authError.message }, { status: 400 })
+    // Criar usuário no auth (service role permite criar sem confirmação de email)
+    let userId: string | null = null
+    if (serviceKey) {
+      const { data, error } = await admin.auth.admin.createUser({
+        email: email.trim().toLowerCase(),
+        password: senha,
+        email_confirm: true,
+      })
+      // Ignora erro de "já existe" — pega o id se veio
+      if (!error || error.message.toLowerCase().includes("already")) {
+        userId = data?.user?.id ?? null
+      }
+      // Se usuário já existe, busca o id pelo email
+      if (!userId && error) {
+        const { data: list } = await admin.auth.admin.listUsers()
+        const found = list?.users?.find(
+          (u: any) => u.email === email.trim().toLowerCase()
+        )
+        userId = found?.id ?? null
+      }
+    } else {
+      // Fallback sem service role: signUp normal
+      const anonClient = createClient(url, anonKey)
+      const { data } = await anonClient.auth.signUp({
+        email: email.trim().toLowerCase(),
+        password: senha,
+      })
+      userId = data.user?.id ?? null
     }
 
-    const userId = authData?.user?.id ?? null
-
-    // Inserir loja
-    const { error: lojaError } = await supabase.from("lojas").insert({
+    // Inserir loja usando client com service role
+    const { error: lojaError } = await admin.from("lojas").insert({
       nome,
       descricao,
       categoria,
@@ -55,7 +73,10 @@ export async function POST(req: NextRequest) {
     })
 
     if (lojaError) {
-      return NextResponse.json({ error: lojaError.message, details: lojaError }, { status: 400 })
+      return NextResponse.json(
+        { error: lojaError.message, code: lojaError.code, details: lojaError.details },
+        { status: 400 }
+      )
     }
 
     return NextResponse.json({ ok: true })
