@@ -1985,7 +1985,7 @@ function NavModal({ destino, onClose }: { destino: { texto: string; lat?: number
       ),
       url: coords
         ? `https://www.google.com/maps/dir/?api=1&destination=${coords}`
-        : `https://www.google.com/maps/dir/?api=1&destination=${enc}`,
+        : `https://www.google.com/maps/search/?api=1&query=${enc}`,
     },
     {
       label: "Waze",
@@ -1997,7 +1997,7 @@ function NavModal({ destino, onClose }: { destino: { texto: string; lat?: number
       ),
       url: coords
         ? `https://waze.com/ul?ll=${coords}&navigate=yes`
-        : `https://waze.com/ul?q=${enc}&navigate=yes`,
+        : `https://waze.com/ul?q=${enc}&navigate=yes&zoom=17`,
     },
     {
       label: "Apple Maps",
