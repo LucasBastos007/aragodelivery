@@ -1394,6 +1394,29 @@ function LojaCard({ loja, isMobile }: { loja: Loja; isMobile: boolean }) {
           {/* Info */}
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ color: "#111827", fontWeight: 800, fontSize: 15, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: 2 }}>{loja.nome}</p>
+            <div style={{ display: "flex", alignItems: "center", gap: 3, marginBottom: 4 }}>
+              {[1,2,3,4,5].map(s => {
+                const nota = Number(loja.nota_media ?? 0)
+                const filled = nota > 0 && nota >= s
+                const half   = nota > 0 && !filled && nota >= s - 0.5
+                return (
+                  <svg key={s} width="12" height="12" viewBox="0 0 24 24" fill={filled ? "#f59e0b" : half ? "url(#mhstar)" : "#E5E7EB"} stroke="none">
+                    <defs><linearGradient id="mhstar"><stop offset="50%" stopColor="#f59e0b"/><stop offset="50%" stopColor="#E5E7EB"/></linearGradient></defs>
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                  </svg>
+                )
+              })}
+              {loja.nota_media != null && loja.nota_media > 0 ? (
+                <>
+                  <span style={{ color: "#111827", fontWeight: 700, fontSize: 12, marginLeft: 2 }}>{Number(loja.nota_media).toFixed(1)}</span>
+                  {loja.total_avaliacoes != null && loja.total_avaliacoes > 0 && (
+                    <span style={{ color: "#9CA3AF", fontSize: 11 }}>({loja.total_avaliacoes})</span>
+                  )}
+                </>
+              ) : (
+                <span style={{ color: "#9CA3AF", fontSize: 11, marginLeft: 2 }}>Sem avaliações</span>
+              )}
+            </div>
             {loja.descricao && (
               <p style={{ color: "#6B7280", fontSize: 12, marginBottom: 5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{loja.descricao}</p>
             )}
@@ -1452,6 +1475,29 @@ function LojaCard({ loja, isMobile }: { loja: Loja; isMobile: boolean }) {
         )}
         <div style={{ padding: "14px 16px 18px" }}>
           <p style={{ color: "#1a1a1a", fontWeight: 700, fontSize: 16, lineHeight: 1.2, marginBottom: 4 }}>{loja.nome}</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 3, marginBottom: 8 }}>
+            {[1,2,3,4,5].map(s => {
+              const nota = Number(loja.nota_media ?? 0)
+              const filled = nota > 0 && nota >= s
+              const half   = nota > 0 && !filled && nota >= s - 0.5
+              return (
+                <svg key={s} width="13" height="13" viewBox="0 0 24 24" fill={filled ? "#f59e0b" : half ? "url(#dhstar)" : "#E5E7EB"} stroke="none">
+                  <defs><linearGradient id="dhstar"><stop offset="50%" stopColor="#f59e0b"/><stop offset="50%" stopColor="#E5E7EB"/></linearGradient></defs>
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+              )
+            })}
+            {loja.nota_media != null && loja.nota_media > 0 ? (
+              <>
+                <span style={{ color: "#111827", fontWeight: 700, fontSize: 13, marginLeft: 2 }}>{Number(loja.nota_media).toFixed(1)}</span>
+                {loja.total_avaliacoes != null && loja.total_avaliacoes > 0 && (
+                  <span style={{ color: "#9CA3AF", fontSize: 12 }}>({loja.total_avaliacoes})</span>
+                )}
+              </>
+            ) : (
+              <span style={{ color: "#9CA3AF", fontSize: 12, marginLeft: 2 }}>Sem avaliações</span>
+            )}
+          </div>
           {loja.descricao && (
             <p style={{ color: "#6B7280", fontSize: 13, marginBottom: 10, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
               {loja.descricao}

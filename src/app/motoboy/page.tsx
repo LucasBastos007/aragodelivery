@@ -80,12 +80,12 @@ function MapaMotoboy({
   myLat, myLng,
   destinoLat, destinoLng,
   lojaLat, lojaLng,
-  raioKm,
+  raioDisplay, raioOpen,
 }: {
   myLat: number; myLng: number
   destinoLat?: number | null; destinoLng?: number | null
   lojaLat?: number | null; lojaLng?: number | null
-  raioKm?: number | null
+  raioDisplay: number; raioOpen: boolean
 }) {
   const { isLoaded, loadError } = useJsApiLoader({
     id: "google-map-motoboy",
@@ -230,17 +230,18 @@ function MapaMotoboy({
         />
       )}
 
-      {/* Círculo de raio */}
-      {raioKm && raioKm > 0 && (
-        <Circle
-          center={{ lat: myLat, lng: myLng }}
-          radius={raioKm * 1000}
-          options={{
-            strokeColor: "#f97316", strokeOpacity: 0.25, strokeWeight: 1.5,
-            fillColor: "#f97316", fillOpacity: 0.05,
-          }}
-        />
-      )}
+      {/* Círculo de raio — sempre visível */}
+      <Circle
+        center={{ lat: myLat, lng: myLng }}
+        radius={raioDisplay * 1000}
+        options={{
+          strokeColor: "#f97316",
+          strokeOpacity: raioOpen ? 0.7 : 0.2,
+          strokeWeight: raioOpen ? 2 : 1.5,
+          fillColor: "#f97316",
+          fillOpacity: raioOpen ? 0.1 : 0.04,
+        }}
+      />
     </GoogleMap>
   )
 }
@@ -267,6 +268,7 @@ export default function MotoboyPage() {
   const [erroConfirm,    setErroConfirm]    = useState("")
 
   const [ganhosDia,      setGanhosDia]      = useState(0)
+  const [corridasDia,    setCorridasDia]    = useState(0)
 
   const [myLat,  setMyLat]  = useState(DEFAULT_LAT)
   const [myLng,  setMyLng]  = useState(DEFAULT_LNG)
@@ -301,6 +303,8 @@ export default function MotoboyPage() {
   const [avancandoEtapa,   setAvancandoEtapa]   = useState(false)
   const [raioKm,           setRaioKm]           = useState<number>(5)
   const [salvandoRaio,     setSalvandoRaio]     = useState(false)
+  const [raioOpen,         setRaioOpen]         = useState(false)
+  const [raioDisplay,      setRaioDisplay]      = useState<number>(5)
   const [fotoMotoboy,      setFotoMotoboy]      = useState<string | null>(null)
 
   // ── Carrega motoboy ────────────────────────────────────────────────────────
@@ -313,7 +317,7 @@ export default function MotoboyPage() {
           sessionStorage.setItem("motoboy_online", data.disponivel ? "1" : "0")
           if (data.lat)     setMyLat(data.lat)
           if (data.lng)     setMyLng(data.lng)
-          if (data.raio_km) setRaioKm(data.raio_km)
+          if (data.raio_km) { setRaioKm(data.raio_km); setRaioDisplay(data.raio_km) }
           if (data.foto)    setFotoMotoboy(data.foto)
         }
         setDispLoading(false)
@@ -330,7 +334,9 @@ export default function MotoboyPage() {
       .eq("status", "entregue")
       .gte("criado_em", hoje.toISOString())
       .then(({ data }) => {
-        setGanhosDia((data ?? []).reduce((s: number, p: any) => s + (p.taxa_entrega ?? 0), 0))
+        const entregas = data ?? []
+        setGanhosDia(entregas.reduce((s: number, p: any) => s + (p.taxa_entrega ?? 0), 0))
+        setCorridasDia(entregas.length)
       })
   }, [motoboy_id, emAndamento.length])
 
@@ -420,7 +426,7 @@ export default function MotoboyPage() {
     const novosIds = new Set(novosProntos.map(p => p.id))
     if (!isFirstLoad.current) {
       const chegaram = [...novosIds].filter(id => !prevProntosRef.current.has(id))
-      if (chegaram.length > 0) { beep(); setSheetH(SHEET_MID) }
+      if (chegaram.length > 0) { playNotificationSound(); setSheetH(SHEET_MID) }
     }
     prevProntosRef.current = novosIds
     isFirstLoad.current    = false
@@ -470,7 +476,7 @@ export default function MotoboyPage() {
             .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
             .eq("id", novo.id).single()
             .then(({ data }) => {
-              if (data) { beep(); setPedidoOferta(data); setTimerOferta(30); setDistKmOferta(null) }
+              if (data) { playNotificationSound(); setPedidoOferta(data); setTimerOferta(30); setDistKmOferta(null) }
             })
         }
       })
@@ -606,6 +612,7 @@ export default function MotoboyPage() {
       try {
         if (!("serviceWorker" in navigator) || !("PushManager" in window)) return
         const reg = await navigator.serviceWorker.register("/sw.js")
+        await reg.update()
         const perm = await Notification.requestPermission()
         if (perm !== "granted") return
         const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
@@ -622,6 +629,18 @@ export default function MotoboyPage() {
     }
     registerPush()
   }, [motoboy_id])
+
+  // ── Push — ouvir mensagem do SW para tocar som em segundo plano ───────────
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return
+    function onSwMsg(e: MessageEvent) {
+      if (e.data?.type === "push-received" && e.data?.isMotoboy) {
+        playNotificationSound()
+      }
+    }
+    navigator.serviceWorker.addEventListener("message", onSwMsg)
+    return () => navigator.serviceWorker.removeEventListener("message", onSwMsg)
+  }, [])
 
   // ── Push — enviar notificação ao cliente ──────────────────────────────────
   async function enviarPush(pedido_id: string, status: string, codigo: string) {
@@ -652,6 +671,8 @@ export default function MotoboyPage() {
     setAtualizando(pedido.id)
     await supabase.from("pedidos").update({ status: "entregue" }).eq("id", pedido.id)
     enviarPush(pedido.id, "entregue", pedido.codigo)
+    setGanhosDia(prev => prev + (pedido.taxa_entrega ?? 0))
+    setCorridasDia(prev => prev + 1)
     await loadPedidos()
     setAtualizando(null)
     setConfirmandoId(null); setCodigoInput(""); setErroConfirm("")
@@ -756,6 +777,8 @@ export default function MotoboyPage() {
     if (nextStatus === "entregue") {
       setCorridaConcluida(ativa)
       setEmAndamento([])
+      setGanhosDia(prev => prev + (ativa.taxa_entrega ?? 0))
+      setCorridasDia(prev => prev + 1)
       enviarPush(ativa.id, "entregue", ativa.codigo)
     } else {
       setEmAndamento(prev => prev.map(p => p.id === ativa.id ? { ...p, status: nextStatus as any } : p))
@@ -809,7 +832,7 @@ export default function MotoboyPage() {
         myLat={myLat} myLng={myLng}
         destinoLat={efetDestinoLat} destinoLng={efetDestinoLng}
         lojaLat={lojaLat} lojaLng={lojaLng}
-        raioKm={raioKm}
+        raioDisplay={raioDisplay} raioOpen={raioOpen}
       />
 
       {/* ── Toast de erro ── */}
@@ -879,7 +902,9 @@ export default function MotoboyPage() {
         <span style={{ color: ganhosDia > 0 ? "#22c55e" : "rgba(255,255,255,0.5)", fontWeight: 900, fontSize: 16, letterSpacing: 0.3 }}>
           R$ {ganhosDia.toFixed(2)}
         </span>
-        <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, fontWeight: 600 }}>hoje</span>
+        <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, fontWeight: 600 }}>
+          {corridasDia > 0 ? `${corridasDia}x · hoje` : "hoje"}
+        </span>
       </div>
 
       {/* ── Toggle online/offline — canto superior direito ── */}
@@ -932,6 +957,69 @@ export default function MotoboyPage() {
           {togglingDisp ? "..." : disponivel ? "Online" : "Offline"}
         </span>
       </div>
+
+      {/* ── Botão de raio de atuação — canto inferior direito sobre o mapa ── */}
+      {!corridaAtiva && !corridaConcluida && (
+        <div style={{
+          position: "absolute", bottom: sheetH + 16, right: 14, zIndex: 25,
+          display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10,
+        }}>
+          {/* Painel do slider */}
+          {raioOpen && (
+            <div style={{
+              background: "rgba(10,10,10,0.92)", backdropFilter: "blur(14px)",
+              borderRadius: 18, padding: "16px 18px",
+              border: "1px solid rgba(249,115,22,0.35)",
+              boxShadow: "0 4px 24px rgba(0,0,0,0.5)",
+              width: 220,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                <p style={{ color: "white", fontWeight: 800, fontSize: 13 }}>Raio de atuação</p>
+                <span style={{ color: "#f97316", fontWeight: 900, fontSize: 20 }}>{raioDisplay} km</span>
+              </div>
+              <input
+                type="range"
+                min={1} max={40} step={1}
+                value={raioDisplay}
+                onChange={e => setRaioDisplay(Number(e.target.value))}
+                onMouseUp={() => salvarRaio(raioDisplay)}
+                onTouchEnd={() => salvarRaio(raioDisplay)}
+                style={{
+                  width: "100%", accentColor: "#f97316",
+                  cursor: "pointer", height: 4,
+                }}
+              />
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
+                <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 10 }}>1 km</span>
+                <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 10 }}>40 km</span>
+              </div>
+              <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 10, marginTop: 8, textAlign: "center" }}>
+                {salvandoRaio ? "Salvando..." : `Pedidos em até ${raioDisplay} km`}
+              </p>
+            </div>
+          )}
+
+          {/* Botão raio */}
+          <button
+            onClick={() => setRaioOpen(o => !o)}
+            style={{
+              width: 48, height: 48, borderRadius: "50%", border: "none",
+              background: raioOpen ? "#f97316" : "rgba(10,10,10,0.82)",
+              backdropFilter: "blur(10px)",
+              boxShadow: raioOpen ? "0 0 0 3px rgba(249,115,22,0.4), 0 4px 16px rgba(0,0,0,0.5)" : "0 2px 14px rgba(0,0,0,0.5)",
+              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+              transition: "all 0.2s",
+            }}
+          >
+            {/* Ícone de radar/raio */}
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={raioOpen ? "white" : "rgba(249,115,22,0.9)"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="2"/>
+              <path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49"/>
+              <path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* ── GPS badge — canto superior esquerdo ── */}
       {compartilhando && (
@@ -1072,28 +1160,6 @@ export default function MotoboyPage() {
                 {togglingDisp ? "..." : "Ficar Online"}
               </button>
 
-              {/* Controle de raio de atuação */}
-              <div style={{ marginTop: 16 }}>
-                <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 8 }}>
-                  Raio de atuação
-                  {salvandoRaio && <span style={{ color: "#f97316", marginLeft: 8 }}>salvando...</span>}
-                </p>
-                <div style={{ display: "flex", gap: 6 }}>
-                  {[2, 3, 5, 8, 10, 15].map(r => (
-                    <button key={r} onClick={() => salvarRaio(r)} style={{
-                      flex: 1, padding: "9px 4px", borderRadius: 10, border: "none",
-                      background: raioKm === r ? "#f97316" : "rgba(255,255,255,0.07)",
-                      color: raioKm === r ? "white" : "rgba(255,255,255,0.4)",
-                      fontWeight: 700, fontSize: 12, cursor: "pointer",
-                    }}>
-                      {r}km
-                    </button>
-                  ))}
-                </div>
-                <p style={{ color: "rgba(255,255,255,0.18)", fontSize: 10, marginTop: 6 }}>
-                  Pedidos dentro de {raioKm}km serão priorizados para você
-                </p>
-              </div>
             </div>
           )}
 
@@ -1470,11 +1536,11 @@ function CorridaAtivaPanel({
   return (
     <div style={{
       position: "absolute", left: 0, right: 0, bottom: 0,
-      height: "45%", background: "#1C1C1E",
+      height: "52%", background: "#1C1C1E",
       borderRadius: "20px 20px 0 0",
       boxShadow: "0 -4px 32px rgba(0,0,0,0.7)",
       zIndex: 35, display: "flex", flexDirection: "column",
-      overflow: "hidden",
+      overflow: "hidden", boxSizing: "border-box",
     }}>
       {/* Modal de navegação */}
       {navDestino && <NavModal destino={navDestino} onClose={() => setNavDestino(null)} />}
@@ -1548,7 +1614,7 @@ function CorridaAtivaPanel({
       </div>
 
       {/* Conteúdo */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "10px 20px 16px" }}>
+      <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "10px 16px 16px", width: "100%", boxSizing: "border-box" }}>
 
         {/* ETAPA 4 — Entregue */}
         {etapa === 3 && (
@@ -1642,56 +1708,57 @@ function CorridaAtivaPanel({
           <>
             <div style={{ marginBottom: 10 }}>
               <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>Entregar em</p>
-              <p style={{ color: "white", fontWeight: 800, fontSize: 14, lineHeight: 1.4 }}>{p?.endereco_entrega}</p>
+              <p style={{ color: "white", fontWeight: 800, fontSize: 14, lineHeight: 1.4, wordBreak: "break-word", overflowWrap: "anywhere" }}>{p?.endereco_entrega}</p>
               {p?.observacao && (
-                <p style={{ color: "#888", fontSize: 12, marginTop: 4, fontStyle: "italic" }}>"{p.observacao}"</p>
+                <p style={{ color: "#aaa", fontSize: 12, marginTop: 4, wordBreak: "break-word" }}>{p.observacao}</p>
               )}
             </div>
 
             {/* Input de código do cliente */}
             <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: "12px 14px", marginBottom: 8 }}>
               <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, marginBottom: 8 }}>
-                Digite o código que o cliente mostrar na tela:
+                Peça o código ao cliente e digite abaixo:
               </p>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  value={codigoInput}
-                  onChange={e => { setCodigoInput(e.target.value.toUpperCase()); setErroConfirm("") }}
-                  onKeyDown={e => {
-                    if (e.key === "Enter" && codigoInput.trim()) {
-                      if (codigoInput.trim().toUpperCase() === (p?.codigo ?? "").toUpperCase()) {
-                        setErroConfirm(""); onAvancar()
-                      } else {
-                        setErroConfirm("Código incorreto. Peça ao cliente para mostrar novamente.")
-                      }
+              <input
+                value={codigoInput}
+                onChange={e => { setCodigoInput(e.target.value.toUpperCase()); setErroConfirm("") }}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && codigoInput.trim()) {
+                    if (codigoInput.trim().toUpperCase() === (p?.codigo ?? "").toUpperCase()) {
+                      setErroConfirm(""); onAvancar()
+                    } else {
+                      setErroConfirm("Código incorreto. Peça ao cliente para mostrar novamente.")
                     }
-                  }}
-                  placeholder={p?.codigo ?? "0000"}
-                  maxLength={8}
-                  style={{
-                    flex: 1, padding: "11px 14px", borderRadius: 12,
-                    fontSize: 22, fontWeight: 900, letterSpacing: 8, textAlign: "center",
-                    background: "rgba(255,255,255,0.07)",
-                    border: erroConfirm ? "1.5px solid rgba(239,68,68,0.6)" : "1.5px solid rgba(255,255,255,0.15)",
-                    color: "white", outline: "none",
-                  }}
-                />
-                <button
-                  onClick={() => setNavDestino({ texto: p?.endereco_entrega ?? "", lat: destinoLat ?? (p as any).lat_entrega ?? undefined, lng: destinoLng ?? (p as any).lng_entrega ?? undefined })}
-                  style={{
-                    padding: "11px 14px", borderRadius: 12,
-                    border: "1.5px solid rgba(255,255,255,0.18)", background: "transparent",
-                    color: "rgba(255,255,255,0.7)", fontSize: 12, cursor: "pointer", fontWeight: 700,
-                  }}>
-                  Nav
-                </button>
-              </div>
+                  }
+                }}
+                placeholder="Digite o código"
+                maxLength={8}
+                inputMode="text"
+                autoComplete="off"
+                style={{
+                  width: "100%", boxSizing: "border-box",
+                  padding: "14px", borderRadius: 12,
+                  fontSize: 26, fontWeight: 900, letterSpacing: 10, textAlign: "center",
+                  background: "rgba(255,255,255,0.07)",
+                  border: erroConfirm ? "1.5px solid rgba(239,68,68,0.6)" : "1.5px solid rgba(255,255,255,0.15)",
+                  color: "white", outline: "none",
+                }}
+              />
               {erroConfirm && (
                 <p style={{ color: "#f87171", fontSize: 11, fontWeight: 600, marginTop: 8, padding: "6px 10px", background: "rgba(239,68,68,0.08)", borderRadius: 8 }}>
                   {erroConfirm}
                 </p>
               )}
             </div>
+            <button
+              onClick={() => setNavDestino({ texto: p?.endereco_entrega ?? "", lat: destinoLat ?? (p as any).lat_entrega ?? undefined, lng: destinoLng ?? (p as any).lng_entrega ?? undefined })}
+              style={{
+                width: "100%", padding: "11px", borderRadius: 12, marginBottom: 8,
+                border: "1.5px solid rgba(255,255,255,0.14)", background: "transparent",
+                color: "rgba(255,255,255,0.6)", fontSize: 13, cursor: "pointer", fontWeight: 700,
+              }}>
+              🗺 Navegar até o cliente
+            </button>
             <button
               onClick={() => {
                 if (!codigoInput.trim()) { setErroConfirm("Digite o código do cliente."); return }
@@ -2133,6 +2200,14 @@ function NavModal({ destino, onClose }: { destino: { texto: string; lat?: number
       </div>
     </div>
   )
+}
+
+function playNotificationSound() {
+  try {
+    const audio = new Audio("/splash.mp3")
+    audio.volume = 1
+    audio.play().catch(() => beep())
+  } catch { beep() }
 }
 
 function beep() {

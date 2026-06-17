@@ -148,13 +148,22 @@ function ModalDespacho({
     if (!error) {
       // Push notification via API
       try {
+        const itensCount = (pedido.itens ?? []).length
+        const distStr = motoboy.dist < 999 ? `${motoboy.dist.toFixed(1)} km até a loja` : ""
+        const linhas = [
+          `📦 ${itensCount} ${itensCount === 1 ? "item" : "itens"} · R$ ${(pedido.taxa_entrega ?? 0).toFixed(2)}`,
+          pedido.loja?.nome ? `🏪 ${pedido.loja.nome}` : "",
+          pedido.endereco_entrega ? `📍 ${pedido.endereco_entrega}` : "",
+          distStr ? `🛵 ${distStr}` : "",
+        ].filter(Boolean).join("\n")
         await fetch("/api/push", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            action: "send-motoboy",
+            action:    "send-motoboy",
             motoboy_id: motoboy.id,
-            title: "Nova corrida!",
-            body:  `Pedido #${pedido.codigo} — R$ ${(pedido.taxa_entrega ?? 0).toFixed(2)}`,
+            title:     `🛵 Nova corrida #${pedido.codigo}!`,
+            body:      linhas,
+            url:       "/motoboy",
           }),
         })
       } catch {}

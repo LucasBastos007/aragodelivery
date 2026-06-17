@@ -42,14 +42,13 @@ export default function MotoboyFinanceiroPage() {
     setPixInput(mb?.pix_chave ?? "")
 
     const { data: ped } = await supabase
-      .from("pedidos").select("id, codigo, taxa_entrega, ganho_motoboy, criado_em, loja:lojas(nome)")
+      .from("pedidos").select("id, codigo, taxa_entrega, criado_em, loja:lojas(nome)")
       .eq("motoboy_id", motoboy_id).eq("status", "entregue")
       .order("criado_em", { ascending: false })
     const pedList = ped ?? []
     setEntregas(pedList.slice(0, 30))
 
-    // Prefere ganho_motoboy (valor real pós-comissão) se disponível
-    const ganhos = pedList.reduce((s, p) => s + (p.ganho_motoboy ?? (p.taxa_entrega ?? 0) * MOTOBOY_PCT), 0)
+    const ganhos = pedList.reduce((s, p) => s + (p.taxa_entrega ?? 0) * MOTOBOY_PCT, 0)
     setTotalGanhos(ganhos)
 
     const { data: saq } = await supabase

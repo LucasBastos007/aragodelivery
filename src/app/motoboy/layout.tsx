@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import { useAuth } from "@/lib/auth"
+import { supabase } from "@/lib/supabase"
 
 const NAV = [
   {
@@ -92,7 +93,22 @@ export default function MotoboyLayout({ children }: { children: React.ReactNode 
   const router   = useRouter()
   const pathname = usePathname()
   const { sessao, authLoading, logout } = useAuth()
-  const [perfilOpen, setPerfilOpen] = useState(false)
+  const [perfilOpen,     setPerfilOpen]     = useState(false)
+  const [notaMedia,      setNotaMedia]      = useState<number | null>(null)
+  const [totalAvals,     setTotalAvals]     = useState(0)
+  const [corridasTotal,  setCorridasTotal]  = useState(0)
+
+  useEffect(() => {
+    if (!perfilOpen || !sessao || sessao.role !== "motoboy") return
+    const id = (sessao as any).motoboy_id as string
+    if (!id) return
+    supabase.from("motoboys").select("nota_media, total_avaliacoes").eq("id", id).single()
+      .then(({ data }) => {
+        if (data) { setNotaMedia((data as any).nota_media ?? null); setTotalAvals((data as any).total_avaliacoes ?? 0) }
+      })
+    supabase.from("pedidos").select("id", { count: "exact" }).eq("motoboy_id", id).eq("status", "entregue")
+      .then(({ count }) => setCorridasTotal(count ?? 0))
+  }, [perfilOpen, sessao])
 
   useEffect(() => {
     if (!authLoading && (!sessao || sessao.role !== "motoboy")) {
@@ -156,9 +172,35 @@ export default function MotoboyLayout({ children }: { children: React.ReactNode 
                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
                   </svg>
                 </div>
-                <div>
+                <div style={{ flex: 1 }}>
                   <p style={{ color: "white", fontWeight: 900, fontSize: 16 }}>{sessao.motoboy_nome}</p>
-                  <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, marginTop: 2 }}>Motoboy parceiro</p>
+                  <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 12, marginTop: 2 }}>Motoboy parceiro</p>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 6 }}>
+                    {/* Estrelas */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill={notaMedia !== null ? "#f59e0b" : "rgba(255,255,255,0.15)"} stroke="none">
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                      </svg>
+                      <span style={{ color: notaMedia !== null ? "#f59e0b" : "rgba(255,255,255,0.25)", fontWeight: 800, fontSize: 13 }}>
+                        {notaMedia !== null ? notaMedia.toFixed(1) : "—"}
+                      </span>
+                      {totalAvals > 0 && (
+                        <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 11 }}>({totalAvals})</span>
+                      )}
+                    </div>
+                    {/* Separador */}
+                    <span style={{ color: "rgba(255,255,255,0.12)", fontSize: 12 }}>·</span>
+                    {/* Corridas */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(249,115,22,0.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/>
+                        <path d="M6 17 L9 10 L14 10 L18 17"/><path d="M9 10 L11 7 L16 7 L18 10 L14 10"/>
+                      </svg>
+                      <span style={{ color: "rgba(255,255,255,0.5)", fontSize: 12, fontWeight: 700 }}>
+                        {corridasTotal} {corridasTotal === 1 ? "entrega" : "entregas"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
 

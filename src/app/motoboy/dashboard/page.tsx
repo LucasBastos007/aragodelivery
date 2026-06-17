@@ -21,8 +21,10 @@ function dateInicio(periodo: Periodo): Date {
   return new Date(2020, 0, 1)
 }
 
+const MOTOBOY_PCT = 0.80
+
 function ganhoReal(p: any): number {
-  return p.ganho_motoboy ?? p.taxa_entrega ?? 0
+  return (p.taxa_entrega ?? 0) * MOTOBOY_PCT
 }
 
 function StatCard({ icon, label, value, sub, color }: {
@@ -109,7 +111,7 @@ export default function MotoboyDashboardPage() {
 
     const { data: todos } = await supabase
       .from("pedidos")
-      .select("id, codigo, taxa_entrega, ganho_motoboy, criado_em, loja:lojas(nome)")
+      .select("id, codigo, taxa_entrega, criado_em, loja:lojas(nome)")
       .eq("motoboy_id", motoboy_id)
       .eq("status", "entregue")
       .order("criado_em", { ascending: false })

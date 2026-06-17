@@ -366,8 +366,8 @@ export default function RestaurantePage() {
               <img src={loja.logo_url} alt={loja.nome} style={{ width: "100%", height: 160, objectFit: "cover", display: "block" }} />
               <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 50%)" }} />
               <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "16px 20px" }}>
-                <h1 style={{ color: "#111827", fontWeight: 900, fontSize: 22, marginBottom: 2 }}>{loja.nome}</h1>
-                {loja.descricao && <p style={{ color: "#374151", fontSize: 12 }}>{loja.descricao}</p>}
+                <h1 style={{ color: "white", fontWeight: 900, fontSize: 22, marginBottom: 2 }}>{loja.nome}</h1>
+                {loja.descricao && <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 12 }}>{loja.descricao}</p>}
               </div>
             </div>
           ) : (
@@ -375,6 +375,39 @@ export default function RestaurantePage() {
               <div style={{ fontSize: 36, marginBottom: 8 }}>{CAT_ICONS[loja.categoria]}</div>
               <h1 style={{ color: "#111827", fontWeight: 900, fontSize: 22, marginBottom: 4 }}>{loja.nome}</h1>
               {loja.descricao && <p style={{ color: "#6B7280", fontSize: 13 }}>{loja.descricao}</p>}
+            </div>
+          )}
+
+          {/* Avaliação da loja */}
+          {(loja as any).nota_media != null && (
+            <div style={{
+              padding: "12px 20px", borderTop: "1px solid #F3F4F6",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              background: "#fff",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="#f59e0b" stroke="none">
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+                <span style={{ color: "#111827", fontWeight: 800, fontSize: 15 }}>{Number((loja as any).nota_media).toFixed(1)}</span>
+                {(loja as any).total_avaliacoes > 0 && (
+                  <span style={{ color: "#6B7280", fontSize: 13 }}>({(loja as any).total_avaliacoes} avaliações)</span>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 3 }}>
+                {[1,2,3,4,5].map(s => {
+                  const nota = Number((loja as any).nota_media)
+                  const fill = nota >= s ? "#f59e0b" : nota >= s - 0.5 ? "url(#halfStar)" : "#E5E7EB"
+                  return (
+                    <svg key={s} width="14" height="14" viewBox="0 0 24 24" fill={fill} stroke="none">
+                      <defs>
+                        <linearGradient id="halfStar"><stop offset="50%" stopColor="#f59e0b"/><stop offset="50%" stopColor="#E5E7EB"/></linearGradient>
+                      </defs>
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                    </svg>
+                  )
+                })}
+              </div>
             </div>
           )}
         </div>

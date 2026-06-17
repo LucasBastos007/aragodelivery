@@ -28,6 +28,8 @@ export interface Loja {
   contrato_assinado?: boolean
   contrato_assinado_em?: string
   motivo_rejeicao?: string
+  nota_media?: number | null
+  total_avaliacoes?: number | null
 }
 
 export interface Motoboy {

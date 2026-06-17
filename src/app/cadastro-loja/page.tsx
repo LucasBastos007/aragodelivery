@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { LogoClean } from "@/components/LogoClean"
 import { motion, AnimatePresence } from "framer-motion"
-import { supabase } from "@/lib/supabase"
 import { StepIndicator } from "@/components/cadastro/StepIndicator"
 import { FormInput } from "@/components/cadastro/FormInput"
 import { PasswordField } from "@/components/cadastro/PasswordField"
@@ -277,44 +276,39 @@ export default function CadastroLoja() {
       const valorMinimoNum = parseFloat(config.valorMinimo.replace(/[R$\s.]/g, "").replace(",", ".")) || 0
       const prepMin = parseInt(config.tempoPreparo)
 
-      let authUserId: string | null = null
-      const { data: authData } = await supabase.auth.signUp({
-        email: responsible.email.trim().toLowerCase(),
-        password: responsible.senha,
-      })
-      authUserId = authData.user?.id ?? null
-
       const pixKeyFinal = pixKey.trim()
         || `${bank.banco} Ag:${bank.agencia} Cc:${bank.conta}`
 
-      const payload = {
-        nome: business.nomeFantasia.trim(),
-        descricao: tipoCadastro === "cpf" ? business.razaoSocial.trim() : business.razaoSocial.trim(),
-        categoria: business.segmento as "Restaurante" | "Mercadinho" | "Farmácia" | "Outros",
-        endereco: enderecoStr,
-        telefone: business.telefone,
-        taxa_entrega: 5,
-        tempo_min: prepMin,
-        tempo_max: prepMin + 15,
-        status: "pendente" as const,
-        aberto: false,
-        comissao: 10,
-        nome_responsavel: tipoCadastro === "cpf" ? business.razaoSocial.trim() : responsible.nome.trim(),
-        cpf_responsavel: tipoCadastro === "cpf" ? business.cnpj : responsible.cpf,
-        cnpj: tipoCadastro === "cnpj" ? business.cnpj : "",
-        email: responsible.email.trim().toLowerCase(),
-        pix_key: pixKeyFinal,
-        ...(authUserId ? { user_id: authUserId } : {}),
-        valor_minimo: valorMinimoNum,
-        aceita_retirada: config.aceitaRetirada,
-      }
+      const res = await fetch("/api/cadastro-loja", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nome: business.nomeFantasia.trim(),
+          descricao: business.razaoSocial.trim(),
+          categoria: business.segmento,
+          endereco: enderecoStr,
+          telefone: business.telefone,
+          taxa_entrega: 5,
+          tempo_min: prepMin,
+          tempo_max: prepMin + 15,
+          comissao: 10,
+          nome_responsavel: tipoCadastro === "cpf" ? business.razaoSocial.trim() : responsible.nome.trim(),
+          cpf_responsavel: tipoCadastro === "cpf" ? business.cnpj : responsible.cpf,
+          cnpj: tipoCadastro === "cnpj" ? business.cnpj : "",
+          email: responsible.email.trim(),
+          senha: responsible.senha,
+          pix_key: pixKeyFinal,
+          valor_minimo: valorMinimoNum,
+          aceita_retirada: config.aceitaRetirada,
+        }),
+      })
 
-      const { error } = await supabase.from("lojas").insert(payload)
-      if (error) throw error
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? "Erro ao enviar cadastro")
       setSucesso(true)
-    } catch (e) {
+    } catch (e: any) {
       console.error(e)
-      alert("Erro ao enviar cadastro. Verifique os dados e tente novamente.")
+      alert(`Erro ao enviar cadastro: ${e?.message ?? "Verifique os dados e tente novamente."}`)
     }
     setLoading(false)
   }
