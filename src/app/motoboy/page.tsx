@@ -737,10 +737,14 @@ export default function MotoboyPage() {
     const updates: Record<string, any> = { status: nextStatus }
     if (nextStatus === "entregue") {
       updates.ganho_motoboy = ativa.taxa_entrega ?? 0
-      if (fotoUrl) updates.foto_entrega = fotoUrl
     }
 
-    const { error } = await supabase.from("pedidos").update(updates).eq("id", ativa.id)
+    let { error } = await supabase.from("pedidos").update(updates).eq("id", ativa.id)
+    if (error && nextStatus === "entregue") {
+      // Fallback: coluna ganho_motoboy pode não existir — tenta só com status
+      const r2 = await supabase.from("pedidos").update({ status: nextStatus }).eq("id", ativa.id)
+      error = r2.error
+    }
     if (error) {
       setToastMsg("Erro ao atualizar. Tente novamente.")
       setTimeout(() => setToastMsg(null), 3500)
@@ -1450,9 +1454,10 @@ function CorridaAtivaPanel({
   destinoLat?: number
   destinoLng?: number
 }) {
-  const [navDestino, setNavDestino] = useState<{ texto: string; lat?: number; lng?: number } | null>(null)
-  const [fotoModal,  setFotoModal]  = useState(false)
-  const [sosModal,   setSOSModal]   = useState(false)
+  const [navDestino,  setNavDestino]  = useState<{ texto: string; lat?: number; lng?: number } | null>(null)
+  const [sosModal,    setSOSModal]    = useState(false)
+  const [codigoInput, setCodigoInput] = useState("")
+  const [erroConfirm, setErroConfirm] = useState("")
 
   const p    = corridaConcluida ?? pedido
   const loja = p?.loja
@@ -1635,37 +1640,77 @@ function CorridaAtivaPanel({
         {/* ETAPA 3 — Em rota */}
         {etapa === 2 && (
           <>
-            {/* Modal de foto comprovante */}
-            {fotoModal && (
-              <FotoModal
-                pedidoId={p?.id ?? ""}
-                onConfirmar={(url) => { setFotoModal(false); onAvancar(url) }}
-                onPular={() => { setFotoModal(false); onAvancar() }}
-              />
-            )}
-            <div style={{ marginBottom: 12 }}>
+            <div style={{ marginBottom: 10 }}>
               <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>Entregar em</p>
               <p style={{ color: "white", fontWeight: 800, fontSize: 14, lineHeight: 1.4 }}>{p?.endereco_entrega}</p>
               {p?.observacao && (
                 <p style={{ color: "#888", fontSize: 12, marginTop: 4, fontStyle: "italic" }}>"{p.observacao}"</p>
               )}
             </div>
-            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-              <button onClick={() => setFotoModal(true)} disabled={avancando} style={{
-                flex: 1, padding: "14px 10px", borderRadius: 14, border: "none",
-                background: "#FF8C00", color: "white", fontWeight: 900, fontSize: 13,
-                cursor: "pointer",
-              }}>
-                {avancando ? "Salvando..." : "Confirmar entrega"}
-              </button>
-              <button onClick={() => setNavDestino({ texto: p?.endereco_entrega ?? "", lat: destinoLat ?? (p as any).lat_entrega ?? undefined, lng: destinoLng ?? (p as any).lng_entrega ?? undefined })} style={{
-                padding: "14px 16px", borderRadius: 14,
-                border: "1.5px solid rgba(255,255,255,0.18)", background: "transparent",
-                color: "rgba(255,255,255,0.7)", fontSize: 12, cursor: "pointer", fontWeight: 700,
-              }}>
-                Nav
-              </button>
+
+            {/* Input de código do cliente */}
+            <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: "12px 14px", marginBottom: 8 }}>
+              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, marginBottom: 8 }}>
+                Digite o código que o cliente mostrar na tela:
+              </p>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  value={codigoInput}
+                  onChange={e => { setCodigoInput(e.target.value.toUpperCase()); setErroConfirm("") }}
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && codigoInput.trim()) {
+                      if (codigoInput.trim().toUpperCase() === (p?.codigo ?? "").toUpperCase()) {
+                        setErroConfirm(""); onAvancar()
+                      } else {
+                        setErroConfirm("Código incorreto. Peça ao cliente para mostrar novamente.")
+                      }
+                    }
+                  }}
+                  placeholder={p?.codigo ?? "0000"}
+                  maxLength={8}
+                  style={{
+                    flex: 1, padding: "11px 14px", borderRadius: 12,
+                    fontSize: 22, fontWeight: 900, letterSpacing: 8, textAlign: "center",
+                    background: "rgba(255,255,255,0.07)",
+                    border: erroConfirm ? "1.5px solid rgba(239,68,68,0.6)" : "1.5px solid rgba(255,255,255,0.15)",
+                    color: "white", outline: "none",
+                  }}
+                />
+                <button
+                  onClick={() => setNavDestino({ texto: p?.endereco_entrega ?? "", lat: destinoLat ?? (p as any).lat_entrega ?? undefined, lng: destinoLng ?? (p as any).lng_entrega ?? undefined })}
+                  style={{
+                    padding: "11px 14px", borderRadius: 12,
+                    border: "1.5px solid rgba(255,255,255,0.18)", background: "transparent",
+                    color: "rgba(255,255,255,0.7)", fontSize: 12, cursor: "pointer", fontWeight: 700,
+                  }}>
+                  Nav
+                </button>
+              </div>
+              {erroConfirm && (
+                <p style={{ color: "#f87171", fontSize: 11, fontWeight: 600, marginTop: 8, padding: "6px 10px", background: "rgba(239,68,68,0.08)", borderRadius: 8 }}>
+                  {erroConfirm}
+                </p>
+              )}
             </div>
+            <button
+              onClick={() => {
+                if (!codigoInput.trim()) { setErroConfirm("Digite o código do cliente."); return }
+                if (codigoInput.trim().toUpperCase() !== (p?.codigo ?? "").toUpperCase()) {
+                  setErroConfirm("Código incorreto. Peça ao cliente para mostrar novamente.")
+                  return
+                }
+                setErroConfirm("")
+                onAvancar()
+              }}
+              disabled={avancando}
+              style={{
+                width: "100%", padding: "14px", borderRadius: 14, border: "none",
+                background: codigoInput.trim() ? "#22c55e" : "rgba(34,197,94,0.2)",
+                color: "white", fontWeight: 900, fontSize: 14,
+                cursor: avancando ? "not-allowed" : "pointer", marginBottom: 8,
+              }}>
+              {avancando ? "Confirmando..." : "Confirmar entrega"}
+            </button>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {/* Contato do cliente (mascarado) */}
               {p?.telefone_cliente && (
