@@ -713,7 +713,12 @@ export default function MotoboyPage() {
       return
     }
     const ativa = emAndamento.find(p => ["indo_para_loja","na_loja","em_rota","coletado"].includes(p.status))
-    if (!ativa) return
+    if (!ativa) {
+      // emAndamento vazio — tenta recarregar e aguarda
+      await loadPedidos()
+      setAvancandoEtapa(false)
+      return
+    }
     setAvancandoEtapa(true)
     const NEXT: Record<string, string> = {
       "indo_para_loja": "na_loja",
@@ -731,7 +736,12 @@ export default function MotoboyPage() {
     }
 
     const { error } = await supabase.from("pedidos").update(updates).eq("id", ativa.id)
-    if (error) { setAvancandoEtapa(false); return }
+    if (error) {
+      setToastMsg("Erro ao atualizar. Tente novamente.")
+      setTimeout(() => setToastMsg(null), 3500)
+      setAvancandoEtapa(false)
+      return
+    }
 
     // Atualiza emAndamento imediatamente sem esperar loadPedidos
     if (nextStatus === "entregue") {
