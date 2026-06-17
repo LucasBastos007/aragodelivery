@@ -250,7 +250,10 @@ export default function MotoboyPage() {
   const { sessao } = useAuth()
   const motoboy_id = sessao?.role === "motoboy" ? sessao.motoboy_id : null
 
-  const [disponivel,     setDisponivel]     = useState(false)
+  const [disponivel,     setDisponivel]     = useState(() => {
+    if (typeof window !== "undefined") return sessionStorage.getItem("motoboy_online") === "1"
+    return false
+  })
   const [dispLoading,    setDispLoading]    = useState(true)
   const [togglingDisp,   setTogglingDisp]   = useState(false)
 
@@ -307,6 +310,7 @@ export default function MotoboyPage() {
       .then(({ data }) => {
         if (data) {
           setDisponivel(data.disponivel)
+          sessionStorage.setItem("motoboy_online", data.disponivel ? "1" : "0")
           if (data.lat)     setMyLat(data.lat)
           if (data.lng)     setMyLng(data.lng)
           if (data.raio_km) setRaioKm(data.raio_km)
@@ -389,6 +393,7 @@ export default function MotoboyPage() {
       await supabase.from("motoboys").update({ disponivel: novo }).eq("id", motoboy_id)
     }
     setDisponivel(novo)
+    sessionStorage.setItem("motoboy_online", novo ? "1" : "0")
     setTogglingDisp(false)
     if (novo) setSheetH(SHEET_PEEK)
   }
@@ -764,14 +769,20 @@ export default function MotoboyPage() {
     marcarEntregue(pedido)
   }
 
-  // ── Bottom sheet drag ──────────────────────────────────────────────────────
-  function onDragStart(y: number) { isDragging.current = true; dragStartY.current = y; dragStartH.current = sheetH }
-  function onDragMove(y: number) {
-    if (!isDragging.current) return
-    setSheetH(Math.max(SHEET_PEEK, Math.min(SHEET_FULL, dragStartH.current + (dragStartY.current - y))))
+  // ── Bottom sheet drag — Pointer Capture para captura confiável no mobile ──
+  function onDragPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    e.currentTarget.setPointerCapture(e.pointerId)
+    isDragging.current = true
+    dragStartY.current = e.clientY
+    dragStartH.current = sheetH
   }
-  function onDragEnd() {
+  function onDragPointerMove(e: React.PointerEvent<HTMLDivElement>) {
     if (!isDragging.current) return
+    setSheetH(Math.max(SHEET_PEEK, Math.min(SHEET_FULL, dragStartH.current + (dragStartY.current - e.clientY))))
+  }
+  function onDragPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (!isDragging.current) return
+    e.currentTarget.releasePointerCapture(e.pointerId)
     isDragging.current = false
     const snaps = [SHEET_PEEK, SHEET_MID, SHEET_FULL]
     setSheetH(snaps.reduce((a, b) => Math.abs(b - sheetH) < Math.abs(a - sheetH) ? b : a))
@@ -978,16 +989,13 @@ export default function MotoboyPage() {
           overflow: "hidden",
         }}
       >
-        {/* Drag handle */}
+        {/* Drag handle — Pointer Capture garante captura fora do elemento */}
         <div
-          style={{ padding: "12px 0 8px", cursor: "grab", flexShrink: 0, touchAction: "none" }}
-          onMouseDown={e => onDragStart(e.clientY)}
-          onMouseMove={e => onDragMove(e.clientY)}
-          onMouseUp={onDragEnd}
-          onMouseLeave={onDragEnd}
-          onTouchStart={e => onDragStart(e.touches[0].clientY)}
-          onTouchMove={e => { e.preventDefault(); onDragMove(e.touches[0].clientY) }}
-          onTouchEnd={onDragEnd}
+          style={{ padding: "16px 0 10px", cursor: "grab", flexShrink: 0, touchAction: "none", userSelect: "none" }}
+          onPointerDown={onDragPointerDown}
+          onPointerMove={onDragPointerMove}
+          onPointerUp={onDragPointerUp}
+          onPointerCancel={onDragPointerUp}
         >
           <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.15)", margin: "0 auto" }} />
         </div>
