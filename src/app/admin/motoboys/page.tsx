@@ -38,11 +38,11 @@ function ModalRejeicao({
       background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center",
     }}>
       <div style={{
-        background: "#1C1C1E", borderRadius: 20, padding: "24px 16px", width: "calc(100% - 32px)", maxWidth: 440,
+        background: "white", borderRadius: 20, padding: "24px 16px", width: "calc(100% - 32px)", maxWidth: 440,
         boxShadow: "0 8px 48px rgba(0,0,0,0.8)", boxSizing: "border-box",
       }}>
-        <p style={{ color: "white", fontWeight: 900, fontSize: 16, marginBottom: 4 }}>Rejeitar cadastro</p>
-        <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 13, marginBottom: 20 }}>
+        <p style={{ color: "#0F172A", fontWeight: 900, fontSize: 16, marginBottom: 4 }}>Rejeitar cadastro</p>
+        <p style={{ color: "#94a3b8", fontSize: 13, marginBottom: 20 }}>
           Informe o motivo para {motoboy.nome}
         </p>
 
@@ -53,8 +53,8 @@ function ModalRejeicao({
           rows={4}
           style={{
             width: "100%", padding: "12px 14px", borderRadius: 12, resize: "vertical",
-            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
-            color: "white", fontSize: 13, fontFamily: "inherit", outline: "none",
+            background: "#F9FAFB", border: "1px solid #E2E8F0",
+            color: "#0F172A", fontSize: 13, fontFamily: "inherit", outline: "none",
             boxSizing: "border-box",
           }}
         />
@@ -66,7 +66,7 @@ function ModalRejeicao({
             style={{
               flex: 1, padding: "12px", borderRadius: 12, border: "none",
               background: motivo.trim() ? "#ef4444" : "rgba(239,68,68,0.2)",
-              color: motivo.trim() ? "white" : "rgba(255,255,255,0.3)",
+              color: motivo.trim() ? "white" : "#94a3b8",
               fontWeight: 900, fontSize: 14, cursor: motivo.trim() ? "pointer" : "not-allowed",
             }}>
             {salvando ? "Salvando..." : "Confirmar rejeição"}
@@ -75,8 +75,8 @@ function ModalRejeicao({
             onClick={onCancelar}
             style={{
               padding: "12px 18px", borderRadius: 12,
-              border: "1px solid rgba(255,255,255,0.12)", background: "transparent",
-              color: "rgba(255,255,255,0.5)", fontWeight: 700, fontSize: 14, cursor: "pointer",
+              border: "1px solid #E2E8F0", background: "transparent",
+              color: "#64748B", fontWeight: 700, fontSize: 14, cursor: "pointer",
             }}>
             Cancelar
           </button>
@@ -90,8 +90,8 @@ function ModalRejeicao({
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13 }}>
-      <span style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }}>{label}</span>
-      <span style={{ color: "white", fontWeight: 600, textAlign: "right", maxWidth: "60%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={value}>{value}</span>
+      <span style={{ color: "#94a3b8", flexShrink: 0 }}>{label}</span>
+      <span style={{ color: "#0F172A", fontWeight: 600, textAlign: "right", maxWidth: "60%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={value}>{value}</span>
     </div>
   )
 }
@@ -194,12 +194,12 @@ export default function MotoboyPage() {
       {aprovadoWhats && (
         <div style={{
           position: "fixed", bottom: 16, left: 16, right: 16, zIndex: 100,
-          background: "#1C1C1E", border: "1px solid rgba(34,197,94,0.3)",
+          background: "white", border: "1px solid rgba(34,197,94,0.3)",
           borderRadius: 16, padding: "16px", boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
           maxWidth: 360, margin: "0 auto",
         }}>
           <p style={{ color: "#22c55e", fontWeight: 900, fontSize: 14, marginBottom: 4 }}>Aprovado!</p>
-          <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, marginBottom: 12 }}>
+          <p style={{ color: "#64748B", fontSize: 12, marginBottom: 12 }}>
             Contrato gerado para {aprovadoWhats.nome}
           </p>
           <div style={{ display: "flex", gap: 8 }}>
@@ -218,7 +218,7 @@ export default function MotoboyPage() {
             <button onClick={() => setAprovadoWhats(null)} style={{
               padding: "8px 12px", borderRadius: 10,
               border: "1px solid rgba(255,255,255,0.1)", background: "transparent",
-              color: "rgba(255,255,255,0.35)", fontSize: 12, cursor: "pointer",
+              color: "#94a3b8", fontSize: 12, cursor: "pointer",
             }}>
               Depois
             </button>
@@ -229,15 +229,15 @@ export default function MotoboyPage() {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, gap: 10 }}>
         <div style={{ minWidth: 0 }}>
-          <h1 style={{ color: "white", fontWeight: 900, fontSize: 20 }}>Motoboys</h1>
-          <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 12, marginTop: 4 }}>
+          <h1 style={{ color: "#0F172A", fontWeight: 900, fontSize: 20 }}>Motoboys</h1>
+          <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 4 }}>
             {motoboys.length} cadastrados · {onlines.length} online agora
           </p>
         </div>
         <button onClick={load} style={{
           padding: "8px 12px", borderRadius: 10, flexShrink: 0,
-          border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)",
-          color: "rgba(255,255,255,0.4)", fontSize: 12, fontWeight: 700, cursor: "pointer",
+          border: "1px solid rgba(255,255,255,0.1)", background: "#FAFAFA",
+          color: "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer",
         }}>
           Atualizar
         </button>
@@ -261,7 +261,7 @@ export default function MotoboyPage() {
             <p style={{ color: "#f59e0b", fontWeight: 900, fontSize: 14 }}>
               {pendentes.length} cadastro{pendentes.length > 1 ? "s" : ""} aguardando aprovação
             </p>
-            <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, marginTop: 2 }}>
+            <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 2 }}>
               Clique para filtrar e revisar os cadastros pendentes
             </p>
           </div>
@@ -285,8 +285,8 @@ export default function MotoboyPage() {
             padding: "7px 14px", borderRadius: 999, border: "none",
             background: filtroStatus === f.key
               ? (f.key === "pendente" ? "#f59e0b" : "#f97316")
-              : "rgba(255,255,255,0.06)",
-            color: filtroStatus === f.key ? "white" : "rgba(255,255,255,0.4)",
+              : "#F9FAFB",
+            color: filtroStatus === f.key ? "white" : "#64748B",
             fontWeight: 700, fontSize: 12, cursor: "pointer",
           }}>
             {f.label}
@@ -298,9 +298,9 @@ export default function MotoboyPage() {
         {/* Lista */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
           {loading ? (
-            <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13 }}>Carregando...</p>
+            <p style={{ color: "#94a3b8", fontSize: 13 }}>Carregando...</p>
           ) : filtrados.length === 0 ? (
-            <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13 }}>Nenhum motoboy encontrado.</p>
+            <p style={{ color: "#94a3b8", fontSize: 13 }}>Nenhum motoboy encontrado.</p>
           ) : (
             filtrados.map(m => {
               const cor = STATUS_COLOR[m.status] ?? "#555"
@@ -310,7 +310,7 @@ export default function MotoboyPage() {
                   onClick={() => setSelecionado(m)}
                   style={{
                     background: selecionado?.id === m.id ? "rgba(249,115,22,0.06)" : "#111",
-                    border: `1px solid ${selecionado?.id === m.id ? "rgba(249,115,22,0.4)" : m.status === "pendente" ? "rgba(245,158,11,0.25)" : "rgba(255,255,255,0.07)"}`,
+                    border: `1px solid ${selecionado?.id === m.id ? "rgba(249,115,22,0.4)" : m.status === "pendente" ? "rgba(245,158,11,0.25)" : "#F8FAFC"}`,
                     borderRadius: 14, padding: "14px 16px", cursor: "pointer",
                     display: "flex", alignItems: "center", gap: 14, transition: "all 0.15s",
                   }}>
@@ -323,7 +323,7 @@ export default function MotoboyPage() {
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <p style={{ color: "white", fontWeight: 700, fontSize: 14 }}>{m.nome}</p>
+                      <p style={{ color: "#0F172A", fontWeight: 700, fontSize: 14 }}>{m.nome}</p>
                       <span style={{
                         padding: "2px 8px", borderRadius: 999, fontSize: 10, fontWeight: 800,
                         background: `${cor}18`, color: cor, border: `1px solid ${cor}35`,
@@ -336,11 +336,11 @@ export default function MotoboyPage() {
                         </span>
                       )}
                     </div>
-                    <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, marginTop: 3 }}>
+                    <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 3 }}>
                       {m.veiculo} · {m.placa} · {m.telefone}
                     </p>
                     {m.status === "pendente" && (
-                      <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 11, marginTop: 3 }}>
+                      <p style={{ color: "#CBD5E1", fontSize: 11, marginTop: 3 }}>
                         Cadastro em {new Date(m.criado_em).toLocaleDateString("pt-BR")}
                       </p>
                     )}
@@ -365,7 +365,7 @@ export default function MotoboyPage() {
         {selecionado && (
           <div style={{
             width: "100%", maxWidth: 400, flexShrink: 0, alignSelf: "flex-start", boxSizing: "border-box",
-            background: "#111", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 18, padding: "20px 16px",
+            background: "white", border: "1px solid #F8FAFC", borderRadius: 18, padding: "20px 16px",
             display: "flex", flexDirection: "column", gap: 16,
           }}>
             {/* Header */}
@@ -380,7 +380,7 @@ export default function MotoboyPage() {
                   <IconMotoboy color={STATUS_COLOR[selecionado.status]} size={18} />
                 </div>
                 <div>
-                  <p style={{ color: "white", fontWeight: 900, fontSize: 15 }}>{selecionado.nome}</p>
+                  <p style={{ color: "#0F172A", fontWeight: 900, fontSize: 15 }}>{selecionado.nome}</p>
                   <span style={{
                     fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 999,
                     background: `${STATUS_COLOR[selecionado.status] ?? "#555"}18`,
@@ -392,13 +392,13 @@ export default function MotoboyPage() {
                 </div>
               </div>
               <button onClick={() => setSelecionado(null)} style={{
-                background: "rgba(255,255,255,0.05)", border: "none", borderRadius: 8,
-                color: "rgba(255,255,255,0.4)", width: 28, height: 28, cursor: "pointer", fontSize: 14,
+                background: "#F9FAFB", border: "none", borderRadius: 8,
+                color: "#64748B", width: 28, height: 28, cursor: "pointer", fontSize: 14,
               }}>✕</button>
             </div>
 
             {/* Dados */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 0", borderTop: "1px solid #1e1e1e", borderBottom: "1px solid #1e1e1e" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 0", borderTop: "1px solid #F1F5F9", borderBottom: "1px solid #F1F5F9" }}>
               <Row label="Telefone" value={selecionado.telefone} />
               <Row label="Email"    value={selecionado.email} />
               <Row label="CPF"      value={selecionado.cpf} />
@@ -416,7 +416,7 @@ export default function MotoboyPage() {
             {selecionado.motivo_rejeicao && (
               <div style={{ background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 10, padding: "10px 12px" }}>
                 <p style={{ color: "rgba(239,68,68,0.7)", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 4 }}>Motivo da rejeição</p>
-                <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 12 }}>{selecionado.motivo_rejeicao}</p>
+                <p style={{ color: "#64748B", fontSize: 12 }}>{selecionado.motivo_rejeicao}</p>
               </div>
             )}
 
@@ -424,7 +424,7 @@ export default function MotoboyPage() {
             {selecionado.status === "aprovado" && selecionado.contrato_token && (
               <div style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)", borderRadius: 12, padding: "12px 14px" }}>
                 <p style={{ color: "#818cf8", fontSize: 11, fontWeight: 700, marginBottom: 8 }}>Link do contrato</p>
-                <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, marginBottom: 10, wordBreak: "break-all" }}>
+                <p style={{ color: "#94a3b8", fontSize: 11, marginBottom: 10, wordBreak: "break-all" }}>
                   /contrato/motoboy/{selecionado.contrato_token.slice(0, 16)}...
                 </p>
                 <div style={{ display: "flex", gap: 6 }}>
@@ -459,7 +459,7 @@ export default function MotoboyPage() {
                     disabled={salvando}
                     style={{
                       width: "100%", padding: "13px", borderRadius: 12, border: "none",
-                      background: "#f97316", color: "white", fontWeight: 900, fontSize: 14,
+                      background: "#f97316", color: "#0F172A", fontWeight: 900, fontSize: 14,
                       cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
                     }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -481,7 +481,7 @@ export default function MotoboyPage() {
               )}
 
               {selecionado.status === "aprovado" && (
-                <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, textAlign: "center" }}>
+                <p style={{ color: "#94a3b8", fontSize: 12, textAlign: "center" }}>
                   Aguardando assinatura do contrato pelo motoboy
                 </p>
               )}
@@ -492,7 +492,7 @@ export default function MotoboyPage() {
                   disabled={salvando}
                   style={{
                     width: "100%", padding: "13px", borderRadius: 12, border: "none",
-                    background: "#22c55e", color: "white", fontWeight: 900, fontSize: 14,
+                    background: "#22c55e", color: "#0F172A", fontWeight: 900, fontSize: 14,
                     cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
                   }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -522,7 +522,7 @@ export default function MotoboyPage() {
                     disabled={salvando}
                     style={{
                       width: "100%", padding: "13px", borderRadius: 12, border: "none",
-                      background: "#f97316", color: "white", fontWeight: 900, fontSize: 14,
+                      background: "#f97316", color: "#0F172A", fontWeight: 900, fontSize: 14,
                       cursor: "pointer",
                     }}>
                     {salvando ? "Reativando..." : "Reativar"}
@@ -532,8 +532,8 @@ export default function MotoboyPage() {
                     disabled={salvando}
                     style={{
                       width: "100%", padding: "12px", borderRadius: 12,
-                      border: "1px solid rgba(255,255,255,0.12)", background: "transparent",
-                      color: "rgba(255,255,255,0.5)", fontWeight: 700, fontSize: 12, cursor: "pointer",
+                      border: "1px solid #E2E8F0", background: "transparent",
+                      color: "#64748B", fontWeight: 700, fontSize: 12, cursor: "pointer",
                     }}>
                     Reapresentar contrato
                   </button>
@@ -545,8 +545,8 @@ export default function MotoboyPage() {
                 <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
                   <a href={`tel:${selecionado.telefone}`} style={{
                     flex: 1, padding: "9px", borderRadius: 10,
-                    border: "1px solid rgba(255,255,255,0.08)", background: "transparent",
-                    color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700,
+                    border: "1px solid #F1F5F9", background: "transparent",
+                    color: "#64748B", fontSize: 11, fontWeight: 700,
                     textDecoration: "none", textAlign: "center" as const,
                   }}>
                     Ligar

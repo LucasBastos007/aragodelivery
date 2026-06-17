@@ -62,7 +62,7 @@ function MapaDespachoInner({
       motoboys.forEach(mb => {
         if (!mb.lat || !mb.lng) return
         const isSOS     = alertas.some(a => a.motoboy_id === mb.id && a.status === "pendente")
-        const col       = isSOS ? "#ef4444" : mb.disponivel ? "#22c55e" : "rgba(255,255,255,0.3)"
+        const col       = isSOS ? "#ef4444" : mb.disponivel ? "#22c55e" : "#94a3b8"
         const icon = L.divIcon({
           className: "",
           html: `<div style="
@@ -179,40 +179,40 @@ function ModalDespacho({
       background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center",
     }}>
       <div style={{
-        background: "#1C1C1E", borderRadius: 20, padding: "20px 16px", width: "calc(100% - 32px)", maxWidth: 420,
+        background: "white", borderRadius: 20, padding: "20px 16px", width: "calc(100% - 32px)", maxWidth: 420,
         maxHeight: "85vh", display: "flex", flexDirection: "column",
         boxShadow: "0 8px 48px rgba(0,0,0,0.8)", boxSizing: "border-box",
       }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
           <div>
-            <p style={{ color: "white", fontWeight: 900, fontSize: 15 }}>Despachar pedido #{pedido.codigo}</p>
-            <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, marginTop: 2 }}>
+            <p style={{ color: "#0F172A", fontWeight: 900, fontSize: 15 }}>Despachar pedido #{pedido.codigo}</p>
+            <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 2 }}>
               {pedido.loja?.nome} → R$ {(pedido.taxa_entrega ?? 0).toFixed(2)}
             </p>
           </div>
           <button onClick={onClose} style={{
-            background: "rgba(255,255,255,0.06)", border: "none", borderRadius: 8,
-            color: "rgba(255,255,255,0.4)", width: 30, height: 30, cursor: "pointer", fontSize: 14,
+            background: "#F9FAFB", border: "none", borderRadius: 8,
+            color: "#64748B", width: 30, height: 30, cursor: "pointer", fontSize: 14,
           }}>✕</button>
         </div>
 
         {sucesso ? (
           <div style={{ textAlign: "center", padding: "20px 0" }}>
             <p style={{ color: "#22c55e", fontWeight: 900, fontSize: 18 }}>Despachado!</p>
-            <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 13, marginTop: 6 }}>Motoboy notificado com sucesso.</p>
+            <p style={{ color: "#94a3b8", fontSize: 13, marginTop: 6 }}>Motoboy notificado com sucesso.</p>
           </div>
         ) : candidatos.length === 0 ? (
           <div style={{ textAlign: "center", padding: "20px 0" }}>
-            <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 14 }}>Nenhum motoboy disponível no momento.</p>
+            <p style={{ color: "#94a3b8", fontSize: 14 }}>Nenhum motoboy disponível no momento.</p>
           </div>
         ) : (
           <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
-            <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 4 }}>
+            <p style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 4 }}>
               Motoboys disponíveis
             </p>
             {candidatos.map(mb => (
               <div key={mb.id} style={{
-                background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+                background: "#FAFAFA", border: "1px solid #F1F5F9",
                 borderRadius: 14, padding: "12px 14px", display: "flex", alignItems: "center", gap: 12,
               }}>
                 <div style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(34,197,94,0.12)", border: "1.5px solid rgba(34,197,94,0.35)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -221,8 +221,8 @@ function ModalDespacho({
                   </svg>
                 </div>
                 <div style={{ flex: 1 }}>
-                  <p style={{ color: "white", fontWeight: 700, fontSize: 14 }}>{mb.nome}</p>
-                  <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, marginTop: 2 }}>
+                  <p style={{ color: "#0F172A", fontWeight: 700, fontSize: 14 }}>{mb.nome}</p>
+                  <p style={{ color: "#94a3b8", fontSize: 11, marginTop: 2 }}>
                     {mb.dist < 999 ? `${mb.dist.toFixed(1)} km da loja` : "Distância desconhecida"}
                     {mb.veiculo && ` · ${mb.veiculo}`}
                   </p>
@@ -233,7 +233,7 @@ function ModalDespacho({
                   style={{
                     padding: "8px 16px", borderRadius: 10, border: "none",
                     background: despachando === mb.id ? "rgba(249,115,22,0.4)" : "#f97316",
-                    color: "white", fontWeight: 900, fontSize: 12, cursor: "pointer",
+                    color: "#0F172A", fontWeight: 900, fontSize: 12, cursor: "pointer",
                   }}>
                   {despachando === mb.id ? "..." : "Despachar"}
                 </button>
@@ -309,18 +309,18 @@ export default function AdminDespachoPage() {
   ]
 
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "#0a0a0a" }}>
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "#F1F5F9" }}>
       {/* Header */}
       <div style={{ padding: "16px 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 10 }}>
         <div style={{ minWidth: 0 }}>
-          <h1 style={{ color: "white", fontWeight: 900, fontSize: 18 }}>Despacho ao Vivo</h1>
-          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, marginTop: 3 }}>
+          <h1 style={{ color: "#0F172A", fontWeight: 900, fontSize: 18 }}>Despacho ao Vivo</h1>
+          <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 3 }}>
             {mbOnline.length} online · {pedidos.length} na fila
             {alertas.length > 0 && <span style={{ color: "#ef4444", fontWeight: 700 }}> · {alertas.length} SOS</span>}
           </p>
         </div>
         <button onClick={() => load()} style={{
-          background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
+          background: "#F9FAFB", border: "1px solid rgba(255,255,255,0.1)",
           borderRadius: 10, color: "rgba(255,255,255,0.6)", padding: "8px 12px",
           fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
         }}>
@@ -345,7 +345,7 @@ export default function AdminDespachoPage() {
       `}</style>
 
       {/* Mapa */}
-      <div style={{ flexShrink: 0, height: 300, background: "#111", borderBottom: "1px solid #1a1a1a" }}>
+      <div style={{ flexShrink: 0, height: 300, background: "white", borderBottom: "1px solid #1a1a1a" }}>
         {!loading && (
           <MapaDespacho
             motoboys={motoboys}
@@ -365,14 +365,14 @@ export default function AdminDespachoPage() {
             style={{
               flex: 1, padding: "12px 8px", background: "none",
               border: "none", borderBottom: aba === a.key ? "2px solid #f97316" : "2px solid transparent",
-              color: aba === a.key ? "#f97316" : "rgba(255,255,255,0.35)",
+              color: aba === a.key ? "#f97316" : "#94a3b8",
               fontWeight: 700, fontSize: 13, cursor: "pointer", transition: "all 0.15s",
               display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
             }}>
             {a.label}
             <span style={{
-              background: a.alert ? "#ef4444" : aba === a.key ? "rgba(249,115,22,0.2)" : "rgba(255,255,255,0.07)",
-              color: a.alert ? "white" : aba === a.key ? "#f97316" : "rgba(255,255,255,0.3)",
+              background: a.alert ? "#ef4444" : aba === a.key ? "rgba(249,115,22,0.2)" : "#F8FAFC",
+              color: a.alert ? "white" : aba === a.key ? "#f97316" : "#94a3b8",
               borderRadius: 999, padding: "1px 7px", fontSize: 11, fontWeight: 900,
               animation: a.alert ? "sosPulse 1.5s infinite" : "none",
             }}>
@@ -389,10 +389,10 @@ export default function AdminDespachoPage() {
         {aba === "pedidos" && (
           <>
             {loading ? (
-              <p style={{ color: "rgba(255,255,255,0.3)" }}>Carregando...</p>
+              <p style={{ color: "#94a3b8" }}>Carregando...</p>
             ) : pedidos.length === 0 ? (
               <div style={{ textAlign: "center", paddingTop: 32 }}>
-                <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 14 }}>Nenhum pedido na fila</p>
+                <p style={{ color: "#CBD5E1", fontSize: 14 }}>Nenhum pedido na fila</p>
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -402,7 +402,7 @@ export default function AdminDespachoPage() {
                     onClick={() => setPedidoSelecionado((s: any) => s?.id === p.id ? null : p)}
                     style={{
                       background: pedidoSelecionado?.id === p.id ? "rgba(249,115,22,0.08)" : "#111",
-                      border: `1px solid ${pedidoSelecionado?.id === p.id ? "rgba(249,115,22,0.4)" : "rgba(255,255,255,0.07)"}`,
+                      border: `1px solid ${pedidoSelecionado?.id === p.id ? "rgba(249,115,22,0.4)" : "#F8FAFC"}`,
                       borderRadius: 14, padding: "14px 16px", cursor: "pointer", transition: "all 0.15s",
                     }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
@@ -410,16 +410,16 @@ export default function AdminDespachoPage() {
                         <span style={{ padding: "2px 8px", borderRadius: 999, background: "rgba(249,115,22,0.15)", color: "#f97316", fontSize: 11, fontWeight: 800 }}>
                           #{p.codigo}
                         </span>
-                        <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 11 }}>
+                        <span style={{ color: "#CBD5E1", fontSize: 11 }}>
                           {new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                         </span>
                       </div>
                       <p style={{ color: "#f97316", fontWeight: 900, fontSize: 16 }}>R$ {(p.taxa_entrega ?? 0).toFixed(2)}</p>
                     </div>
-                    <p style={{ color: "white", fontWeight: 700, fontSize: 13, marginBottom: 3 }}>{p.loja?.nome ?? "—"}</p>
-                    <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 12 }}>{p.endereco_entrega}</p>
+                    <p style={{ color: "#0F172A", fontWeight: 700, fontSize: 13, marginBottom: 3 }}>{p.loja?.nome ?? "—"}</p>
+                    <p style={{ color: "#94a3b8", fontSize: 12 }}>{p.endereco_entrega}</p>
                     {p.itens?.length > 0 && (
-                      <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 11, marginTop: 4 }}>
+                      <p style={{ color: "#CBD5E1", fontSize: 11, marginTop: 4 }}>
                         {p.itens.map((i: any) => `${i.quantidade}× ${i.nome}`).join(" · ")}
                       </p>
                     )}
@@ -427,7 +427,7 @@ export default function AdminDespachoPage() {
                       onClick={e => { e.stopPropagation(); setPedidoSelecionado(p) }}
                       style={{
                         marginTop: 10, width: "100%", padding: "10px", borderRadius: 10, border: "none",
-                        background: "#f97316", color: "white", fontWeight: 900, fontSize: 13, cursor: "pointer",
+                        background: "#f97316", color: "#0F172A", fontWeight: 900, fontSize: 13, cursor: "pointer",
                         display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
                       }}>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -448,7 +448,7 @@ export default function AdminDespachoPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {mbOnline.length > 0 && (
               <>
-                <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 4 }}>
+                <p style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 4 }}>
                   Online ({mbOnline.length})
                 </p>
                 {mbOnline.map(mb => (
@@ -458,7 +458,7 @@ export default function AdminDespachoPage() {
             )}
             {mbOffline.length > 0 && (
               <>
-                <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 4, marginTop: 12 }}>
+                <p style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 4, marginTop: 12 }}>
                   Offline ({mbOffline.length})
                 </p>
                 {mbOffline.map(mb => (
@@ -467,7 +467,7 @@ export default function AdminDespachoPage() {
               </>
             )}
             {motoboys.length === 0 && !loading && (
-              <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 14, textAlign: "center", paddingTop: 32 }}>Nenhum motoboy cadastrado</p>
+              <p style={{ color: "#CBD5E1", fontSize: 14, textAlign: "center", paddingTop: 32 }}>Nenhum motoboy cadastrado</p>
             )}
           </div>
         )}
@@ -482,7 +482,7 @@ export default function AdminDespachoPage() {
                     <polyline points="20 6 9 17 4 12"/>
                   </svg>
                 </div>
-                <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 14 }}>Nenhum SOS ativo</p>
+                <p style={{ color: "#CBD5E1", fontSize: 14 }}>Nenhum SOS ativo</p>
               </div>
             ) : (
               alertas.map(a => (
@@ -500,7 +500,7 @@ export default function AdminDespachoPage() {
                     </div>
                     <div style={{ flex: 1 }}>
                       <p style={{ color: "#ef4444", fontWeight: 900, fontSize: 15 }}>SOS — {a.motoboy?.nome ?? "Motoboy"}</p>
-                      <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, marginTop: 2 }}>
+                      <p style={{ color: "#94a3b8", fontSize: 11, marginTop: 2 }}>
                         {new Date(a.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                         {a.lat && a.lng && ` · ${a.lat.toFixed(5)}, ${a.lng.toFixed(5)}`}
                       </p>
@@ -566,7 +566,7 @@ function MotoboyStat({ mb, online, alertas }: { mb: any; online: boolean; alerta
 
   return (
     <div style={{
-      background: "#111", border: `1px solid ${isSOS ? "rgba(239,68,68,0.4)" : "rgba(255,255,255,0.07)"}`,
+      background: "white", border: `1px solid ${isSOS ? "rgba(239,68,68,0.4)" : "#F8FAFC"}`,
       borderRadius: 12, padding: "11px 14px", display: "flex", alignItems: "center", gap: 10,
     }}>
       <div style={{
@@ -579,15 +579,15 @@ function MotoboyStat({ mb, online, alertas }: { mb: any; online: boolean; alerta
           {mb.nome}
           {isSOS && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 900 }}>SOS</span>}
         </p>
-        <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, marginTop: 2 }}>
+        <p style={{ color: "#94a3b8", fontSize: 11, marginTop: 2 }}>
           {mb.veiculo ?? "—"}
           {minsAgo !== null && ` · ${minsAgo < 1 ? "agora" : `${minsAgo}m atrás`}`}
         </p>
       </div>
       <div style={{
         padding: "2px 8px", borderRadius: 999, fontSize: 10, fontWeight: 800,
-        background: online ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.05)",
-        color: online ? "#22c55e" : "rgba(255,255,255,0.2)",
+        background: online ? "rgba(34,197,94,0.12)" : "#F9FAFB",
+        color: online ? "#22c55e" : "#CBD5E1",
       }}>
         {online ? "Online" : "Offline"}
       </div>

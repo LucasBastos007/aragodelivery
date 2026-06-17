@@ -64,8 +64,8 @@ export default function PedidosPage() {
     <div className="p-4 sm:p-8">
       <div className="flex items-center justify-between mb-4 sm:mb-6">
         <div style={{ minWidth: 0 }}>
-          <h1 className="text-2xl font-black text-white">Pedidos</h1>
-          <p className="text-sm mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
+          <h1 style={{ color: "#0F172A", fontSize: 22, fontWeight: 900 }}>Pedidos</h1>
+          <p className="text-sm mt-0.5" style={{ color: "#94a3b8" }}>
             Hoje: <span className="font-bold text-green-400">
               R$ {totalHoje.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
             </span>
@@ -85,7 +85,7 @@ export default function PedidosPage() {
             }}>
             {s === "todos" ? "Todos" : STATUS_LABEL[s as StatusPedido]}
             {s !== "todos" && (
-              <span style={{ color: "rgba(255,255,255,0.25)" }}>
+              <span style={{ color: "#CBD5E1" }}>
                 {" "}({pedidos.filter(p => p.status === s).length})
               </span>
             )}
@@ -95,27 +95,27 @@ export default function PedidosPage() {
 
       <div className="flex flex-col gap-3">
         {loading ? (
-          <p className="text-white/30 text-sm">Carregando...</p>
+          <p style={{ color: "#94a3b8", fontSize: 13 }}>Carregando...</p>
         ) : filtrados.length === 0 ? (
-          <p className="text-white/30 text-sm">Nenhum pedido encontrado.</p>
+          <p style={{ color: "#94a3b8", fontSize: 13 }}>Nenhum pedido encontrado.</p>
         ) : (
           filtrados.map(p => (
             <div key={p.id} className="card p-3 sm:p-4 flex items-start gap-3">
               <div className="flex-shrink-0 text-center" style={{ minWidth: 48 }}>
-                <p className="text-xs font-black text-white/50">#{p.codigo}</p>
-                <p className="text-[10px] mt-0.5 text-white/20">
+                <p className="text-xs font-black ">#{p.codigo}</p>
+                <p className="text-[10px] mt-0.5 ">
                   {new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                 </p>
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                   <span className={`badge ${STATUS_BADGE[p.status]}`}>{STATUS_LABEL[p.status]}</span>
-                  <span className="text-xs text-white/50 truncate">{(p.loja as any)?.nome ?? "—"}</span>
+                  <span className="text-xs  truncate">{(p.loja as any)?.nome ?? "—"}</span>
                 </div>
-                <p className="text-xs text-white/30 truncate">
+                <p className="text-xs  truncate">
                   {(p.motoboy as any)?.nome ?? "Sem motoboy"}
                 </p>
-                <p className="text-xs text-white/20 truncate">
+                <p className="text-xs  truncate">
                   {p.endereco_entrega}
                 </p>
               </div>
@@ -123,7 +123,7 @@ export default function PedidosPage() {
                 <p className="font-black text-white text-sm">
                   R$ {p.total.toFixed(2)}
                 </p>
-                <p className="text-[10px] mt-0.5 text-white/25">
+                <p className="text-[10px] mt-0.5 ">
                   {PAGAMENTO_ICON[p.forma_pagamento]}
                 </p>
               </div>
