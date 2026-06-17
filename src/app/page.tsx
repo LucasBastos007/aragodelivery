@@ -34,10 +34,11 @@ const CAT_COLORS: Record<string, { bg: string; text: string; accent: string }> =
 const CATEGORIAS: CategoriaLoja[] = ["Restaurante", "Mercadinho", "Farmácia", "Outros"]
 
 type HomeCatAction = "filter" | "busca" | "breve"
-const CATS_HOME: { label: string; icon: React.ReactNode; bg: string; cat: CategoriaLoja | null; badge: string | null; action: HomeCatAction }[] = [
+const CATS_HOME: { label: string; icon: React.ReactNode; img?: string; bg: string; cat: CategoriaLoja | null; badge: string | null; action: HomeCatAction }[] = [
   {
     label: "Restaurantes",
     bg: "linear-gradient(145deg,#FF5722,#E64A19)",
+    img: "/icons/restaurantes.png",
     cat: "Restaurante", badge: null, action: "filter",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -77,6 +78,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; bg: string; cat: Catego
   {
     label: "Mercados",
     bg: "linear-gradient(145deg,#E53935,#C62828)",
+    img: "/icons/mercados.png",
     cat: "Mercadinho", badge: null, action: "filter",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -107,6 +109,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; bg: string; cat: Catego
   {
     label: "Farmácias",
     bg: "linear-gradient(145deg,#1E88E5,#1565C0)",
+    img: "/icons/farmacias.png",
     cat: "Farmácia", badge: null, action: "filter",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -133,6 +136,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; bg: string; cat: Catego
   {
     label: "Gourmet",
     bg: "linear-gradient(145deg,#4E342E,#6D4C41)",
+    img: "/icons/gourmet.png",
     cat: "Restaurante", badge: "Novo", action: "filter",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -168,6 +172,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; bg: string; cat: Catego
   {
     label: "Pet Shops",
     bg: "linear-gradient(145deg,#AD1457,#E91E63)",
+    img: "/icons/petshops.png",
     cat: "Outros", badge: null, action: "filter",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -195,6 +200,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; bg: string; cat: Catego
   {
     label: "Bebidas",
     bg: "linear-gradient(145deg,#0288D1,#0277BD)",
+    img: "/icons/bebidas.png",
     cat: "Outros", badge: null, action: "filter",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -230,6 +236,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; bg: string; cat: Catego
   {
     label: "Massas",
     bg: "linear-gradient(145deg,#F57F17,#E65100)",
+    img: "/icons/massas.png",
     cat: "Restaurante", badge: null, action: "filter",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -261,6 +268,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; bg: string; cat: Catego
   {
     label: "Lanches",
     bg: "linear-gradient(145deg,#6D4C41,#4E342E)",
+    img: "/icons/lanches.png",
     cat: "Restaurante", badge: null, action: "filter",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -293,6 +301,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; bg: string; cat: Catego
   {
     label: "Pizzarias",
     bg: "linear-gradient(145deg,#C62828,#B71C1C)",
+    img: "/icons/pizzarias.png",
     cat: "Restaurante", badge: null, action: "filter",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -333,6 +342,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; bg: string; cat: Catego
   {
     label: "Ver mais",
     bg: "linear-gradient(145deg,#546E7A,#78909C)",
+    img: "/icons/ver-mais.png",
     cat: null, badge: null, action: "busca",
     icon: (
       <svg width="28" height="28" viewBox="0 0 28 28" fill="white" xmlns="http://www.w3.org/2000/svg" opacity={0.9}>
@@ -936,7 +946,17 @@ export default function Home() {
                         outline: isActive ? "2.5px solid rgba(255,255,255,0.8)" : "none",
                         outlineOffset: 1,
                       }}>
-                        {c.icon}
+                        {c.img
+                          ? <img
+                              src={c.img}
+                              alt={c.label}
+                              width={46}
+                              height={46}
+                              style={{ objectFit: "contain", display: "block" }}
+                              onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; (e.currentTarget.nextSibling as HTMLElement | null)?.style.setProperty("display", "flex") }}
+                            />
+                          : null}
+                        <span style={{ display: c.img ? "none" : "flex" }}>{c.icon}</span>
                       </div>
                       {c.badge && (
                         <span style={{
