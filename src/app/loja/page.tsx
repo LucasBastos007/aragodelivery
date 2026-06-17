@@ -232,8 +232,8 @@ export default function LojaDashboard() {
     await supabase.from("pedidos").update({ status: proximo }).eq("id", id)
     enviarPush(id, proximo)
 
-    // Notifica motoboy disponível quando o pedido fica pronto
-    if (statusAtual === "preparando") {
+    // Chama motoboy ao iniciar preparo para minimizar espera
+    if (statusAtual === "aceito") {
       fetch("/api/escalada", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

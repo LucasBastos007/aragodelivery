@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
   if (!pedido) return NextResponse.json({ error: "pedido não encontrado" }, { status: 404 })
 
   // Só escalada se o pedido está em aguardando_aceite ou pronto
-  if (!["aguardando_aceite", "pronto"].includes(pedido.status)) {
+  if (!["aguardando_aceite", "pronto", "preparando"].includes(pedido.status)) {
     return NextResponse.json({ ok: true, msg: "status não elegível para escalada" })
   }
 
