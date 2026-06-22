@@ -1,185 +1,296 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 
+// ─── Slide data ───────────────────────────────────────────────────────────────
 const SLIDES = [
   {
-    title: "O delivery chegou em Aragoiânia!",
+    title: "O delivery chegou\nem Aragoiânia!",
     sub: "Peça da sua loja favorita com poucos cliques e receba em casa rapidinho.",
-    color: "#DC2626",
-    bg: "rgba(220,38,38,0.08)",
+    grad: ["#c2410c", "#dc2626", "#991b1b"],
+    accent: "#ff6b35",
+    particle: "#ff9f7a",
   },
   {
-    title: "Acompanhe em tempo real",
-    sub: "Veja cada etapa do seu pedido — da loja até a sua porta. Com rastreamento ao vivo.",
-    color: "#3b82f6",
-    bg: "rgba(59,130,246,0.08)",
+    title: "Acompanhe\nem tempo real",
+    sub: "Veja cada etapa do seu pedido — da loja até a sua porta, com rastreamento ao vivo.",
+    grad: ["#1d4ed8", "#2563eb", "#1e3a8a"],
+    accent: "#60a5fa",
+    particle: "#93c5fd",
   },
   {
-    title: "Rápido e fácil",
-    sub: "Receba em casa ou retire na loja. Pague como preferir: PIX, cartão, Apple Pay ou Google Pay.",
-    color: "#22c55e",
-    bg: "rgba(34,197,94,0.08)",
+    title: "Rápido, fácil\ne seguro",
+    sub: "Pague como preferir: PIX, cartão, Apple Pay ou Google Pay. Receba em casa ou retire na loja.",
+    grad: ["#059669", "#10b981", "#065f46"],
+    accent: "#34d399",
+    particle: "#6ee7b7",
   },
 ]
 
-function IllustrationScooter() {
+// ─── Illustrations ────────────────────────────────────────────────────────────
+function IlluDelivery({ accent }: { accent: string }) {
   return (
-    <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Sombra */}
-      <ellipse cx="36" cy="65" rx="22" ry="4" fill="rgba(0,0,0,0.10)"/>
-      {/* Caixa de entrega */}
-      <rect x="38" y="20" width="20" height="16" rx="3" fill="#DC2626"/>
-      <rect x="38" y="20" width="20" height="16" rx="3" stroke="#b91c1c" strokeWidth="1"/>
-      <line x1="48" y1="20" x2="48" y2="36" stroke="#b91c1c" strokeWidth="1.5"/>
-      <rect x="44" y="24" width="8" height="5" rx="1.5" fill="white" opacity="0.3"/>
-      {/* Corpo da moto */}
-      <path d="M18 42 Q22 30 38 33 L58 33 Q62 33 62 38 L62 44 Q62 48 58 48 L20 48 Q16 48 16 44 Z" fill="#1f2937"/>
-      {/* Selim */}
-      <rect x="30" y="28" width="18" height="7" rx="3.5" fill="#374151"/>
-      {/* Guidão */}
-      <path d="M54 28 L54 34" stroke="#6b7280" strokeWidth="3" strokeLinecap="round"/>
-      <path d="M50 28 L58 28" stroke="#6b7280" strokeWidth="2.5" strokeLinecap="round"/>
-      {/* Rodas */}
-      <circle cx="22" cy="52" r="10" fill="#1f2937" stroke="#374151" strokeWidth="2"/>
-      <circle cx="22" cy="52" r="5" fill="#4b5563"/>
-      <circle cx="22" cy="52" r="2" fill="#9ca3af"/>
-      <circle cx="56" cy="52" r="10" fill="#1f2937" stroke="#374151" strokeWidth="2"/>
-      <circle cx="56" cy="52" r="5" fill="#4b5563"/>
-      <circle cx="56" cy="52" r="2" fill="#9ca3af"/>
-      {/* Escapamento / detalhe frente */}
-      <path d="M16 44 L10 46" stroke="#6b7280" strokeWidth="2" strokeLinecap="round"/>
+    <svg width="260" height="200" viewBox="0 0 260 200" fill="none">
+      <style>{`
+        @keyframes drive { 0%,100%{transform:translateX(0)} 50%{transform:translateX(6px)} }
+        @keyframes wheel { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        @keyframes speedLine { 0%{opacity:0;transform:translateX(10px)} 50%{opacity:1} 100%{opacity:0;transform:translateX(-20px)} }
+        @keyframes bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+        @keyframes pulse { 0%,100%{opacity:0.3;transform:scale(1)} 50%{opacity:0.7;transform:scale(1.1)} }
+      `}</style>
+
+      {/* Fundo estrada */}
+      <rect x="0" y="155" width="260" height="8" rx="2" fill="rgba(255,255,255,0.15)"/>
+      <rect x="20" y="157" width="30" height="3" rx="1" fill="rgba(255,255,255,0.4)"/>
+      <rect x="70" y="157" width="30" height="3" rx="1" fill="rgba(255,255,255,0.4)"/>
+      <rect x="120" y="157" width="30" height="3" rx="1" fill="rgba(255,255,255,0.4)"/>
+      <rect x="170" y="157" width="30" height="3" rx="1" fill="rgba(255,255,255,0.4)"/>
+      <rect x="220" y="157" width="30" height="3" rx="1" fill="rgba(255,255,255,0.4)"/>
+
+      {/* Sombra moto */}
+      <ellipse cx="140" cy="160" rx="55" ry="6" fill="rgba(0,0,0,0.25)" style={{animation:"pulse 1.4s ease-in-out infinite"}}/>
+
+      {/* Grupo moto - animação */}
+      <g style={{animation:"drive 1.4s ease-in-out infinite", transformOrigin:"140px 140px"}}>
+        {/* Caixa de entrega */}
+        <rect x="110" y="72" width="44" height="34" rx="6" fill="white" opacity="0.95"/>
+        <rect x="110" y="72" width="44" height="34" rx="6" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5"/>
+        <line x1="132" y1="72" x2="132" y2="106" stroke="rgba(0,0,0,0.15)" strokeWidth="1.5"/>
+        <rect x="122" y="79" width="20" height="10" rx="3" fill={accent} opacity="0.8"/>
+        <text x="132" y="89" textAnchor="middle" fontSize="7" fontWeight="800" fill="white">CHEGÔ</text>
+        {/* Alça caixa */}
+        <path d="M122 72 Q132 66 142 72" stroke="rgba(255,255,255,0.6)" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+
+        {/* Corpo moto */}
+        <path d="M86 118 Q95 100 115 103 L155 103 Q172 103 174 112 L174 130 Q174 138 164 138 L96 138 Q86 138 86 130 Z" fill="rgba(255,255,255,0.95)"/>
+        {/* Detalhe cor no corpo */}
+        <path d="M100 118 Q108 108 120 108 L150 108 Q162 108 164 116 L164 125 Q164 130 158 130 L106 130 Q100 130 100 124 Z" fill={accent} opacity="0.3"/>
+
+        {/* Selim */}
+        <rect x="118" y="94" width="36" height="12" rx="6" fill="rgba(255,255,255,0.9)"/>
+        {/* Guidão */}
+        <path d="M162 90 L162 104" stroke="rgba(255,255,255,0.8)" strokeWidth="4" strokeLinecap="round"/>
+        <path d="M156 90 L168 90" stroke="rgba(255,255,255,0.7)" strokeWidth="3" strokeLinecap="round"/>
+
+        {/* Motoboy */}
+        <circle cx="145" cy="82" r="10" fill="rgba(255,255,255,0.95)"/>
+        {/* Capacete */}
+        <path d="M136 80 Q136 68 145 68 Q154 68 154 80 Z" fill={accent}/>
+        <path d="M136 80 Q138 84 145 84 Q152 84 154 80" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" fill="none"/>
+        {/* Visor */}
+        <path d="M138 76 Q145 72 152 76" stroke="rgba(255,255,255,0.8)" strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+
+        {/* Roda traseira */}
+        <g style={{transformOrigin:"104px 145px", animation:"wheel 0.5s linear infinite"}}>
+          <circle cx="104" cy="145" r="18" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.9)" strokeWidth="3"/>
+          <circle cx="104" cy="145" r="10" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.6)" strokeWidth="2"/>
+          <circle cx="104" cy="145" r="3" fill="rgba(255,255,255,0.9)"/>
+          <line x1="104" y1="132" x2="104" y2="158" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5"/>
+          <line x1="91" y1="145" x2="117" y2="145" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5"/>
+        </g>
+        {/* Roda dianteira */}
+        <g style={{transformOrigin:"168px 145px", animation:"wheel 0.5s linear infinite"}}>
+          <circle cx="168" cy="145" r="18" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.9)" strokeWidth="3"/>
+          <circle cx="168" cy="145" r="10" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.6)" strokeWidth="2"/>
+          <circle cx="168" cy="145" r="3" fill="rgba(255,255,255,0.9)"/>
+          <line x1="168" y1="132" x2="168" y2="158" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5"/>
+          <line x1="155" y1="145" x2="181" y2="145" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5"/>
+        </g>
+      </g>
+
       {/* Linhas de velocidade */}
-      <line x1="4" y1="36" x2="14" y2="36" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" opacity="0.7"/>
-      <line x1="2" y1="42" x2="12" y2="42" stroke="#DC2626" strokeWidth="1.5" strokeLinecap="round" opacity="0.5"/>
-      <line x1="5" y1="48" x2="13" y2="48" stroke="#DC2626" strokeWidth="1" strokeLinecap="round" opacity="0.35"/>
+      {[0,1,2,3].map(i => (
+        <line key={i} x1={60 - i*14} y1={100 + i*12} x2={28 - i*14} y2={100 + i*12}
+          stroke="rgba(255,255,255,0.6)" strokeWidth={2.5 - i*0.4} strokeLinecap="round"
+          style={{animation:`speedLine ${0.9 + i*0.15}s ease-in-out ${i*0.1}s infinite`}}/>
+      ))}
     </svg>
   )
 }
 
-function IllustrationTracking() {
+function IlluTracking({ accent }: { accent: string }) {
   return (
-    <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg width="220" height="220" viewBox="0 0 220 220" fill="none">
+      <style>{`
+        @keyframes ping {0%{opacity:0.8;transform:scale(1)} 100%{opacity:0;transform:scale(2.5)}}
+        @keyframes dash {0%{stroke-dashoffset:80} 100%{stroke-dashoffset:0}}
+        @keyframes glow {0%,100%{opacity:0.4} 50%{opacity:1}}
+        @keyframes scoot {0%,100%{transform:translateX(0) translateY(0)} 50%{transform:translateX(6px) translateY(-3px)}}
+      `}</style>
+
       {/* Telefone */}
-      <rect x="14" y="6" width="34" height="58" rx="7" fill="#1e3a5f"/>
-      <rect x="16" y="8" width="30" height="54" rx="6" fill="#1d4ed8"/>
-      {/* Tela mapa */}
-      <rect x="18" y="12" width="26" height="38" rx="3" fill="#dbeafe"/>
-      {/* Ruas do mapa */}
-      <line x1="18" y1="28" x2="44" y2="28" stroke="#93c5fd" strokeWidth="2"/>
-      <line x1="30" y1="12" x2="30" y2="50" stroke="#93c5fd" strokeWidth="2"/>
-      <rect x="20" y="15" width="8" height="6" rx="1" fill="#bfdbfe"/>
-      <rect x="33" y="30" width="9" height="7" rx="1" fill="#bfdbfe"/>
-      <rect x="20" y="32" width="7" height="8" rx="1" fill="#bfdbfe"/>
+      <rect x="55" y="20" width="110" height="175" rx="18" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.4)" strokeWidth="2"/>
+      <rect x="60" y="26" width="100" height="163" rx="14" fill="rgba(255,255,255,0.12)"/>
+
+      {/* Mapa */}
+      <rect x="64" y="32" width="92" height="118" rx="10" fill="rgba(255,255,255,0.9)"/>
+      {/* Grid mapa */}
+      {[50,66,82,98,114].map(y => <line key={y} x1="64" y1={y} x2="156" y2={y} stroke={accent} strokeWidth="0.8" opacity="0.3"/>)}
+      {[80,96,112,128,144].map(x => <line key={x} x1={x} y1="32" x2={x} y2="150" stroke={accent} strokeWidth="0.8" opacity="0.3"/>)}
+
+      {/* Blocos de quarteirão */}
+      {[[68,36,22,18],[96,36,18,18],[68,58,18,22],[102,58,22,18],[68,84,14,16],[90,84,20,16],[116,84,16,16],[68,104,28,14],[102,104,18,14],[124,60,22,22]].map(([x,y,w,h],i) => (
+        <rect key={i} x={x} y={y} width={w} height={h} rx="3" fill={accent} opacity="0.18"/>
+      ))}
+
       {/* Rota tracejada */}
-      <path d="M24 44 Q24 36 30 32 Q36 28 38 22" stroke="#3b82f6" strokeWidth="2" strokeDasharray="3 2" strokeLinecap="round"/>
-      {/* Pin destino */}
-      <path d="M38 22 C38 18 44 18 44 22 C44 26 38 30 38 30 C38 30 32 26 32 22 C32 18 38 18 38 22Z" fill="#DC2626"/>
-      <circle cx="38" cy="22" r="3" fill="white"/>
-      {/* Ponto de origem */}
-      <circle cx="24" cy="44" r="4" fill="#22c55e" stroke="white" strokeWidth="2"/>
-      {/* Botão home */}
-      <rect x="28" y="54" width="6" height="4" rx="2" fill="#93c5fd"/>
-      {/* Sinal de rastreamento ao redor */}
-      <path d="M52 24 Q58 30 52 36" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" fill="none" opacity="0.7"/>
-      <path d="M56 20 Q65 30 56 40" stroke="#3b82f6" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.4"/>
+      <path d="M88 138 Q88 118 100 110 Q112 102 112 86 Q112 70 108 60"
+        stroke={accent} strokeWidth="3" strokeDasharray="6 4" strokeLinecap="round" fill="none"
+        style={{animation:"dash 2s linear infinite"}}/>
+
+      {/* Pin destino (animado) */}
+      <circle cx="108" cy="55" r="18" fill={accent} opacity="0.2" style={{animation:"ping 1.5s ease-out infinite"}}/>
+      <path d="M108 40 C108 34 116 34 116 40 C116 48 108 56 108 56 C108 56 100 48 100 40 C100 34 108 34 108 40Z" fill="white"/>
+      <circle cx="108" cy="40" r="4" fill={accent}/>
+
+      {/* Motoboy no mapa */}
+      <g style={{animation:"scoot 1.5s ease-in-out infinite", transformOrigin:"88px 138px"}}>
+        <circle cx="88" cy="138" r="8" fill={accent}/>
+        <circle cx="88" cy="138" r="12" fill={accent} opacity="0.25" style={{animation:"ping 1.5s ease-out infinite"}}/>
+        <text x="88" y="141" textAnchor="middle" fontSize="8">🛵</text>
+      </g>
+
+      {/* Barra inferior do telefone */}
+      <rect x="64" y="155" width="92" height="28" rx="4" fill="rgba(255,255,255,0.15)"/>
+      <rect x="72" y="160" width="40" height="6" rx="3" fill="rgba(255,255,255,0.5)"/>
+      <rect x="72" y="170" width="28" height="4" rx="2" fill="rgba(255,255,255,0.3)"/>
+      <rect x="120" y="159" width="30" height="16" rx="5" fill={accent} opacity="0.8"/>
+      <text x="135" y="170" textAnchor="middle" fontSize="7" fontWeight="800" fill="white">LIVE</text>
+
+      {/* Notch */}
+      <rect x="92" y="21" width="36" height="8" rx="4" fill="rgba(0,0,0,0.3)"/>
+
+      {/* Ondas de sinal */}
+      {[1,2,3].map(i => (
+        <path key={i} d={`M${165+i*8} ${90-i*10} Q${170+i*8} 110 ${165+i*8} ${130+i*10}`}
+          stroke="rgba(255,255,255,0.5)" strokeWidth="2" fill="none" strokeLinecap="round"
+          style={{animation:`glow 1.5s ease-in-out ${i*0.3}s infinite`}}/>
+      ))}
     </svg>
   )
 }
 
-function IllustrationFast() {
+function IlluPayment({ accent }: { accent: string }) {
   return (
-    <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-      {/* Sombra */}
-      <ellipse cx="36" cy="67" rx="20" ry="3.5" fill="rgba(0,0,0,0.08)"/>
-      {/* Cartão de trás */}
-      <rect x="20" y="22" width="40" height="26" rx="5" fill="#4ade80" transform="rotate(-5 20 22)"/>
-      {/* Cartão do meio */}
-      <rect x="16" y="26" width="40" height="26" rx="5" fill="#16a34a" transform="rotate(2 16 26)"/>
-      {/* Cartão da frente */}
-      <rect x="12" y="30" width="42" height="28" rx="6" fill="#15803d"/>
-      <rect x="12" y="30" width="42" height="28" rx="6" stroke="#166534" strokeWidth="1"/>
-      {/* Chip */}
-      <rect x="18" y="38" width="10" height="8" rx="2" fill="#4ade80" opacity="0.7"/>
-      <line x1="21" y1="38" x2="21" y2="46" stroke="#166534" strokeWidth="0.8" opacity="0.5"/>
-      <line x1="24" y1="38" x2="24" y2="46" stroke="#166534" strokeWidth="0.8" opacity="0.5"/>
-      <line x1="18" y1="42" x2="28" y2="42" stroke="#166534" strokeWidth="0.8" opacity="0.5"/>
-      {/* Número mascarado */}
-      <circle cx="32" cy="51" r="2" fill="#4ade80" opacity="0.5"/>
-      <circle cx="38" cy="51" r="2" fill="#4ade80" opacity="0.5"/>
-      <circle cx="44" cy="51" r="2" fill="#4ade80" opacity="0.5"/>
-      <rect x="47" y="49" width="5" height="4" rx="1" fill="#4ade80" opacity="0.5"/>
-      {/* Símbolo check de confirmação */}
-      <circle cx="54" cy="20" r="12" fill="#22c55e"/>
-      <circle cx="54" cy="20" r="12" stroke="white" strokeWidth="2"/>
-      <path d="M48 20 L52 24 L60 14" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-      {/* PIX icon hint */}
-      <path d="M19 20 L23 16 L27 20 L23 24 Z" fill="#22c55e" opacity="0.6"/>
+    <svg width="240" height="200" viewBox="0 0 240 200" fill="none">
+      <style>{`
+        @keyframes cardFan {0%,100%{transform:rotate(0deg) translateY(0)} 50%{transform:rotate(-2deg) translateY(-4px)}}
+        @keyframes checkPop {0%{transform:scale(0);opacity:0} 60%{transform:scale(1.2)} 100%{transform:scale(1);opacity:1}}
+        @keyframes coinFloat {0%,100%{transform:translateY(0) rotate(0deg)} 50%{transform:translateY(-8px) rotate(10deg)}}
+      `}</style>
+
+      {/* Cartão 3 - atrás */}
+      <g style={{transformOrigin:"120px 120px", animation:"cardFan 3s ease-in-out 0.4s infinite"}}>
+        <rect x="40" y="85" width="160" height="100" rx="14" fill="rgba(255,255,255,0.2)" transform="rotate(-8 40 85)"/>
+      </g>
+      {/* Cartão 2 - meio */}
+      <g style={{transformOrigin:"120px 120px", animation:"cardFan 3s ease-in-out 0.2s infinite"}}>
+        <rect x="44" y="80" width="160" height="100" rx="14" fill="rgba(255,255,255,0.35)" transform="rotate(-3 44 80)"/>
+      </g>
+      {/* Cartão 1 - frente */}
+      <g style={{transformOrigin:"120px 120px", animation:"cardFan 3s ease-in-out infinite"}}>
+        <rect x="36" y="75" width="168" height="105" rx="14" fill="rgba(255,255,255,0.95)"/>
+        <rect x="36" y="96" width="168" height="18" fill={accent} opacity="0.2"/>
+        {/* Chip */}
+        <rect x="52" y="102" width="28" height="20" rx="4" fill={accent} opacity="0.7"/>
+        <line x1="60" y1="102" x2="60" y2="122" stroke="rgba(255,255,255,0.6)" strokeWidth="1"/>
+        <line x1="68" y1="102" x2="68" y2="122" stroke="rgba(255,255,255,0.6)" strokeWidth="1"/>
+        <line x1="52" y1="112" x2="80" y2="112" stroke="rgba(255,255,255,0.6)" strokeWidth="1"/>
+        {/* Número */}
+        {[0,1,2,3].map(i => (
+          <g key={i}>
+            {i < 3
+              ? [0,1,2,3].map(j => <circle key={j} cx={54 + i*40 + j*8} cy="148" r="3" fill={accent} opacity="0.5"/>)
+              : <text key="num" x={54 + i*40} y="152" fontSize="11" fontWeight="700" fill={accent} opacity="0.8">4231</text>
+            }
+          </g>
+        ))}
+        {/* Contactless */}
+        <path d="M155 86 Q162 90 162 96 Q162 102 155 106" stroke={accent} strokeWidth="2" fill="none" strokeLinecap="round" opacity="0.8"/>
+        <path d="M160 83 Q170 90 170 96 Q170 102 160 109" stroke={accent} strokeWidth="2" fill="none" strokeLinecap="round" opacity="0.5"/>
+        {/* Logo Visa-like */}
+        <text x="178" y="170" fontSize="10" fontWeight="900" fill={accent} textAnchor="end" opacity="0.6">VISA</text>
+      </g>
+
+      {/* Check de confirmação */}
+      <g style={{animation:"checkPop 0.6s cubic-bezier(0.34,1.56,0.64,1) 0.5s both"}}>
+        <circle cx="172" cy="55" r="28" fill="rgba(255,255,255,0.95)"/>
+        <circle cx="172" cy="55" r="24" fill={accent} opacity="0.15"/>
+        <path d="M160 55 L168 63 L184 44" stroke={accent} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"/>
+      </g>
+
+      {/* PIX icon */}
+      <g style={{animation:"coinFloat 2.5s ease-in-out infinite"}}>
+        <circle cx="50" cy="40" r="20" fill="rgba(255,255,255,0.9)"/>
+        <text x="50" y="47" textAnchor="middle" fontSize="18">💠</text>
+      </g>
+
+      {/* Apple Pay */}
+      <g style={{animation:"coinFloat 2.5s ease-in-out 0.8s infinite"}}>
+        <rect x="180" y="20" width="50" height="28" rx="8" fill="rgba(255,255,255,0.9)"/>
+        <text x="205" y="38" textAnchor="middle" fontSize="10" fontWeight="700" fill="#1D1D1F"> Pay</text>
+      </g>
     </svg>
   )
 }
 
-const SLIDE_ILLUSTRATIONS = [IllustrationScooter, IllustrationTracking, IllustrationFast]
+const ILLUSTRATIONS = [IlluDelivery, IlluTracking, IlluPayment]
 
+// ─── Utils ────────────────────────────────────────────────────────────────────
 function unlockAudio() {
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
-    ctx.resume()
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.connect(gain)
-    gain.connect(ctx.destination)
-    gain.gain.setValueAtTime(0, ctx.currentTime)
-    osc.start(ctx.currentTime)
-    osc.stop(ctx.currentTime + 0.01)
+    const g = ctx.createGain()
+    g.gain.setValueAtTime(0, ctx.currentTime)
+    const o = ctx.createOscillator()
+    o.connect(g); g.connect(ctx.destination)
+    o.start(); o.stop(ctx.currentTime + 0.01)
   } catch {}
 }
 
+// ─── Page ─────────────────────────────────────────────────────────────────────
 export default function OnboardingPage() {
-  const router = useRouter()
+  const router  = useRouter()
   const [phase, setPhase] = useState<"intro" | "slides">("intro")
   const [logoVisible, setLogoVisible] = useState(false)
   const [slide, setSlide] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [statusPermissoes, setStatusPermissoes] = useState({ geo: false, notif: false, audio: false })
+  const [dir,   setDir]   = useState<"left" | "right">("left")
+  const [animating, setAnimating] = useState(false)
+  const [loading,   setLoading]   = useState(false)
+  const [btnPress,  setBtnPress]  = useState(false)
+  const touchStart  = useRef<number | null>(null)
 
+  const s    = SLIDES[slide]
   const isLast = slide === SLIDES.length - 1
-  const s = SLIDES[slide]
+  const Illu = ILLUSTRATIONS[slide]
 
   useEffect(() => {
-    const t1 = setTimeout(() => setLogoVisible(true), 400)
-    const t2 = setTimeout(() => setPhase("slides"), 3000)
+    const t1 = setTimeout(() => setLogoVisible(true), 300)
+    const t2 = setTimeout(() => setPhase("slides"), 2800)
     return () => { clearTimeout(t1); clearTimeout(t2) }
   }, [])
 
+  function goTo(next: number) {
+    if (animating || next < 0 || next >= SLIDES.length) return
+    setDir(next > slide ? "left" : "right")
+    setAnimating(true)
+    setTimeout(() => { setSlide(next); setAnimating(false) }, 300)
+  }
+
   function next() {
-    if (isLast) solicitarPermissoes()
-    else setSlide(s => s + 1)
+    if (isLast) { solicitarPermissoes(); return }
+    goTo(slide + 1)
   }
 
   async function solicitarPermissoes() {
     setLoading(true)
-
-    // 1. Desbloquear áudio (requer gesto do usuário)
     unlockAudio()
-    setStatusPermissoes(p => ({ ...p, audio: true }))
-
-    // 2. Notificações push
-    if (typeof window !== "undefined" && "Notification" in window) {
-      try {
-        const result = await Notification.requestPermission()
-        setStatusPermissoes(p => ({ ...p, notif: result === "granted" }))
-      } catch {}
+    if ("Notification" in window) {
+      try { await Notification.requestPermission() } catch {}
     }
-
-    // 3. Localização
     if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        () => { setStatusPermissoes(p => ({ ...p, geo: true })); concluir() },
-        () => concluir(),
-        { timeout: 8000 }
-      )
+      navigator.geolocation.getCurrentPosition(() => concluir(), () => concluir(), { timeout: 8000 })
     } else {
       concluir()
     }
@@ -190,161 +301,213 @@ export default function OnboardingPage() {
     router.push("/")
   }
 
-  // ── Tela intro com logo animada ──────────────────
+  // ── Intro ───────────────────────────────────────────────────────────────────
   if (phase === "intro") {
     return (
       <div style={{
-        minHeight: "100vh", background: "#f8fafc",
+        minHeight: "100vh",
+        background: `linear-gradient(160deg, ${SLIDES[0].grad[0]}, ${SLIDES[0].grad[1]}, ${SLIDES[0].grad[2]})`,
         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        perspective: "800px", overflow: "hidden",
+        overflow: "hidden", position: "relative",
       }}>
-        <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
-          {Array.from({ length: 12 }).map((_, i) => (
-            <div key={i} style={{
-              position: "absolute",
-              width: 6, height: 6, borderRadius: "50%",
-              background: i % 3 === 0 ? "#DC2626" : i % 3 === 1 ? "rgba(220,38,38,0.3)" : "rgba(0,0,0,0.06)",
-              left: `${(i * 8.3 + 5) % 100}%`,
-              top: `${(i * 13 + 10) % 100}%`,
-              animation: `float ${3 + (i % 3)}s ease-in-out ${i * 0.3}s infinite alternate`,
-              opacity: logoVisible ? 1 : 0,
-              transition: "opacity 0.5s",
-            }} />
-          ))}
+        {/* Círculos decorativos */}
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+          <div style={{ position: "absolute", top: "-10%", right: "-10%", width: 300, height: 300, borderRadius: "50%", background: "rgba(255,255,255,0.06)" }}/>
+          <div style={{ position: "absolute", bottom: "-5%", left: "-15%", width: 400, height: 400, borderRadius: "50%", background: "rgba(255,255,255,0.04)" }}/>
+          <div style={{ position: "absolute", top: "40%", left: "-5%", width: 150, height: 150, borderRadius: "50%", background: "rgba(255,255,255,0.05)" }}/>
         </div>
 
+        {/* Partículas */}
+        {Array.from({ length: 10 }).map((_, i) => (
+          <div key={i} style={{
+            position: "absolute",
+            width: 5 + (i % 3) * 3, height: 5 + (i % 3) * 3,
+            borderRadius: "50%", background: "rgba(255,255,255,0.3)",
+            left: `${10 + i * 9}%`, top: `${15 + (i * 17) % 70}%`,
+            opacity: logoVisible ? 1 : 0,
+            animation: `floatP ${2.5 + (i % 3) * 0.5}s ease-in-out ${i * 0.2}s infinite alternate`,
+            transition: "opacity 0.5s",
+          }}/>
+        ))}
+
+        {/* Logo */}
         <div style={{
-          transform: logoVisible ? "rotateY(0deg) scale(1)" : "rotateY(-90deg) scale(0.5)",
+          transform: logoVisible ? "scale(1) translateY(0)" : "scale(0.3) translateY(40px)",
           opacity: logoVisible ? 1 : 0,
-          transition: "transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.6s ease",
-          transformStyle: "preserve-3d",
-          filter: logoVisible ? "drop-shadow(0 0 32px rgba(220,38,38,0.25))" : "none",
+          transition: "all 0.8s cubic-bezier(0.34,1.56,0.64,1)",
+          filter: logoVisible ? "drop-shadow(0 20px 60px rgba(0,0,0,0.35))" : "none",
         }}>
-          <img
-            src="/logo-chego.jpg"
-            alt="Chegô"
-            style={{ width: 220, height: 220, borderRadius: 40, objectFit: "contain" }}
-          />
+          <img src="/logo-chego.jpg" alt="Chegô" style={{ width: 180, height: 180, borderRadius: 40, objectFit: "contain", display: "block" }}/>
         </div>
 
         <p style={{
-          color: "#9CA3AF", fontSize: 14, fontWeight: 600, marginTop: 24,
+          color: "rgba(255,255,255,0.9)", fontSize: 22, fontWeight: 800, marginTop: 28, letterSpacing: "-0.3px",
           opacity: logoVisible ? 1 : 0,
           transform: logoVisible ? "translateY(0)" : "translateY(20px)",
           transition: "all 0.6s ease 0.4s",
-          letterSpacing: 2, textTransform: "uppercase",
+        }}>
+          Chegô Delivery
+        </p>
+        <p style={{
+          color: "rgba(255,255,255,0.55)", fontSize: 13, fontWeight: 600, marginTop: 6, letterSpacing: 3, textTransform: "uppercase",
+          opacity: logoVisible ? 1 : 0,
+          transform: logoVisible ? "translateY(0)" : "translateY(12px)",
+          transition: "all 0.6s ease 0.55s",
         }}>
           Aragoiânia · GO
         </p>
 
         <style>{`
-          @keyframes float {
-            from { transform: translateY(0px) rotate(0deg); }
-            to   { transform: translateY(-20px) rotate(180deg); }
+          @keyframes floatP {
+            from { transform: translateY(0) rotate(0deg); }
+            to   { transform: translateY(-18px) rotate(180deg); }
           }
         `}</style>
       </div>
     )
   }
 
-  // ── Slides ──────────────────────────────────────
+  // ── Slides ──────────────────────────────────────────────────────────────────
+  const grad = `linear-gradient(160deg, ${s.grad[0]}, ${s.grad[1]} 55%, ${s.grad[2]})`
+
   return (
     <div style={{
-      minHeight: "100vh", background: "#f8fafc",
-      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between",
-      padding: "48px 24px 40px",
-    }}>
-      <div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <img src="/logo-chego.jpg" alt="Chegô" style={{ height: 32, width: "auto", borderRadius: 8, objectFit: "contain" }} />
-        <button onClick={concluir}
-          style={{ background: "none", border: "none", color: "#9CA3AF", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+      minHeight: "100vh", background: grad, transition: "background 0.5s ease",
+      display: "flex", flexDirection: "column", position: "relative", overflow: "hidden",
+      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+    }}
+      onTouchStart={e => { touchStart.current = e.touches[0].clientX }}
+      onTouchEnd={e => {
+        if (touchStart.current === null) return
+        const dx = e.changedTouches[0].clientX - touchStart.current
+        if (Math.abs(dx) > 50) { dx < 0 ? goTo(slide + 1) : goTo(slide - 1) }
+        touchStart.current = null
+      }}
+    >
+      {/* Decoração de fundo */}
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden" }}>
+        <div style={{ position: "absolute", top: "-20%", right: "-20%", width: 450, height: 450, borderRadius: "50%", background: "rgba(255,255,255,0.06)" }}/>
+        <div style={{ position: "absolute", bottom: "-10%", left: "-20%", width: 500, height: 500, borderRadius: "50%", background: "rgba(255,255,255,0.04)" }}/>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} style={{
+            position: "absolute", borderRadius: "50%",
+            width: 4 + (i % 3) * 3, height: 4 + (i % 3) * 3,
+            background: "rgba(255,255,255,0.25)",
+            left: `${8 + i * 15}%`, top: `${20 + (i * 12) % 55}%`,
+            animation: `floatP ${2 + i * 0.4}s ease-in-out ${i * 0.3}s infinite alternate`,
+          }}/>
+        ))}
+      </div>
+
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "52px 28px 0", position: "relative", zIndex: 10 }}>
+        <img src="/logo-chego.jpg" alt="Chegô" style={{ height: 36, width: 36, borderRadius: 10, objectFit: "contain" }}/>
+        <button onClick={concluir} style={{
+          background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)",
+          color: "white", fontSize: 13, fontWeight: 700, padding: "6px 16px", borderRadius: 99,
+          cursor: "pointer", backdropFilter: "blur(8px)",
+        }}>
           Pular
         </button>
       </div>
 
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", gap: 24, maxWidth: 360 }}>
-        <div style={{
-          width: 120, height: 120, borderRadius: 36, background: s.bg,
-          border: `2px solid ${s.color}40`,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          transition: "all 0.4s",
-        }}>
-          {(() => { const Illu = SLIDE_ILLUSTRATIONS[slide]; return <Illu /> })()}
-        </div>
-        <div>
-          <h1 style={{ color: "#111827", fontWeight: 900, fontSize: 28, lineHeight: 1.15, marginBottom: 12 }}>
-            {s.title}
-          </h1>
-          <p style={{ color: "#6B7280", fontSize: 15, lineHeight: 1.65 }}>
-            {s.sub}
-          </p>
-        </div>
+      {/* Ilustração */}
+      <div style={{
+        flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
+        padding: "24px 20px 0", position: "relative", zIndex: 10,
+        transform: animating ? (dir === "left" ? "translateX(-40px)" : "translateX(40px)") : "translateX(0)",
+        opacity: animating ? 0 : 1,
+        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+      }}>
+        <Illu accent={s.accent} />
+      </div>
 
+      {/* Card de conteúdo */}
+      <div style={{
+        margin: "0 0", padding: "32px 28px 40px",
+        background: "rgba(255,255,255,0.12)",
+        backdropFilter: "blur(20px)",
+        borderTop: "1px solid rgba(255,255,255,0.2)",
+        borderRadius: "32px 32px 0 0",
+        position: "relative", zIndex: 10,
+        transform: animating ? "translateY(16px)" : "translateY(0)",
+        opacity: animating ? 0 : 1,
+        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1) 0.05s",
+      }}>
+        {/* Título */}
+        <h1 style={{
+          color: "white", fontWeight: 900, fontSize: 28, lineHeight: 1.2,
+          letterSpacing: "-0.5px", marginBottom: 10, whiteSpace: "pre-line",
+        }}>
+          {s.title}
+        </h1>
+        <p style={{ color: "rgba(255,255,255,0.75)", fontSize: 15, lineHeight: 1.6, marginBottom: 28 }}>
+          {s.sub}
+        </p>
+
+        {/* Card de permissões (último slide) */}
         {isLast && (
-          <div style={{ background: "#F9FAFB", border: "1px solid #e5e7eb", borderRadius: 16, padding: "16px 18px", width: "100%", display: "flex", flexDirection: "column", gap: 10 }}>
-            <p style={{ color: "#374151", fontWeight: 700, fontSize: 13, marginBottom: 4 }}>
-              O app vai solicitar acesso a:
+          <div style={{
+            background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.2)",
+            borderRadius: 18, padding: "14px 16px", marginBottom: 24,
+            display: "flex", flexDirection: "column", gap: 12,
+          }}>
+            <p style={{ color: "rgba(255,255,255,0.9)", fontWeight: 700, fontSize: 12, textTransform: "uppercase", letterSpacing: 1 }}>
+              O app vai solicitar
             </p>
             {[
-              {
-                icon: (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
-                  </svg>
-                ),
-                label: "Localização",
-                desc: "Para preencher o endereço de entrega automaticamente",
-              },
-              {
-                icon: (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-                  </svg>
-                ),
-                label: "Notificações",
-                desc: "Para avisar quando seu pedido sair para entrega",
-              },
-              {
-                icon: (
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
-                  </svg>
-                ),
-                label: "Áudio",
-                desc: "Para tocar sons de confirmação e entrega",
-              },
+              { emoji: "📍", label: "Localização", desc: "Para preencher o endereço automaticamente" },
+              { emoji: "🔔", label: "Notificações", desc: "Para avisar quando o pedido sair para entrega" },
+              { emoji: "🔊", label: "Áudio",        desc: "Para tocar sons de confirmação" },
             ].map(item => (
-              <div key={item.label} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                <div style={{ flexShrink: 0, marginTop: 1 }}>{item.icon}</div>
+              <div key={item.label} style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                <span style={{ fontSize: 20 }}>{item.emoji}</span>
                 <div>
-                  <p style={{ color: "#374151", fontWeight: 600, fontSize: 13 }}>{item.label}</p>
-                  <p style={{ color: "#9CA3AF", fontSize: 12 }}>{item.desc}</p>
+                  <p style={{ color: "white", fontWeight: 700, fontSize: 13 }}>{item.label}</p>
+                  <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>{item.desc}</p>
                 </div>
               </div>
             ))}
           </div>
         )}
-      </div>
 
-      <div style={{ width: "100%", maxWidth: 360, display: "flex", flexDirection: "column", gap: 20, alignItems: "center" }}>
-        <div style={{ display: "flex", gap: 8 }}>
+        {/* Dots */}
+        <div style={{ display: "flex", gap: 6, marginBottom: 20, alignItems: "center" }}>
           {SLIDES.map((_, i) => (
-            <div key={i} onClick={() => setSlide(i)} style={{
-              width: i === slide ? 24 : 8, height: 8, borderRadius: 4, cursor: "pointer",
-              background: i === slide ? s.color : "#E5E7EB",
-              transition: "all 0.3s",
-            }} />
+            <div key={i} onClick={() => goTo(i)} style={{
+              height: 6, borderRadius: 3, cursor: "pointer",
+              width: i === slide ? 24 : 6,
+              background: i === slide ? "white" : "rgba(255,255,255,0.35)",
+              transition: "all 0.3s cubic-bezier(0.34,1.56,0.64,1)",
+            }}/>
           ))}
         </div>
-        <button onClick={next} disabled={loading} style={{
-          width: "100%", padding: "16px", borderRadius: 14, border: "none",
-          background: loading ? `${s.color}60` : s.color,
-          color: "white", fontWeight: 800, fontSize: 16, cursor: loading ? "not-allowed" : "pointer",
-          transition: "background 0.2s",
-        }}>
+
+        {/* Botão */}
+        <button
+          onClick={() => { if (!loading && !animating) { setBtnPress(true); setTimeout(() => setBtnPress(false), 150); next() } }}
+          disabled={loading}
+          style={{
+            width: "100%", padding: "17px", borderRadius: 16, border: "none",
+            background: loading ? "rgba(255,255,255,0.4)" : "white",
+            color: loading ? "rgba(255,255,255,0.7)" : s.grad[0],
+            fontWeight: 900, fontSize: 16, cursor: loading ? "not-allowed" : "pointer",
+            boxShadow: btnPress ? "none" : "0 8px 32px rgba(0,0,0,0.2)",
+            transform: btnPress ? "scale(0.97)" : "scale(1)",
+            transition: "all 0.15s cubic-bezier(0.34,1.56,0.64,1)",
+            letterSpacing: "-0.2px",
+          }}
+        >
           {loading ? "Configurando..." : isLast ? "Permitir e começar →" : "Continuar →"}
         </button>
       </div>
+
+      <style>{`
+        @keyframes floatP {
+          from { transform: translateY(0) rotate(0deg); }
+          to   { transform: translateY(-16px) rotate(180deg); }
+        }
+      `}</style>
     </div>
   )
 }

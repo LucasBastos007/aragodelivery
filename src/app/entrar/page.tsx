@@ -65,23 +65,14 @@ export default function EntrarPage() {
     }
 
     if (role === "lojista") {
-      const { data, error } = await supabase
-        .from("lojas")
-        .select("id, nome, status, email, senha")
-        .eq("email", email.trim().toLowerCase())
-        .single()
-
-      if (error || !data) { setErro("Email não encontrado."); setLoading(false); return }
-      if (data.senha !== senha) { setErro("Senha incorreta."); setLoading(false); return }
-      if (data.status === "pendente") {
-        setErro("Cadastro aguardando aprovação. Entraremos em contato em breve.")
-        setLoading(false); return
-      }
-      if (data.status === "suspenso") {
-        setErro("Esta conta foi suspensa. Entre em contato com o suporte.")
-        setLoading(false); return
-      }
-      login({ role: "lojista", loja_id: data.id, loja_nome: data.nome })
+      const res  = await fetch("/api/login-loja", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), senha }),
+      })
+      const json = await res.json()
+      if (!res.ok) { setErro(json.error ?? "Erro ao entrar."); setLoading(false); return }
+      login({ role: "lojista", loja_id: json.loja_id, loja_nome: json.loja_nome })
       router.push("/loja")
       setLoading(false)
       return

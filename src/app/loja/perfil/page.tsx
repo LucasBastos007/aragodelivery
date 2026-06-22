@@ -40,29 +40,46 @@ type Form = {
 }
 
 async function geocodeAddress(address: string): Promise<[number, number] | null> {
+  const query = `${address}, Aragoiânia, GO, Brasil`
+
+  // Tenta Google Maps se a chave estiver configurada
   try {
     const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY
-    if (!key) return null
-    const q   = encodeURIComponent(`${address}, Aragoiânia, GO, Brasil`)
-    const res  = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${q}&key=${key}`)
-    const data = await res.json()
-    if (data.status === "OK" && data.results[0]) {
-      const loc = data.results[0].geometry.location
-      return [loc.lat, loc.lng]
+    if (key) {
+      const q   = encodeURIComponent(query)
+      const res  = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${q}&key=${key}`)
+      const data = await res.json()
+      if (data.status === "OK" && data.results[0]) {
+        const loc = data.results[0].geometry.location
+        return [loc.lat, loc.lng]
+      }
     }
-    return null
-  } catch { return null }
+  } catch {}
+
+  // Fallback: Nominatim (OpenStreetMap, gratuito)
+  try {
+    const q   = encodeURIComponent(query)
+    const res  = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=br`,
+      { headers: { "Accept-Language": "pt-BR", "User-Agent": "ChegôDelivery/1.0" } }
+    )
+    const data = await res.json()
+    if (data?.[0]) return [parseFloat(data[0].lat), parseFloat(data[0].lon)]
+  } catch {}
+
+  return null
 }
 
 async function uploadBanner(file: File, loja_id: string): Promise<string> {
   const ext = file.name.split(".").pop() ?? "jpg"
   const path = `lojas/${loja_id}/banner.${ext}`
-  const { data, error } = await supabase.storage
-    .from("entregas")
-    .upload(path, file, { upsert: true, contentType: file.type })
-  if (error || !data) return ""
-  const { data: { publicUrl } } = supabase.storage.from("entregas").getPublicUrl(data.path)
-  return publicUrl
+  const form = new FormData()
+  form.append("file", file)
+  form.append("path", path)
+  const res = await fetch("/api/upload", { method: "POST", body: form })
+  if (!res.ok) return ""
+  const data = await res.json()
+  return data.url ?? ""
 }
 
 async function buscarCep(cep: string) {
@@ -99,6 +116,7 @@ export default function PerfilPage() {
   const [loading, setLoading] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [salvo, setSalvo] = useState(false)
+  const [erroSalvar, setErroSalvar] = useState("")
   const [buscandoCep, setBuscandoCep] = useState(false)
   const [bannerFile, setBannerFile] = useState<File | null>(null)
   const [bannerPreview, setBannerPreview] = useState<string>("")
@@ -205,17 +223,23 @@ export default function PerfilPage() {
   async function salvar() {
     if (!loja_id) return
     setSalvando(true)
+    setErroSalvar("")
 
     let logoFinal = form.logo_url
     if (bannerFile) {
       logoFinal = await uploadBanner(bannerFile, loja_id)
+      if (!logoFinal) {
+        setErroSalvar("Falha ao enviar a foto. Tente novamente.")
+        setSalvando(false)
+        return
+      }
     }
 
     const enderecoCompleto = [form.logradouro, form.numero, form.complemento, form.bairro, form.cidade + (form.estado ? " - " + form.estado : "")]
       .filter(Boolean).join(", ")
     const coords = enderecoCompleto ? await geocodeAddress(enderecoCompleto) : null
 
-    await supabase.from("lojas").update({
+    const { error: errUpdate } = await supabase.from("lojas").update({
       nome: form.nome.trim(),
       descricao: form.descricao.trim(),
       categoria: form.categoria,
@@ -237,6 +261,12 @@ export default function PerfilPage() {
       horarios,
       ...(coords ? { lat: coords[0], lng: coords[1] } : {}),
     }).eq("id", loja_id)
+
+    if (errUpdate) {
+      setErroSalvar(errUpdate.message)
+      setSalvando(false)
+      return
+    }
 
     await sincronizarHorarios(horarios, loja_id)
 
@@ -503,6 +533,11 @@ export default function PerfilPage() {
         </div>
       </div>
 
+      {erroSalvar && (
+        <p style={{ color: "#ef4444", fontSize: 13, fontWeight: 600, background: "rgba(239,68,68,0.08)", padding: "12px 16px", borderRadius: 10, marginBottom: 12 }}>
+          ⚠️ {erroSalvar}
+        </p>
+      )}
       <button onClick={salvar} disabled={salvando} className="btn-primary" style={{ padding: "14px 32px", width: "100%" }}>
         {salvando ? "Salvando..." : "Salvar alterações"}
       </button>

@@ -102,26 +102,35 @@ export default function AdminSaquesPage() {
 
       {/* Cards resumo */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 24 }}>
-        <div style={{ background: "white", borderRadius: 14, padding: "18px 20px", border: "1px solid rgba(245,158,11,0.2)" }}>
-          <p style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700, marginBottom: 8 }}>AGUARDANDO PAGAMENTO</p>
-          <p style={{ color: "#f59e0b", fontWeight: 900, fontSize: 26 }}>R$ {totalPendente.toFixed(2)}</p>
-          <p style={{ color: "#CBD5E1", fontSize: 12, marginTop: 4 }}>
-            {saques.filter(s => s.status === "solicitado").length} solicitações
-          </p>
+        <div style={{ background: "white", borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)", border: "1px solid #F1F5F9" }}>
+          <div style={{ height: 4, background: "linear-gradient(90deg, #f59e0b, #fbbf24)" }} />
+          <div style={{ padding: "16px 20px" }}>
+            <p style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700, marginBottom: 8 }}>AGUARDANDO PAGAMENTO</p>
+            <p style={{ color: "#f59e0b", fontWeight: 900, fontSize: 26 }}>R$ {totalPendente.toFixed(2)}</p>
+            <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 4 }}>
+              {saques.filter(s => s.status === "solicitado").length} solicitações
+            </p>
+          </div>
         </div>
-        <div style={{ background: "white", borderRadius: 14, padding: "18px 20px", border: "1px solid rgba(34,197,94,0.15)" }}>
-          <p style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700, marginBottom: 8 }}>TOTAL JÁ PAGO</p>
-          <p style={{ color: "#22c55e", fontWeight: 900, fontSize: 26 }}>R$ {totalPagoHoje.toFixed(2)}</p>
-          <p style={{ color: "#CBD5E1", fontSize: 12, marginTop: 4 }}>
-            {saques.filter(s => s.status === "pago").length} pagamentos
-          </p>
+        <div style={{ background: "white", borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)", border: "1px solid #F1F5F9" }}>
+          <div style={{ height: 4, background: "linear-gradient(90deg, #22c55e, #4ade80)" }} />
+          <div style={{ padding: "16px 20px" }}>
+            <p style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700, marginBottom: 8 }}>TOTAL JÁ PAGO</p>
+            <p style={{ color: "#22c55e", fontWeight: 900, fontSize: 26 }}>R$ {totalPagoHoje.toFixed(2)}</p>
+            <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 4 }}>
+              {saques.filter(s => s.status === "pago").length} pagamentos
+            </p>
+          </div>
         </div>
-        <div style={{ background: "white", borderRadius: 14, padding: "18px 20px", border: "1px solid #F8FAFC" }}>
-          <p style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700, marginBottom: 8 }}>MENSALIDADES PENDENTES</p>
-          <p style={{ color: "#f97316", fontWeight: 900, fontSize: 26 }}>
-            {mensalidades.filter(m => m.status === "pendente").length}
-          </p>
-          <p style={{ color: "#CBD5E1", fontSize: 12, marginTop: 4 }}>aguardando desconto</p>
+        <div style={{ background: "white", borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)", border: "1px solid #F1F5F9" }}>
+          <div style={{ height: 4, background: "linear-gradient(90deg, #f97316, #fb923c)" }} />
+          <div style={{ padding: "16px 20px" }}>
+            <p style={{ color: "#94a3b8", fontSize: 11, fontWeight: 700, marginBottom: 8 }}>MENSALIDADES PENDENTES</p>
+            <p style={{ color: "#f97316", fontWeight: 900, fontSize: 26 }}>
+              {mensalidades.filter(m => m.status === "pendente").length}
+            </p>
+            <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 4 }}>aguardando desconto</p>
+          </div>
         </div>
       </div>
 
@@ -201,11 +210,11 @@ export default function AdminSaquesPage() {
                         {s.status === "pago" ? "Pago" : s.status === "solicitado" ? "Aguardando" : "Cancelado"}
                       </span>
                     </div>
-                    <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 13, fontWeight: 600 }}>
+                    <p style={{ color: "#0F172A", fontSize: 13, fontWeight: 600 }}>
                       {s.loja?.nome ?? s.motoboy?.nome ?? "—"}
                     </p>
                     <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#94a3b8", marginTop: 3, flexWrap: "wrap" }}>
-                      <span>PIX: <strong style={{ color: "rgba(255,255,255,0.6)" }}>{s.pix_chave}</strong></span>
+                      <span>PIX: <strong style={{ color: "#0F172A" }}>{s.pix_chave}</strong></span>
                       <span>· Solicitado {new Date(s.criado_em).toLocaleDateString("pt-BR")}</span>
                       {s.pago_em && <span>· Pago {new Date(s.pago_em).toLocaleDateString("pt-BR")}</span>}
                     </div>
@@ -302,7 +311,7 @@ export default function AdminSaquesPage() {
                             Descontar
                           </button>
                           <button onClick={() => atualizarStatusMensalidade(m.id, "dispensado")} disabled={processando === m.id}
-                            style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "#64748B", fontSize: 11, cursor: "pointer" }}>
+                            style={{ padding: "5px 10px", borderRadius: 8, border: "1px solid #E2E8F0", background: "transparent", color: "#64748B", fontSize: 11, cursor: "pointer" }}>
                             Dispensar
                           </button>
                         </div>
@@ -330,7 +339,7 @@ export default function AdminSaquesPage() {
                         Mensalidade (R$)
                       </label>
                       <input
-                        style={{ width: "100%", padding: "9px 12px", borderRadius: 9, fontSize: 14, background: "#F9FAFB", border: "1px solid rgba(255,255,255,0.1)", color: "#0F172A", outline: "none", boxSizing: "border-box" as const }}
+                        style={{ width: "100%", padding: "9px 12px", borderRadius: 9, fontSize: 14, background: "#F9FAFB", border: "1px solid #E2E8F0", color: "#0F172A", outline: "none", boxSizing: "border-box" as const }}
                         type="number" step="0.01" min="0"
                         value={planoMens} onChange={e => setPlanoMens(e.target.value)}
                       />
@@ -340,7 +349,7 @@ export default function AdminSaquesPage() {
                         Comissão por pedido (%)
                       </label>
                       <input
-                        style={{ width: "100%", padding: "9px 12px", borderRadius: 9, fontSize: 14, background: "#F9FAFB", border: "1px solid rgba(255,255,255,0.1)", color: "#0F172A", outline: "none", boxSizing: "border-box" as const }}
+                        style={{ width: "100%", padding: "9px 12px", borderRadius: 9, fontSize: 14, background: "#F9FAFB", border: "1px solid #E2E8F0", color: "#0F172A", outline: "none", boxSizing: "border-box" as const }}
                         type="number" step="0.1" min="0" max="100"
                         value={planoComissao} onChange={e => setPlanoComissao(e.target.value)}
                       />
@@ -352,7 +361,7 @@ export default function AdminSaquesPage() {
                       {salvandoPlano ? "Salvando..." : "✓ Salvar"}
                     </button>
                     <button onClick={() => setEditandoPlano(null)}
-                      style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "#64748B", fontSize: 13, cursor: "pointer" }}>
+                      style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid #E2E8F0", background: "transparent", color: "#64748B", fontSize: 13, cursor: "pointer" }}>
                       Cancelar
                     </button>
                   </div>
@@ -376,7 +385,7 @@ export default function AdminSaquesPage() {
                     </div>
                   </div>
                   <button onClick={() => { setEditandoPlano(l.id); setPlanoMens(String(l.plano_mensalidade ?? 0)); setPlanoComissao(String(l.comissao ?? 0)) }}
-                    style={{ padding: "7px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    style={{ padding: "7px 14px", borderRadius: 10, border: "1px solid #E2E8F0", background: "transparent", color: "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                     Editar plano
                   </button>
                 </div>

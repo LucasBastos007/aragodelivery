@@ -1,0 +1,40 @@
+{
+  "name": "Chegô Delivery",
+  "short_name": "Chegô",
+  "description": "Delivery em Aragoiânia - GO",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#f97316",
+  "categories": ["food", "shopping"],
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/logo-chego.jpg",
+      "sizes": "1024x1024",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo-chego.jpg",
+      "sizes": "1024x1024",
+      "type": "image/jpeg",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Ver lojas",
+      "url": "/lojas",
+      "description": "Explorar restaurantes e lojas"
+    },
+    {
+      "name": "Meu perfil",
+      "url": "/cliente/meu-perfil",
+      "description": "Acessar meu perfil"
+    }
+  ]
+}

@@ -178,7 +178,7 @@ export default function MotoboyPage() {
   const onlines    = motoboys.filter(m => m.disponivel && m.status === "ativo")
 
   return (
-    <div style={{ padding: "16px", overflowX: "hidden" }}>
+    <div style={{ padding: "32px 36px" }}>
 
       {/* Modal de rejeição */}
       {modalRejeicao && selecionado && (
@@ -217,7 +217,7 @@ export default function MotoboyPage() {
             </a>
             <button onClick={() => setAprovadoWhats(null)} style={{
               padding: "8px 12px", borderRadius: 10,
-              border: "1px solid rgba(255,255,255,0.1)", background: "transparent",
+              border: "1px solid #E2E8F0", background: "transparent",
               color: "#94a3b8", fontSize: 12, cursor: "pointer",
             }}>
               Depois
@@ -229,16 +229,21 @@ export default function MotoboyPage() {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, gap: 10 }}>
         <div style={{ minWidth: 0 }}>
-          <h1 style={{ color: "#0F172A", fontWeight: 900, fontSize: 20 }}>Motoboys</h1>
-          <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 4 }}>
-            {motoboys.length} cadastrados · {onlines.length} online agora
+          <p style={{ fontSize: 12, fontWeight: 700, color: "#f97316", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Gestão</p>
+          <h1 style={{ color: "#0F172A", fontWeight: 900, fontSize: 26, letterSpacing: "-0.5px" }}>Motoboys</h1>
+          <p style={{ color: "#94a3b8", fontSize: 13, marginTop: 3 }}>
+            {motoboys.length} cadastrados
+            {onlines.length > 0 && <span style={{ color: "#22c55e", fontWeight: 700, marginLeft: 8 }}>· {onlines.length} online agora</span>}
           </p>
         </div>
         <button onClick={load} style={{
-          padding: "8px 12px", borderRadius: 10, flexShrink: 0,
-          border: "1px solid rgba(255,255,255,0.1)", background: "#FAFAFA",
-          color: "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer",
+          padding: "9px 16px", borderRadius: 10, flexShrink: 0,
+          border: "1.5px solid #E2E8F0", background: "white",
+          color: "#64748B", fontSize: 13, fontWeight: 700, cursor: "pointer",
+          boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
+          display: "flex", alignItems: "center", gap: 6,
         }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
           Atualizar
         </button>
       </div>
@@ -294,7 +299,7 @@ export default function MotoboyPage() {
         ))}
       </div>
 
-      <div style={{ display: "flex", gap: 20, flexDirection: "column" }}>
+      <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
         {/* Lista */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
           {loading ? (
@@ -309,8 +314,9 @@ export default function MotoboyPage() {
                   key={m.id}
                   onClick={() => setSelecionado(m)}
                   style={{
-                    background: selecionado?.id === m.id ? "rgba(249,115,22,0.06)" : "#111",
-                    border: `1px solid ${selecionado?.id === m.id ? "rgba(249,115,22,0.4)" : m.status === "pendente" ? "rgba(245,158,11,0.25)" : "#F8FAFC"}`,
+                    background: selecionado?.id === m.id ? "rgba(249,115,22,0.04)" : "white",
+                    border: `1.5px solid ${selecionado?.id === m.id ? "#f97316" : m.status === "pendente" ? "rgba(245,158,11,0.3)" : "#F1F5F9"}`,
+                    boxShadow: selecionado?.id === m.id ? "0 4px 20px rgba(249,115,22,0.12)" : "0 1px 4px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03)",
                     borderRadius: 14, padding: "14px 16px", cursor: "pointer",
                     display: "flex", alignItems: "center", gap: 14, transition: "all 0.15s",
                   }}>
@@ -364,41 +370,34 @@ export default function MotoboyPage() {
         {/* Painel de detalhe */}
         {selecionado && (
           <div style={{
-            width: "100%", maxWidth: 400, flexShrink: 0, alignSelf: "flex-start", boxSizing: "border-box",
-            background: "white", border: "1px solid #F8FAFC", borderRadius: 18, padding: "20px 16px",
-            display: "flex", flexDirection: "column", gap: 16,
+            width: 380, flexShrink: 0, alignSelf: "flex-start",
+            background: "white", border: "1.5px solid #F1F5F9", borderRadius: 18,
+            boxShadow: "0 4px 24px rgba(0,0,0,0.08)",
+            display: "flex", flexDirection: "column", gap: 0,
+            overflow: "hidden", position: "sticky", top: 24,
           }}>
-            {/* Header */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{
-                  width: 40, height: 40, borderRadius: "50%",
-                  background: `${STATUS_COLOR[selecionado.status] ?? "#555"}18`,
-                  border: `1.5px solid ${STATUS_COLOR[selecionado.status] ?? "#555"}40`,
-                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                }}>
-                  <IconMotoboy color={STATUS_COLOR[selecionado.status]} size={18} />
-                </div>
-                <div>
-                  <p style={{ color: "#0F172A", fontWeight: 900, fontSize: 15 }}>{selecionado.nome}</p>
-                  <span style={{
-                    fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 999,
-                    background: `${STATUS_COLOR[selecionado.status] ?? "#555"}18`,
-                    color: STATUS_COLOR[selecionado.status] ?? "#555",
-                    border: `1px solid ${STATUS_COLOR[selecionado.status] ?? "#555"}35`,
-                  }}>
-                    {STATUS_LABEL[selecionado.status] ?? selecionado.status}
-                  </span>
-                </div>
+            {/* Hero */}
+            <div style={{ height: 80, background: `linear-gradient(135deg, ${STATUS_COLOR[selecionado.status] ?? "#64748b"}18, ${STATUS_COLOR[selecionado.status] ?? "#64748b"}08)`, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <button onClick={() => setSelecionado(null)} style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: "50%", background: "white", border: "1.5px solid #E2E8F0", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#94a3b8", fontSize: 14, fontWeight: 700, boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>✕</button>
+            </div>
+            <div style={{ padding: "0 20px", marginTop: -22, marginBottom: 4, display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: `${STATUS_COLOR[selecionado.status] ?? "#94a3b8"}18`, border: `2.5px solid white`, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <IconMotoboy color={STATUS_COLOR[selecionado.status] ?? "#64748b"} size={22} />
               </div>
-              <button onClick={() => setSelecionado(null)} style={{
-                background: "#F9FAFB", border: "none", borderRadius: 8,
-                color: "#64748B", width: 28, height: 28, cursor: "pointer", fontSize: 14,
-              }}>✕</button>
+              <span style={{ fontSize: 11, fontWeight: 800, padding: "3px 10px", borderRadius: 50, background: `${STATUS_COLOR[selecionado.status] ?? "#94a3b8"}18`, color: STATUS_COLOR[selecionado.status] ?? "#94a3b8", border: `1px solid ${STATUS_COLOR[selecionado.status] ?? "#94a3b8"}33`, display: "flex", alignItems: "center", gap: 5 }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: STATUS_COLOR[selecionado.status] ?? "#94a3b8" }} />
+                {STATUS_LABEL[selecionado.status] ?? selecionado.status}
+              </span>
+            </div>
+            <div style={{ padding: "6px 20px 14px" }}>
+              <p style={{ fontSize: 17, fontWeight: 900, color: "#0F172A", letterSpacing: "-0.3px" }}>{selecionado.nome}</p>
+              {selecionado.disponivel && selecionado.status === "ativo" && (
+                <p style={{ fontSize: 11, color: "#22c55e", fontWeight: 700, marginTop: 2 }}>● Online agora</p>
+              )}
             </div>
 
             {/* Dados */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 0", borderTop: "1px solid #F1F5F9", borderBottom: "1px solid #F1F5F9" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 20px", borderTop: "1px solid #F1F5F9", borderBottom: "1px solid #F1F5F9" }}>
               <Row label="Telefone" value={selecionado.telefone} />
               <Row label="Email"    value={selecionado.email} />
               <Row label="CPF"      value={selecionado.cpf} />
@@ -414,7 +413,7 @@ export default function MotoboyPage() {
 
             {/* Motivo de rejeição */}
             {selecionado.motivo_rejeicao && (
-              <div style={{ background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 10, padding: "10px 12px" }}>
+              <div style={{ margin: "12px 20px 0", background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 10, padding: "10px 12px" }}>
                 <p style={{ color: "rgba(239,68,68,0.7)", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 4 }}>Motivo da rejeição</p>
                 <p style={{ color: "#64748B", fontSize: 12 }}>{selecionado.motivo_rejeicao}</p>
               </div>
@@ -422,7 +421,7 @@ export default function MotoboyPage() {
 
             {/* Link do contrato */}
             {selecionado.status === "aprovado" && selecionado.contrato_token && (
-              <div style={{ background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)", borderRadius: 12, padding: "12px 14px" }}>
+              <div style={{ margin: "12px 20px 0", background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)", borderRadius: 12, padding: "12px 14px" }}>
                 <p style={{ color: "#818cf8", fontSize: 11, fontWeight: 700, marginBottom: 8 }}>Link do contrato</p>
                 <p style={{ color: "#94a3b8", fontSize: 11, marginBottom: 10, wordBreak: "break-all" }}>
                   /contrato/motoboy/{selecionado.contrato_token.slice(0, 16)}...
@@ -451,7 +450,7 @@ export default function MotoboyPage() {
             )}
 
             {/* Ações */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "16px 20px 20px" }}>
               {selecionado.status === "pendente" && (
                 <>
                   <button

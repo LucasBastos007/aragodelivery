@@ -56,6 +56,17 @@ export function useClienteAuth() {
     })
   }
 
+  async function loginApple() {
+    await supabase.auth.signInWithOAuth({
+      provider: "apple",
+      options: {
+        redirectTo: typeof window !== "undefined"
+          ? `${window.location.origin}/cliente/meu-perfil`
+          : undefined,
+      },
+    })
+  }
+
   async function loginEmail(email: string, senha: string): Promise<string | null> {
     const { error } = await supabase.auth.signInWithPassword({ email, password: senha })
     return error?.message ?? null
@@ -105,5 +116,5 @@ export function useClienteAuth() {
     setPerfil(null)
   }
 
-  return { user, perfil, loading, loginGoogle, loginEmail, cadastrar, salvarPerfil, logout }
+  return { user, perfil, loading, loginGoogle, loginApple, loginEmail, cadastrar, salvarPerfil, logout }
 }

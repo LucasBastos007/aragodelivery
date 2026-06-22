@@ -96,14 +96,13 @@ export default function ContratoMotoboyPage() {
     if (!canvas || !motoboy) return
     const assinatura = canvas.toDataURL("image/png")
     setSalvando(true)
-    const { error } = await supabase.from("motoboys").update({
-      contrato_assinatura: assinatura,
-      contrato_assinado: true,
-      contrato_assinado_em: new Date().toISOString(),
-      status: "contrato_assinado",
-    }).eq("id", motoboy.id)
+    const res = await fetch("/api/contrato-motoboy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, assinatura }),
+    })
     setSalvando(false)
-    if (error) { alert("Erro ao salvar assinatura. Tente novamente."); return }
+    if (!res.ok) { alert("Erro ao salvar assinatura. Tente novamente."); return }
     setAssinado(true)
   }
 
@@ -167,18 +166,67 @@ export default function ContratoMotoboyPage() {
 
         {/* Texto do contrato */}
         <div style={{ background: "#0f0f0f", border: "1px solid #1e1e1e", borderRadius: 14, padding: "24px", marginBottom: 24 }}>
-          <p className="text-xs font-bold uppercase tracking-wider mb-4" style={{ color: "rgba(255,255,255,0.3)" }}>Termos e condições</p>
-          <div className="text-sm leading-relaxed flex flex-col gap-3" style={{ color: "rgba(255,255,255,0.6)" }}>
-            <p><strong style={{ color: "white" }}>1. Objeto</strong> — Este contrato estabelece os termos de parceria entre a plataforma Chegô Delivery e o entregador identificado acima, para realização de entregas na cidade de Aragoiânia-GO.</p>
-            <p><strong style={{ color: "white" }}>2. Remuneração</strong> — O entregador receberá o valor combinado por entrega concluída, repassado via PIX à chave cadastrada em até 7 dias úteis.</p>
-            <p><strong style={{ color: "white" }}>3. Autonomia</strong> — O entregador é profissional autônomo e define seus próprios horários de disponibilidade. Não há vínculo empregatício com o Chegô Delivery.</p>
-            <p><strong style={{ color: "white" }}>4. Obrigações do entregador</strong> — O entregador se compromete a: (a) tratar clientes e lojistas com respeito; (b) realizar as entregas no tempo estimado; (c) manter o veículo em condições de uso; (d) manter o aplicativo atualizado durante o serviço.</p>
-            <p><strong style={{ color: "white" }}>5. Obrigações da plataforma</strong> — O Chegô Delivery se compromete a: (a) fornecer acesso ao aplicativo de entregas; (b) repassar os valores devidos no prazo acordado; (c) fornecer suporte técnico.</p>
-            <p><strong style={{ color: "white" }}>6. Suspensão</strong> — O Chegô Delivery poderá suspender o acesso do entregador em caso de reclamações comprovadas, inatividade prolongada ou descumprimento dos termos.</p>
-            <p><strong style={{ color: "white" }}>7. Rescisão</strong> — Qualquer das partes pode encerrar a parceria com aviso de 7 dias.</p>
-            <p><strong style={{ color: "white" }}>8. Vigência</strong> — Este contrato entra em vigor na data de assinatura e é válido por prazo indeterminado.</p>
+          <p className="text-xs font-bold uppercase tracking-wider mb-4" style={{ color: "rgba(255,255,255,0.3)" }}>Contrato completo</p>
+          <div className="text-sm leading-relaxed flex flex-col gap-4" style={{ color: "rgba(255,255,255,0.65)" }}>
+
+            <div style={{ textAlign: "center", marginBottom: 8 }}>
+              <p style={{ color: "white", fontWeight: 900, fontSize: 15 }}>TERMO DE PARCERIA PARA PRESTAÇÃO DE SERVIÇOS DE ENTREGA</p>
+              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}>PLATAFORMA CHEGÔ DELIVERY E ENTREGADOR PARCEIRO (MOTOBOY) AUTÔNOMO</p>
+            </div>
+
+            <p>Pelo presente instrumento particular, de um lado:</p>
+            <p><strong style={{ color: "white" }}>CHEGÔ DELIVERY</strong> (67.543.510 LIVIA RAYANE SOUSA DA SILVA), pessoa jurídica de direito privado, inscrita no CNPJ sob o nº 67.543.510/0001-86, na modalidade de Microempreendedor Individual (MEI), com sede na Rua Pedro Nestor Pereira, nº 0, Quadra 14, Lote 24, Aragoiânia/GO, CEP 75330-000, representada por sua titular, Sra. Livia Rayane Sousa da Silva, doravante <strong style={{ color: "white" }}>"PLATAFORMA"</strong>;</p>
+            <p>e, de outro lado:</p>
+            <p><strong style={{ color: "white" }}>{motoboy!.nome}</strong>, pessoa física, portador(a) do CPF nº {motoboy!.cpf}{motoboy!.cnh ? ` e da CNH nº ${motoboy!.cnh}` : ""}, doravante <strong style={{ color: "white" }}>"ENTREGADOR"</strong> ou <strong style={{ color: "white" }}>"MOTOBOY"</strong>.</p>
+
+            <div style={{ height: 1, background: "rgba(255,255,255,0.07)" }} />
+
+            <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 1ª — DO OBJETO</p>
+            <p>1.1. O presente Termo disciplina a parceria entre as PARTES, por meio da qual a PLATAFORMA disponibilizará ao ENTREGADOR acesso ao aplicativo "Chegô Delivery", pelo qual poderá visualizar e aceitar, de forma livre e espontânea, solicitações de entrega de estabelecimentos parceiros ("Lojistas") a consumidores finais ("Clientes").</p>
+            <p>1.2. A PLATAFORMA atua exclusivamente como intermediadora tecnológica, não se confundindo com transportadora, operadora logística ou empregadora do ENTREGADOR.</p>
+
+            <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 2ª — DA NATUREZA AUTÔNOMA DA RELAÇÃO</p>
+            <p>2.1. O ENTREGADOR presta seus serviços de forma absolutamente autônoma, eventual e por sua livre iniciativa, <strong style={{ color: "white" }}>sem vínculo de emprego, subordinação, hierarquia ou exclusividade</strong> com a PLATAFORMA.</p>
+            <p>2.2. O ENTREGADOR tem plena liberdade para: (a) conectar-se e desconectar-se nos dias e horários que melhor lhe convierem, sem obrigação de cumprir jornada ou meta; (b) aceitar ou recusar qualquer solicitação de entrega, sem penalidade pela simples recusa; (c) prestar serviços para outras plataformas ou estabelecimentos, sem cláusula de exclusividade.</p>
+            <p>2.3. Em razão da natureza autônoma, o ENTREGADOR não terá direito a férias, 13º salário, FGTS, aviso prévio ou quaisquer verbas rescisórias trabalhistas, sendo responsável pelo próprio recolhimento previdenciário e obrigações fiscais.</p>
+
+            <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 3ª — DAS OBRIGAÇÕES DA PLATAFORMA</p>
+            <p>3.1. A PLATAFORMA se obriga a: (a) disponibilizar o aplicativo para visualização e aceite de entregas; (b) informar, em cada solicitação, a origem, o destino aproximado e o valor a ser pago antes do aceite; (c) efetuar o repasse dos valores devidos na periodicidade prevista na Cláusula 4ª; (d) prestar suporte técnico ao ENTREGADOR.</p>
+
+            <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 4ª — DA REMUNERAÇÃO</p>
+            <p>4.1. Por cada entrega efetivamente realizada e confirmada, o ENTREGADOR receberá valor fixo informado previamente no momento do oferecimento da corrida, podendo variar conforme política da PLATAFORMA, sempre informada antes do aceite.</p>
+            <p>4.2. O repasse dos valores será realizado semanalmente, mediante transferência para conta bancária ou chave PIX indicada pelo ENTREGADOR.</p>
+            <p>4.3. Eventuais bonificações, incentivos por meta ou taxas dinâmicas poderão ser oferecidos a critério exclusivo da PLATAFORMA, mediante comunicação prévia.</p>
+
+            <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 5ª — DO VEÍCULO E EQUIPAMENTOS</p>
+            <p>5.1. O ENTREGADOR utilizará veículo próprio ou alugado, sendo de sua exclusiva responsabilidade: (a) manter o veículo em bom estado e com documentação regular (CRLV e CNH compatível); (b) possuir seguro pessoal e/ou do veículo quando aplicável; (c) utilizar equipamentos de proteção (capacete e bag adequado); (d) custear combustível, manutenção e multas, sem reembolso da PLATAFORMA.</p>
+            <p>5.2. O ENTREGADOR deverá possuir smartphone próprio com plano de dados ativo e compatível com o aplicativo, arcando com os custos de aquisição e manutenção.</p>
+
+            <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 6ª — DA RESPONSABILIDADE</p>
+            <p>6.1. O ENTREGADOR é o único e exclusivo responsável por acidentes de trânsito, infrações e danos causados a si, a Clientes, a Lojistas ou a terceiros durante as entregas, <strong style={{ color: "white" }}>isentando a PLATAFORMA de qualquer responsabilidade civil, trabalhista, criminal ou administrativa</strong> decorrente de tais eventos, ressalvada falha comprovada e exclusiva do sistema tecnológico da PLATAFORMA.</p>
+            <p>6.2. Em caso de avaria, perda ou extravio de produto, o ENTREGADOR deverá comunicar imediatamente o ocorrido, podendo responder pelo ressarcimento quando comprovada sua culpa.</p>
+
+            <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 7ª — DA CONDUTA</p>
+            <p>7.1. O ENTREGADOR se obriga a tratar Clientes e Lojistas com urbanidade e respeito, manter a integridade dos pedidos e não consumir bebida alcoólica ou substância que comprometa sua capacidade de condução durante as entregas.</p>
+            <p>7.2. Reclamações fundamentadas e reiteradas poderão resultar em suspensão ou bloqueio do acesso, assegurado o direito de manifestação prévia, salvo em casos graves (violência, assédio, fraude).</p>
+
+            <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 8ª — DA PROTEÇÃO DE DADOS (LGPD)</p>
+            <p>8.1. As PARTES se obrigam a tratar os dados pessoais de Clientes e Lojistas em conformidade com a Lei nº 13.709/2018 (LGPD), utilizando-os exclusivamente para a execução das entregas.</p>
+
+            <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 9ª — DA VIGÊNCIA E DO DESCADASTRAMENTO</p>
+            <p>9.1. O presente Termo vigerá por prazo indeterminado, podendo ser encerrado a qualquer tempo por qualquer das PARTES mediante simples descadastramento no aplicativo ou comunicação por escrito, sem necessidade de aviso prévio.</p>
+            <p>9.2. A PLATAFORMA poderá suspender ou bloquear o acesso do ENTREGADOR de forma imediata em caso de fraude, conduta inadequada grave, descumprimento de obrigações legais (ex.: CNH vencida) ou descumprimento reiterado deste Termo.</p>
+
+            <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 10ª — DISPOSIÇÕES GERAIS</p>
+            <p>10.1. Este Termo representa a totalidade do acordo entre as PARTES, substituindo entendimentos anteriores sobre o mesmo objeto.</p>
+            <p>10.2. O ENTREGADOR declara ter lido e compreendido integralmente este Termo, manifestando sua livre e espontânea concordância.</p>
+
+            <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 11ª — DO FORO</p>
+            <p>11.1. As PARTES elegem o foro da Comarca de Aragoiânia, Estado de Goiás, para dirimir quaisquer controvérsias decorrentes deste Termo.</p>
+
+            <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "8px 0" }} />
             <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 12 }}>
-              Aragoiânia-GO · {new Date().toLocaleDateString("pt-BR")}
+              Aragoiânia/GO, {new Date().toLocaleDateString("pt-BR")}
             </p>
           </div>
         </div>

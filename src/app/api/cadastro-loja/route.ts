@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
       cpf_responsavel,
       cnpj,
       email: email.trim().toLowerCase(),
+      senha,
       pix_key,
       valor_minimo,
       aceita_retirada,

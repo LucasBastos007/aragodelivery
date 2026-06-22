@@ -14,7 +14,7 @@ interface Cupom {
 
 const inp: React.CSSProperties = {
   width: "100%", padding: "10px 13px", borderRadius: 10, fontSize: 14,
-  background: "#F9FAFB", border: "1px solid rgba(255,255,255,0.1)",
+  background: "#F9FAFB", border: "1px solid #E2E8F0",
   color: "#0F172A", outline: "none", boxSizing: "border-box",
 }
 
@@ -139,7 +139,7 @@ export default function AdminCuponsPage() {
           {cupons.map(c => (
             <div key={c.id} style={{
               background: "white", borderRadius: 14, padding: "16px 18px",
-              border: `1px solid ${c.ativo ? "#F1F5F9" : "rgba(255,255,255,0.03)"}`,
+              border: `1px solid ${c.ativo ? "#F1F5F9" : "#F1F5F9"}`,
               opacity: c.ativo ? 1 : 0.5,
               display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
             }}>
@@ -165,7 +165,7 @@ export default function AdminCuponsPage() {
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-                <button onClick={() => toggleAtivo(c)} style={{ padding: "7px 14px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                <button onClick={() => toggleAtivo(c)} style={{ padding: "7px 14px", borderRadius: 10, border: "1px solid #E2E8F0", background: "transparent", color: "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                   {c.ativo ? "Desativar" : "Ativar"}
                 </button>
                 <button onClick={() => excluir(c.id)} style={{ padding: "7px 12px", borderRadius: 10, border: "1px solid rgba(239,68,68,0.2)", background: "rgba(239,68,68,0.06)", color: "#f87171", fontSize: 12, cursor: "pointer" }}>

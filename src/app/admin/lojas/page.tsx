@@ -89,6 +89,18 @@ export default function LojasPage() {
     setSalvando(false)
   }
 
+  async function ativarLoja(loja: Loja) {
+    setSalvando(true)
+    await fetch("/api/admin/ativar-loja", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ loja_id: loja.id }),
+    })
+    await load()
+    setSelecionada(prev => prev ? { ...prev, status: "ativo" } as Loja : null)
+    setSalvando(false)
+  }
+
   async function aprovar(loja: Loja) {
     const token = gerarToken()
     await atualizarStatus(loja.id, "aprovado", { contrato_token: token })
@@ -349,13 +361,13 @@ export default function LojasPage() {
                 </div>
               )}
               {selecionada.status === "contrato_assinado" && (
-                <button onClick={() => atualizarStatus(selecionada.id, "ativo")} disabled={salvando} style={{
+                <button onClick={() => ativarLoja(selecionada)} disabled={salvando} style={{
                   width: "100%", padding: "12px", borderRadius: 10, border: "none",
                   background: "linear-gradient(135deg, #10b981, #059669)",
                   color: "white", fontWeight: 800, fontSize: 13, cursor: "pointer",
                   boxShadow: "0 4px 16px rgba(16,185,129,0.3)",
                 }}>
-                  ✓ Ativar loja
+                  {salvando ? "Ativando…" : "✓ Ativar loja"}
                 </button>
               )}
               {selecionada.status === "ativo" && (

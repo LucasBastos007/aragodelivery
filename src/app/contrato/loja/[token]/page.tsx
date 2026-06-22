@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react"
 import { useParams } from "next/navigation"
-import { supabase } from "@/lib/supabase"
 import type { Loja } from "@/types"
 
 export default function ContratoLojaPage() {
@@ -20,12 +19,9 @@ export default function ContratoLojaPage() {
 
   useEffect(() => {
     async function load() {
-      const { data, error } = await supabase
-        .from("lojas")
-        .select("*")
-        .eq("contrato_token", token)
-        .single()
-      if (error || !data) { setErro("Link inválido ou expirado."); setLoading(false); return }
+      const res = await fetch(`/api/contrato-loja?token=${token}`)
+      const data = await res.json()
+      if (!res.ok) { setErro(data.error ?? "Link inválido ou expirado."); setLoading(false); return }
       if (data.contrato_assinado) { setAssinado(true) }
       setLoja(data)
       setLoading(false)
@@ -99,14 +95,13 @@ export default function ContratoLojaPage() {
     if (!canvas || !loja) return
     const assinatura = canvas.toDataURL("image/png")
     setSalvando(true)
-    const { error } = await supabase.from("lojas").update({
-      contrato_assinatura: assinatura,
-      contrato_assinado: true,
-      contrato_assinado_em: new Date().toISOString(),
-      status: "contrato_assinado",
-    }).eq("id", loja.id)
+    const res = await fetch("/api/contrato-loja", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, assinatura }),
+    })
     setSalvando(false)
-    if (error) { alert("Erro ao salvar assinatura. Tente novamente."); return }
+    if (!res.ok) { alert("Erro ao salvar assinatura. Tente novamente."); return }
     setAssinado(true)
   }
 
@@ -171,18 +166,74 @@ export default function ContratoLojaPage() {
 
         {/* Texto do contrato */}
         <div style={{ background: "#ffffff", border: "1px solid #e5e7eb", borderRadius: 14, padding: "24px", marginBottom: 24 }}>
-          <p className="text-xs font-bold uppercase tracking-wider mb-4" style={{ color: "#9CA3AF" }}>Termos e condições</p>
-          <div className="text-sm leading-relaxed flex flex-col gap-3" style={{ color: "#374151" }}>
-            <p><strong style={{ color: "#111827" }}>1. Objeto</strong> — Este contrato estabelece os termos de parceria entre a plataforma Chegô Delivery e a loja identificada acima, para oferta e venda de produtos via aplicativo na cidade de Aragoiânia-GO.</p>
-            <p><strong style={{ color: "#111827" }}>2. Comissão</strong> — A loja parceira concorda em pagar uma comissão de <strong style={{ color: "#f97316" }}>10%</strong> sobre o valor de cada pedido pago e entregue através da plataforma.</p>
-            <p><strong style={{ color: "#111827" }}>3. Repasse</strong> — Os valores líquidos (após dedução de comissão) serão repassados via PIX à chave cadastrada, em até 7 dias úteis após cada transação.</p>
-            <p><strong style={{ color: "#111827" }}>4. Obrigações da loja</strong> — A loja se compromete a: (a) manter o cardápio atualizado; (b) aceitar pedidos dentro do horário de funcionamento cadastrado; (c) preparar os itens com qualidade e dentro do prazo estimado; (d) informar disponibilidade de produtos em tempo real.</p>
-            <p><strong style={{ color: "#111827" }}>5. Obrigações da plataforma</strong> — O Chegô Delivery se compromete a: (a) divulgar a loja no aplicativo; (b) fornecer suporte técnico; (c) repassar os valores devidos no prazo acordado.</p>
-            <p><strong style={{ color: "#111827" }}>6. Suspensão</strong> — O Chegô Delivery poderá suspender temporariamente o acesso da loja em caso de reclamações recorrentes, inatividade ou descumprimento dos termos.</p>
-            <p><strong style={{ color: "#111827" }}>7. Rescisão</strong> — Qualquer das partes pode encerrar a parceria com aviso prévio de 15 dias.</p>
-            <p><strong style={{ color: "#111827" }}>8. Vigência</strong> — Este contrato entra em vigor na data de assinatura e é válido por prazo indeterminado.</p>
+          <p className="text-xs font-bold uppercase tracking-wider mb-4" style={{ color: "#9CA3AF" }}>Contrato completo</p>
+          <div className="text-sm leading-relaxed flex flex-col gap-4" style={{ color: "#374151" }}>
+
+            <div style={{ textAlign: "center", marginBottom: 8 }}>
+              <p style={{ color: "#111827", fontWeight: 900, fontSize: 15 }}>CONTRATO DE PARCERIA COMERCIAL</p>
+              <p style={{ color: "#9CA3AF", fontSize: 12 }}>PLATAFORMA CHEGÔ DELIVERY E LOJISTA PARCEIRO</p>
+            </div>
+
+            <p>Pelo presente instrumento particular, de um lado:</p>
+            <p><strong style={{ color: "#111827" }}>CHEGÔ DELIVERY</strong> (67.543.510 LIVIA RAYANE SOUSA DA SILVA), pessoa jurídica de direito privado, inscrita no CNPJ sob o nº 67.543.510/0001-86, na modalidade de Microempreendedor Individual (MEI), com sede na Rua Pedro Nestor Pereira, nº 0, Quadra 14, Lote 24, Aragoiânia/GO, CEP 75330-000, representada por sua titular, Sra. Livia Rayane Sousa da Silva, doravante <strong style={{ color: "#111827" }}>"PLATAFORMA"</strong>;</p>
+            <p>e, de outro lado:</p>
+            <p>
+              <strong style={{ color: "#111827" }}>{loja!.nome}</strong>,
+              {loja!.cnpj ? ` inscrito no CNPJ sob o nº ${loja!.cnpj},` : (loja! as any).cpf_responsavel ? ` inscrito no CPF sob o nº ${(loja! as any).cpf_responsavel},` : ""}
+              {loja!.endereco ? ` com endereço em ${loja!.endereco},` : ""}
+              {loja!.nome_responsavel ? ` representado por ${loja!.nome_responsavel},` : ""} doravante <strong style={{ color: "#111827" }}>"LOJISTA"</strong>.
+            </p>
+
+            <div style={{ height: 1, background: "#e5e7eb" }} />
+
+            <p style={{ color: "#111827", fontWeight: 800 }}>CLÁUSULA 1ª — DO OBJETO</p>
+            <p>1.1. O presente contrato tem por objeto estabelecer as condições de parceria comercial entre a PLATAFORMA e o LOJISTA, mediante a qual a PLATAFORMA disponibilizará, por meio do aplicativo "Chegô Delivery" e ferramentas associadas, canal digital para que o LOJISTA oferte e venda seus produtos a consumidores finais.</p>
+            <p>1.2. A PLATAFORMA atua exclusivamente como intermediadora tecnológica, não sendo responsável pela relação de consumo entre o LOJISTA e o cliente final, nem pela qualidade, quantidade, composição ou segurança dos produtos comercializados.</p>
+
+            <p style={{ color: "#111827", fontWeight: 800 }}>CLÁUSULA 2ª — DAS OBRIGAÇÕES DA PLATAFORMA</p>
+            <p>2.1. A PLATAFORMA se obriga a: (a) disponibilizar ao LOJISTA o acesso ao sistema de gestão e vitrine no aplicativo pelo prazo contratual; (b) promover o LOJISTA nos canais próprios da PLATAFORMA; (c) fornecer suporte técnico para uso das ferramentas disponibilizadas; (d) repassar ao LOJISTA os valores devidos, conforme Cláusula 4ª; (e) manter sigilo sobre as informações comerciais do LOJISTA.</p>
+
+            <p style={{ color: "#111827", fontWeight: 800 }}>CLÁUSULA 3ª — DAS OBRIGAÇÕES DO LOJISTA</p>
+            <p>3.1. O LOJISTA se obriga a: (a) manter o cardápio atualizado e com informações verídicas sobre preços, disponibilidade e composição dos produtos; (b) aceitar e preparar pedidos dentro dos horários de funcionamento cadastrados; (c) garantir padrão de qualidade, higiene e segurança alimentar dos produtos; (d) embalar adequadamente os itens para entrega; (e) comunicar à PLATAFORMA indisponibilidade temporária de produtos ou encerramento antecipado de funcionamento; (f) cumprir todas as normas fiscais, sanitárias e trabalhistas aplicáveis à sua atividade; (g) tratar os entregadores parceiros e clientes com urbanidade e respeito.</p>
+            <p>3.2. O LOJISTA é o único responsável perante órgãos fiscais, sanitários e de defesa do consumidor pela regularidade dos produtos que comercializa.</p>
+
+            <p style={{ color: "#111827", fontWeight: 800 }}>CLÁUSULA 4ª — DA REMUNERAÇÃO E FORMA DE PAGAMENTO</p>
+            <p>4.1. Pelo uso da PLATAFORMA, o LOJISTA pagará mensalidade fixa conforme acordado entre as partes, com vencimento mensal, mediante forma de pagamento definida no ato da contratação.</p>
+            <p>4.2. Em caso de atraso no pagamento, incidirão multa de 2% (dois por cento) sobre o valor devido e juros moratórios de 1% (um por cento) ao mês, calculados pro rata die.</p>
+            <p>4.3. O não pagamento por 30 (trinta) dias corridos poderá resultar na suspensão imediata do acesso do LOJISTA à PLATAFORMA, independentemente de notificação prévia.</p>
+
+            <p style={{ color: "#111827", fontWeight: 800 }}>CLÁUSULA 5ª — DA NATUREZA DA RELAÇÃO</p>
+            <p>5.1. O presente contrato não gera entre as PARTES qualquer vínculo de emprego, sociedade, associação ou representação comercial. O LOJISTA não possui exclusividade e pode operar em outros canais de venda.</p>
+
+            <p style={{ color: "#111827", fontWeight: 800 }}>CLÁUSULA 6ª — DA PROPRIEDADE INTELECTUAL</p>
+            <p>6.1. A marca, logotipo, nome e demais elementos de identidade visual do "Chegô Delivery" são de propriedade exclusiva da PLATAFORMA. O LOJISTA poderá utilizá-los apenas para fins de divulgação da parceria, vedado qualquer uso que cause confusão ao consumidor ou desvirtue a marca.</p>
+
+            <p style={{ color: "#111827", fontWeight: 800 }}>CLÁUSULA 7ª — DA PROTEÇÃO DE DADOS (LGPD)</p>
+            <p>7.1. As PARTES se comprometem a tratar os dados pessoais de clientes e terceiros em conformidade com a Lei nº 13.709/2018 (LGPD), utilizando-os estritamente para a execução das atividades objeto deste contrato.</p>
+            <p>7.2. Em caso de incidente de segurança envolvendo dados pessoais, a parte que tiver ciência do fato deverá notificar a outra imediatamente e adotar as medidas de contenção cabíveis.</p>
+
+            <p style={{ color: "#111827", fontWeight: 800 }}>CLÁUSULA 8ª — DA CONFIDENCIALIDADE</p>
+            <p>8.1. As PARTES se obrigam a guardar sigilo sobre as informações comerciais, financeiras e operacionais trocadas em razão deste contrato, durante toda a vigência e por 2 (dois) anos após seu encerramento, salvo obrigação legal em contrário.</p>
+
+            <p style={{ color: "#111827", fontWeight: 800 }}>CLÁUSULA 9ª — DA VIGÊNCIA, RENOVAÇÃO E RESCISÃO</p>
+            <p>9.1. O presente contrato vigerá por prazo indeterminado, podendo ser rescindido por qualquer das PARTES mediante aviso prévio por escrito.</p>
+            <p>9.2. A PLATAFORMA poderá rescindir o contrato de imediato, sem ônus, em caso de: (a) descumprimento grave das obrigações do LOJISTA; (b) reincidência em reclamações de clientes ou entregadores; (c) prática de ato ilícito; (d) inadimplência superior a 30 (trinta) dias.</p>
+            <p>9.3. O LOJISTA poderá rescindir o contrato mediante comunicação prévia por escrito, ficando responsável pelos pagamentos devidos até a data da rescisão.</p>
+
+            <p style={{ color: "#111827", fontWeight: 800 }}>CLÁUSULA 10ª — DAS LIMITAÇÕES DE RESPONSABILIDADE</p>
+            <p>10.1. A PLATAFORMA não se responsabiliza por: (a) qualidade, segurança ou integridade dos produtos oferecidos pelo LOJISTA; (b) reclamações de consumidores decorrentes de falha do LOJISTA na preparação ou embalagem dos produtos; (c) eventuais danos causados por entregadores autônomos que atuem pelo aplicativo; (d) interrupções de serviço decorrentes de casos fortuitos ou força maior.</p>
+
+            <p style={{ color: "#111827", fontWeight: 800 }}>CLÁUSULA 11ª — DISPOSIÇÕES GERAIS</p>
+            <p>11.1. Este instrumento representa a totalidade do acordo entre as PARTES, substituindo negociações, propostas ou entendimentos anteriores relacionados ao mesmo objeto.</p>
+            <p>11.2. Qualquer alteração das condições aqui estabelecidas deverá ser realizada por escrito e aceita por ambas as PARTES.</p>
+            <p>11.3. O LOJISTA declara ter lido e compreendido integralmente este contrato, concordando livre e espontaneamente com todas as cláusulas.</p>
+
+            <p style={{ color: "#111827", fontWeight: 800 }}>CLÁUSULA 12ª — DO FORO</p>
+            <p>12.1. As PARTES elegem o foro da Comarca de Aragoiânia, Estado de Goiás, para dirimir quaisquer controvérsias oriundas deste contrato, com renúncia de qualquer outro, por mais privilegiado que seja.</p>
+
+            <div style={{ height: 1, background: "#e5e7eb", margin: "8px 0" }} />
             <p style={{ color: "#9CA3AF", fontSize: 12 }}>
-              Aragoiânia-GO · {new Date().toLocaleDateString("pt-BR")}
+              Aragoiânia/GO, {new Date().toLocaleDateString("pt-BR")}
             </p>
           </div>
         </div>

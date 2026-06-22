@@ -15,16 +15,14 @@ type ProdutoForm = {
 }
 const FORM_VAZIO: ProdutoForm = { nome: "", descricao: "", preco: "", categoria_id: "", disponivel: true, foto_url: "" }
 
-async function uploadFoto(file: File, path: string): Promise<string> {
-  const { supabase: sb } = await import("@/lib/supabase")
-  const ext = file.name.split(".").pop() || "jpg"
-  const safePath = path.replace(/\.[^.]+$/, `.${ext}`)
-  const { data, error } = await supabase.storage
-    .from("entregas")
-    .upload(safePath, file, { upsert: true, contentType: file.type })
-  if (error || !data) return ""
-  const { data: { publicUrl } } = supabase.storage.from("entregas").getPublicUrl(data.path)
-  return publicUrl
+async function uploadFoto(file: File, path: string): Promise<{ url: string; erro?: string }> {
+  const form = new FormData()
+  form.append("file", file)
+  form.append("path", path)
+  const res = await fetch("/api/upload", { method: "POST", body: form })
+  const data = await res.json()
+  if (!res.ok) return { url: "", erro: data.error ?? "Falha no upload da foto" }
+  return { url: data.url ?? "" }
 }
 
 export default function CardapioPage() {
@@ -43,6 +41,7 @@ export default function CardapioPage() {
   const [fotoPreview, setFotoPreview] = useState<string>("")
   const [nomeCat, setNomeCat] = useState("")
   const [salvando, setSalvando] = useState(false)
+  const [erroSalvar, setErroSalvar] = useState("")
   const fotoInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -64,11 +63,18 @@ export default function CardapioPage() {
   async function salvarCategoria() {
     if (!nomeCat.trim() || !lojaId) return
     setSalvando(true)
-    await supabase.from("categorias_produto").insert({
-      loja_id: lojaId,
-      nome: nomeCat.trim(),
-      ordem: categorias.length,
+    setErroSalvar("")
+    const res = await fetch("/api/loja/categorias", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ loja_id: lojaId, nome: nomeCat.trim(), ordem: categorias.length }),
     })
+    if (!res.ok) {
+      const d = await res.json()
+      setErroSalvar(d.error ?? "Erro ao salvar categoria")
+      setSalvando(false)
+      return
+    }
     setNomeCat(""); setModalCat(false)
     await carregarTudo()
     setSalvando(false)
@@ -76,7 +82,11 @@ export default function CardapioPage() {
 
   async function deletarCategoria(id: string) {
     if (!confirm("Deletar categoria? Os produtos desta categoria ficarão sem categoria.")) return
-    await supabase.from("categorias_produto").delete().eq("id", id)
+    await fetch("/api/loja/categorias", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, loja_id: lojaId }),
+    })
     await carregarTudo()
   }
 
@@ -85,6 +95,7 @@ export default function CardapioPage() {
     setFormProd(FORM_VAZIO)
     setFotoFile(null)
     setFotoPreview("")
+    setErroSalvar("")
     setModalProd(true)
   }
 
@@ -99,6 +110,7 @@ export default function CardapioPage() {
     })
     setFotoFile(null)
     setFotoPreview(p.foto_url ?? "")
+    setErroSalvar("")
     setModalProd(true)
   }
 
@@ -106,19 +118,28 @@ export default function CardapioPage() {
     setModalProd(false)
     setFotoFile(null)
     setFotoPreview("")
+    setErroSalvar("")
   }
 
   async function salvarProduto() {
     if (!formProd.nome.trim() || !formProd.preco || !lojaId) return
     setSalvando(true)
+    setErroSalvar("")
 
     let fotoUrlFinal = formProd.foto_url
     if (fotoFile) {
-      const path = `produtos/${lojaId}/${Date.now()}_${fotoFile.name.replace(/\s+/g, "_")}`
-      fotoUrlFinal = await uploadFoto(fotoFile, path)
+      const path = `produtos/${lojaId}/${Date.now()}.${fotoFile.name.split(".").pop() ?? "jpg"}`
+      const { url, erro } = await uploadFoto(fotoFile, path)
+      if (!url) {
+        setErroSalvar(erro ?? "Falha ao enviar a foto. Verifique o tamanho (máx. 5MB) e tente novamente.")
+        setSalvando(false)
+        return
+      }
+      fotoUrlFinal = url
     }
 
-    const dados = {
+    const body = {
+      id: editando?.id,
       loja_id: lojaId,
       nome: formProd.nome.trim(),
       descricao: formProd.descricao.trim(),
@@ -127,24 +148,41 @@ export default function CardapioPage() {
       disponivel: formProd.disponivel,
       foto_url: fotoUrlFinal || null,
     }
-    if (editando) {
-      await supabase.from("produtos").update(dados).eq("id", editando.id)
-    } else {
-      await supabase.from("produtos").insert(dados)
+
+    const res = await fetch("/api/loja/produtos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+
+    if (!res.ok) {
+      const d = await res.json()
+      setErroSalvar(d.error ?? "Erro ao salvar produto")
+      setSalvando(false)
+      return
     }
+
     fecharModalProd(); setEditando(null); setFormProd(FORM_VAZIO)
     await carregarTudo()
     setSalvando(false)
   }
 
   async function toggleDisponivel(p: Produto) {
-    await supabase.from("produtos").update({ disponivel: !p.disponivel }).eq("id", p.id)
+    await fetch("/api/loja/produtos", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: p.id, loja_id: lojaId, disponivel: !p.disponivel }),
+    })
     await carregarTudo()
   }
 
   async function deletarProduto(id: string) {
     if (!confirm("Deletar este produto?")) return
-    await supabase.from("produtos").delete().eq("id", id)
+    await fetch("/api/loja/produtos", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, loja_id: lojaId }),
+    })
     await carregarTudo()
   }
 
@@ -306,6 +344,11 @@ export default function CardapioPage() {
                 {formProd.disponivel ? "Disponível para pedidos" : "Indisponível (oculto no cardápio)"}
               </span>
             </label>
+            {erroSalvar && (
+              <p style={{ color: "#ef4444", fontSize: 13, fontWeight: 600, background: "rgba(239,68,68,0.08)", padding: "10px 14px", borderRadius: 10 }}>
+                ⚠️ {erroSalvar}
+              </p>
+            )}
             <div style={{ display: "flex", gap: 10, paddingTop: 4 }}>
               <button onClick={fecharModalProd} className="btn-ghost" style={{ flex: 1, justifyContent: "center" }}>Cancelar</button>
               <button onClick={salvarProduto} disabled={salvando || !formProd.nome || !formProd.preco}
@@ -319,7 +362,7 @@ export default function CardapioPage() {
 
       {/* Modal: Nova Categoria */}
       {modalCat && (
-        <Modal title="Nova categoria" onClose={() => setModalCat(false)}>
+        <Modal title="Nova categoria" onClose={() => { setModalCat(false); setErroSalvar("") }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div>
               <label className="label">Nome da categoria</label>
@@ -327,8 +370,13 @@ export default function CardapioPage() {
                 onChange={e => setNomeCat(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && salvarCategoria()} autoFocus />
             </div>
+            {erroSalvar && (
+              <p style={{ color: "#ef4444", fontSize: 13, fontWeight: 600, background: "rgba(239,68,68,0.08)", padding: "10px 14px", borderRadius: 10 }}>
+                ⚠️ {erroSalvar}
+              </p>
+            )}
             <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => setModalCat(false)} className="btn-ghost" style={{ flex: 1, justifyContent: "center" }}>Cancelar</button>
+              <button onClick={() => { setModalCat(false); setErroSalvar("") }} className="btn-ghost" style={{ flex: 1, justifyContent: "center" }}>Cancelar</button>
               <button onClick={salvarCategoria} disabled={salvando || !nomeCat.trim()}
                 className="btn-primary" style={{ flex: 1, justifyContent: "center" }}>
                 {salvando ? "Salvando..." : "Criar categoria"}
