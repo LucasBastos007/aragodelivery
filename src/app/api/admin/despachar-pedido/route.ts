@@ -1,0 +1,36 @@
+import { NextRequest, NextResponse } from "next/server"
+import { createClient } from "@supabase/supabase-js"
+
+function adminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { persistSession: false, autoRefreshToken: false } }
+  )
+}
+
+export async function POST(req: NextRequest) {
+  const { pedido_id, motoboy_id } = await req.json()
+  if (!pedido_id || !motoboy_id) {
+    return NextResponse.json({ error: "pedido_id e motoboy_id obrigatórios" }, { status: 400 })
+  }
+
+  const sb = adminClient()
+
+  // Atualização atômica: só despacha se ainda estiver pronto e sem motoboy
+  const { data, error } = await sb
+    .from("pedidos")
+    .update({ motoboy_id, status: "aguardando_aceite" })
+    .eq("id", pedido_id)
+    .eq("status", "pronto")
+    .is("motoboy_id", null)
+    .select("id, codigo, taxa_entrega")
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  if (!data || data.length === 0) {
+    return NextResponse.json({ error: "Pedido já foi despachado ou não está disponível" }, { status: 409 })
+  }
+
+  return NextResponse.json({ ok: true, pedido: data[0] })
+}

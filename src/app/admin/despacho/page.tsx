@@ -141,12 +141,17 @@ function ModalDespacho({
 
   async function despachar(motoboy: any) {
     setDespachando(motoboy.id)
-    const { error } = await supabase.from("pedidos")
-      .update({ motoboy_id: motoboy.id, status: "aguardando_aceite" })
-      .eq("id", pedido.id)
-      .eq("status", "pronto")
-    if (!error) {
-      // Push notification via API
+    try {
+      const res = await fetch("/api/admin/despachar-pedido", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pedido_id: pedido.id, motoboy_id: motoboy.id }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        alert(res.status === 409 ? "Pedido já foi despachado por outro admin." : (json.error ?? "Erro ao despachar."))
+        onDespachado(); onClose(); return
+      }
+      // Push notification
       try {
         const itensCount = (pedido.itens ?? []).length
         const distStr = motoboy.dist < 999 ? `${motoboy.dist.toFixed(1)} km até a loja` : ""
@@ -159,18 +164,16 @@ function ModalDespacho({
         await fetch("/api/push", {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            action:    "send-motoboy",
-            motoboy_id: motoboy.id,
-            title:     `🛵 Nova corrida #${pedido.codigo}!`,
-            body:      linhas,
-            url:       "/motoboy",
+            action: "send-motoboy", motoboy_id: motoboy.id,
+            title: `🛵 Nova corrida #${pedido.codigo}!`, body: linhas, url: "/motoboy",
           }),
         })
       } catch {}
       setSucesso(true)
       setTimeout(() => { onDespachado(); onClose() }, 1600)
+    } finally {
+      setDespachando(null)
     }
-    setDespachando(null)
   }
 
   return (
@@ -282,10 +285,12 @@ export default function AdminDespachoPage() {
     return () => clearInterval(iv)
   }, [load])
 
-  // Realtime
+  // Realtime — filtra pedidos apenas no status relevante para o despacho
   useEffect(() => {
     const ch = supabase.channel("despacho-rt")
-      .on("postgres_changes", { event: "*", schema: "public", table: "pedidos" }, load)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "pedidos", filter: "status=eq.pronto" }, load)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "pedidos", filter: "status=eq.pronto" }, load)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "pedidos", filter: "status=eq.aguardando_aceite" }, load)
       .on("postgres_changes", { event: "*", schema: "public", table: "motoboys" }, load)
       .on("postgres_changes", { event: "*", schema: "public", table: "alertas_sos" }, load)
       .subscribe()

@@ -53,8 +53,11 @@ function urlBase64ToUint8Array(base64String: string) {
 async function geocodeAddress(address: string): Promise<[number, number] | null> {
   try {
     const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY
-    const q   = encodeURIComponent(`${address}, Aragoiânia, GO, Brasil`)
-    const res  = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${q}&key=${key}`)
+    const q   = encodeURIComponent(`${address}, Brasil`)
+    const ctrl = new AbortController()
+    const tid  = setTimeout(() => ctrl.abort(), 5000)
+    const res  = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${q}&key=${key}`, { signal: ctrl.signal })
+    clearTimeout(tid)
     const data = await res.json()
     if (data.status === "OK" && data.results[0]) {
       const loc = data.results[0].geometry.location
@@ -62,6 +65,28 @@ async function geocodeAddress(address: string): Promise<[number, number] | null>
     }
     return null
   } catch { return null }
+}
+
+async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
+  try {
+    const key  = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY
+    const ctrl = new AbortController()
+    const tid  = setTimeout(() => ctrl.abort(), 5000)
+    const res  = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${key}&language=pt-BR&result_type=locality|administrative_area_level_2`,
+      { signal: ctrl.signal }
+    )
+    clearTimeout(tid)
+    const data = await res.json()
+    if (data.status === "OK" && data.results[0]) {
+      const c = data.results[0].address_components as { types: string[]; short_name: string }[]
+      const city  = c?.find(x => x.types.includes("administrative_area_level_2"))?.short_name
+      const state = c?.find(x => x.types.includes("administrative_area_level_1"))?.short_name
+      if (city && state) return `${city} · ${state}`
+      return data.results[0].formatted_address.split(",")[0]
+    }
+  } catch {}
+  return null
 }
 
 
@@ -97,41 +122,47 @@ function MapaMotoboy({
   const followRef      = useRef(true)
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null)
 
+  // Refs para posição atual — evitam que o efeito de rota re-execute a cada update de GPS
+  const myLatRef = useRef(myLat)
+  const myLngRef = useRef(myLng)
+  useEffect(() => { myLatRef.current = myLat; myLngRef.current = myLng }, [myLat, myLng])
+
   // Pan para seguir o motoboy apenas quando não há destino ativo
   useEffect(() => {
     if (!mapInstanceRef.current || !followRef.current) return
     mapInstanceRef.current.panTo({ lat: myLat, lng: myLng })
   }, [myLat, myLng])
 
-  // Quando destino ou loja mudam: reposiciona o mapa E recalcula a rota
+  // Recalcula rota APENAS quando o destino ou loja mudam — não a cada update de GPS
   useEffect(() => {
     if (!isLoaded || !destinoLat || !destinoLng) {
       setDirections(null)
       return
     }
 
-    // Ajusta o mapa imediatamente para mostrar motoboy + destino + loja (se houver)
-    // antes mesmo da rota carregar, para o usuário ver os marcadores
+    const lat = myLatRef.current
+    const lng = myLngRef.current
+
+    // Posiciona o mapa para mostrar motoboy + destino + loja antes da rota carregar
     if (mapInstanceRef.current) {
       followRef.current = false
       const b = new google.maps.LatLngBounds()
-      b.extend({ lat: myLat,      lng: myLng      })
+      b.extend({ lat, lng })
       b.extend({ lat: destinoLat, lng: destinoLng })
       if (lojaLat && lojaLng) b.extend({ lat: lojaLat, lng: lojaLng })
-      // bottom: 320 garante que a rota fique acima do painel CorridaAtivaPanel (45% da tela)
       mapInstanceRef.current.fitBounds(b, { top: 60, right: 24, bottom: 320, left: 24 })
     }
 
     // Calcula a rota de navegação
     const svc = new google.maps.DirectionsService()
     svc.route({
-      origin:      { lat: myLat,      lng: myLng      },
+      origin:      { lat, lng },
       destination: { lat: destinoLat, lng: destinoLng },
       travelMode:  google.maps.TravelMode.DRIVING,
     }, (result, status) => {
       if (status === "OK" && result) {
         setDirections(result)
-        // Reposiciona com os bounds reais da rota calculada
+        // Ajusta bounds com a rota real — apenas uma vez ao carregar, não a cada GPS update
         if (mapInstanceRef.current && result.routes[0]?.bounds) {
           mapInstanceRef.current.fitBounds(result.routes[0].bounds, {
             top: 60, right: 24, bottom: 320, left: 24,
@@ -139,7 +170,8 @@ function MapaMotoboy({
         }
       }
     })
-  }, [isLoaded, destinoLat, destinoLng, lojaLat, lojaLng, myLat, myLng])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded, destinoLat, destinoLng, lojaLat, lojaLng])
 
   if (loadError) return (
     <div style={{ position: "absolute", inset: 0, background: "#1a1a2e", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
@@ -273,7 +305,9 @@ export default function MotoboyPage() {
   const [myLat,  setMyLat]  = useState(DEFAULT_LAT)
   const [myLng,  setMyLng]  = useState(DEFAULT_LNG)
   const [compartilhando, setCompartilhando] = useState(false)
-  const watchIdRef = useRef<number | null>(null)
+  const [cidadeAtual, setCidadeAtual] = useState<string | null>(null)
+  const watchIdRef    = useRef<number | null>(null)
+  const firstGeoRef   = useRef(true)
 
   const [destinoLat, setDestinoLat] = useState<number | null>(null)
   const [destinoLng, setDestinoLng] = useState<number | null>(null)
@@ -291,7 +325,8 @@ export default function MotoboyPage() {
 
   const prevProntosRef  = useRef<Set<string>>(new Set())
   const isFirstLoad     = useRef(true)
-  const justAcceptedRef = useRef(false)
+  const justAcceptedRef  = useRef(false)
+  const dismissedIdsRef  = useRef<Set<string>>(new Set())
 
   // ── Oferta de corrida (Tópico 02) ─────────────────────────────────────────
   const [pedidoOferta,    setPedidoOferta]    = useState<any | null>(null)
@@ -416,7 +451,7 @@ export default function MotoboyPage() {
         .eq("status", "pronto").is("motoboy_id", null)
         .order("criado_em", { ascending: true }),
       supabase.from("pedidos")
-        .select("*, loja_lat, loja_lng, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone), nome_cliente, telefone_cliente")
+        .select("*, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng)")
         .in("status", ["indo_para_loja", "na_loja", "em_rota", "coletado"])
         .eq("motoboy_id", motoboy_id)
         .order("criado_em", { ascending: true }),
@@ -463,7 +498,7 @@ export default function MotoboyPage() {
       .eq("status", "aguardando_aceite")
       .limit(1)
       .then(({ data }) => {
-        if (data && data.length > 0) {
+        if (data && data.length > 0 && !dismissedIdsRef.current.has(data[0].id)) {
           setPedidoOferta(data[0]); setTimerOferta(30); setDistKmOferta(null)
         }
       })
@@ -471,12 +506,14 @@ export default function MotoboyPage() {
     const ch = supabase.channel(`oferta-${motoboy_id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "pedidos" }, payload => {
         const novo = payload.new as any
-        if (novo?.motoboy_id === motoboy_id && novo?.status === "aguardando_aceite") {
+        if (novo?.motoboy_id === motoboy_id && novo?.status === "aguardando_aceite" && !dismissedIdsRef.current.has(novo.id)) {
           supabase.from("pedidos")
             .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
             .eq("id", novo.id).single()
             .then(({ data }) => {
-              if (data) { playNotificationSound(); setPedidoOferta(data); setTimerOferta(30); setDistKmOferta(null) }
+              if (data && !dismissedIdsRef.current.has(data.id)) {
+                playNotificationSound(); setPedidoOferta(data); setTimerOferta(30); setDistKmOferta(null)
+              }
             })
         }
       })
@@ -492,6 +529,7 @@ export default function MotoboyPage() {
       // Timeout — escalada para próximo motoboy
       const ofertaId = pedidoOferta.id
       setPedidoOferta(null)
+      dismissedIdsRef.current.add(ofertaId)
       fetch("/api/escalada", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pedido_id: ofertaId, motoboy_recusou_id: motoboy_id }),
@@ -564,12 +602,24 @@ export default function MotoboyPage() {
     if (!motoboy_id || !navigator.geolocation) return
     if (watchIdRef.current !== null) return
     setCompartilhando(true)
+    firstGeoRef.current = true
     watchIdRef.current = navigator.geolocation.watchPosition(
       async ({ coords }) => {
         setMyLat(coords.latitude); setMyLng(coords.longitude)
-        await supabase.from("motoboys")
-          .update({ lat: coords.latitude, lng: coords.longitude })
+        const { error } = await supabase.from("motoboys")
+          .update({ lat: coords.latitude, lng: coords.longitude, last_seen: new Date().toISOString() })
           .eq("id", motoboy_id)
+        if (error) {
+          // RLS bloqueou ou conexão falhou — tenta via API
+          fetch("/api/motoboy/update-location", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ motoboy_id, lat: coords.latitude, lng: coords.longitude }),
+          }).catch(() => {})
+        }
+        if (firstGeoRef.current) {
+          firstGeoRef.current = false
+          reverseGeocode(coords.latitude, coords.longitude).then(c => { if (c) setCidadeAtual(c) })
+        }
       },
       () => setCompartilhando(false),
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
@@ -582,6 +632,7 @@ export default function MotoboyPage() {
       watchIdRef.current = null
     }
     setCompartilhando(false)
+    setCidadeAtual(null)
     if (motoboy_id) supabase.from("motoboys").update({ lat: null, lng: null }).eq("id", motoboy_id)
   }, [motoboy_id])
 
@@ -592,16 +643,18 @@ export default function MotoboyPage() {
       ({ coords }) => {
         setMyLat(coords.latitude)
         setMyLng(coords.longitude)
+        reverseGeocode(coords.latitude, coords.longitude).then(c => { if (c) setCidadeAtual(c) })
       },
       () => {},
       { enableHighAccuracy: true, timeout: 10000 }
     )
   }, [])
 
+  // Inicia GPS sempre que ficar online (não só durante entrega ativa)
   useEffect(() => {
-    if (emAndamento.length > 0 && disponivel) iniciarRastreamento()
+    if (disponivel) iniciarRastreamento()
     else pararRastreamento()
-  }, [emAndamento.length, disponivel, iniciarRastreamento, pararRastreamento])
+  }, [disponivel, iniciarRastreamento, pararRastreamento])
 
   useEffect(() => () => pararRastreamento(), [pararRastreamento])
 
@@ -682,14 +735,16 @@ export default function MotoboyPage() {
   async function aceitarCorrida() {
     if (!pedidoOferta || !motoboy_id) return
     setAceitandoCorrida(true)
-    const { error } = await supabase
-      .from("pedidos")
-      .update({ status: "indo_para_loja", motoboy_id })
-      .eq("id", pedidoOferta.id)
-      .eq("status", "aguardando_aceite")
+    const res = await fetch("/api/motoboy/aceitar-corrida", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pedido_id: pedidoOferta.id, motoboy_id }),
+    })
     setAceitandoCorrida(false)
-    if (error) {
-      setToastMsg("Erro ao aceitar corrida. Tente novamente.")
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok || json.error) {
+      setToastMsg(res.status === 409 ? "Corrida já foi aceita por outro motoboy." : (json.error ?? "Erro ao aceitar corrida."))
+      dismissedIdsRef.current.add(pedidoOferta.id)
       setPedidoOferta(null)
       setTimeout(() => setToastMsg(null), 3500)
       return
@@ -701,7 +756,6 @@ export default function MotoboyPage() {
     setEmAndamento([pedidoAceito])
     setSheetH(SHEET_MID)
     setPedidoOferta(null)
-    // loadPedidos() em background sem await — o intervalo de 15s já cobre o re-fetch
     loadPedidos()
   }
 
@@ -710,6 +764,7 @@ export default function MotoboyPage() {
     if (!pedidoOferta || !motoboy_id) return
     const ofertaId = pedidoOferta.id
     setPedidoOferta(null)
+    dismissedIdsRef.current.add(ofertaId)
     // Escalada: tenta próximo motoboy (ou fila geral se atingiu limite)
     try {
       await fetch("/api/escalada", {
@@ -740,40 +795,33 @@ export default function MotoboyPage() {
     }
     const ativa = emAndamento.find(p => ["indo_para_loja","na_loja","em_rota","coletado"].includes(p.status))
     if (!ativa) {
-      // emAndamento vazio — tenta recarregar e aguarda
       await loadPedidos()
       setAvancandoEtapa(false)
       return
     }
     setAvancandoEtapa(true)
-    const NEXT: Record<string, string> = {
-      "indo_para_loja": "na_loja",
-      "na_loja":        "em_rota",
-      "em_rota":        "entregue",
-      "coletado":       "entregue",
-    }
-    const nextStatus = NEXT[ativa.status]
-    if (!nextStatus) { setAvancandoEtapa(false); return }
 
-    const updates: Record<string, any> = { status: nextStatus }
-    if (nextStatus === "entregue") {
-      updates.ganho_motoboy = ativa.taxa_entrega ?? 0
-    }
+    const res = await fetch("/api/motoboy/avancar-etapa", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pedido_id:   ativa.id,
+        motoboy_id,
+        status_atual: ativa.status,
+        taxa_entrega: ativa.taxa_entrega ?? 0,
+      }),
+    })
 
-    let { error } = await supabase.from("pedidos").update(updates).eq("id", ativa.id)
-    if (error && nextStatus === "entregue") {
-      // Fallback: coluna ganho_motoboy pode não existir — tenta só com status
-      const r2 = await supabase.from("pedidos").update({ status: nextStatus }).eq("id", ativa.id)
-      error = r2.error
-    }
-    if (error) {
-      setToastMsg("Erro ao atualizar. Tente novamente.")
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok || json.error) {
+      setToastMsg(json.error ?? "Erro ao atualizar. Tente novamente.")
       setTimeout(() => setToastMsg(null), 3500)
       setAvancandoEtapa(false)
       return
     }
 
-    // Atualiza emAndamento imediatamente sem esperar loadPedidos
+    const nextStatus: string = json.nextStatus
+
     if (nextStatus === "entregue") {
       setCorridaConcluida(ativa)
       setEmAndamento([])
@@ -856,9 +904,6 @@ export default function MotoboyPage() {
             {corridaAtiva.status === "na_loja" && "Na loja — pegue o pedido"}
             {corridaAtiva.status === "em_rota" && "Em rota de entrega"}
           </p>
-          <span style={{ color: corridaAtiva.status === "indo_para_loja" ? "#f97316" : corridaAtiva.status === "na_loja" ? "#22c55e" : "#818cf8", fontSize: 11, fontWeight: 800 }}>
-            #{corridaAtiva.codigo}
-          </span>
         </div>
       )}
 
@@ -1021,7 +1066,7 @@ export default function MotoboyPage() {
         </div>
       )}
 
-      {/* ── GPS badge — canto superior esquerdo ── */}
+      {/* ── GPS badge + cidade — canto superior esquerdo ── */}
       {compartilhando && (
         <div style={{
           position: "absolute", top: 12, left: 12, zIndex: 20,
@@ -1030,8 +1075,11 @@ export default function MotoboyPage() {
           border: "1px solid rgba(34,197,94,0.3)",
           display: "flex", alignItems: "center", gap: 5,
         }}>
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e", display: "inline-block", flexShrink: 0 }} />
           <span style={{ color: "#22c55e", fontSize: 10, fontWeight: 700 }}>GPS</span>
+          {cidadeAtual && (
+            <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 10, fontWeight: 600 }}>· {cidadeAtual}</span>
+          )}
         </div>
       )}
 
@@ -1146,8 +1194,23 @@ export default function MotoboyPage() {
                   </div>
                 )}
               </div>
+
+              {/* Localização atual */}
+              <div style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 999, padding: "5px 12px", marginBottom: 14,
+              }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={cidadeAtual ? "#22c55e" : "rgba(255,255,255,0.2)"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+                </svg>
+                <span style={{ fontSize: 11, fontWeight: 700, color: cidadeAtual ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.25)" }}>
+                  {cidadeAtual ?? "Detectando localização..."}
+                </span>
+              </div>
+
               <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 13, marginBottom: 18 }}>
-                Fique online para receber pedidos
+                Fique online para receber pedidos na sua região
               </p>
               <button onClick={toggleDisponivel} disabled={togglingDisp || dispLoading} style={{
                 width: "100%", padding: "16px", borderRadius: 16, border: "none",
