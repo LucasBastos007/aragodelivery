@@ -51,24 +51,12 @@ export async function POST(req: NextRequest) {
   const lojaLat = (pedido as any).loja_lat ?? (pedido.loja as any)?.lat ?? null
   const lojaLng = (pedido.loja as any)?.lng ?? null
 
-  // Busca motoboys disponíveis — tenta com colunas extras, fallback para básicas
-  let motoboys: any[] = []
-  const { data: mb1, error: err1 } = await supabase
+  // Busca motoboys disponíveis
+  const { data: motoboys = [] } = await supabase
     .from("motoboys")
-    .select("id, lat, lng, raio_km, push_subscription")
+    .select("id, lat, lng, push_subscription")
     .eq("disponivel", true)
     .eq("status", "ativo")
-
-  if (!err1 && mb1) {
-    motoboys = mb1
-  } else {
-    const { data: mb2 } = await supabase
-      .from("motoboys")
-      .select("id, lat, lng")
-      .eq("disponivel", true)
-      .eq("status", "ativo")
-    motoboys = mb2 ?? []
-  }
 
   if (motoboys.length === 0) {
     if (pedido.status === "aguardando_aceite") {
@@ -96,10 +84,8 @@ export async function POST(req: NextRequest) {
     .filter(m => m.id && !ignorar.has(m.id) && !ocupados.has(m.id) && m.lat && m.lng)
     .map(m => {
       const distLoja = lojaLat && lojaLng ? haversineKm(m.lat, m.lng, lojaLat, lojaLng) : 0
-      const dentroRaio = !m.raio_km || distLoja <= m.raio_km
-      return { ...m, distLoja, dentroRaio }
+      return { ...m, distLoja }
     })
-    .filter(m => m.dentroRaio)
     .sort((a, b) => a.distLoja - b.distLoja)
 
   if (candidatos.length === 0) {
