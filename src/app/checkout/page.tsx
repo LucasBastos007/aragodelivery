@@ -104,10 +104,13 @@ interface GeoResult {
 }
 
 async function reverseGeocode(lat: number, lng: number): Promise<GeoResult> {
+  const ctrl = new AbortController()
+  const tid  = setTimeout(() => ctrl.abort(), 5000)
   const res = await fetch(
     `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=pt-BR`,
-    { headers: { "User-Agent": "AragoDelivery/1.0" } }
+    { headers: { "User-Agent": "AragoDelivery/1.0" }, signal: ctrl.signal }
   )
+  clearTimeout(tid)
   const d = await res.json()
   const a = d.address ?? {}
   return {
@@ -665,7 +668,7 @@ export default function CheckoutPage() {
     // Carteiras digitais: tenta abrir UI nativa antes de salvar o pedido
     if (pagamento === "apple_pay" || pagamento === "google_pay") {
       const walletOk = await processWalletPayment(totalFinal)
-      if (!walletOk) return
+      if (!walletOk) { setEnviando(false); return }
     }
 
     const codigoBase = codigoFromTelefone(telefone)

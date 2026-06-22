@@ -145,7 +145,7 @@ const PROXIMO_STATUS: Partial<Record<StatusPedido, StatusPedido>> = {
 }
 const PROXIMO_LABEL: Partial<Record<StatusPedido, string>> = {
   pendente:   "✓ Aceitar pedido",
-  aceito:     "Iniciar preparo",
+  aceito:     "Iniciar preparo e chamar motoboy",
   preparando: "Marcar como pronto",
 }
 
@@ -207,10 +207,22 @@ export default function LojaDashboard() {
   }, [loja_id])
 
   useEffect(() => {
+    if (!loja_id) return
     load()
     const interval = setInterval(load, 15_000)
-    return () => clearInterval(interval)
-  }, [])
+    // Realtime: detecta novos pedidos e mudanças de status instantaneamente
+    const ch = supabase.channel(`loja-pedidos-${loja_id}`)
+      .on("postgres_changes", {
+        event: "INSERT", schema: "public", table: "pedidos",
+        filter: `loja_id=eq.${loja_id}`,
+      }, () => load())
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "pedidos",
+        filter: `loja_id=eq.${loja_id}`,
+      }, () => load())
+      .subscribe()
+    return () => { clearInterval(interval); supabase.removeChannel(ch) }
+  }, [loja_id])
 
   async function enviarPush(id: string, status: StatusPedido) {
     try {
@@ -227,16 +239,18 @@ export default function LojaDashboard() {
 
   async function avancarStatus(id: string, statusAtual: StatusPedido) {
     const proximo = PROXIMO_STATUS[statusAtual]
-    if (!proximo) return
+    if (!proximo || !loja_id) return
     setAtualizando(id)
-    await supabase.from("pedidos").update({ status: proximo }).eq("id", id)
+    await fetch("/api/loja/status-pedido", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pedido_id: id, status: proximo, loja_id }),
+    })
     enviarPush(id, proximo)
 
-    // Chama motoboy ao iniciar preparo para minimizar espera
+    // Ao iniciar preparo, aciona motoboy imediatamente
     if (statusAtual === "aceito") {
-      fetch("/api/escalada", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      await fetch("/api/escalada", {
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pedido_id: id }),
       }).catch(() => {})
     }
@@ -246,9 +260,12 @@ export default function LojaDashboard() {
   }
 
   async function cancelar(id: string) {
-    if (!confirm("Cancelar este pedido?")) return
+    if (!confirm("Cancelar este pedido?") || !loja_id) return
     setAtualizando(id)
-    await supabase.from("pedidos").update({ status: "cancelado" }).eq("id", id)
+    await fetch("/api/loja/status-pedido", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pedido_id: id, status: "cancelado", loja_id }),
+    })
     enviarPush(id, "cancelado")
     await load()
     setAtualizando(null)
@@ -409,7 +426,7 @@ export default function LojaDashboard() {
                   </button>
                 )}
 
-                {p.status === "pronto" && !p.motoboy_id && (
+                {(p.status === "pronto" || p.status === "preparando") && !p.motoboy_id && (
                   <button onClick={() => chamarMotoboy(p.id)} disabled={!!atualizando}
                     className="btn-primary" style={{ flex: 1, justifyContent: "center", fontSize: 13, display: "flex", alignItems: "center", gap: 7 }}>
                     {atualizando === p.id ? "Chamando..." : (
