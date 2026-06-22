@@ -196,7 +196,10 @@ export default function LojaDashboard() {
       if (!horarios || horarios.tipo === "sempre_aberto") return
       const deveria = deveEstarAberto(horarios)
       if (deveria !== null) {
-        await supabase.from("lojas").update({ aberto: deveria }).eq("id", loja_id!)
+        await fetch("/api/loja/atualizar", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ loja_id, aberto: deveria }),
+        })
       }
     }
 

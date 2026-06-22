@@ -327,6 +327,7 @@ export default function MotoboyPage() {
   const isFirstLoad     = useRef(true)
   const justAcceptedRef  = useRef(false)
   const dismissedIdsRef  = useRef<Set<string>>(new Set())
+  const isLoadingPedidosRef = useRef(false)
 
   // ── Oferta de corrida (Tópico 02) ─────────────────────────────────────────
   const [pedidoOferta,    setPedidoOferta]    = useState<any | null>(null)
@@ -360,6 +361,7 @@ export default function MotoboyPage() {
   }, [motoboy_id])
 
   // ── Ganhos do dia ──────────────────────────────────────────────────────────
+  // Só recarrega do banco na montagem — avancarEtapa atualiza otimisticamente ao entregar
   useEffect(() => {
     if (!motoboy_id) return
     const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
@@ -373,7 +375,7 @@ export default function MotoboyPage() {
         setGanhosDia(entregas.reduce((s: number, p: any) => s + (p.taxa_entrega ?? 0), 0))
         setCorridasDia(entregas.length)
       })
-  }, [motoboy_id, emAndamento.length])
+  }, [motoboy_id])
 
   // ── Injeta CSS de animação pulse (uma vez) ────────────────────────────────
   useEffect(() => {
@@ -438,7 +440,8 @@ export default function MotoboyPage() {
 
   // ── Pedidos ────────────────────────────────────────────────────────────────
   async function loadPedidos() {
-    if (!motoboy_id) return
+    if (!motoboy_id || isLoadingPedidosRef.current) return
+    isLoadingPedidosRef.current = true
     const [
       { data: prontosData },
       { data: andamentoData, error: andamentoError },
@@ -475,6 +478,7 @@ export default function MotoboyPage() {
     if (novosProntos.length > 0 || (andamentoData ?? []).length > 0) {
       setSheetH(h => Math.max(h, SHEET_MID))
     }
+    isLoadingPedidosRef.current = false
   }
 
   useEffect(() => {
@@ -655,6 +659,18 @@ export default function MotoboyPage() {
     if (disponivel) iniciarRastreamento()
     else pararRastreamento()
   }, [disponivel, iniciarRastreamento, pararRastreamento])
+
+  // Heartbeat: atualiza last_seen a cada 30s quando online (cobre motoboys estacionários)
+  useEffect(() => {
+    if (!motoboy_id || !disponivel) return
+    const iv = setInterval(() => {
+      fetch("/api/motoboy/status", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ motoboy_id }),
+      }).catch(() => {})
+    }, 30_000)
+    return () => clearInterval(iv)
+  }, [motoboy_id, disponivel])
 
   useEffect(() => () => pararRastreamento(), [pararRastreamento])
 
