@@ -7,8 +7,6 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-const MAX_TENTATIVAS = 3
-
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371
   const dL = (lat2 - lat1) * Math.PI / 180
@@ -31,75 +29,73 @@ function initVapid() {
   return false
 }
 
-// POST /api/escalada — chamado quando motoboy recusa ou timeout expira
 export async function POST(req: NextRequest) {
   const { pedido_id, motoboy_recusou_id } = await req.json()
   if (!pedido_id) return NextResponse.json({ error: "pedido_id obrigatório" }, { status: 400 })
 
-  // Busca o pedido
-  const { data: pedido } = await supabase
+  // Busca o pedido — sem colunas opcionais que podem não existir
+  const { data: pedido, error: pedidoErr } = await supabase
     .from("pedidos")
-    .select("id, codigo, motoboy_id, status, loja_id, taxa_entrega, historico_atribuicao, loja:lojas(lat, lng, endereco)")
+    .select("id, codigo, motoboy_id, status, loja_id, taxa_entrega, loja_lat, loja_lng, loja:lojas(lat, lng, endereco)")
     .eq("id", pedido_id)
     .single()
 
-  if (!pedido) return NextResponse.json({ error: "pedido não encontrado" }, { status: 404 })
+  if (pedidoErr || !pedido) {
+    return NextResponse.json({ error: "pedido não encontrado", detail: pedidoErr?.message }, { status: 404 })
+  }
 
-  // Só escalada se o pedido está em aguardando_aceite ou pronto
   if (!["aguardando_aceite", "pronto", "preparando"].includes(pedido.status)) {
     return NextResponse.json({ ok: true, msg: "status não elegível para escalada" })
   }
 
-  // Histórico de tentativas (quem já foi tentado)
-  const historico: { motoboy_id: string; ts: string; motivo: string }[] =
-    Array.isArray(pedido.historico_atribuicao) ? pedido.historico_atribuicao : []
+  const lojaLat = (pedido as any).loja_lat ?? (pedido.loja as any)?.lat ?? null
+  const lojaLng = (pedido.loja as any)?.lng ?? null
 
-  // Registra recusa do motoboy atual
-  if (motoboy_recusou_id) {
-    historico.push({ motoboy_id: motoboy_recusou_id, ts: new Date().toISOString(), motivo: "recusou" })
-  }
-
-  // Limite de tentativas atingido → fila geral
-  if (historico.length >= MAX_TENTATIVAS) {
-    await supabase.from("pedidos").update({
-      status: "pronto", motoboy_id: null,
-      historico_atribuicao: historico,
-    }).eq("id", pedido_id)
-    return NextResponse.json({ ok: true, msg: "limite de tentativas — pedido em fila geral" })
-  }
-
-  // IDs já tentados
-  const jaTestados = new Set(historico.map(h => h.motoboy_id))
-  const lojaLat    = (pedido.loja as any)?.lat as number | null
-  const lojaLng    = (pedido.loja as any)?.lng as number | null
-
-  // Busca motoboys disponíveis sem entrega ativa
-  const { data: motoboys } = await supabase
+  // Busca motoboys disponíveis — tenta com colunas extras, fallback para básicas
+  let motoboys: any[] = []
+  const { data: mb1, error: err1 } = await supabase
     .from("motoboys")
     .select("id, lat, lng, raio_km, push_subscription")
     .eq("disponivel", true)
     .eq("status", "ativo")
 
-  if (!motoboys || motoboys.length === 0) {
-    // Nenhum disponível — volta para fila geral
-    await supabase.from("pedidos").update({
-      status: "pronto", motoboy_id: null, historico_atribuicao: historico,
-    }).eq("id", pedido_id)
+  if (!err1 && mb1) {
+    motoboys = mb1
+  } else {
+    const { data: mb2 } = await supabase
+      .from("motoboys")
+      .select("id, lat, lng")
+      .eq("disponivel", true)
+      .eq("status", "ativo")
+    motoboys = mb2 ?? []
+  }
+
+  if (motoboys.length === 0) {
+    if (pedido.status === "aguardando_aceite") {
+      await supabase.from("pedidos").update({ status: "pronto", motoboy_id: null }).eq("id", pedido_id)
+    }
     return NextResponse.json({ ok: true, msg: "nenhum motoboy disponível" })
   }
 
-  // Filtra já tentados e verifica se têm entrega ativa
+  // Motoboys com entrega ativa (não disponíveis para nova)
   const { data: comEntrega } = await supabase
     .from("pedidos")
     .select("motoboy_id")
     .in("status", ["indo_para_loja", "na_loja", "em_rota", "aguardando_aceite", "coletado"])
+    .neq("id", pedido_id)
 
-  const ocupados = new Set((comEntrega ?? []).map((p: any) => p.motoboy_id))
+  const ocupados = new Set((comEntrega ?? []).map((p: any) => p.motoboy_id).filter(Boolean))
+
+  // Ignora o motoboy que recusou nesta tentativa
+  const ignorar = new Set<string>()
+  if (motoboy_recusou_id) ignorar.add(motoboy_recusou_id)
+  // Se o pedido já estava atribuído a alguém, ignora esse também
+  if (pedido.motoboy_id) ignorar.add(pedido.motoboy_id)
 
   const candidatos = motoboys
-    .filter(m => m.id && !jaTestados.has(m.id) && !ocupados.has(m.id) && m.lat && m.lng)
+    .filter(m => m.id && !ignorar.has(m.id) && !ocupados.has(m.id) && m.lat && m.lng)
     .map(m => {
-      const distLoja = lojaLat && lojaLng ? haversineKm(m.lat, m.lng, lojaLat, lojaLng) : 999
+      const distLoja = lojaLat && lojaLng ? haversineKm(m.lat, m.lng, lojaLat, lojaLng) : 0
       const dentroRaio = !m.raio_km || distLoja <= m.raio_km
       return { ...m, distLoja, dentroRaio }
     })
@@ -107,25 +103,34 @@ export async function POST(req: NextRequest) {
     .sort((a, b) => a.distLoja - b.distLoja)
 
   if (candidatos.length === 0) {
-    // Nenhum candidato elegível — fila geral
-    await supabase.from("pedidos").update({
-      status: "pronto", motoboy_id: null, historico_atribuicao: historico,
-    }).eq("id", pedido_id)
-    return NextResponse.json({ ok: true, msg: "sem candidatos elegíveis — fila geral" })
+    if (pedido.status === "aguardando_aceite") {
+      await supabase.from("pedidos").update({ status: "pronto", motoboy_id: null }).eq("id", pedido_id)
+    }
+    return NextResponse.json({ ok: true, msg: "sem candidatos elegíveis" })
   }
 
-  // Atribui ao mais próximo
   const escolhido = candidatos[0]
-  historico.push({ motoboy_id: escolhido.id, ts: new Date().toISOString(), motivo: "escalada" })
 
-  await supabase.from("pedidos").update({
+  // Salva lat/lng da loja no pedido para o mapa do motoboy
+  const lojaLatSalvar = lojaLat ?? (pedido.loja as any)?.lat
+  const lojaLngSalvar = (pedido.loja as any)?.lng
+
+  // Atualização atômica: só reatribui se o pedido ainda está no mesmo estado que lemos
+  // (evita race condition entre duas chamadas de escalada simultâneas)
+  const updateQuery = supabase.from("pedidos").update({
     motoboy_id: escolhido.id,
     status: "aguardando_aceite",
-    historico_atribuicao: historico,
-    ...(lojaLat != null && lojaLng != null ? { loja_lat: lojaLat, loja_lng: lojaLng } : {}),
-  }).eq("id", pedido_id)
+    ...(lojaLatSalvar != null ? { loja_lat: lojaLatSalvar } : {}),
+    ...(lojaLngSalvar != null ? { loja_lng: lojaLngSalvar } : {}),
+  }).eq("id", pedido_id).eq("status", pedido.status)
 
-  // Envia push para o motoboy escalado
+  if (pedido.motoboy_id) {
+    await updateQuery.eq("motoboy_id", pedido.motoboy_id)
+  } else {
+    await updateQuery.is("motoboy_id", null)
+  }
+
+  // Push notification para o motoboy
   if (escolhido.push_subscription) {
     try {
       if (initVapid()) {
@@ -143,5 +148,5 @@ export async function POST(req: NextRequest) {
     } catch {}
   }
 
-  return NextResponse.json({ ok: true, motoboy_id: escolhido.id, tentativa: historico.length })
+  return NextResponse.json({ ok: true, motoboy_id: escolhido.id })
 }

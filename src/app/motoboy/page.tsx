@@ -414,7 +414,10 @@ export default function MotoboyPage() {
     if (!motoboy_id) return
     setSalvandoRaio(true)
     setRaioKm(km)
-    await supabase.from("motoboys").update({ raio_km: km }).eq("id", motoboy_id)
+    await fetch("/api/motoboy/status", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ motoboy_id, raio_km: km }),
+    })
     setSalvandoRaio(false)
   }
 
@@ -423,16 +426,10 @@ export default function MotoboyPage() {
     if (!motoboy_id) return
     setTogglingDisp(true)
     const novo = !disponivel
-    const now  = new Date().toISOString()
-    // Tenta salvar last_seen junto; se a coluna não existir, faz update separado
-    const { error } = await supabase
-      .from("motoboys")
-      .update({ disponivel: novo, last_seen: now })
-      .eq("id", motoboy_id)
-    if (error) {
-      // Coluna last_seen pode não existir — salva só disponivel
-      await supabase.from("motoboys").update({ disponivel: novo }).eq("id", motoboy_id)
-    }
+    await fetch("/api/motoboy/status", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ motoboy_id, disponivel: novo }),
+    })
     setDisponivel(novo)
     sessionStorage.setItem("motoboy_online", novo ? "1" : "0")
     setTogglingDisp(false)
@@ -504,9 +501,12 @@ export default function MotoboyPage() {
       })
 
     const ch = supabase.channel(`oferta-${motoboy_id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "pedidos" }, payload => {
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "pedidos",
+        filter: `motoboy_id=eq.${motoboy_id}`,
+      }, payload => {
         const novo = payload.new as any
-        if (novo?.motoboy_id === motoboy_id && novo?.status === "aguardando_aceite" && !dismissedIdsRef.current.has(novo.id)) {
+        if (novo?.status === "aguardando_aceite" && !dismissedIdsRef.current.has(novo.id)) {
           supabase.from("pedidos")
             .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
             .eq("id", novo.id).single()
