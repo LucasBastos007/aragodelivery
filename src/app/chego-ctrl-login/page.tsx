@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth"
+import InstallBanner from "@/components/InstallBanner"
 
 export default function AdminLoginPage() {
   const router = useRouter()
@@ -99,6 +100,7 @@ export default function AdminLoginPage() {
               {loading ? "Verificando..." : "Entrar →"}
             </button>
           </div>
+          <InstallBanner />
         </div>
       </div>
     </div>
