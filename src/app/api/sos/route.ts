@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
         body: `${mb?.nome ?? "Motoboy"} acionou o SOS${coordsText}`,
         requireInteraction: true,
         tag: "sos-admin",
-        url: "/admin/pedidos",
+        url: "/chego-ctrl/pedidos",
         vibrate: [500, 200, 500, 200, 500, 200, 800],
       })
 

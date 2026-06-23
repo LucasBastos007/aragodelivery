@@ -21,7 +21,7 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   {
-    href: "/admin", label: "Dashboard", accent: "#f97316",
+    href: "/chego-ctrl", label: "Dashboard", accent: "#f97316",
     icon: (
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="3" width="7" height="7" rx="1.5"/>
@@ -32,7 +32,7 @@ const NAV: NavItem[] = [
     ),
   },
   {
-    href: "/admin/lojas", label: "Lojas", accent: "#10b981",
+    href: "/chego-ctrl/lojas", label: "Lojas", accent: "#10b981",
     icon: (
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
@@ -41,7 +41,7 @@ const NAV: NavItem[] = [
     ),
   },
   {
-    href: "/admin/motoboys", label: "Motoboys", accent: "#3b82f6",
+    href: "/chego-ctrl/motoboys", label: "Motoboys", accent: "#3b82f6",
     icon: (
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="8" r="4"/>
@@ -51,7 +51,7 @@ const NAV: NavItem[] = [
     ),
   },
   {
-    href: "/admin/pedidos", label: "Pedidos", accent: "#8b5cf6",
+    href: "/chego-ctrl/pedidos", label: "Pedidos", accent: "#8b5cf6",
     icon: (
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
@@ -61,7 +61,7 @@ const NAV: NavItem[] = [
     ),
   },
   {
-    href: "/admin/despacho", label: "Despacho", accent: "#0ea5e9",
+    href: "/chego-ctrl/despacho", label: "Despacho", accent: "#0ea5e9",
     icon: (
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
         <polygon points="3 11 22 2 13 21 11 13 3 11"/>
@@ -69,7 +69,7 @@ const NAV: NavItem[] = [
     ),
   },
   {
-    href: "/admin/saques", label: "Financeiro", accent: "#22c55e",
+    href: "/chego-ctrl/saques", label: "Financeiro", accent: "#22c55e",
     icon: (
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
         <rect x="1" y="4" width="22" height="16" rx="2"/>
@@ -79,7 +79,7 @@ const NAV: NavItem[] = [
     ),
   },
   {
-    href: "/admin/cupons", label: "Cupons", accent: "#ec4899",
+    href: "/chego-ctrl/cupons", label: "Cupons", accent: "#ec4899",
     icon: (
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
@@ -190,7 +190,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             Menu principal
           </p>
           {NAV.map(n => {
-            const active = n.href === "/admin" ? path === "/admin" : path.startsWith(n.href)
+            const active = n.href === "/chego-ctrl" ? path === "/chego-ctrl" : path.startsWith(n.href)
             return (
               <Link key={n.href} href={n.href} style={{
                 display: "flex", alignItems: "center", gap: 10,

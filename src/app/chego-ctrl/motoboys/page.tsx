@@ -161,7 +161,7 @@ export default function MotoboyPage() {
     setLoadingDocs(true)
     Promise.all(
       entries.map(async ({ key, value }) => {
-        const res = await fetch("/api/admin/doc-url", {
+        const res = await fetch("/api/chego-ctrl/doc-url", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ value }),

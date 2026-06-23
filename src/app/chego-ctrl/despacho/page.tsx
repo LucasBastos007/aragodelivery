@@ -142,7 +142,7 @@ function ModalDespacho({
   async function despachar(motoboy: any) {
     setDespachando(motoboy.id)
     try {
-      const res = await fetch("/api/admin/despachar-pedido", {
+      const res = await fetch("/api/chego-ctrl/despachar-pedido", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pedido_id: pedido.id, motoboy_id: motoboy.id }),
       })

@@ -91,7 +91,7 @@ export default function LojasPage() {
 
   async function ativarLoja(loja: Loja) {
     setSalvando(true)
-    await fetch("/api/admin/ativar-loja", {
+    await fetch("/api/chego-ctrl/ativar-loja", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ loja_id: loja.id }),

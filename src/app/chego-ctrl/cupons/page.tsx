@@ -44,7 +44,7 @@ export default function AdminCuponsPage() {
     if (!codigo.trim()) { setErro("Informe o código"); return }
     if (!valor || isNaN(Number(valor)) || Number(valor) <= 0) { setErro("Valor inválido"); return }
     setErro(""); setSalvando(true)
-    const res = await fetch("/api/admin/cupons", {
+    const res = await fetch("/api/chego-ctrl/cupons", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ codigo, tipo, valor: Number(valor), pedido_minimo: Number(minimo) || 0, validade: validade || null }),
     })
@@ -55,7 +55,7 @@ export default function AdminCuponsPage() {
   }
 
   async function toggleAtivo(c: Cupom) {
-    await fetch("/api/admin/cupons", {
+    await fetch("/api/chego-ctrl/cupons", {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: c.id, ativo: !c.ativo }),
     })
@@ -64,7 +64,7 @@ export default function AdminCuponsPage() {
 
   async function excluir(id: string) {
     if (!confirm("Excluir?")) return
-    await fetch("/api/admin/cupons", {
+    await fetch("/api/chego-ctrl/cupons", {
       method: "DELETE", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     })

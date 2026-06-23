@@ -270,23 +270,23 @@ export default function AdminDashboard() {
             </div>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
-            {stats.lojas_pendentes > 0 && <Link href="/admin/lojas" style={{ padding: "7px 14px", borderRadius: 9, background: "#d97706", color: "white", fontSize: 12, fontWeight: 700, textDecoration: "none" }}>Ver lojas →</Link>}
-            {stats.motoboys_pendentes > 0 && <Link href="/admin/motoboys" style={{ padding: "7px 14px", borderRadius: 9, background: "#d97706", color: "white", fontSize: 12, fontWeight: 700, textDecoration: "none" }}>Ver motoboys →</Link>}
+            {stats.lojas_pendentes > 0 && <Link href="/chego-ctrl/lojas" style={{ padding: "7px 14px", borderRadius: 9, background: "#d97706", color: "white", fontSize: 12, fontWeight: 700, textDecoration: "none" }}>Ver lojas →</Link>}
+            {stats.motoboys_pendentes > 0 && <Link href="/chego-ctrl/motoboys" style={{ padding: "7px 14px", borderRadius: 9, background: "#d97706", color: "white", fontSize: 12, fontWeight: 700, textDecoration: "none" }}>Ver motoboys →</Link>}
           </div>
         </div>
       )}
 
       {/* ─── KPI Grid ─── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 28 }}>
-        <KpiCard loading={loading} label="Lojas Ativas" value={stats.lojas_ativas} href="/admin/lojas" color="#f97316"
+        <KpiCard loading={loading} label="Lojas Ativas" value={stats.lojas_ativas} href="/chego-ctrl/lojas" color="#f97316"
           sub={stats.lojas_pendentes > 0 ? `${stats.lojas_pendentes} pend. aprovação` : "Todas operando"}
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>}
         />
-        <KpiCard loading={loading} label="Motoboys Ativos" value={stats.motoboys_ativos} href="/admin/motoboys" color="#3b82f6"
+        <KpiCard loading={loading} label="Motoboys Ativos" value={stats.motoboys_ativos} href="/chego-ctrl/motoboys" color="#3b82f6"
           sub={stats.motoboys_pendentes > 0 ? `${stats.motoboys_pendentes} pend. aprovação` : "Todos ativos"}
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>}
         />
-        <KpiCard loading={loading} label="Pedidos Hoje" value={stats.pedidos_hoje} href="/admin/pedidos" color="#8b5cf6"
+        <KpiCard loading={loading} label="Pedidos Hoje" value={stats.pedidos_hoje} href="/chego-ctrl/pedidos" color="#8b5cf6"
           sub={stats.cancelamentos > 0 ? `${stats.cancelamentos} cancelados` : "Sem cancelamentos"}
           icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>}
         />
@@ -430,10 +430,10 @@ export default function AdminDashboard() {
             </div>
             <div style={{ padding: "8px 12px" }}>
               {[
-                { href: "/admin/despacho", label: "Despacho ao vivo", color: "#5E5CE6", icon: "📡" },
-                { href: "/admin/saques",   label: "Financeiro",       color: "#30D158", icon: "💳" },
-                { href: "/admin/cupons",   label: "Cupons",           color: "#ec4899", icon: "🏷️" },
-                { href: "/admin/pedidos",  label: "Todos os pedidos", color: "#3b82f6", icon: "📦" },
+                { href: "/chego-ctrl/despacho", label: "Despacho ao vivo", color: "#5E5CE6", icon: "📡" },
+                { href: "/chego-ctrl/saques",   label: "Financeiro",       color: "#30D158", icon: "💳" },
+                { href: "/chego-ctrl/cupons",   label: "Cupons",           color: "#ec4899", icon: "🏷️" },
+                { href: "/chego-ctrl/pedidos",  label: "Todos os pedidos", color: "#3b82f6", icon: "📦" },
               ].map(item => (
                 <Link key={item.href} href={item.href} style={{
                   display: "flex", alignItems: "center", gap: 10, padding: "9px 8px", borderRadius: 10,
@@ -456,7 +456,7 @@ export default function AdminDashboard() {
           <div style={{ background: "white", borderRadius: 18, border: "1px solid rgba(0,0,0,0.06)", boxShadow: "0 2px 8px rgba(0,0,0,0.05)", overflow: "hidden" }}>
             <div style={{ padding: "18px 20px 14px", borderBottom: "1px solid #F5F5F7", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <SectionHeader title="Atividade recente" sub="Últimos pedidos" color="#8b5cf6" />
-              <Link href="/admin/pedidos" style={{ fontSize: 12, color: "#f97316", fontWeight: 700, textDecoration: "none" }}>Ver todos →</Link>
+              <Link href="/chego-ctrl/pedidos" style={{ fontSize: 12, color: "#f97316", fontWeight: 700, textDecoration: "none" }}>Ver todos →</Link>
             </div>
             <div style={{ padding: "4px 0" }}>
               {loading ? Array.from({ length: 5 }).map((_, i) => (

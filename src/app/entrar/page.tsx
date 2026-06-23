@@ -65,7 +65,7 @@ export default function EntrarPage() {
 
     if (role === "admin") {
       login({ role: "admin" })
-      router.push("/admin")
+      router.push("/chego-ctrl")
     } else if (role === "lojista") {
       login({ role: "lojista", loja_id: json.loja_id, loja_nome: json.loja_nome })
       router.push("/loja")
