@@ -43,17 +43,78 @@ const ALL_STEPS: StepId[] = [
   "banco",
 ]
 
-const VEHICLE_TYPES = [
-  { id: "Moto", icon: "🏍️" },
-  { id: "Bicicleta", icon: "🚲" },
-  { id: "Carro", icon: "🚗" },
-  { id: "A pé", icon: "🚶" },
+const VEHICLE_TYPES: { id: string; icon: React.ReactNode }[] = [
+  {
+    id: "Moto",
+    icon: (
+      <svg width="36" height="28" viewBox="0 0 36 28" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="6" cy="21" r="5"/><circle cx="30" cy="21" r="5"/>
+        <path d="M11 21h14M18 21V12l-5-4H9M18 12h8l3 5h2"/>
+        <path d="M13 8h6"/>
+      </svg>
+    ),
+  },
+  {
+    id: "Bicicleta",
+    icon: (
+      <svg width="36" height="28" viewBox="0 0 36 28" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="7" cy="20" r="5"/><circle cx="29" cy="20" r="5"/>
+        <path d="M7 20l10-12h5M22 8l5 12"/>
+        <path d="M7 20l15-8"/>
+        <circle cx="22" cy="8" r="2" fill="currentColor" stroke="none"/>
+      </svg>
+    ),
+  },
+  {
+    id: "Carro",
+    icon: (
+      <svg width="38" height="24" viewBox="0 0 38 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="10" width="34" height="10" rx="3"/>
+        <path d="M8 10L13 4h12l5 6"/>
+        <circle cx="10" cy="20" r="3"/><circle cx="28" cy="20" r="3"/>
+        <line x1="2" y1="16" x2="36" y2="16"/>
+      </svg>
+    ),
+  },
+  {
+    id: "A pé",
+    icon: (
+      <svg width="20" height="34" viewBox="0 0 20 34" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="10" cy="4" r="3"/>
+        <path d="M10 7v10M6 13l8 2M6 17l-3 10M14 17l3 10M6 27l2-6M14 27l-2-6"/>
+      </svg>
+    ),
+  },
 ]
 
-const GENEROS = [
-  { id: "Masculino", icon: "👦" },
-  { id: "Feminino", icon: "👧" },
-  { id: "Prefiro não informar", icon: "🤝" },
+const GENEROS: { id: string; icon: React.ReactNode }[] = [
+  {
+    id: "Masculino",
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="10" cy="14" r="6"/><line x1="14.8" y1="9.2" x2="21" y2="3"/>
+        <polyline points="16 3 21 3 21 8"/>
+      </svg>
+    ),
+  },
+  {
+    id: "Feminino",
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="8" r="6"/><line x1="12" y1="14" x2="12" y2="21"/>
+        <line x1="9" y1="18" x2="15" y2="18"/>
+      </svg>
+    ),
+  },
+  {
+    id: "Prefiro não informar",
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="8" r="4"/>
+        <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+      </svg>
+    ),
+  },
 ]
 
 const STEP_META: Record<StepId, { question: string; hint?: string; category: string }> = {
@@ -384,7 +445,8 @@ export default function CadastroMotoboy() {
                     background: sel ? "rgba(220,38,38,0.1)" : "#F8FAFC",
                     border: `1px solid ${sel ? "rgba(220,38,38,0.2)" : "#E2E8F0"}`,
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 22, transition: "all 0.18s",
+                    color: sel ? "#DC2626" : "#94A3B8",
+                    transition: "all 0.18s",
                   }}>{g.icon}</div>
                   <span style={{
                     color: sel ? "#DC2626" : "#374151",
@@ -397,7 +459,11 @@ export default function CadastroMotoboy() {
                     display: "flex", alignItems: "center", justifyContent: "center",
                     transition: "all 0.18s",
                   }}>
-                    {sel && <span style={{ color: "white", fontSize: 11, fontWeight: 900 }}>✓</span>}
+                    {sel && (
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="1.5,5 4,7.5 8.5,2.5"/>
+                      </svg>
+                    )}
                   </div>
                 </button>
               )
@@ -531,16 +597,20 @@ export default function CadastroMotoboy() {
                       width: 22, height: 22, borderRadius: "50%",
                       background: "#DC2626",
                       display: "flex", alignItems: "center", justifyContent: "center",
-                      fontSize: 11, color: "white", fontWeight: 900,
                       boxShadow: "0 2px 6px rgba(220,38,38,0.4)",
-                    }}>✓</div>
+                    }}>
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="1.5,5 4,7.5 8.5,2.5"/>
+                      </svg>
+                    </div>
                   )}
                   <div style={{
-                    width: 60, height: 60, borderRadius: 18,
-                    background: sel ? "rgba(220,38,38,0.1)" : "#F8FAFC",
+                    width: 64, height: 64, borderRadius: 18,
+                    background: sel ? "rgba(220,38,38,0.08)" : "#F8FAFC",
                     border: `1px solid ${sel ? "rgba(220,38,38,0.2)" : "#E2E8F0"}`,
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 32, transition: "all 0.2s",
+                    color: sel ? "#DC2626" : "#94A3B8",
+                    transition: "all 0.2s",
                   }}>{v.icon}</div>
                   <span style={{
                     color: sel ? "#DC2626" : "#475569",
@@ -643,6 +713,7 @@ export default function CadastroMotoboy() {
             value={docs.cnhFrente}
             onChange={f => { setDocs(d => ({ ...d, cnhFrente: f })); setErro("") }}
             required
+            light
           />
         )
 
@@ -653,26 +724,29 @@ export default function CadastroMotoboy() {
             value={docs.cnhVerso}
             onChange={f => { setDocs(d => ({ ...d, cnhVerso: f })); setErro("") }}
             required
+            light
           />
         )
 
       case "crlv":
         return (
           <FileUpload
-            label="CRLV (documento do veículo)"
+            label="CRLV do veículo"
             value={docs.crlv}
             onChange={f => { setDocs(d => ({ ...d, crlv: f })); setErro("") }}
             required
+            light
           />
         )
 
       case "selfie":
         return (
           <FileUpload
-            label="Selfie com o documento"
+            label="Selfie segurando o documento"
             value={docs.selfie}
             onChange={f => { setDocs(d => ({ ...d, selfie: f })); setErro("") }}
             required
+            light
           />
         )
 
@@ -683,6 +757,7 @@ export default function CadastroMotoboy() {
             onChange={b => { setBank(b); setErro("") }}
             autoFillDoc={personal.cpf}
             errors={{ banco: undefined, agencia: undefined, conta: undefined, cpfTitular: undefined }}
+            light
           />
         )
 
