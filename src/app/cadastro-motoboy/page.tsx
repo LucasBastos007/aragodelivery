@@ -15,7 +15,7 @@ interface PersonalData {
   email: string; celular: string; senha: string; confirmarSenha: string
 }
 interface VehicleData {
-  tipo: string; placa: string; modelo: string; ano: string
+  tipo: string; placa: string; marca: string; modelo: string; ano: string
   cnh: string; categoriaCnh: string; validadeCnh: string
 }
 interface DocsData {
@@ -33,6 +33,38 @@ type StepId =
 // ─── Constants ────────────────────────────────────────────────────────────────
 const ANO_ATUAL = new Date().getFullYear()
 const ANOS = Array.from({ length: ANO_ATUAL - 1999 }, (_, i) => String(ANO_ATUAL - i))
+
+// Placa: formato antigo ABC-1234 ou Mercosul ABC1D23
+function validarPlaca(placa: string): boolean {
+  const v = placa.replace(/[-\s]/g, "").toUpperCase()
+  return /^[A-Z]{3}[0-9]{4}$/.test(v) || /^[A-Z]{3}[0-9][A-Z][0-9]{2}$/.test(v)
+}
+
+const MODELOS_MOTO: Record<string, string[]> = {
+  Honda:    ["CG 160 Fan", "CG 160 Titan", "CG 160 Start", "CG 160 Cargo", "Biz 125", "Biz 110", "Pop 110i", "PCX 150", "NXR 160 Bros", "CB 300R", "CB 500F", "XRE 300", "Outro"],
+  Yamaha:   ["Factor 150", "YBR 150", "YBR 125", "Fazer 250", "Lander 250", "Crosser 150", "MT-03", "MT-07", "NMAX 160", "Outro"],
+  Kawasaki: ["Ninja 300", "Ninja 400", "Z400", "Versys 300X", "Eliminator 500", "Outro"],
+  Suzuki:   ["GSX-S750", "V-Strom 650", "Burgman 400", "GS 120", "Outro"],
+  Haojue:   ["DK 150 S", "Ryder 190", "NK 150", "Outro"],
+  Dafra:    ["Apache RTR 200", "Kansas 150", "Speed 150", "Outro"],
+  BMW:      ["G 310 R", "G 310 GS", "F 750 GS", "Outro"],
+  Outro:    ["Outro"],
+}
+
+const MODELOS_CARRO: Record<string, string[]> = {
+  Fiat:        ["Mobi", "Uno", "Argo", "Argo Drive", "Cronos", "Strada", "Palio", "Siena", "Doblo", "Outro"],
+  Volkswagen:  ["Gol", "Voyage", "Polo", "Virtus", "Fox", "Saveiro", "Up!", "T-Cross", "Outro"],
+  Chevrolet:   ["Onix", "Onix Plus", "Celta", "Classic", "Montana", "Spin", "S10", "Tracker", "Outro"],
+  Ford:        ["Ka", "Ka Sedan", "Fiesta", "Ecosport", "Ranger", "Outro"],
+  Renault:     ["Kwid", "Sandero", "Logan", "Duster", "Captur", "Outro"],
+  Hyundai:     ["HB20", "HB20S", "Creta", "Tucson", "Outro"],
+  Toyota:      ["Etios Sedan", "Etios Hatch", "Yaris", "Corolla", "Hilux", "SW4", "Outro"],
+  Nissan:      ["March", "Versa", "Kicks", "Frontier", "Outro"],
+  Peugeot:     ["208", "2008", "301", "Outro"],
+  Citroën:     ["C3", "C4 Cactus", "Berlingo", "Outro"],
+  Jeep:        ["Renegade", "Compass", "Wrangler", "Outro"],
+  Outro:       ["Outro"],
+}
 
 const ALL_STEPS: StepId[] = [
   "nome", "cpf", "nascimento", "genero",
@@ -127,8 +159,8 @@ const STEP_META: Record<StepId, { question: string; hint?: string; category: str
   senha:      { question: "Crie uma senha segura", hint: "Mínimo de 8 caracteres", category: "Acesso" },
   endereco:   { question: "Qual é o seu endereço?", hint: "Digite o CEP para preencher automaticamente", category: "Localização" },
   veiculo:    { question: "Com qual veículo você vai fazer entregas?", category: "Veículo" },
-  placa:      { question: "Qual é a placa do veículo?", category: "Veículo" },
-  modeloAno:  { question: "Qual é o modelo e o ano?", category: "Veículo" },
+  placa:      { question: "Qual é a placa do veículo?", hint: "Formato: ABC-1234 (antigo) ou ABC1D23 (Mercosul)", category: "Veículo" },
+  modeloAno:  { question: "Marca, modelo e ano", hint: "Selecione a marca e o modelo do seu veículo", category: "Veículo" },
   cnh:        { question: "Dados da sua CNH", hint: "Número, categoria e validade", category: "Veículo" },
   cnhFrente:  { question: "Foto da CNH — frente", hint: "Foto clara e legível, sem reflexo", category: "Documentos" },
   cnhVerso:   { question: "Foto da CNH — verso", hint: "Foto clara e legível, sem reflexo", category: "Documentos" },
@@ -224,7 +256,7 @@ export default function CadastroMotoboy() {
     bairro: "", cidade: "", estado: "",
   })
   const [vehicle, setVehicle] = useState<VehicleData>({
-    tipo: "Moto", placa: "", modelo: "", ano: String(ANO_ATUAL),
+    tipo: "Moto", placa: "", marca: "", modelo: "", ano: String(ANO_ATUAL),
     cnh: "", categoriaCnh: "A", validadeCnh: "",
   })
   const [docs, setDocs] = useState<DocsData>({
@@ -286,10 +318,16 @@ export default function CadastroMotoboy() {
         if (!address.numero.trim()) return "Informe o número"
         return null
       case "veiculo": return null
-      case "placa":
-        return vehicle.placa.trim() ? null : "Informe a placa do veículo"
+      case "placa": {
+        const p = vehicle.placa.trim()
+        if (!p) return "Informe a placa do veículo"
+        if (!validarPlaca(p)) return "Placa inválida — use ABC-1234 ou ABC1D23 (Mercosul)"
+        return null
+      }
       case "modeloAno":
-        return vehicle.modelo.trim() ? null : "Informe o modelo do veículo"
+        if (!vehicle.marca) return "Selecione a marca do veículo"
+        if (!vehicle.modelo) return "Selecione o modelo do veículo"
+        return null
       case "cnh":
         if (!vehicle.cnh.trim()) return "Informe o número da CNH"
         return vehicle.validadeCnh ? null : "Informe a validade da CNH"
@@ -346,7 +384,9 @@ export default function CadastroMotoboy() {
           telefone: personal.celular,
           cpf:      personal.cpf,
           veiculo:  vehicle.tipo,
-          placa:    vehicle.placa.toUpperCase() || null,
+          placa:    vehicle.placa
+            ? `${vehicle.placa.toUpperCase()}${vehicle.marca ? ` — ${vehicle.marca} ${vehicle.modelo} ${vehicle.ano}` : ""}`
+            : null,
           pix_key:  bank.banco ? `${bank.banco} Ag:${bank.agencia} Cc:${bank.conta}` : null,
         }),
       })
@@ -629,31 +669,87 @@ export default function CadastroMotoboy() {
           />
         )
 
-      case "modeloAno":
+      case "modeloAno": {
+        const tipoVeiculo = vehicle.tipo
+        const marcasMap = tipoVeiculo === "Carro" ? MODELOS_CARRO : MODELOS_MOTO
+        const marcas = Object.keys(marcasMap)
+        const modelos = vehicle.marca && marcasMap[vehicle.marca] ? marcasMap[vehicle.marca] : []
+        const selStyle = (hasVal: boolean): React.CSSProperties => ({
+          ...inp,
+          cursor: "pointer", paddingRight: 44,
+          color: hasVal ? "#0F172A" : "#94A3B8",
+        })
         return (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <input
-              ref={inputRef}
-              style={{ ...inp, ...focusStyle("modelo") }}
-              value={vehicle.modelo}
-              onChange={e => { setVehicle(v => ({ ...v, modelo: e.target.value })); setErro("") }}
-              onKeyDown={onEnter}
-              onFocus={() => setFocusedInp("modelo")}
-              onBlur={() => setFocusedInp(null)}
-              placeholder="Ex: Honda CG 160"
-            />
+            {/* Marca */}
             <div style={{ position: "relative" }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 8 }}>Marca</p>
               <select
-                style={{ ...inp, cursor: "pointer", paddingRight: 44 }}
-                value={vehicle.ano}
-                onChange={e => setVehicle(v => ({ ...v, ano: e.target.value }))}
+                style={selStyle(!!vehicle.marca)}
+                value={vehicle.marca}
+                onChange={e => {
+                  setVehicle(v => ({ ...v, marca: e.target.value, modelo: "" }))
+                  setErro("")
+                }}
               >
-                {ANOS.map(a => <option key={a}>{a}</option>)}
+                <option value="">Selecione a marca</option>
+                {marcas.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
-              <span style={{ position: "absolute", right: 18, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#9ca3af", fontSize: 14 }}>▼</span>
+              <span style={{ position: "absolute", right: 18, bottom: 18, pointerEvents: "none", color: "#94A3B8", fontSize: 13 }}>▼</span>
             </div>
+
+            {/* Modelo */}
+            {vehicle.marca && (
+              <div style={{ position: "relative" }}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 8 }}>Modelo</p>
+                {vehicle.marca === "Outro" || vehicle.modelo === "Outro" ? (
+                  <input
+                    ref={inputRef}
+                    style={{ ...inp, ...focusStyle("modelo") }}
+                    value={vehicle.modelo === "Outro" ? "" : vehicle.modelo}
+                    onChange={e => { setVehicle(v => ({ ...v, modelo: e.target.value })); setErro("") }}
+                    onKeyDown={onEnter}
+                    onFocus={() => setFocusedInp("modelo")}
+                    onBlur={() => setFocusedInp(null)}
+                    placeholder="Digite o modelo"
+                    autoFocus
+                  />
+                ) : (
+                  <>
+                    <select
+                      style={selStyle(!!vehicle.modelo)}
+                      value={vehicle.modelo}
+                      onChange={e => {
+                        setVehicle(v => ({ ...v, modelo: e.target.value }))
+                        setErro("")
+                      }}
+                    >
+                      <option value="">Selecione o modelo</option>
+                      {modelos.map(m => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                    <span style={{ position: "absolute", right: 18, bottom: 18, pointerEvents: "none", color: "#94A3B8", fontSize: 13 }}>▼</span>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Ano */}
+            {vehicle.marca && vehicle.modelo && (
+              <div style={{ position: "relative" }}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.7px", marginBottom: 8 }}>Ano</p>
+                <select
+                  style={{ ...inp, cursor: "pointer", paddingRight: 44 }}
+                  value={vehicle.ano}
+                  onChange={e => setVehicle(v => ({ ...v, ano: e.target.value }))}
+                >
+                  {ANOS.map(a => <option key={a}>{a}</option>)}
+                </select>
+                <span style={{ position: "absolute", right: 18, bottom: 18, pointerEvents: "none", color: "#94A3B8", fontSize: 13 }}>▼</span>
+              </div>
+            )}
           </div>
         )
+      }
 
       case "cnh":
         return (
