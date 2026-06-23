@@ -1,4 +1,3 @@
-import crypto from "crypto"
 import { NextRequest, NextResponse } from "next/server"
 import { sessionResponse, unauthorized } from "@/lib/session"
 import { checkRateLimit } from "@/lib/rate-limit"
@@ -15,13 +14,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Credenciais de admin não configuradas no servidor." }, { status: 500 })
   }
 
-  // timingSafeEqual para evitar timing attack
-  let emailOk = false
-  let senhaOk = false
-  try {
-    emailOk = crypto.timingSafeEqual(Buffer.from((email ?? "").toLowerCase()), Buffer.from(adminEmail.toLowerCase()))
-    senhaOk = crypto.timingSafeEqual(Buffer.from(senha ?? ""), Buffer.from(adminSenha))
-  } catch {}
+  console.log(`[admin-auth] email_len=${(email ?? "").length} env_email_len=${adminEmail.length} senha_len=${(senha ?? "").length} env_senha_len=${adminSenha.length}`)
+
+  const emailOk = (email ?? "").toLowerCase().trim() === adminEmail.toLowerCase().trim()
+  const senhaOk = (senha ?? "").trim() === adminSenha.trim()
+
+  console.log(`[admin-auth] emailOk=${emailOk} senhaOk=${senhaOk}`)
 
   if (!emailOk || !senhaOk) return unauthorized("Credenciais inválidas.")
 
