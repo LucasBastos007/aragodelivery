@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   let emailOk = false
   let senhaOk = false
   try {
-    emailOk = crypto.timingSafeEqual(Buffer.from(email ?? ""), Buffer.from(adminEmail))
+    emailOk = crypto.timingSafeEqual(Buffer.from((email ?? "").toLowerCase()), Buffer.from(adminEmail.toLowerCase()))
     senhaOk = crypto.timingSafeEqual(Buffer.from(senha ?? ""), Buffer.from(adminSenha))
   } catch {}
 
