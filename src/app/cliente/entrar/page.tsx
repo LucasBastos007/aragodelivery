@@ -25,7 +25,7 @@ export default function ClienteEntrarPage() {
   const [sucesso, setSucesso]   = useState("")
 
   useEffect(() => {
-    if (user) router.push("/cliente/perfil")
+    if (user) router.push("/")
   }, [user])
 
   async function handleSubmit() {
@@ -35,7 +35,7 @@ export default function ClienteEntrarPage() {
     if (modo === "entrar") {
       const err = await loginEmail(email.trim(), senha)
       if (err) setErro(err === "Invalid login credentials" ? "Email ou senha incorretos." : err)
-      else router.push("/cliente/perfil")
+      else router.push("/")
     } else {
       if (!nome.trim()) { setErro("Informe seu nome."); setLoading(false); return }
       if (senha.length < 6) { setErro("A senha precisa ter pelo menos 6 caracteres."); setLoading(false); return }

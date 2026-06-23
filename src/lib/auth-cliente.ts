@@ -50,7 +50,7 @@ export function useClienteAuth() {
       provider: "google",
       options: {
         redirectTo: typeof window !== "undefined"
-          ? `${window.location.origin}/cliente/meu-perfil`
+          ? `${window.location.origin}/`
           : undefined,
       },
     })
@@ -61,7 +61,7 @@ export function useClienteAuth() {
       provider: "apple",
       options: {
         redirectTo: typeof window !== "undefined"
-          ? `${window.location.origin}/cliente/meu-perfil`
+          ? `${window.location.origin}/`
           : undefined,
       },
     })
