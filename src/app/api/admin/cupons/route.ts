@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { requireAdmin, unauthorized } from "@/lib/session"
 
 function adminClient() {
   return createClient(
@@ -11,6 +12,8 @@ function adminClient() {
 
 // POST — criar cupom global (loja_id = null)
 export async function POST(req: NextRequest) {
+  if (!requireAdmin(req)) return unauthorized()
+
   const body = await req.json()
   const { codigo, tipo, valor, pedido_minimo, validade } = body
   if (!codigo || !tipo || valor == null) {
@@ -30,6 +33,8 @@ export async function POST(req: NextRequest) {
 
 // PATCH — ativar/desativar
 export async function PATCH(req: NextRequest) {
+  if (!requireAdmin(req)) return unauthorized()
+
   const { id, ativo } = await req.json()
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 })
   const { error } = await adminClient().from("cupons").update({ ativo }).eq("id", id).is("loja_id", null)
@@ -39,6 +44,8 @@ export async function PATCH(req: NextRequest) {
 
 // DELETE — excluir
 export async function DELETE(req: NextRequest) {
+  if (!requireAdmin(req)) return unauthorized()
+
   const { id } = await req.json()
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 })
   const { error } = await adminClient().from("cupons").delete().eq("id", id).is("loja_id", null)

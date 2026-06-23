@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { getSession } from "@/lib/session"
+
+const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"])
 
 function adminClient() {
   return createClient(
@@ -10,19 +13,22 @@ function adminClient() {
 }
 
 export async function POST(req: NextRequest) {
+  if (!getSession(req)) return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
+
   const form = await req.formData()
   const file = form.get("file") as File | null
   const path = form.get("path") as string | null
 
   if (!file || !path) return NextResponse.json({ error: "file e path são obrigatórios" }, { status: 400 })
+  if (!ALLOWED_MIME.has(file.type)) return NextResponse.json({ error: "Tipo de arquivo não permitido" }, { status: 400 })
   if (file.size > 5 * 1024 * 1024) return NextResponse.json({ error: "Arquivo muito grande (máx. 5MB)" }, { status: 400 })
 
   const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase().replace(/[^a-z0-9]/g, "")
   // Remove acentos, caracteres especiais e espaços do path inteiro
   const cleanPath = path
-    .normalize("NFD").replace(/[̀-ͯ]/g, "") // remove acentos
-    .replace(/[^a-zA-Z0-9/_.\-]/g, "_")               // caracteres inválidos → _
-    .replace(/_+/g, "_")                               // múltiplos _ → um só
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9/_.\-]/g, "_")
+    .replace(/_+/g, "_")
   const safePath = cleanPath.replace(/\.[^./]+$/, `.${ext}`)
 
   const bytes = await file.arrayBuffer()

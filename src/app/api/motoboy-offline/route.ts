@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { requireMotoboy } from "@/lib/session"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,8 +9,10 @@ const supabase = createClient(
 
 export async function POST(req: NextRequest) {
   try {
-    const { motoboy_id } = await req.json()
-    if (!motoboy_id) return new Response("missing id", { status: 400 })
+    const _sess = requireMotoboy(req)
+    if (!_sess) return new Response("unauthorized", { status: 401 })
+    const motoboy_id = _sess.motoboy_id
+
     await supabase
       .from("motoboys")
       .update({ disponivel: false, last_seen: new Date().toISOString() })

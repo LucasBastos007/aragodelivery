@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import bcrypt from "bcryptjs"
 
 export async function POST(req: NextRequest) {
   try {
@@ -49,6 +50,8 @@ export async function POST(req: NextRequest) {
       userId = data.user?.id ?? null
     }
 
+    const senhaHash = senha ? await bcrypt.hash(senha, 12) : null
+
     // Inserir loja usando client com service role
     const { error: lojaError } = await admin.from("lojas").insert({
       nome,
@@ -66,7 +69,7 @@ export async function POST(req: NextRequest) {
       cpf_responsavel,
       cnpj,
       email: email.trim().toLowerCase(),
-      senha,
+      senha: senhaHash,
       pix_key,
       valor_minimo,
       aceita_retirada,

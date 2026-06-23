@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import webpush from "web-push"
+import { getSession, unauthorized } from "@/lib/session"
+
+// Verifica se a requisição vem de código interno do servidor (cron, webhook, etc.)
+function isInternalRequest(req: NextRequest): boolean {
+  const secret = process.env.INTERNAL_API_SECRET
+  if (!secret) return false
+  return req.headers.get("x-internal-secret") === secret
+}
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,7 +38,18 @@ function initVapid() {
 }
 
 export async function POST(req: NextRequest) {
-  const { pedido_id, motoboy_recusou_id } = await req.json()
+  // Aceita: sessão válida de qualquer role (browser) OU segredo interno (server-to-server)
+  const sess = getSession(req)
+  if (!sess && !isInternalRequest(req)) return unauthorized()
+
+  const body = await req.json()
+  let { pedido_id, motoboy_recusou_id } = body
+
+  // BOLA fix: se o chamador é motoboy, impede que ele recuse no nome de outro
+  if (sess?.role === "motoboy") {
+    motoboy_recusou_id = sess.motoboy_id
+  }
+
   if (!pedido_id) return NextResponse.json({ error: "pedido_id obrigatório" }, { status: 400 })
 
   // Busca o pedido — sem colunas opcionais que podem não existir

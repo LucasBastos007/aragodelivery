@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { requireMotoboy, unauthorized } from "@/lib/session"
 
 function adminClient() {
   return createClient(
@@ -17,10 +18,14 @@ const NEXT_STATUS: Record<string, string> = {
 }
 
 export async function POST(req: NextRequest) {
-  const { pedido_id, motoboy_id, status_atual, taxa_entrega } = await req.json()
+  const _sess = requireMotoboy(req)
+  if (!_sess) return unauthorized()
+  const motoboy_id = _sess.motoboy_id
 
-  if (!pedido_id || !motoboy_id || !status_atual) {
-    return NextResponse.json({ error: "pedido_id, motoboy_id e status_atual são obrigatórios" }, { status: 400 })
+  const { pedido_id, status_atual, taxa_entrega } = await req.json()
+
+  if (!pedido_id || !status_atual) {
+    return NextResponse.json({ error: "pedido_id e status_atual são obrigatórios" }, { status: 400 })
   }
 
   const nextStatus = NEXT_STATUS[status_atual as string]
@@ -61,8 +66,6 @@ export async function POST(req: NextRequest) {
     try {
       const { data: ped } = await sb.from("pedidos").select("codigo, push_subscription").eq("id", pedido_id).single()
       if (ped?.push_subscription) {
-        const { initVapid, sendPush } = await import("@/lib/push-utils").catch(() => ({ initVapid: null, sendPush: null }))
-        // Fallback inline se módulo não existir
         const wp = await import("web-push")
         wp.setVapidDetails(
           process.env.VAPID_EMAIL!,

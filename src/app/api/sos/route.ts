@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { requireMotoboy, requireAdmin, unauthorized } from "@/lib/session"
 
 const sb = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,7 +13,11 @@ const VAPID_PUB    = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY  ?? ""
 const VAPID_PRIV   = process.env.VAPID_PRIVATE_KEY    ?? ""
 
 export async function POST(req: NextRequest) {
-  const { motoboy_id, pedido_id, lat, lng } = await req.json()
+  const _sess = requireMotoboy(req)
+  if (!_sess) return unauthorized()
+  const motoboy_id = _sess.motoboy_id
+
+  const { pedido_id, lat, lng } = await req.json()
 
   // Save alert with service role (bypasses RLS)
   await sb.from("alertas_sos").insert({
@@ -61,6 +66,8 @@ export async function POST(req: NextRequest) {
 
 // Admin registers their push subscription
 export async function PUT(req: NextRequest) {
+  if (!requireAdmin(req)) return unauthorized()
+
   const { subscription } = await req.json()
   if (!subscription) return NextResponse.json({ error: "missing subscription" }, { status: 400 })
 

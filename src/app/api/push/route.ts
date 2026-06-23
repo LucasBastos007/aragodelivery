@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import webpush from "web-push"
 import { createClient } from "@supabase/supabase-js"
+import { requireMotoboy, requireLoja, getSession, unauthorized } from "@/lib/session"
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const { action } = body
 
-  // ── Salvar subscription do cliente (pedido) ──────────────────────────────
+  // ── Salvar subscription do cliente (pedido) — público ───────────────────────
   if (action === "subscribe") {
     const { pedido_id, subscription } = body
     if (!pedido_id || !subscription) {
@@ -49,21 +50,42 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // ── Salvar subscription do motoboy ───────────────────────────────────────
+  // ── Salvar subscription do motoboy — requer sessão motoboy ──────────────────
   if (action === "subscribe-motoboy") {
-    const { motoboy_id, subscription } = body
-    if (!motoboy_id || !subscription) {
-      return NextResponse.json({ error: "motoboy_id e subscription obrigatórios" }, { status: 400 })
+    const _sess = requireMotoboy(req)
+    if (!_sess) return unauthorized()
+    const { subscription } = body
+    if (!subscription) {
+      return NextResponse.json({ error: "subscription obrigatório" }, { status: 400 })
     }
     const { error } = await supabaseAdmin
       .from("motoboys")
       .update({ push_subscription: subscription })
-      .eq("id", motoboy_id)
+      .eq("id", _sess.motoboy_id)
     if (error) return NextResponse.json({ ok: false, error: error.message })
     return NextResponse.json({ ok: true })
   }
 
-  // ── Enviar notificação ao cliente (pedido) ───────────────────────────────
+  // ── Salvar subscription da loja — requer sessão loja ────────────────────────
+  if (action === "subscribe-loja") {
+    const _sess = requireLoja(req)
+    if (!_sess) return unauthorized()
+    const { subscription } = body
+    if (!subscription) {
+      return NextResponse.json({ error: "subscription obrigatório" }, { status: 400 })
+    }
+    const { error } = await supabaseAdmin
+      .from("lojas")
+      .update({ push_subscription: subscription })
+      .eq("id", _sess.loja_id)
+    if (error) return NextResponse.json({ ok: false, error: error.message })
+    return NextResponse.json({ ok: true })
+  }
+
+  // ── Ações de envio — requer qualquer sessão autenticada ─────────────────────
+  if (!getSession(req)) return unauthorized()
+
+  // ── Enviar notificação ao cliente (pedido) ───────────────────────────────────
   if (action === "send") {
     const { pedido_id, status, codigo } = body
     if (!pedido_id || !status) {
@@ -93,7 +115,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── Enviar notificação ao motoboy ────────────────────────────────────────
+  // ── Enviar notificação ao motoboy ─────────────────────────────────────────────
   if (action === "send-motoboy") {
     const { motoboy_id, title, body: msgBody, url } = body
     if (!motoboy_id) {
@@ -124,21 +146,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── Salvar subscription da loja ──────────────────────────────────────────
-  if (action === "subscribe-loja") {
-    const { loja_id, subscription } = body
-    if (!loja_id || !subscription) {
-      return NextResponse.json({ error: "loja_id e subscription obrigatórios" }, { status: 400 })
-    }
-    const { error } = await supabaseAdmin
-      .from("lojas")
-      .update({ push_subscription: subscription })
-      .eq("id", loja_id)
-    if (error) return NextResponse.json({ ok: false, error: error.message })
-    return NextResponse.json({ ok: true })
-  }
-
-  // ── Enviar notificação à loja (novo pedido) ──────────────────────────────
+  // ── Enviar notificação à loja (novo pedido) ──────────────────────────────────
   if (action === "send-loja") {
     const { loja_id, pedido_id, codigo, nome_cliente, total, qtd_itens } = body
     if (!loja_id) {

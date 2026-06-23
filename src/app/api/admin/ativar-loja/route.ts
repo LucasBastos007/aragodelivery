@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { enviarBoasVindasLoja } from "@/lib/email"
+import { requireAdmin, unauthorized } from "@/lib/session"
 
 function adminClient() {
   return createClient(
@@ -11,6 +12,8 @@ function adminClient() {
 }
 
 export async function POST(req: NextRequest) {
+  if (!requireAdmin(req)) return unauthorized()
+
   const { loja_id } = await req.json()
   if (!loja_id) return NextResponse.json({ error: "loja_id obrigatório" }, { status: 400 })
 

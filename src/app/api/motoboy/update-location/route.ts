@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { requireMotoboy, unauthorized } from "@/lib/session"
 
 function adminClient() {
   return createClient(
@@ -10,9 +11,13 @@ function adminClient() {
 }
 
 export async function POST(req: NextRequest) {
-  const { motoboy_id, lat, lng } = await req.json()
-  if (!motoboy_id || lat == null || lng == null) {
-    return NextResponse.json({ error: "motoboy_id, lat e lng obrigatórios" }, { status: 400 })
+  const _sess = requireMotoboy(req)
+  if (!_sess) return unauthorized()
+  const motoboy_id = _sess.motoboy_id
+
+  const { lat, lng } = await req.json()
+  if (lat == null || lng == null) {
+    return NextResponse.json({ error: "lat e lng obrigatórios" }, { status: 400 })
   }
   const { error } = await adminClient()
     .from("motoboys")

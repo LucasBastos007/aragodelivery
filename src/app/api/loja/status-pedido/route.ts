@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { requireLoja, unauthorized } from "@/lib/session"
 
 function adminClient() {
   return createClient(
@@ -12,7 +13,12 @@ function adminClient() {
 const STATUS_VALIDOS = ["aceito", "preparando", "pronto", "cancelado"]
 
 export async function POST(req: NextRequest) {
-  const { pedido_id, status, loja_id } = await req.json()
+  const _sess = requireLoja(req)
+  if (!_sess) return unauthorized()
+  const sessLojaId = _sess.loja_id
+
+  const { pedido_id, status } = await req.json()
+  const loja_id = sessLojaId
   if (!pedido_id || !status || !loja_id) {
     return NextResponse.json({ error: "pedido_id, status e loja_id obrigatórios" }, { status: 400 })
   }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { requireLoja, unauthorized } from "@/lib/session"
 
 function adminClient() {
   return createClient(
@@ -10,7 +11,12 @@ function adminClient() {
 }
 
 export async function POST(req: NextRequest) {
-  const { loja_id, nome, ordem } = await req.json()
+  const _sess = requireLoja(req)
+  if (!_sess) return unauthorized()
+  const sessLojaId = _sess.loja_id
+
+  const { nome, ordem } = await req.json()
+  const loja_id = sessLojaId
   if (!loja_id || !nome) return NextResponse.json({ error: "loja_id e nome obrigatórios" }, { status: 400 })
 
   const { error } = await adminClient().from("categorias_produto").insert({ loja_id, nome: nome.trim(), ordem })
@@ -19,7 +25,12 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const { id, loja_id } = await req.json()
+  const _sess = requireLoja(req)
+  if (!_sess) return unauthorized()
+  const sessLojaId = _sess.loja_id
+
+  const { id } = await req.json()
+  const loja_id = sessLojaId
   if (!id || !loja_id) return NextResponse.json({ error: "id e loja_id obrigatórios" }, { status: 400 })
 
   const { error } = await adminClient().from("categorias_produto").delete().eq("id", id).eq("loja_id", loja_id)

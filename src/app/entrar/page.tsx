@@ -4,11 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
-import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
-
-const ADMIN_EMAIL = "admin@arago.com"
-const ADMIN_SENHA = "arago2024"
 
 type Role = "lojista" | "motoboy" | "admin"
 
@@ -53,68 +49,31 @@ export default function EntrarPage() {
     setErro("")
     setLoading(true)
 
-    if (role === "admin") {
-      if (email.trim() === ADMIN_EMAIL && senha === ADMIN_SENHA) {
-        login({ role: "admin" })
-        router.push("/admin")
-      } else {
-        setErro("Credenciais de administrador inválidas.")
-      }
-      setLoading(false)
-      return
-    }
+    const endpoint =
+      role === "admin"   ? "/api/auth/admin"   :
+      role === "lojista" ? "/api/login-loja"   :
+                           "/api/auth/motoboy"
 
-    if (role === "lojista") {
-      const res  = await fetch("/api/login-loja", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), senha }),
-      })
-      const json = await res.json()
-      if (!res.ok) { setErro(json.error ?? "Erro ao entrar."); setLoading(false); return }
+    const res  = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim().toLowerCase(), senha }),
+    })
+    const json = await res.json()
+
+    if (!res.ok) { setErro(json.error ?? "Erro ao entrar."); setLoading(false); return }
+
+    if (role === "admin") {
+      login({ role: "admin" })
+      router.push("/admin")
+    } else if (role === "lojista") {
       login({ role: "lojista", loja_id: json.loja_id, loja_nome: json.loja_nome })
       router.push("/loja")
-      setLoading(false)
-      return
-    }
-
-    if (role === "motoboy") {
-      const { data, error } = await supabase
-        .from("motoboys")
-        .select("id, nome, status, email, senha")
-        .eq("email", email.trim().toLowerCase())
-        .single()
-
-      // Coluna senha pode ainda não existir no banco (schema antigo)
-      if (error && (error as any).code === "PGRST204") {
-        const { data: d2, error: e2 } = await supabase
-          .from("motoboys")
-          .select("id, nome, status, email")
-          .eq("email", email.trim().toLowerCase())
-          .single()
-        if (e2 || !d2) { setErro("Email não encontrado."); setLoading(false); return }
-        if (d2.status === "pendente") { setErro("Cadastro aguardando aprovação."); setLoading(false); return }
-        login({ role: "motoboy", motoboy_id: d2.id, motoboy_nome: d2.nome })
-        router.push("/motoboy")
-        setLoading(false)
-        return
-      }
-
-      if (error || !data) { setErro("Email não encontrado."); setLoading(false); return }
-      if (data.senha && data.senha !== senha) { setErro("Senha incorreta."); setLoading(false); return }
-      if (data.status === "pendente") {
-        setErro("Cadastro aguardando aprovação. Entraremos em contato em breve.")
-        setLoading(false); return
-      }
-      if (data.status === "suspenso") {
-        setErro("Esta conta foi suspensa. Entre em contato com o suporte.")
-        setLoading(false); return
-      }
-      login({ role: "motoboy", motoboy_id: data.id, motoboy_nome: data.nome })
+    } else {
+      login({ role: "motoboy", motoboy_id: json.motoboy_id, motoboy_nome: json.motoboy_nome })
       router.push("/motoboy")
-      setLoading(false)
-      return
     }
+    setLoading(false)
   }
 
   const cadastroLink = role === "lojista"
@@ -158,7 +117,7 @@ export default function EntrarPage() {
                 type="email" value={email}
                 onChange={e => setEmail(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && entrar()}
-                placeholder={role === "admin" ? "admin@arago.com" : "seu@email.com"}
+                placeholder="seu@email.com"
                 autoComplete="email"
                 style={{
                   width: "100%", padding: "12px 14px", borderRadius: 10, fontSize: 14,

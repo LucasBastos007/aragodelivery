@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { requireLoja, unauthorized } from "@/lib/session"
 
 function adminClient() {
   return createClient(
@@ -11,8 +12,13 @@ function adminClient() {
 
 // POST — insert ou update
 export async function POST(req: NextRequest) {
+  const _sess = requireLoja(req)
+  if (!_sess) return unauthorized()
+  const sessLojaId = _sess.loja_id
+
   const body = await req.json()
-  const { id, loja_id, ...dados } = body
+  const { id, ...dados } = body
+  const loja_id = sessLojaId
 
   if (!loja_id) return NextResponse.json({ error: "loja_id obrigatório" }, { status: 400 })
 
@@ -31,7 +37,12 @@ export async function POST(req: NextRequest) {
 
 // DELETE — remove por id
 export async function DELETE(req: NextRequest) {
-  const { id, loja_id } = await req.json()
+  const _sess = requireLoja(req)
+  if (!_sess) return unauthorized()
+  const sessLojaId = _sess.loja_id
+
+  const { id } = await req.json()
+  const loja_id = sessLojaId
   if (!id || !loja_id) return NextResponse.json({ error: "id e loja_id obrigatórios" }, { status: 400 })
 
   const { error } = await adminClient().from("produtos").delete().eq("id", id).eq("loja_id", loja_id)
@@ -41,7 +52,12 @@ export async function DELETE(req: NextRequest) {
 
 // PATCH — toggle disponivel
 export async function PATCH(req: NextRequest) {
-  const { id, loja_id, disponivel } = await req.json()
+  const _sess = requireLoja(req)
+  if (!_sess) return unauthorized()
+  const sessLojaId = _sess.loja_id
+
+  const { id, disponivel } = await req.json()
+  const loja_id = sessLojaId
   if (!id || !loja_id) return NextResponse.json({ error: "id e loja_id obrigatórios" }, { status: 400 })
 
   const { error } = await adminClient().from("produtos").update({ disponivel }).eq("id", id).eq("loja_id", loja_id)

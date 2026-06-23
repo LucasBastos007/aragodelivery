@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { requireLoja, unauthorized } from "@/lib/session"
 
 function adminClient() {
   return createClient(
@@ -14,7 +15,12 @@ const CAMPOS_PERMITIDOS = ["aberto"] as const
 type CampoPermitido = typeof CAMPOS_PERMITIDOS[number]
 
 export async function POST(req: NextRequest) {
-  const { loja_id, ...campos } = await req.json()
+  const _sess = requireLoja(req)
+  if (!_sess) return unauthorized()
+  const sessLojaId = _sess.loja_id
+
+  const { ...campos } = await req.json()
+  const loja_id = sessLojaId
   if (!loja_id) return NextResponse.json({ error: "loja_id obrigatório" }, { status: 400 })
 
   const updates: Partial<Record<CampoPermitido, unknown>> = {}

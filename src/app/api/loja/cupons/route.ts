@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { requireLoja, unauthorized } from "@/lib/session"
 
 function adminClient() {
   return createClient(
@@ -11,8 +12,13 @@ function adminClient() {
 
 // POST — criar cupom da loja
 export async function POST(req: NextRequest) {
+  const _sess = requireLoja(req)
+  if (!_sess) return unauthorized()
+  const sessLojaId = _sess.loja_id
+
   const body = await req.json()
-  const { loja_id, codigo, tipo, valor, pedido_minimo, validade } = body
+  const { codigo, tipo, valor, pedido_minimo, validade } = body
+  const loja_id = sessLojaId
   if (!loja_id || !codigo || !tipo || valor == null) {
     return NextResponse.json({ error: "loja_id, codigo, tipo e valor são obrigatórios" }, { status: 400 })
   }
@@ -30,7 +36,12 @@ export async function POST(req: NextRequest) {
 
 // PATCH — ativar/desativar (valida que pertence à loja)
 export async function PATCH(req: NextRequest) {
-  const { id, loja_id, ativo } = await req.json()
+  const _sess = requireLoja(req)
+  if (!_sess) return unauthorized()
+  const sessLojaId = _sess.loja_id
+
+  const { id, ativo } = await req.json()
+  const loja_id = sessLojaId
   if (!id || !loja_id) return NextResponse.json({ error: "id e loja_id obrigatórios" }, { status: 400 })
   const { error } = await adminClient().from("cupons").update({ ativo }).eq("id", id).eq("loja_id", loja_id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -39,7 +50,12 @@ export async function PATCH(req: NextRequest) {
 
 // DELETE — excluir (valida que pertence à loja)
 export async function DELETE(req: NextRequest) {
-  const { id, loja_id } = await req.json()
+  const _sess = requireLoja(req)
+  if (!_sess) return unauthorized()
+  const sessLojaId = _sess.loja_id
+
+  const { id } = await req.json()
+  const loja_id = sessLojaId
   if (!id || !loja_id) return NextResponse.json({ error: "id e loja_id obrigatórios" }, { status: 400 })
   const { error } = await adminClient().from("cupons").delete().eq("id", id).eq("loja_id", loja_id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

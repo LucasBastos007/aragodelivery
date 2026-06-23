@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import bcrypt from "bcryptjs"
 
 const sb = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,10 +16,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Dados obrigatórios ausentes" }, { status: 400 })
   }
 
+  const senhaHash = senha ? await bcrypt.hash(senha, 12) : null
+
   const { error } = await sb.from("motoboys").insert({
     nome,
     email,
-    senha:     senha     || null,
+    senha:     senhaHash || null,
     telefone:  telefone  || null,
     cpf,
     veiculo:   veiculo   || null,

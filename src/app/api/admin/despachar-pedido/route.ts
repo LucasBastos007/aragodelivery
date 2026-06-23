@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { requireAdmin, unauthorized } from "@/lib/session"
 
 function adminClient() {
   return createClient(
@@ -10,6 +11,8 @@ function adminClient() {
 }
 
 export async function POST(req: NextRequest) {
+  if (!requireAdmin(req)) return unauthorized()
+
   const { pedido_id, motoboy_id } = await req.json()
   if (!pedido_id || !motoboy_id) {
     return NextResponse.json({ error: "pedido_id e motoboy_id obrigatórios" }, { status: 400 })
