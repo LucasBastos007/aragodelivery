@@ -52,11 +52,13 @@ export async function POST(req: NextRequest) {
   const lojaLng = (pedido.loja as any)?.lng ?? null
 
   // Busca motoboys disponíveis
-  const { data: motoboys = [] } = await supabase
+  const { data: motoboyData } = await supabase
     .from("motoboys")
     .select("id, lat, lng, push_subscription")
     .eq("disponivel", true)
     .eq("status", "ativo")
+
+  const motoboys = motoboyData ?? []
 
   if (motoboys.length === 0) {
     if (pedido.status === "aguardando_aceite") {
