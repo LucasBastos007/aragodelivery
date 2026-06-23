@@ -80,37 +80,47 @@ const STEP_META: Record<StepId, { question: string; hint?: string; category: str
 const LIGHT_CSS = `
   [data-light-form] .input {
     background: white !important;
-    border: 2px solid #e5e7eb !important;
-    color: #111827 !important;
+    border: 1.5px solid #E2E8F0 !important;
+    color: #0F172A !important;
     font-size: 16px !important;
     border-radius: 14px !important;
     padding: 16px 18px !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
+    transition: border-color 0.15s, box-shadow 0.15s !important;
   }
-  [data-light-form] .input::placeholder { color: #9ca3af !important; }
+  [data-light-form] .input::placeholder { color: #94A3B8 !important; }
   [data-light-form] .input:focus {
     border-color: #DC2626 !important;
-    box-shadow: 0 0 0 3px rgba(220,38,38,0.08) !important;
+    box-shadow: 0 0 0 3px rgba(220,38,38,0.1), 0 1px 3px rgba(0,0,0,0.05) !important;
     outline: none !important;
   }
   [data-light-form] select.input,
   [data-light-form] select.input option {
     background: white !important;
-    color: #111827 !important;
+    color: #0F172A !important;
   }
   [data-light-form] .label {
-    color: #374151 !important;
-    font-size: 13px !important;
-    font-weight: 600 !important;
+    color: #475569 !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.5px !important;
+    text-transform: uppercase !important;
   }
-  [data-light-form] .btn-primary { background: #DC2626 !important; }
+  [data-light-form] .btn-primary {
+    background: linear-gradient(135deg, #DC2626, #C41E3A) !important;
+    box-shadow: 0 4px 16px rgba(220,38,38,0.3) !important;
+    border-radius: 12px !important;
+    font-weight: 800 !important;
+  }
   [data-light-form] .btn-ghost {
-    background: #f3f4f6 !important;
-    border-color: #e5e7eb !important;
-    color: #374151 !important;
+    background: #F8FAFC !important;
+    border-color: #E2E8F0 !important;
+    color: #475569 !important;
   }
   [data-light-form] .card {
     background: white !important;
-    border: 1px solid #e5e7eb !important;
+    border: 1px solid #E2E8F0 !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05) !important;
   }
   @keyframes chego-spin { to { transform: rotate(360deg) } }
 `
@@ -118,16 +128,17 @@ const LIGHT_CSS = `
 // Shared input style for inline inputs
 const inp: React.CSSProperties = {
   width: "100%", padding: "18px 20px",
-  fontSize: 18, borderRadius: 16,
-  background: "white", border: "2px solid #e5e7eb",
-  color: "#111827", outline: "none", boxSizing: "border-box",
+  fontSize: 17, borderRadius: 14,
+  background: "white", border: "1.5px solid #E2E8F0",
+  color: "#0F172A", outline: "none", boxSizing: "border-box",
   transition: "border-color 0.15s, box-shadow 0.15s",
   WebkitAppearance: "none",
+  boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
 }
 
 const inpFocus = {
   borderColor: "#DC2626",
-  boxShadow: "0 0 0 3px rgba(220,38,38,0.08)",
+  boxShadow: "0 0 0 3px rgba(220,38,38,0.1), 0 1px 3px rgba(0,0,0,0.05)",
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -349,30 +360,48 @@ export default function CadastroMotoboy() {
 
       case "genero":
         return (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {GENEROS.map(g => (
-              <button
-                key={g.id}
-                type="button"
-                onClick={() => { setPersonal(p => ({ ...p, genero: g.id })); setErro("") }}
-                style={{
-                  display: "flex", alignItems: "center", gap: 16,
-                  padding: "18px 20px", borderRadius: 16,
-                  border: `2px solid ${personal.genero === g.id ? "#DC2626" : "#e5e7eb"}`,
-                  background: personal.genero === g.id ? "#FEF2F2" : "white",
-                  cursor: "pointer", textAlign: "left",
-                  transition: "all 0.15s",
-                }}
-              >
-                <span style={{ fontSize: 30 }}>{g.icon}</span>
-                <span style={{ color: personal.genero === g.id ? "#DC2626" : "#374151", fontWeight: 700, fontSize: 16 }}>
-                  {g.id}
-                </span>
-                {personal.genero === g.id && (
-                  <span style={{ marginLeft: "auto", color: "#DC2626", fontWeight: 700, fontSize: 18 }}>✓</span>
-                )}
-              </button>
-            ))}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {GENEROS.map(g => {
+              const sel = personal.genero === g.id
+              return (
+                <button
+                  key={g.id}
+                  type="button"
+                  onClick={() => { setPersonal(p => ({ ...p, genero: g.id })); setErro("") }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 16,
+                    padding: "16px 20px", borderRadius: 16,
+                    border: `1.5px solid ${sel ? "#DC2626" : "#E2E8F0"}`,
+                    background: sel ? "#FFF1F2" : "white",
+                    cursor: "pointer", textAlign: "left",
+                    transition: "all 0.18s",
+                    boxShadow: sel ? "0 4px 16px rgba(220,38,38,0.12)" : "0 1px 3px rgba(0,0,0,0.04)",
+                    transform: sel ? "translateX(4px)" : "translateX(0)",
+                  }}
+                >
+                  <div style={{
+                    width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+                    background: sel ? "rgba(220,38,38,0.1)" : "#F8FAFC",
+                    border: `1px solid ${sel ? "rgba(220,38,38,0.2)" : "#E2E8F0"}`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 22, transition: "all 0.18s",
+                  }}>{g.icon}</div>
+                  <span style={{
+                    color: sel ? "#DC2626" : "#374151",
+                    fontWeight: 700, fontSize: 16, flex: 1,
+                  }}>{g.id}</span>
+                  <div style={{
+                    width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
+                    border: `2px solid ${sel ? "#DC2626" : "#CBD5E1"}`,
+                    background: sel ? "#DC2626" : "white",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    transition: "all 0.18s",
+                  }}>
+                    {sel && <span style={{ color: "white", fontSize: 11, fontWeight: 900 }}>✓</span>}
+                  </div>
+                </button>
+              )
+            })}
           </div>
         )
 
@@ -474,28 +503,52 @@ export default function CadastroMotoboy() {
 
       case "veiculo":
         return (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            {VEHICLE_TYPES.map(v => (
-              <button
-                key={v.id}
-                type="button"
-                onClick={() => { setVehicle(veh => ({ ...veh, tipo: v.id })); setErro("") }}
-                style={{
-                  display: "flex", flexDirection: "column",
-                  alignItems: "center", justifyContent: "center",
-                  gap: 10, padding: "28px 16px", borderRadius: 18,
-                  border: `2px solid ${vehicle.tipo === v.id ? "#DC2626" : "#e5e7eb"}`,
-                  background: vehicle.tipo === v.id ? "#FEF2F2" : "white",
-                  cursor: "pointer", transition: "all 0.15s",
-                  boxShadow: vehicle.tipo === v.id ? "0 4px 16px rgba(220,38,38,0.15)" : "none",
-                }}
-              >
-                <span style={{ fontSize: 40 }}>{v.icon}</span>
-                <span style={{ color: vehicle.tipo === v.id ? "#DC2626" : "#374151", fontWeight: 700, fontSize: 15 }}>
-                  {v.id}
-                </span>
-              </button>
-            ))}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            {VEHICLE_TYPES.map(v => {
+              const sel = vehicle.tipo === v.id
+              return (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => { setVehicle(veh => ({ ...veh, tipo: v.id })); setErro("") }}
+                  style={{
+                    display: "flex", flexDirection: "column",
+                    alignItems: "center", justifyContent: "center",
+                    gap: 14, padding: "28px 16px", borderRadius: 20,
+                    border: `1.5px solid ${sel ? "#DC2626" : "#E2E8F0"}`,
+                    background: sel ? "#FFF1F2" : "white",
+                    cursor: "pointer", transition: "all 0.2s",
+                    boxShadow: sel
+                      ? "0 8px 28px rgba(220,38,38,0.18)"
+                      : "0 1px 4px rgba(0,0,0,0.06)",
+                    transform: sel ? "translateY(-3px)" : "translateY(0)",
+                    position: "relative",
+                  }}
+                >
+                  {sel && (
+                    <div style={{
+                      position: "absolute", top: 10, right: 10,
+                      width: 22, height: 22, borderRadius: "50%",
+                      background: "#DC2626",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 11, color: "white", fontWeight: 900,
+                      boxShadow: "0 2px 6px rgba(220,38,38,0.4)",
+                    }}>✓</div>
+                  )}
+                  <div style={{
+                    width: 60, height: 60, borderRadius: 18,
+                    background: sel ? "rgba(220,38,38,0.1)" : "#F8FAFC",
+                    border: `1px solid ${sel ? "rgba(220,38,38,0.2)" : "#E2E8F0"}`,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 32, transition: "all 0.2s",
+                  }}>{v.icon}</div>
+                  <span style={{
+                    color: sel ? "#DC2626" : "#475569",
+                    fontWeight: 700, fontSize: 14, letterSpacing: "-0.2px",
+                  }}>{v.id}</span>
+                </button>
+              )
+            })}
           </div>
         )
 
@@ -640,44 +693,67 @@ export default function CadastroMotoboy() {
 
   // ─── Animation variants ─────────────────────────────────────────────────────
   const variants = {
-    enter:  (d: number) => ({ x: d * 48, opacity: 0 }),
-    center: { x: 0, opacity: 1 },
-    exit:   (d: number) => ({ x: d * -48, opacity: 0 }),
+    enter:  (d: number) => ({ x: d * 56, y: 8, opacity: 0 }),
+    center: { x: 0, y: 0, opacity: 1 },
+    exit:   (d: number) => ({ x: d * -56, y: -8, opacity: 0 }),
   }
 
   // ─── Success screen ─────────────────────────────────────────────────────────
   if (sucesso) {
     return (
-      <div style={{ minHeight: "100vh", background: "#F9FAFB", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ minHeight: "100vh", background: "white", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <motion.div
-          initial={{ scale: 0.85, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 260, damping: 20 }}
-          style={{ background: "white", borderRadius: 24, padding: 40, textAlign: "center", maxWidth: 420, width: "100%", boxShadow: "0 8px 40px rgba(0,0,0,0.1)" }}
+          initial={{ scale: 0.9, opacity: 0, y: 24 }}
+          animate={{ scale: 1, opacity: 1, y: 0 }}
+          transition={{ type: "spring", stiffness: 280, damping: 22 }}
+          style={{
+            background: "white", borderRadius: 28, padding: "48px 36px",
+            textAlign: "center", maxWidth: 400, width: "100%",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.04)",
+            border: "1px solid #F1F5F9",
+          }}
         >
           <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.2, type: "spring", stiffness: 300 }}
-            style={{ width: 80, height: 80, borderRadius: "50%", background: "rgba(34,197,94,0.1)", border: "2px solid rgba(34,197,94,0.3)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", fontSize: 38 }}
+            initial={{ scale: 0, rotate: -20 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ delay: 0.15, type: "spring", stiffness: 300, damping: 15 }}
+            style={{
+              width: 90, height: 90, borderRadius: "50%",
+              background: "linear-gradient(135deg, #dcfce7, #bbf7d0)",
+              border: "2px solid #86efac",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              margin: "0 auto 28px", fontSize: 44,
+            }}
           >
             ✅
           </motion.div>
-          <h2 style={{ fontSize: 22, fontWeight: 900, color: "#111827", marginBottom: 8 }}>
-            Cadastro enviado!
-          </h2>
-          <p style={{ fontSize: 14, color: "#6B7280", lineHeight: 1.7, marginBottom: 6 }}>
-            Recebemos seus dados. Nossa equipe analisará em até 48h.
-          </p>
-          <p style={{ fontSize: 13, color: "#9ca3af", lineHeight: 1.7, marginBottom: 28 }}>
-            Após aprovação, você receberá um link para assinar o contrato digital e começar a fazer entregas.
-          </p>
-          <a
-            href="/"
-            style={{ display: "block", padding: "15px", borderRadius: 14, background: "#DC2626", color: "white", fontWeight: 800, textDecoration: "none", fontSize: 15, boxShadow: "0 4px 20px rgba(220,38,38,0.3)" }}
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
           >
-            Voltar ao início
-          </a>
+            <h2 style={{ fontSize: 26, fontWeight: 900, color: "#0F172A", marginBottom: 10, letterSpacing: "-0.5px" }}>
+              Cadastro enviado!
+            </h2>
+            <p style={{ fontSize: 15, color: "#64748B", lineHeight: 1.7, marginBottom: 8 }}>
+              Recebemos seus dados com sucesso.
+            </p>
+            <p style={{ fontSize: 14, color: "#94A3B8", lineHeight: 1.7, marginBottom: 32 }}>
+              Nossa equipe vai analisar em até 48h. Após aprovação, você receberá o contrato digital para assinar e poderá começar a fazer entregas.
+            </p>
+            <a
+              href="/"
+              style={{
+                display: "block", padding: "16px", borderRadius: 14,
+                background: "linear-gradient(135deg, #DC2626, #C41E3A)",
+                color: "white", fontWeight: 800, textDecoration: "none",
+                fontSize: 15, letterSpacing: "-0.2px",
+                boxShadow: "0 4px 20px rgba(220,38,38,0.3)",
+              }}
+            >
+              Voltar ao início
+            </a>
+          </motion.div>
         </motion.div>
       </div>
     )
@@ -685,52 +761,83 @@ export default function CadastroMotoboy() {
 
   // ─── Main form ──────────────────────────────────────────────────────────────
   return (
-    <div style={{ minHeight: "100vh", background: "#F9FAFB" }} data-light-form="">
+    <div style={{ minHeight: "100vh", background: "white" }} data-light-form="">
       <style>{LIGHT_CSS}</style>
 
-      {/* ── Fixed header ─────────────────────────────────────────────────── */}
-      <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 50, background: "white", boxShadow: "0 1px 8px rgba(0,0,0,0.06)" }}>
-        {/* Progress bar */}
-        <div style={{ height: 3, background: "#f3f4f6" }}>
-          <motion.div
-            style={{ height: "100%", background: "#DC2626", borderRadius: "0 2px 2px 0", originX: 0 }}
-            animate={{ width: `${progress}%` }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
-          />
-        </div>
+      {/* ── Top progress stripe ───────────────────────────────────────────── */}
+      <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 4, background: "#F1F5F9", zIndex: 60 }}>
+        <motion.div
+          style={{
+            height: "100%", originX: 0,
+            background: "linear-gradient(90deg, #DC2626, #f97316)",
+          }}
+          animate={{ width: `${progress}%` }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+        />
+      </div>
 
-        <div style={{ maxWidth: 480, margin: "0 auto", padding: "12px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+      {/* ── Fixed header ─────────────────────────────────────────────────── */}
+      <div style={{
+        position: "fixed", top: 4, left: 0, right: 0, zIndex: 50,
+        background: "rgba(255,255,255,0.96)",
+        backdropFilter: "blur(12px)",
+        borderBottom: "1px solid #F1F5F9",
+      }}>
+        <div style={{ maxWidth: 560, margin: "0 auto", padding: "13px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+          {/* Back / close */}
           {stepIdx > 0 ? (
             <button
               onClick={back}
-              style={{ background: "#f3f4f6", border: "none", cursor: "pointer", color: "#374151", width: 40, height: 40, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}
+              style={{
+                background: "#F8FAFC", border: "1.5px solid #E2E8F0",
+                cursor: "pointer", color: "#475569",
+                width: 38, height: 38, borderRadius: 11,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 16, flexShrink: 0, transition: "all 0.15s",
+              }}
             >
               ←
             </button>
           ) : (
             <a
               href="/"
-              style={{ background: "#f3f4f6", border: "none", color: "#374151", width: 40, height: 40, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0, textDecoration: "none" }}
+              style={{
+                background: "#F8FAFC", border: "1.5px solid #E2E8F0",
+                color: "#475569", width: 38, height: 38, borderRadius: 11,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 16, flexShrink: 0, textDecoration: "none",
+              }}
             >
               ←
             </a>
           )}
 
+          {/* Logo centered */}
           <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
-            <img src="/logo-chego.png" alt="Chegô" style={{ height: 36, objectFit: "contain" }} />
+            <img src="/logo-chego.png" alt="Chegô" style={{ height: 32, objectFit: "contain" }} />
           </div>
 
-          <div style={{ width: 40, flexShrink: 0, textAlign: "right" }}>
-            <span style={{ color: "#9ca3af", fontSize: 12, fontWeight: 700 }}>
-              {stepIdx + 1}/{totalSteps}
+          {/* Step pill */}
+          <div style={{
+            background: "#F8FAFC", border: "1.5px solid #E2E8F0",
+            borderRadius: 10, padding: "6px 12px",
+            display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
+          }}>
+            <div style={{
+              width: 6, height: 6, borderRadius: "50%",
+              background: "#DC2626",
+              boxShadow: "0 0 0 2px rgba(220,38,38,0.2)",
+            }} />
+            <span style={{ color: "#475569", fontSize: 12, fontWeight: 700 }}>
+              {stepIdx + 1} <span style={{ color: "#CBD5E1" }}>/</span> {totalSteps}
             </span>
           </div>
         </div>
       </div>
 
       {/* ── Main content ─────────────────────────────────────────────────── */}
-      <div style={{ paddingTop: 80, paddingBottom: 120, minHeight: "100vh" }}>
-        <div style={{ maxWidth: 480, margin: "0 auto", padding: "32px 20px 24px" }}>
+      <div style={{ paddingTop: 90, paddingBottom: 110, minHeight: "100vh" }}>
+        <div style={{ maxWidth: 560, margin: "0 auto", padding: "36px 24px 28px" }}>
           <AnimatePresence mode="wait" custom={direction}>
             <motion.div
               key={currentStepId}
@@ -739,21 +846,37 @@ export default function CadastroMotoboy() {
               initial="enter"
               animate="center"
               exit="exit"
-              transition={{ duration: 0.2, ease: "easeOut" }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
             >
-              {/* Category badge */}
-              <p style={{ color: "#DC2626", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10 }}>
-                {meta.category}
-              </p>
+              {/* Category pill */}
+              <div style={{ marginBottom: 18 }}>
+                <span style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  padding: "5px 12px", borderRadius: 999,
+                  background: "#FFF1F2", border: "1px solid #FECDD3",
+                  color: "#DC2626", fontSize: 11, fontWeight: 800,
+                  textTransform: "uppercase", letterSpacing: 1.4,
+                }}>
+                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#DC2626", display: "inline-block" }} />
+                  {meta.category}
+                </span>
+              </div>
 
               {/* Big question */}
-              <h1 style={{ color: "#111827", fontSize: 26, fontWeight: 900, lineHeight: 1.25, marginBottom: meta.hint ? 10 : 28, letterSpacing: "-0.3px" }}>
+              <h1 style={{
+                color: "#0F172A", fontSize: 29, fontWeight: 900,
+                lineHeight: 1.2, marginBottom: meta.hint ? 10 : 28,
+                letterSpacing: "-0.5px",
+              }}>
                 {meta.question}
               </h1>
 
               {/* Hint */}
               {meta.hint && (
-                <p style={{ color: "#6B7280", fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>
+                <p style={{
+                  color: "#64748B", fontSize: 15, lineHeight: 1.65,
+                  marginBottom: 28,
+                }}>
                   {meta.hint}
                 </p>
               )}
@@ -765,16 +888,18 @@ export default function CadastroMotoboy() {
               <AnimatePresence>
                 {erro && (
                   <motion.div
-                    initial={{ opacity: 0, y: -6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
+                    initial={{ opacity: 0, y: -8, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.97 }}
                     style={{
-                      marginTop: 14, padding: "12px 16px", borderRadius: 12,
-                      background: "#FEF2F2", border: "1px solid #FECACA",
+                      marginTop: 14, padding: "13px 16px", borderRadius: 12,
+                      background: "#FFF1F2", border: "1px solid #FECDD3",
                       color: "#DC2626", fontSize: 14, fontWeight: 500,
+                      display: "flex", alignItems: "center", gap: 8,
                     }}
                   >
-                    ⚠️ {erro}
+                    <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+                    {erro}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -787,22 +912,29 @@ export default function CadastroMotoboy() {
       {/* ── Fixed bottom CTA ─────────────────────────────────────────────── */}
       <div style={{
         position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 50,
-        background: "white", borderTop: "1px solid #f3f4f6",
-        padding: "14px 20px",
-        paddingBottom: "calc(14px + env(safe-area-inset-bottom))",
+        background: "rgba(255,255,255,0.96)",
+        backdropFilter: "blur(12px)",
+        borderTop: "1px solid #F1F5F9",
+        padding: "16px 24px",
+        paddingBottom: "calc(16px + env(safe-area-inset-bottom))",
       }}>
-        <div style={{ maxWidth: 480, margin: "0 auto" }}>
+        <div style={{ maxWidth: 560, margin: "0 auto" }}>
           <button
             onClick={next}
             disabled={loading}
             style={{
-              width: "100%", padding: "17px 24px", borderRadius: 16,
-              background: loading ? "#fca5a5" : "#DC2626",
+              width: "100%", padding: "18px 24px", borderRadius: 16,
+              background: loading
+                ? "#fca5a5"
+                : "linear-gradient(135deg, #DC2626 0%, #C41E3A 100%)",
               color: "white", fontWeight: 800, fontSize: 16,
               border: "none", cursor: loading ? "not-allowed" : "pointer",
               display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-              boxShadow: loading ? "none" : "0 4px 20px rgba(220,38,38,0.35)",
-              transition: "background 0.15s, box-shadow 0.15s",
+              boxShadow: loading
+                ? "none"
+                : "0 4px 24px rgba(220,38,38,0.32), inset 0 1px 0 rgba(255,255,255,0.15)",
+              transition: "all 0.15s",
+              letterSpacing: "-0.2px",
             }}
           >
             {loading ? (
@@ -811,9 +943,9 @@ export default function CadastroMotoboy() {
                 Enviando...
               </>
             ) : isLastStep ? (
-              "Enviar cadastro ✓"
+              <>Enviar cadastro <span style={{ fontSize: 18 }}>✓</span></>
             ) : (
-              "Continuar →"
+              <>Continuar <span style={{ fontSize: 18 }}>→</span></>
             )}
           </button>
         </div>
