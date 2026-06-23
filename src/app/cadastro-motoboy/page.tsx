@@ -174,7 +174,16 @@ export default function CadastroMotoboy() {
   const totalSteps    = activeSteps.length
   const isLastStep    = stepIdx === totalSteps - 1
   const progress      = ((stepIdx + 1) / totalSteps) * 100
-  const meta          = STEP_META[currentStepId]
+
+  const meta = (() => {
+    const base = STEP_META[currentStepId]
+    if (!needsVehicleDoc) {
+      if (currentStepId === "cnhFrente") return { ...base, question: "Foto do RG ou CNH — frente", hint: "Foto clara e legível, sem reflexo" }
+      if (currentStepId === "cnhVerso")  return { ...base, question: "Foto do RG ou CNH — verso",  hint: "Foto clara e legível, sem reflexo" }
+      if (currentStepId === "selfie")    return { ...base, question: "Selfie segurando o documento", hint: "Segure o documento ao lado do rosto, sem óculos escuros" }
+    }
+    return base
+  })()
 
   // Auto-focus text input when step changes
   useEffect(() => {
@@ -212,10 +221,10 @@ export default function CadastroMotoboy() {
       case "cnh":
         if (!vehicle.cnh.trim()) return "Informe o número da CNH"
         return vehicle.validadeCnh ? null : "Informe a validade da CNH"
-      case "cnhFrente": return docs.cnhFrente ? null : "Adicione a foto da frente da CNH"
-      case "cnhVerso":  return docs.cnhVerso  ? null : "Adicione a foto do verso da CNH"
+      case "cnhFrente": return docs.cnhFrente ? null : needsVehicleDoc ? "Adicione a foto da frente da CNH" : "Adicione a foto da frente do documento"
+      case "cnhVerso":  return docs.cnhVerso  ? null : needsVehicleDoc ? "Adicione a foto do verso da CNH"  : "Adicione a foto do verso do documento"
       case "crlv":      return docs.crlv      ? null : "Adicione o CRLV do veículo"
-      case "selfie":    return docs.selfie    ? null : "Adicione a selfie com o documento"
+      case "selfie":    return docs.selfie    ? null : "Adicione a selfie segurando o documento"
       case "banco":
         if (!bank.banco) return "Selecione o banco"
         if (!bank.agencia.trim()) return "Informe a agência"
@@ -255,26 +264,30 @@ export default function CadastroMotoboy() {
         address.cep ? `CEP ${address.cep}` : "",
       ].filter(Boolean).join(", ")
 
-      const { data: authData } = await supabase.auth.signUp({
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email: personal.email.trim().toLowerCase(),
         password: personal.senha,
       })
+      if (authError) throw authError
 
-      const { error } = await supabase.from("motoboys").insert({
-        nome:       personal.nome.trim(),
-        email:      personal.email.trim().toLowerCase(),
-        telefone:   personal.celular,
-        cpf:        personal.cpf,
-        veiculo:    vehicle.tipo,
-        placa:      vehicle.placa.toUpperCase() || null,
-        cnh:        vehicle.cnh || null,
-        endereco:   endStr,
-        pix_key:    `${bank.banco} Ag:${bank.agencia} Cc:${bank.conta}`,
-        status:     "pendente",
-        disponivel: false,
-        ...(authData?.user?.id ? { user_id: authData.user.id } : {}),
+      const res = await fetch("/api/cadastro-motoboy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nome:      personal.nome.trim(),
+          email:     personal.email.trim().toLowerCase(),
+          telefone:  personal.celular,
+          cpf:       personal.cpf,
+          veiculo:   vehicle.tipo,
+          placa:     vehicle.placa.toUpperCase() || null,
+          cnh:       vehicle.cnh || null,
+          endereco:  endStr,
+          pix_key:   `${bank.banco} Ag:${bank.agencia} Cc:${bank.conta}`,
+          user_id:   authData?.user?.id ?? null,
+        }),
       })
-      if (error) throw error
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? "Erro ao salvar cadastro")
       setSucesso(true)
     } catch (e: any) {
       setErro(e?.message ?? "Erro ao enviar. Verifique os dados e tente novamente.")
@@ -573,7 +586,7 @@ export default function CadastroMotoboy() {
       case "cnhFrente":
         return (
           <FileUpload
-            label="Frente da CNH"
+            label={needsVehicleDoc ? "Frente da CNH" : "Frente do RG ou CNH"}
             value={docs.cnhFrente}
             onChange={f => { setDocs(d => ({ ...d, cnhFrente: f })); setErro("") }}
             required
@@ -583,7 +596,7 @@ export default function CadastroMotoboy() {
       case "cnhVerso":
         return (
           <FileUpload
-            label="Verso da CNH"
+            label={needsVehicleDoc ? "Verso da CNH" : "Verso do RG ou CNH"}
             value={docs.cnhVerso}
             onChange={f => { setDocs(d => ({ ...d, cnhVerso: f })); setErro("") }}
             required
