@@ -96,7 +96,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     if (!authLoading && (!sessao || sessao.role !== "admin")) {
-      router.push("/entrar")
+      router.push("/chego-ctrl-login")
     }
   }, [sessao, authLoading, router])
 
@@ -139,7 +139,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   function handleLogout() {
     logout()
-    router.push("/entrar")
+    router.push("/chego-ctrl-login")
   }
 
   return (

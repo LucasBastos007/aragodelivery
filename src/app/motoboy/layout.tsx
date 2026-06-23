@@ -112,7 +112,7 @@ export default function MotoboyLayout({ children }: { children: React.ReactNode 
 
   useEffect(() => {
     if (!authLoading && (!sessao || sessao.role !== "motoboy")) {
-      router.push("/entrar")
+      router.push("/entrar/motoboy")
     }
   }, [sessao, authLoading, router])
 
@@ -273,7 +273,7 @@ export default function MotoboyLayout({ children }: { children: React.ReactNode 
                 </Link>
               ))}
 
-              <button onClick={() => { logout(); router.push("/entrar") }} style={{
+              <button onClick={() => { logout(); router.push("/entrar/motoboy") }} style={{
                 width: "100%", marginTop: 20, padding: "15px",
                 borderRadius: 14, border: "1px solid rgba(239,68,68,0.2)",
                 background: "rgba(239,68,68,0.08)", color: "#ef4444",
