@@ -1,9 +1,14 @@
 import crypto from "crypto"
 import { NextRequest, NextResponse } from "next/server"
 
-const SECRET = process.env.SESSION_SECRET ?? "dev-insecure-change-me-in-production"
-const COOKIE = "arago_sess"
-const MAX_AGE = 60 * 60 * 24 * 7 // 7 dias
+const COOKIE  = "arago_sess"
+const MAX_AGE = 60 * 60 * 24 // 24 horas
+
+function getSecret(): string {
+  const s = process.env.SESSION_SECRET
+  if (!s) throw new Error("SESSION_SECRET não configurada — configure a variável de ambiente antes de subir o servidor.")
+  return s
+}
 
 export type SessionPayload =
   | { role: "admin" }
@@ -11,7 +16,7 @@ export type SessionPayload =
   | { role: "motoboy"; motoboy_id: string }
 
 function sign(data: string): string {
-  return crypto.createHmac("sha256", SECRET).update(data).digest("hex")
+  return crypto.createHmac("sha256", getSecret()).update(data).digest("hex")
 }
 
 function encodeSession(payload: SessionPayload): string {

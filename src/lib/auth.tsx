@@ -11,7 +11,7 @@ type AuthCtx = {
   sessao: Sessao | null
   authLoading: boolean
   login: (s: Sessao) => void
-  logout: () => void
+  logout: () => Promise<void>
 }
 
 const Ctx = createContext<AuthCtx | null>(null)
@@ -33,9 +33,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem("arago_sessao", JSON.stringify(s))
   }
 
-  function logout() {
+  async function logout() {
     setSessao(null)
     localStorage.removeItem("arago_sessao")
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {})
   }
 
   return <Ctx.Provider value={{ sessao, authLoading, login, logout }}>{children}</Ctx.Provider>

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import webpush from "web-push"
 import { createClient } from "@supabase/supabase-js"
-import { requireMotoboy, requireLoja, getSession, unauthorized } from "@/lib/session"
+import { requireMotoboy, requireLoja, requireAdmin, getSession, unauthorized } from "@/lib/session"
+import { checkRateLimit } from "@/lib/rate-limit"
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -82,10 +83,48 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // ── Ações de envio — requer qualquer sessão autenticada ─────────────────────
+  // ── Enviar notificação à loja (novo pedido) — rate limit, sem sessão (cliente no checkout) ──
+  if (action === "send-loja") {
+    const rateLimited = checkRateLimit(req)
+    if (rateLimited) return rateLimited
+
+    const { loja_id, pedido_id, codigo, nome_cliente, total, qtd_itens } = body
+    if (!loja_id) {
+      return NextResponse.json({ error: "loja_id obrigatório" }, { status: 400 })
+    }
+
+    const { data: loja } = await supabaseAdmin
+      .from("lojas")
+      .select("push_subscription")
+      .eq("id", loja_id)
+      .single()
+
+    if (!loja?.push_subscription) {
+      return NextResponse.json({ ok: true, skipped: "no subscription" })
+    }
+
+    const qtd = Number(qtd_itens ?? 1)
+    try {
+      await sendPush(loja.push_subscription, {
+        title: `Novo pedido #${codigo}!`,
+        body:  `${nome_cliente} · ${qtd} item${qtd !== 1 ? "s" : ""} · R$ ${Number(total).toFixed(2)}`,
+        tag:   `pedido-loja-${pedido_id}`,
+        url:   "/loja",
+        requireInteraction: true,
+      })
+      return NextResponse.json({ ok: true })
+    } catch (err: any) {
+      if (err.statusCode === 410) {
+        await supabaseAdmin.from("lojas").update({ push_subscription: null }).eq("id", loja_id)
+      }
+      return NextResponse.json({ ok: false, error: String(err.message) })
+    }
+  }
+
+  // ── Demais ações de envio — requer sessão autenticada ────────────────────────
   if (!getSession(req)) return unauthorized()
 
-  // ── Enviar notificação ao cliente (pedido) ───────────────────────────────────
+  // ── Enviar notificação ao cliente (pedido) — loja ou motoboy ─────────────────
   if (action === "send") {
     const { pedido_id, status, codigo } = body
     if (!pedido_id || !status) {
@@ -115,8 +154,9 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── Enviar notificação ao motoboy ─────────────────────────────────────────────
+  // ── Enviar notificação ao motoboy — somente admin ────────────────────────────
   if (action === "send-motoboy") {
+    if (!requireAdmin(req)) return unauthorized()
     const { motoboy_id, title, body: msgBody, url } = body
     if (!motoboy_id) {
       return NextResponse.json({ error: "motoboy_id obrigatório" }, { status: 400 })
@@ -141,41 +181,6 @@ export async function POST(req: NextRequest) {
     } catch (err: any) {
       if (err.statusCode === 410) {
         await supabaseAdmin.from("motoboys").update({ push_subscription: null }).eq("id", motoboy_id)
-      }
-      return NextResponse.json({ ok: false, error: String(err.message) })
-    }
-  }
-
-  // ── Enviar notificação à loja (novo pedido) ──────────────────────────────────
-  if (action === "send-loja") {
-    const { loja_id, pedido_id, codigo, nome_cliente, total, qtd_itens } = body
-    if (!loja_id) {
-      return NextResponse.json({ error: "loja_id obrigatório" }, { status: 400 })
-    }
-
-    const { data: loja } = await supabaseAdmin
-      .from("lojas")
-      .select("push_subscription")
-      .eq("id", loja_id)
-      .single()
-
-    if (!loja?.push_subscription) {
-      return NextResponse.json({ ok: true, skipped: "no subscription" })
-    }
-
-    const qtd = Number(qtd_itens ?? 1)
-    try {
-      await sendPush(loja.push_subscription, {
-        title: `Novo pedido #${codigo}!`,
-        body:  `${nome_cliente} · ${qtd} item${qtd !== 1 ? "s" : ""} · R$ ${Number(total).toFixed(2)}`,
-        tag:   `pedido-loja-${pedido_id}`,
-        url:   "/loja",
-        requireInteraction: true,
-      })
-      return NextResponse.json({ ok: true })
-    } catch (err: any) {
-      if (err.statusCode === 410) {
-        await supabaseAdmin.from("lojas").update({ push_subscription: null }).eq("id", loja_id)
       }
       return NextResponse.json({ ok: false, error: String(err.message) })
     }
