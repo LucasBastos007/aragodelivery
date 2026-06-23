@@ -427,6 +427,7 @@ export default function Home() {
   const touchStartX = useRef(0)
   // step: 0=nenhum 1=hamburguer 2=carrinho 3=farmácia 4=logo
   const [step, setStep] = useState(0)
+  const [pedidoAtivo, setPedidoAtivo] = useState<{ codigo: string; id: string } | null>(null)
 
   const isMobile    = useIsMobile()
   const primeiroNome = perfil?.nome?.split(" ")[0] ?? user?.user_metadata?.name?.split(" ")[0] ?? null
@@ -435,6 +436,10 @@ export default function Home() {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("arago_last_address")
       if (saved) setLastAddress(saved)
+      const ativo = localStorage.getItem("arago_pedido_ativo")
+      if (ativo) {
+        try { setPedidoAtivo(JSON.parse(ativo)) } catch {}
+      }
     }
   }, [])
 
@@ -495,6 +500,23 @@ export default function Home() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#F9FAFB", overflowX: "hidden" }}>
+
+      {/* ── BANNER PEDIDO ATIVO ────────────────────────────── */}
+      {pedidoAtivo && !splashVis && (
+        <a href={`/pedido/${pedidoAtivo.codigo}`} style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          background: "#DC2626", color: "white", padding: "12px 20px",
+          textDecoration: "none", gap: 12,
+          position: "sticky", top: 0, zIndex: 100,
+          boxShadow: "0 2px 12px rgba(220,38,38,0.35)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "white", animation: "pulse 1.5s infinite" }} />
+            <span style={{ fontWeight: 700, fontSize: 14 }}>Pedido #{pedidoAtivo.codigo} em andamento</span>
+          </div>
+          <span style={{ fontWeight: 700, fontSize: 13, opacity: 0.9 }}>Acompanhar →</span>
+        </a>
+      )}
 
       {/* ── SPLASH ─────────────────────────────────────────── */}
       {splashVis && (

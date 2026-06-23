@@ -766,6 +766,8 @@ export default function CheckoutPage() {
     setPedidoCodigo(codigo!)
     setPedidoId(pedido.id)
     setEnviando(false)
+    // Salva referência do pedido ativo para o cliente conseguir voltar ao rastreamento
+    localStorage.setItem("arago_pedido_ativo", JSON.stringify({ codigo: codigo!, id: pedido.id }))
   }
 
   return (

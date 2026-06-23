@@ -69,28 +69,36 @@ self.addEventListener("fetch", (event) => {
 self.addEventListener("push", (event) => {
   const data = event.data?.json() ?? {}
   const title = data.title ?? "Chegô Delivery"
-  const isMotoboy = (data.tag ?? "").startsWith("motoboy-")
+  const tag = data.tag ?? "chego-update"
+  const isMotoboy = tag.startsWith("motoboy-")
+  const isEntregue = title.includes("entregue") || title.includes("Entregue")
 
   const options = {
     body:    data.body ?? "",
     icon:    "/logo-chego.png",
     badge:   "/logo-chego.png",
-    tag:     data.tag ?? "chego-update",
-    data:    { url: data.url ?? (isMotoboy ? "/motoboy" : "/"), sound: isMotoboy },
+    tag,
+    data:    { url: data.url ?? (isMotoboy ? "/motoboy" : "/") },
     vibrate: isMotoboy
       ? [400, 150, 400, 150, 400, 150, 800]
-      : [200, 100, 200, 100, 200],
-    requireInteraction: data.requireInteraction ?? isMotoboy,
-    renotify: isMotoboy,
+      : isEntregue
+        ? [300, 100, 300, 100, 300, 100, 600, 200, 600]
+        : [200, 100, 200, 100, 200],
+    requireInteraction: data.requireInteraction ?? isMotoboy ?? isEntregue,
+    renotify: true,
     silent: false,
-    actions: isMotoboy ? [{ action: "open", title: "Ver corrida 🛵" }] : [],
+    actions: isMotoboy
+      ? [{ action: "open", title: "Ver corrida 🛵" }]
+      : isEntregue
+        ? [{ action: "open", title: "Avaliar pedido ⭐" }]
+        : [],
   }
 
   event.waitUntil(
     Promise.all([
       self.registration.showNotification(title, options),
       clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) =>
-        list.forEach((c) => c.postMessage({ type: "push-received", tag: data.tag ?? "", isMotoboy }))
+        list.forEach((c) => c.postMessage({ type: "push-received", tag, isMotoboy, isEntregue }))
       ),
     ])
   )

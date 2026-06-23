@@ -56,5 +56,33 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Push ao cliente para coletado e entregue
+  if (nextStatus === "coletado" || nextStatus === "entregue") {
+    try {
+      const { data: ped } = await sb.from("pedidos").select("codigo, push_subscription").eq("id", pedido_id).single()
+      if (ped?.push_subscription) {
+        const { initVapid, sendPush } = await import("@/lib/push-utils").catch(() => ({ initVapid: null, sendPush: null }))
+        // Fallback inline se módulo não existir
+        const wp = await import("web-push")
+        wp.setVapidDetails(
+          process.env.VAPID_EMAIL!,
+          process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
+          process.env.VAPID_PRIVATE_KEY!
+        )
+        const MSG: Record<string, { title: string; body: string }> = {
+          coletado: { title: "🛵 Saiu para entrega!", body: "O motoboy está a caminho da sua casa!" },
+          entregue: { title: "🎉 Pedido entregue!", body: "Aproveite! Que tal avaliar seu pedido?" },
+        }
+        const msg = MSG[nextStatus]
+        if (msg) {
+          await wp.sendNotification(
+            ped.push_subscription,
+            JSON.stringify({ title: msg.title, body: msg.body, tag: `pedido-${pedido_id}`, url: `/pedido/${ped.codigo}`, requireInteraction: nextStatus === "entregue" })
+          ).catch(() => {})
+        }
+      }
+    } catch {}
+  }
+
   return NextResponse.json({ ok: true, nextStatus })
 }

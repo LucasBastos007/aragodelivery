@@ -354,7 +354,9 @@ export default function AcompanhamentoPedido() {
     const newStatus = (data as any).status
     if (prevStatusRef.current !== null && prevStatusRef.current !== "entregue" && newStatus === "entregue") {
       try { const a = new Audio("/splash.mp3"); a.volume = 0.85; a.play().catch(() => {}) } catch {}
+      localStorage.removeItem("arago_pedido_ativo")
     }
+    if (newStatus === "cancelado") localStorage.removeItem("arago_pedido_ativo")
     prevStatusRef.current = newStatus
     setPedido(data as Pedido)
     setLoading(false)
@@ -398,6 +400,18 @@ export default function AcompanhamentoPedido() {
     if (Notification.permission === "granted") subscribePush()
     else if (Notification.permission !== "denied") Notification.requestPermission().then(p => { if (p === "granted") subscribePush() })
   }, [pedido?.id])
+
+  // Ouve mensagem do SW para tocar som de entregue mesmo com a aba em foco
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return
+    function onMsg(e: MessageEvent) {
+      if (e.data?.type === "push-received" && e.data?.isEntregue) {
+        try { const a = new Audio("/splash.mp3"); a.volume = 0.9; a.play().catch(() => {}) } catch {}
+      }
+    }
+    navigator.serviceWorker.addEventListener("message", onMsg)
+    return () => navigator.serviceWorker.removeEventListener("message", onMsg)
+  }, [])
 
   async function enviarAvaliacao() {
     if (!pedido || notaLoja === 0) return
