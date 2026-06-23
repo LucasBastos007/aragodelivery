@@ -342,6 +342,7 @@ export default function MotoboyPage() {
   const [raioOpen,         setRaioOpen]         = useState(false)
   const [raioDisplay,      setRaioDisplay]      = useState<number>(5)
   const [fotoMotoboy,      setFotoMotoboy]      = useState<string | null>(null)
+  const [sosModal,         setSosModal]         = useState(false)
 
   // ── Carrega motoboy ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1116,6 +1117,17 @@ export default function MotoboyPage() {
       )}
 
       {/* ── Painel de corrida ativa (Tópico 03) ── */}
+      {/* ── Modal SOS — renderizado no nível raiz para escapar do overflow:hidden do painel ── */}
+      {sosModal && motoboy_id && (
+        <SOSModal
+          motoboyId={motoboy_id}
+          pedidoId={corridaAtiva?.id ?? emAndamento[0]?.id ?? ""}
+          lat={myLat}
+          lng={myLng}
+          onClose={() => setSosModal(false)}
+        />
+      )}
+
       {(corridaAtiva || corridaConcluida) && (
         <CorridaAtivaPanel
           pedido={corridaAtiva}
@@ -1130,6 +1142,7 @@ export default function MotoboyPage() {
           lojaLng={lojaLng ?? undefined}
           destinoLat={destinoLat ?? undefined}
           destinoLng={destinoLng ?? undefined}
+          onSOSOpen={() => setSosModal(true)}
         />
       )}
 
@@ -1494,12 +1507,10 @@ function SOSModal({
   async function enviarSOS() {
     setEnviando(true)
     try {
-      await supabase.from("alertas_sos").insert({
-        motoboy_id: motoboyId,
-        pedido_id:  pedidoId || null,
-        lat, lng,
-        status:     "pendente",
-        criado_em:  new Date().toISOString(),
+      await fetch("/api/sos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ motoboy_id: motoboyId, pedido_id: pedidoId || null, lat, lng }),
       })
     } catch {}
     setEnviando(false)
@@ -1585,6 +1596,7 @@ function SOSModal({
 function CorridaAtivaPanel({
   pedido, corridaConcluida, avancando, onAvancar, onConcluir,
   motoboyId, myLat, myLng, lojaLat, lojaLng, destinoLat, destinoLng,
+  onSOSOpen,
 }: {
   pedido: any | null
   corridaConcluida: any | null
@@ -1598,9 +1610,9 @@ function CorridaAtivaPanel({
   lojaLng?: number
   destinoLat?: number
   destinoLng?: number
+  onSOSOpen: () => void
 }) {
   const [navDestino,  setNavDestino]  = useState<{ texto: string; lat?: number; lng?: number } | null>(null)
-  const [sosModal,    setSOSModal]    = useState(false)
   const [codigoInput, setCodigoInput] = useState("")
   const [erroConfirm, setErroConfirm] = useState("")
 
@@ -1624,23 +1636,12 @@ function CorridaAtivaPanel({
       {/* Modal de navegação */}
       {navDestino && <NavModal destino={navDestino} onClose={() => setNavDestino(null)} />}
 
-      {/* Modal SOS */}
-      {sosModal && motoboyId && (
-        <SOSModal
-          motoboyId={motoboyId}
-          pedidoId={pedido?.id ?? ""}
-          lat={myLat ?? DEFAULT_LAT}
-          lng={myLng ?? DEFAULT_LNG}
-          onClose={() => setSOSModal(false)}
-        />
-      )}
-
       {/* Handle + SOS */}
       <div style={{ padding: "10px 16px 0", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
         <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.1)", flex: 1, marginRight: 8 }} />
         {!corridaConcluida && (
           <button
-            onClick={() => setSOSModal(true)}
+            onClick={onSOSOpen}
             style={{
               padding: "5px 12px", borderRadius: 999,
               border: "1.5px solid rgba(239,68,68,0.6)", background: "rgba(239,68,68,0.12)",

@@ -5,6 +5,13 @@ import { usePathname, useRouter } from "next/navigation"
 import { useEffect } from "react"
 import { useAuth } from "@/lib/auth"
 
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4)
+  const base64  = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/")
+  const raw     = window.atob(base64)
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)))
+}
+
 type NavItem = {
   href: string
   label: string
@@ -92,6 +99,31 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       router.push("/entrar")
     }
   }, [sessao, authLoading, router])
+
+  useEffect(() => {
+    if (!sessao || sessao.role !== "admin") return
+    async function registerAdminPush() {
+      try {
+        if (!("serviceWorker" in navigator) || !("PushManager" in window)) return
+        const reg = await navigator.serviceWorker.register("/sw.js")
+        await reg.update()
+        const perm = await Notification.requestPermission()
+        if (perm !== "granted") return
+        const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+        if (!vapidKey) return
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidKey),
+        })
+        await fetch("/api/sos", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subscription: sub }),
+        })
+      } catch {}
+    }
+    registerAdminPush()
+  }, [sessao])
 
   if (authLoading || !sessao || sessao.role !== "admin") {
     return (
