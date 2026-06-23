@@ -44,24 +44,30 @@ export default function AdminCuponsPage() {
     if (!codigo.trim()) { setErro("Informe o código"); return }
     if (!valor || isNaN(Number(valor)) || Number(valor) <= 0) { setErro("Valor inválido"); return }
     setErro(""); setSalvando(true)
-    const { error } = await supabase.from("cupons").insert({
-      codigo: codigo.trim().toUpperCase(), tipo, valor: Number(valor),
-      loja_id: null, pedido_minimo: Number(minimo) || 0,
-      validade: validade || null, ativo: true,
+    const res = await fetch("/api/admin/cupons", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ codigo, tipo, valor: Number(valor), pedido_minimo: Number(minimo) || 0, validade: validade || null }),
     })
-    if (error) { setErro(error.message.includes("unique") ? "Código já existe." : error.message); setSalvando(false); return }
+    const json = await res.json()
+    if (!res.ok) { setErro(json.error?.includes("unique") ? "Código já existe." : json.error); setSalvando(false); return }
     setCodigo(""); setValor(""); setMinimo(""); setValidade(""); setTipo("percentual")
     setCriando(false); setSalvando(false); carregar()
   }
 
   async function toggleAtivo(c: Cupom) {
-    await supabase.from("cupons").update({ ativo: !c.ativo }).eq("id", c.id)
+    await fetch("/api/admin/cupons", {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: c.id, ativo: !c.ativo }),
+    })
     setCupons(prev => prev.map(x => x.id === c.id ? { ...x, ativo: !x.ativo } : x))
   }
 
   async function excluir(id: string) {
     if (!confirm("Excluir?")) return
-    await supabase.from("cupons").delete().eq("id", id)
+    await fetch("/api/admin/cupons", {
+      method: "DELETE", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    })
     setCupons(prev => prev.filter(x => x.id !== id))
   }
 

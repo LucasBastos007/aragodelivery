@@ -712,9 +712,12 @@ export default function CheckoutPage() {
       }))
     )
 
-    // Incrementar uso do cupom
+    // Incrementar uso do cupom via admin client (RLS bloqueia anon)
     if (cupomValido) {
-      await supabase.from("cupons").update({ usos: (cupomValido as any).usos + 1 }).eq("id", cupomValido.id)
+      fetch("/api/admin/cupons/usar", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: cupomValido.id }),
+      }).catch(() => {})
     }
 
     if (tipoEntrega === "entrega" && geoRef.current?.geo?.rua) {
