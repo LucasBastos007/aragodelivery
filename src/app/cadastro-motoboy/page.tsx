@@ -1,21 +1,47 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { supabase } from "@/lib/supabase"
-import { StepIndicator } from "@/components/cadastro/StepIndicator"
-import { FormInput } from "@/components/cadastro/FormInput"
-import { PasswordField } from "@/components/cadastro/PasswordField"
 import { FileUpload } from "@/components/cadastro/FileUpload"
 import { AddressFields, AddressData } from "@/components/cadastro/AddressFields"
 import { BankFields, BankData } from "@/components/cadastro/BankFields"
 import { validateCPF, validateEmail, isAdult } from "@/utils/validators"
 import { maskCPF, maskPhone, maskPlaca } from "@/utils/masks"
 
-const STEP_LABELS = ["Dados Pessoais", "Endereço", "Veículo", "Documentos", "Dados Bancários"]
-const TOTAL_STEPS = 5
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface PersonalData {
+  nome: string; cpf: string; nascimento: string; genero: string
+  email: string; celular: string; senha: string; confirmarSenha: string
+}
+interface VehicleData {
+  tipo: string; placa: string; modelo: string; ano: string
+  cnh: string; categoriaCnh: string; validadeCnh: string
+}
+interface DocsData {
+  cnhFrente: File | null; cnhVerso: File | null
+  crlv: File | null; selfie: File | null
+}
+type StepId =
+  | "nome" | "cpf" | "nascimento" | "genero"
+  | "email" | "celular" | "senha"
+  | "endereco"
+  | "veiculo" | "placa" | "modeloAno" | "cnh"
+  | "cnhFrente" | "cnhVerso" | "crlv" | "selfie"
+  | "banco"
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 const ANO_ATUAL = new Date().getFullYear()
 const ANOS = Array.from({ length: ANO_ATUAL - 1999 }, (_, i) => String(ANO_ATUAL - i))
+
+const ALL_STEPS: StepId[] = [
+  "nome", "cpf", "nascimento", "genero",
+  "email", "celular", "senha",
+  "endereco",
+  "veiculo", "placa", "modeloAno", "cnh",
+  "cnhFrente", "cnhVerso", "crlv", "selfie",
+  "banco",
+]
 
 const VEHICLE_TYPES = [
   { id: "Moto", icon: "🏍️" },
@@ -24,217 +50,619 @@ const VEHICLE_TYPES = [
   { id: "A pé", icon: "🚶" },
 ]
 
-interface PersonalData {
-  nome: string
-  cpf: string
-  nascimento: string
-  genero: string
-  email: string
-  celular: string
-  senha: string
-  confirmarSenha: string
+const GENEROS = [
+  { id: "Masculino", icon: "👦" },
+  { id: "Feminino", icon: "👧" },
+  { id: "Prefiro não informar", icon: "🤝" },
+]
+
+const STEP_META: Record<StepId, { question: string; hint?: string; category: string }> = {
+  nome:       { question: "Qual é o seu nome completo?", category: "Dados pessoais" },
+  cpf:        { question: "Qual é o seu CPF?", category: "Dados pessoais" },
+  nascimento: { question: "Quando você nasceu?", category: "Dados pessoais" },
+  genero:     { question: "Como você se identifica?", category: "Dados pessoais" },
+  email:      { question: "Qual é o seu e-mail?", hint: "Será usado para acessar sua conta", category: "Acesso" },
+  celular:    { question: "Qual é o seu WhatsApp?", hint: "Para comunicação sobre as corridas", category: "Acesso" },
+  senha:      { question: "Crie uma senha segura", hint: "Mínimo de 8 caracteres", category: "Acesso" },
+  endereco:   { question: "Qual é o seu endereço?", hint: "Digite o CEP para preencher automaticamente", category: "Localização" },
+  veiculo:    { question: "Com qual veículo você vai fazer entregas?", category: "Veículo" },
+  placa:      { question: "Qual é a placa do veículo?", category: "Veículo" },
+  modeloAno:  { question: "Qual é o modelo e o ano?", category: "Veículo" },
+  cnh:        { question: "Dados da sua CNH", hint: "Número, categoria e validade", category: "Veículo" },
+  cnhFrente:  { question: "Foto da CNH — frente", hint: "Foto clara e legível, sem reflexo", category: "Documentos" },
+  cnhVerso:   { question: "Foto da CNH — verso", hint: "Foto clara e legível, sem reflexo", category: "Documentos" },
+  crlv:       { question: "Foto do CRLV do veículo", hint: "Documento de registro e licenciamento", category: "Documentos" },
+  selfie:     { question: "Selfie segurando a CNH", hint: "Segure o documento ao lado do rosto, sem óculos escuros", category: "Documentos" },
+  banco:      { question: "Dados bancários para receber", hint: "Para o repasse das suas corridas", category: "Pagamento" },
 }
 
-interface VehicleData {
-  tipo: string
-  placa: string
-  modelo: string
-  ano: string
-  cnh: string
-  categoriaCnh: string
-  validadeCnh: string
+// ─── Light theme CSS override (for sub-components that use .input/.label) ────
+const LIGHT_CSS = `
+  [data-light-form] .input {
+    background: white !important;
+    border: 2px solid #e5e7eb !important;
+    color: #111827 !important;
+    font-size: 16px !important;
+    border-radius: 14px !important;
+    padding: 16px 18px !important;
+  }
+  [data-light-form] .input::placeholder { color: #9ca3af !important; }
+  [data-light-form] .input:focus {
+    border-color: #DC2626 !important;
+    box-shadow: 0 0 0 3px rgba(220,38,38,0.08) !important;
+    outline: none !important;
+  }
+  [data-light-form] select.input,
+  [data-light-form] select.input option {
+    background: white !important;
+    color: #111827 !important;
+  }
+  [data-light-form] .label {
+    color: #374151 !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+  }
+  [data-light-form] .btn-primary { background: #DC2626 !important; }
+  [data-light-form] .btn-ghost {
+    background: #f3f4f6 !important;
+    border-color: #e5e7eb !important;
+    color: #374151 !important;
+  }
+  [data-light-form] .card {
+    background: white !important;
+    border: 1px solid #e5e7eb !important;
+  }
+  @keyframes chego-spin { to { transform: rotate(360deg) } }
+`
+
+// Shared input style for inline inputs
+const inp: React.CSSProperties = {
+  width: "100%", padding: "18px 20px",
+  fontSize: 18, borderRadius: 16,
+  background: "white", border: "2px solid #e5e7eb",
+  color: "#111827", outline: "none", boxSizing: "border-box",
+  transition: "border-color 0.15s, box-shadow 0.15s",
+  WebkitAppearance: "none",
 }
 
-interface DocsData {
-  cnhFrente: File | null
-  cnhVerso: File | null
-  crlv: File | null
-  selfie: File | null
+const inpFocus = {
+  borderColor: "#DC2626",
+  boxShadow: "0 0 0 3px rgba(220,38,38,0.08)",
 }
 
-const emptyPersonal: PersonalData = {
-  nome: "", cpf: "", nascimento: "", genero: "Masculino",
-  email: "", celular: "", senha: "", confirmarSenha: "",
-}
-
-const emptyAddress: AddressData = {
-  cep: "", logradouro: "", numero: "", complemento: "",
-  bairro: "", cidade: "", estado: "",
-}
-
-const emptyVehicle: VehicleData = {
-  tipo: "Moto", placa: "", modelo: "", ano: String(ANO_ATUAL),
-  cnh: "", categoriaCnh: "A", validadeCnh: "",
-}
-
-const emptyDocs: DocsData = { cnhFrente: null, cnhVerso: null, crlv: null, selfie: null }
-
-const emptyBank: BankData = {
-  banco: "", tipoConta: "Corrente", agencia: "", conta: "",
-  cpfTitular: "", mesmoCpf: false,
-}
-
-const slide = {
-  initial: { opacity: 0, x: 24 },
-  animate: { opacity: 1, x: 0 },
-  exit: { opacity: 0, x: -24 },
-  transition: { duration: 0.22 },
-}
-
+// ─── Component ────────────────────────────────────────────────────────────────
 export default function CadastroMotoboy() {
-  const [step, setStep] = useState(1)
-  const [loading, setLoading] = useState(false)
-  const [sucesso, setSucesso] = useState(false)
+  const [stepIdx, setStepIdx]       = useState(0)
+  const [direction, setDirection]   = useState(1)
+  const [loading, setLoading]       = useState(false)
+  const [sucesso, setSucesso]       = useState(false)
+  const [erro, setErro]             = useState("")
+  const [showPass, setShowPass]     = useState(false)
+  const [showPass2, setShowPass2]   = useState(false)
+  const [focusedInp, setFocusedInp] = useState<string | null>(null)
 
-  const [personal, setPersonal] = useState<PersonalData>(emptyPersonal)
-  const [address, setAddress] = useState<AddressData>(emptyAddress)
-  const [vehicle, setVehicle] = useState<VehicleData>(emptyVehicle)
-  const [docs, setDocs] = useState<DocsData>(emptyDocs)
-  const [bank, setBank] = useState<BankData>(emptyBank)
-  const [errors, setErrors] = useState<Record<string, string>>({})
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const [personal, setPersonal] = useState<PersonalData>({
+    nome: "", cpf: "", nascimento: "", genero: "Masculino",
+    email: "", celular: "", senha: "", confirmarSenha: "",
+  })
+  const [address, setAddress] = useState<AddressData>({
+    cep: "", logradouro: "", numero: "", complemento: "",
+    bairro: "", cidade: "", estado: "",
+  })
+  const [vehicle, setVehicle] = useState<VehicleData>({
+    tipo: "Moto", placa: "", modelo: "", ano: String(ANO_ATUAL),
+    cnh: "", categoriaCnh: "A", validadeCnh: "",
+  })
+  const [docs, setDocs] = useState<DocsData>({
+    cnhFrente: null, cnhVerso: null, crlv: null, selfie: null,
+  })
+  const [bank, setBank] = useState<BankData>({
+    banco: "", tipoConta: "Corrente", agencia: "", conta: "",
+    cpfTitular: "", mesmoCpf: false,
+  })
 
   const needsVehicleDoc = vehicle.tipo === "Moto" || vehicle.tipo === "Carro"
 
-  function err(field: string, msg: string) {
-    setErrors(e => ({ ...e, [field]: msg }))
-  }
-  function clearErr(field: string) {
-    setErrors(e => { const n = { ...e }; delete n[field]; return n })
-  }
+  const activeSteps = ALL_STEPS.filter(id => {
+    if (["placa", "modeloAno", "cnh", "crlv"].includes(id)) return needsVehicleDoc
+    return true
+  })
 
-  function validateStep1(): boolean {
-    const e: Record<string, string> = {}
-    if (!personal.nome.trim()) e.nome = "Informe seu nome completo"
-    if (!validateCPF(personal.cpf)) e.cpf = "CPF inválido"
-    if (!personal.nascimento) e.nascimento = "Informe sua data de nascimento"
-    else if (!isAdult(personal.nascimento)) e.nascimento = "É necessário ter 18 anos ou mais"
-    if (!validateEmail(personal.email)) e.email = "E-mail inválido"
-    if (personal.celular.replace(/\D/g, "").length < 10) e.celular = "Celular inválido"
-    if (personal.senha.length < 8) e.senha = "Mínimo 8 caracteres"
-    if (personal.confirmarSenha !== personal.senha) e.confirmarSenha = "As senhas não coincidem"
-    setErrors(e)
-    return Object.keys(e).length === 0
-  }
+  const currentStepId = activeSteps[stepIdx]
+  const totalSteps    = activeSteps.length
+  const isLastStep    = stepIdx === totalSteps - 1
+  const progress      = ((stepIdx + 1) / totalSteps) * 100
+  const meta          = STEP_META[currentStepId]
 
-  function validateStep2(): boolean {
-    const e: Record<string, string> = {}
-    if (!address.logradouro.trim()) e.logradouro = "Informe o logradouro"
-    if (!address.numero.trim()) e.numero = "Informe o número"
-    if (!address.bairro.trim()) e.bairro = "Informe o bairro"
-    if (!address.cidade.trim()) e.cep = "Preencha o CEP para buscar o endereço"
-    setErrors(e)
-    return Object.keys(e).length === 0
-  }
+  // Auto-focus text input when step changes
+  useEffect(() => {
+    const t = setTimeout(() => inputRef.current?.focus(), 160)
+    return () => clearTimeout(t)
+  }, [stepIdx])
 
-  function validateStep3(): boolean {
-    const e: Record<string, string> = {}
-    if (needsVehicleDoc) {
-      if (!vehicle.placa.trim()) e.placa = "Informe a placa"
-      if (!vehicle.modelo.trim()) e.modelo = "Informe o modelo"
-      if (!vehicle.cnh.trim()) e.cnh = "Informe o número da CNH"
-      if (!vehicle.validadeCnh) e.validadeCnh = "Informe a validade da CNH"
+  // ─── Validation ─────────────────────────────────────────────────────────────
+  function validate(): string | null {
+    switch (currentStepId) {
+      case "nome":
+        return personal.nome.trim().length >= 3 ? null : "Informe seu nome completo"
+      case "cpf":
+        return validateCPF(personal.cpf) ? null : "CPF inválido"
+      case "nascimento":
+        if (!personal.nascimento) return "Informe sua data de nascimento"
+        return isAdult(personal.nascimento) ? null : "É necessário ter 18 anos ou mais"
+      case "genero": return null
+      case "email":
+        return validateEmail(personal.email) ? null : "E-mail inválido"
+      case "celular":
+        return personal.celular.replace(/\D/g, "").length >= 10 ? null : "Celular inválido"
+      case "senha":
+        if (personal.senha.length < 8) return "A senha deve ter pelo menos 8 caracteres"
+        return personal.confirmarSenha === personal.senha ? null : "As senhas não coincidem"
+      case "endereco":
+        if (!address.logradouro.trim()) return "Preencha o CEP para buscar o endereço"
+        if (!address.numero.trim()) return "Informe o número"
+        return null
+      case "veiculo": return null
+      case "placa":
+        return vehicle.placa.trim() ? null : "Informe a placa do veículo"
+      case "modeloAno":
+        return vehicle.modelo.trim() ? null : "Informe o modelo do veículo"
+      case "cnh":
+        if (!vehicle.cnh.trim()) return "Informe o número da CNH"
+        return vehicle.validadeCnh ? null : "Informe a validade da CNH"
+      case "cnhFrente": return docs.cnhFrente ? null : "Adicione a foto da frente da CNH"
+      case "cnhVerso":  return docs.cnhVerso  ? null : "Adicione a foto do verso da CNH"
+      case "crlv":      return docs.crlv      ? null : "Adicione o CRLV do veículo"
+      case "selfie":    return docs.selfie    ? null : "Adicione a selfie com o documento"
+      case "banco":
+        if (!bank.banco) return "Selecione o banco"
+        if (!bank.agencia.trim()) return "Informe a agência"
+        if (!bank.conta.trim()) return "Informe a conta"
+        return bank.cpfTitular.trim() ? null : "Informe o CPF do titular"
+      default: return null
     }
-    setErrors(e)
-    return Object.keys(e).length === 0
   }
 
-  function validateStep4(): boolean {
-    const e: Record<string, string> = {}
-    if (!docs.cnhFrente) e.cnhFrente = "Anexe a frente da CNH"
-    if (!docs.cnhVerso) e.cnhVerso = "Anexe o verso da CNH"
-    if (needsVehicleDoc && !docs.crlv) e.crlv = "Anexe o CRLV do veículo"
-    if (!docs.selfie) e.selfie = "Anexe a selfie com o documento"
-    setErrors(e)
-    return Object.keys(e).length === 0
-  }
-
-  function validateStep5(): boolean {
-    const e: Record<string, string> = {}
-    if (!bank.banco) e.banco = "Selecione o banco"
-    if (!bank.agencia.trim()) e.agencia = "Informe a agência"
-    if (!bank.conta.trim()) e.conta = "Informe a conta"
-    if (!bank.cpfTitular.trim()) e.cpfTitular = "Informe o CPF/CNPJ do titular"
-    setErrors(e)
-    return Object.keys(e).length === 0
-  }
-
+  // ─── Navigation ─────────────────────────────────────────────────────────────
   function next() {
-    const validators: Record<number, () => boolean> = {
-      1: validateStep1, 2: validateStep2, 3: validateStep3,
-      4: validateStep4, 5: validateStep5,
+    const e = validate()
+    if (e) { setErro(e); return }
+    setErro("")
+    if (stepIdx < totalSteps - 1) {
+      setDirection(1)
+      setStepIdx(s => s + 1)
+    } else {
+      enviar()
     }
-    if (validators[step]()) setStep(s => s + 1)
   }
 
   function back() {
-    setErrors({})
-    setStep(s => s - 1)
+    setErro("")
+    setDirection(-1)
+    setStepIdx(s => s - 1)
   }
 
+  // ─── Submit ─────────────────────────────────────────────────────────────────
   async function enviar() {
-    if (!validateStep5()) return
     setLoading(true)
     try {
-      const enderecoStr = `${address.logradouro}, ${address.numero}${address.complemento ? " " + address.complemento : ""} - ${address.bairro}, ${address.cidade}/${address.estado} - CEP ${address.cep}`
+      const endStr = [
+        address.logradouro, address.numero,
+        address.complemento, `- ${address.bairro}`,
+        `${address.cidade}/${address.estado}`,
+        address.cep ? `CEP ${address.cep}` : "",
+      ].filter(Boolean).join(", ")
 
-      let authUserId: string | null = null
       const { data: authData } = await supabase.auth.signUp({
         email: personal.email.trim().toLowerCase(),
         password: personal.senha,
       })
-      authUserId = authData.user?.id ?? null
 
-      const payload = {
-        nome: personal.nome.trim(),
-        email: personal.email.trim().toLowerCase(),
-        telefone: personal.celular,
-        cpf: personal.cpf,
-        veiculo: vehicle.tipo,
-        placa: vehicle.placa.toUpperCase(),
-        cnh: vehicle.cnh,
-        endereco: enderecoStr,
-        pix_key: `${bank.banco} Ag:${bank.agencia} Cc:${bank.conta}`,
-        status: "pendente" as const,
+      const { error } = await supabase.from("motoboys").insert({
+        nome:       personal.nome.trim(),
+        email:      personal.email.trim().toLowerCase(),
+        telefone:   personal.celular,
+        cpf:        personal.cpf,
+        veiculo:    vehicle.tipo,
+        placa:      vehicle.placa.toUpperCase() || null,
+        cnh:        vehicle.cnh || null,
+        endereco:   endStr,
+        pix_key:    `${bank.banco} Ag:${bank.agencia} Cc:${bank.conta}`,
+        status:     "pendente",
         disponivel: false,
-        ...(authUserId ? { user_id: authUserId } : {}),
-      }
-
-      const { error } = await supabase.from("motoboys").insert(payload)
+        ...(authData?.user?.id ? { user_id: authData.user.id } : {}),
+      })
       if (error) throw error
       setSucesso(true)
-    } catch (e) {
-      console.error(e)
-      alert("Erro ao enviar cadastro. Verifique os dados e tente novamente.")
+    } catch (e: any) {
+      setErro(e?.message ?? "Erro ao enviar. Verifique os dados e tente novamente.")
     }
     setLoading(false)
   }
 
+  // ─── Input per step ─────────────────────────────────────────────────────────
+  function renderInput() {
+    const onEnter = (e: React.KeyboardEvent) => { if (e.key === "Enter") next() }
+    const focusStyle = (id: string) => focusedInp === id ? inpFocus : {}
+
+    switch (currentStepId) {
+
+      case "nome":
+        return (
+          <input
+            ref={inputRef}
+            style={{ ...inp, ...focusStyle("nome") }}
+            value={personal.nome}
+            onChange={e => { setPersonal(p => ({ ...p, nome: e.target.value })); setErro("") }}
+            onKeyDown={onEnter}
+            onFocus={() => setFocusedInp("nome")}
+            onBlur={() => setFocusedInp(null)}
+            placeholder="João da Silva"
+            autoComplete="name"
+          />
+        )
+
+      case "cpf":
+        return (
+          <input
+            ref={inputRef}
+            style={{ ...inp, ...focusStyle("cpf"), letterSpacing: 2 }}
+            value={personal.cpf}
+            onChange={e => { setPersonal(p => ({ ...p, cpf: maskCPF(e.target.value) })); setErro("") }}
+            onKeyDown={onEnter}
+            onFocus={() => setFocusedInp("cpf")}
+            onBlur={() => setFocusedInp(null)}
+            placeholder="000.000.000-00"
+            maxLength={14}
+            inputMode="numeric"
+          />
+        )
+
+      case "nascimento":
+        return (
+          <input
+            ref={inputRef}
+            type="date"
+            style={{ ...inp, ...focusStyle("nasc") }}
+            value={personal.nascimento}
+            onChange={e => { setPersonal(p => ({ ...p, nascimento: e.target.value })); setErro("") }}
+            onFocus={() => setFocusedInp("nasc")}
+            onBlur={() => setFocusedInp(null)}
+            max={new Date(Date.now() - 18 * 365.25 * 86400000).toISOString().split("T")[0]}
+          />
+        )
+
+      case "genero":
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {GENEROS.map(g => (
+              <button
+                key={g.id}
+                type="button"
+                onClick={() => { setPersonal(p => ({ ...p, genero: g.id })); setErro("") }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 16,
+                  padding: "18px 20px", borderRadius: 16,
+                  border: `2px solid ${personal.genero === g.id ? "#DC2626" : "#e5e7eb"}`,
+                  background: personal.genero === g.id ? "#FEF2F2" : "white",
+                  cursor: "pointer", textAlign: "left",
+                  transition: "all 0.15s",
+                }}
+              >
+                <span style={{ fontSize: 30 }}>{g.icon}</span>
+                <span style={{ color: personal.genero === g.id ? "#DC2626" : "#374151", fontWeight: 700, fontSize: 16 }}>
+                  {g.id}
+                </span>
+                {personal.genero === g.id && (
+                  <span style={{ marginLeft: "auto", color: "#DC2626", fontWeight: 700, fontSize: 18 }}>✓</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )
+
+      case "email":
+        return (
+          <input
+            ref={inputRef}
+            type="email"
+            style={{ ...inp, ...focusStyle("email") }}
+            value={personal.email}
+            onChange={e => { setPersonal(p => ({ ...p, email: e.target.value })); setErro("") }}
+            onKeyDown={onEnter}
+            onFocus={() => setFocusedInp("email")}
+            onBlur={() => setFocusedInp(null)}
+            placeholder="seu@email.com"
+            autoComplete="email"
+            inputMode="email"
+          />
+        )
+
+      case "celular":
+        return (
+          <input
+            ref={inputRef}
+            style={{ ...inp, ...focusStyle("cel") }}
+            value={personal.celular}
+            onChange={e => { setPersonal(p => ({ ...p, celular: maskPhone(e.target.value) })); setErro("") }}
+            onKeyDown={onEnter}
+            onFocus={() => setFocusedInp("cel")}
+            onBlur={() => setFocusedInp(null)}
+            placeholder="(64) 9 9999-1234"
+            maxLength={15}
+            inputMode="tel"
+          />
+        )
+
+      case "senha":
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <div style={{ position: "relative" }}>
+              <input
+                ref={inputRef}
+                type={showPass ? "text" : "password"}
+                style={{ ...inp, ...focusStyle("senha"), paddingRight: 56 }}
+                value={personal.senha}
+                onChange={e => { setPersonal(p => ({ ...p, senha: e.target.value })); setErro("") }}
+                onFocus={() => setFocusedInp("senha")}
+                onBlur={() => setFocusedInp(null)}
+                placeholder="Sua senha"
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPass(v => !v)}
+                style={{ position: "absolute", right: 18, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "#9ca3af", padding: 4 }}
+              >
+                {showPass ? "🙈" : "👁️"}
+              </button>
+            </div>
+            <div style={{ position: "relative" }}>
+              <input
+                type={showPass2 ? "text" : "password"}
+                style={{
+                  ...inp, paddingRight: 56,
+                  ...focusStyle("senha2"),
+                  borderColor: personal.confirmarSenha && personal.confirmarSenha !== personal.senha
+                    ? "#ef4444"
+                    : personal.confirmarSenha && personal.confirmarSenha === personal.senha
+                      ? "#22c55e"
+                      : focusedInp === "senha2" ? "#DC2626" : "#e5e7eb",
+                }}
+                value={personal.confirmarSenha}
+                onChange={e => { setPersonal(p => ({ ...p, confirmarSenha: e.target.value })); setErro("") }}
+                onFocus={() => setFocusedInp("senha2")}
+                onBlur={() => setFocusedInp(null)}
+                placeholder="Confirme sua senha"
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPass2(v => !v)}
+                style={{ position: "absolute", right: 18, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "#9ca3af", padding: 4 }}
+              >
+                {showPass2 ? "🙈" : "👁️"}
+              </button>
+            </div>
+            {personal.confirmarSenha && personal.confirmarSenha === personal.senha && (
+              <p style={{ color: "#22c55e", fontSize: 14, fontWeight: 600 }}>✓ Senhas conferem</p>
+            )}
+          </div>
+        )
+
+      case "endereco":
+        return (
+          <div className="flex flex-col gap-2">
+            <AddressFields data={address} onChange={d => { setAddress(d); setErro("") }} errors={{}} />
+          </div>
+        )
+
+      case "veiculo":
+        return (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {VEHICLE_TYPES.map(v => (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => { setVehicle(veh => ({ ...veh, tipo: v.id })); setErro("") }}
+                style={{
+                  display: "flex", flexDirection: "column",
+                  alignItems: "center", justifyContent: "center",
+                  gap: 10, padding: "28px 16px", borderRadius: 18,
+                  border: `2px solid ${vehicle.tipo === v.id ? "#DC2626" : "#e5e7eb"}`,
+                  background: vehicle.tipo === v.id ? "#FEF2F2" : "white",
+                  cursor: "pointer", transition: "all 0.15s",
+                  boxShadow: vehicle.tipo === v.id ? "0 4px 16px rgba(220,38,38,0.15)" : "none",
+                }}
+              >
+                <span style={{ fontSize: 40 }}>{v.icon}</span>
+                <span style={{ color: vehicle.tipo === v.id ? "#DC2626" : "#374151", fontWeight: 700, fontSize: 15 }}>
+                  {v.id}
+                </span>
+              </button>
+            ))}
+          </div>
+        )
+
+      case "placa":
+        return (
+          <input
+            ref={inputRef}
+            style={{ ...inp, ...focusStyle("placa"), textTransform: "uppercase", letterSpacing: 6, textAlign: "center", fontSize: 26, fontWeight: 800 }}
+            value={vehicle.placa}
+            onChange={e => { setVehicle(veh => ({ ...veh, placa: maskPlaca(e.target.value) })); setErro("") }}
+            onKeyDown={onEnter}
+            onFocus={() => setFocusedInp("placa")}
+            onBlur={() => setFocusedInp(null)}
+            placeholder="ABC-1234"
+            maxLength={8}
+          />
+        )
+
+      case "modeloAno":
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <input
+              ref={inputRef}
+              style={{ ...inp, ...focusStyle("modelo") }}
+              value={vehicle.modelo}
+              onChange={e => { setVehicle(v => ({ ...v, modelo: e.target.value })); setErro("") }}
+              onKeyDown={onEnter}
+              onFocus={() => setFocusedInp("modelo")}
+              onBlur={() => setFocusedInp(null)}
+              placeholder="Ex: Honda CG 160"
+            />
+            <div style={{ position: "relative" }}>
+              <select
+                style={{ ...inp, cursor: "pointer", paddingRight: 44 }}
+                value={vehicle.ano}
+                onChange={e => setVehicle(v => ({ ...v, ano: e.target.value }))}
+              >
+                {ANOS.map(a => <option key={a}>{a}</option>)}
+              </select>
+              <span style={{ position: "absolute", right: 18, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#9ca3af", fontSize: 14 }}>▼</span>
+            </div>
+          </div>
+        )
+
+      case "cnh":
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <input
+              ref={inputRef}
+              style={{ ...inp, ...focusStyle("cnh"), letterSpacing: 2 }}
+              value={vehicle.cnh}
+              onChange={e => { setVehicle(v => ({ ...v, cnh: e.target.value.replace(/\D/g, "").slice(0, 11) })); setErro("") }}
+              onKeyDown={onEnter}
+              onFocus={() => setFocusedInp("cnh")}
+              onBlur={() => setFocusedInp(null)}
+              placeholder="Número da CNH (11 dígitos)"
+              inputMode="numeric"
+              maxLength={11}
+            />
+            <div style={{ position: "relative" }}>
+              <select
+                style={{ ...inp, cursor: "pointer", paddingRight: 44 }}
+                value={vehicle.categoriaCnh}
+                onChange={e => setVehicle(v => ({ ...v, categoriaCnh: e.target.value }))}
+              >
+                <option value="A">Categoria A — Motocicleta</option>
+                <option value="AB">Categoria AB</option>
+                <option value="B">Categoria B — Carro</option>
+                <option value="ACC">Categoria ACC</option>
+              </select>
+              <span style={{ position: "absolute", right: 18, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "#9ca3af", fontSize: 14 }}>▼</span>
+            </div>
+            <div>
+              <p style={{ color: "#6B7280", fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Validade da CNH</p>
+              <input
+                type="date"
+                style={{ ...inp, ...focusStyle("valCnh") }}
+                value={vehicle.validadeCnh}
+                onChange={e => { setVehicle(v => ({ ...v, validadeCnh: e.target.value })); setErro("") }}
+                onFocus={() => setFocusedInp("valCnh")}
+                onBlur={() => setFocusedInp(null)}
+                min={new Date().toISOString().split("T")[0]}
+              />
+            </div>
+          </div>
+        )
+
+      case "cnhFrente":
+        return (
+          <FileUpload
+            label="Frente da CNH"
+            value={docs.cnhFrente}
+            onChange={f => { setDocs(d => ({ ...d, cnhFrente: f })); setErro("") }}
+            required
+          />
+        )
+
+      case "cnhVerso":
+        return (
+          <FileUpload
+            label="Verso da CNH"
+            value={docs.cnhVerso}
+            onChange={f => { setDocs(d => ({ ...d, cnhVerso: f })); setErro("") }}
+            required
+          />
+        )
+
+      case "crlv":
+        return (
+          <FileUpload
+            label="CRLV (documento do veículo)"
+            value={docs.crlv}
+            onChange={f => { setDocs(d => ({ ...d, crlv: f })); setErro("") }}
+            required
+          />
+        )
+
+      case "selfie":
+        return (
+          <FileUpload
+            label="Selfie com o documento"
+            value={docs.selfie}
+            onChange={f => { setDocs(d => ({ ...d, selfie: f })); setErro("") }}
+            required
+          />
+        )
+
+      case "banco":
+        return (
+          <BankFields
+            data={bank}
+            onChange={b => { setBank(b); setErro("") }}
+            autoFillDoc={personal.cpf}
+            errors={{ banco: undefined, agencia: undefined, conta: undefined, cpfTitular: undefined }}
+          />
+        )
+
+      default:
+        return null
+    }
+  }
+
+  // ─── Animation variants ─────────────────────────────────────────────────────
+  const variants = {
+    enter:  (d: number) => ({ x: d * 48, opacity: 0 }),
+    center: { x: 0, opacity: 1 },
+    exit:   (d: number) => ({ x: d * -48, opacity: 0 }),
+  }
+
+  // ─── Success screen ─────────────────────────────────────────────────────────
   if (sucesso) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6" style={{ background: "#0a0a0a" }}>
+      <div style={{ minHeight: "100vh", background: "#F9FAFB", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <motion.div
           initial={{ scale: 0.85, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 260, damping: 20 }}
-          className="card p-8 text-center max-w-sm w-full"
+          style={{ background: "white", borderRadius: 24, padding: 40, textAlign: "center", maxWidth: 420, width: "100%", boxShadow: "0 8px 40px rgba(0,0,0,0.1)" }}
         >
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ delay: 0.2, type: "spring", stiffness: 300 }}
-            className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-5"
-            style={{ background: "rgba(34,197,94,0.12)", border: "2px solid rgba(34,197,94,0.3)" }}
+            style={{ width: 80, height: 80, borderRadius: "50%", background: "rgba(34,197,94,0.1)", border: "2px solid rgba(34,197,94,0.3)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", fontSize: 38 }}
           >
-            <span className="text-4xl">✅</span>
+            ✅
           </motion.div>
-          <h2 className="text-xl font-black text-white mb-2">Cadastro enviado!</h2>
-          <p className="text-sm mb-2" style={{ color: "rgba(255,255,255,0.5)" }}>
+          <h2 style={{ fontSize: 22, fontWeight: 900, color: "#111827", marginBottom: 8 }}>
+            Cadastro enviado!
+          </h2>
+          <p style={{ fontSize: 14, color: "#6B7280", lineHeight: 1.7, marginBottom: 6 }}>
             Recebemos seus dados. Nossa equipe analisará em até 48h.
           </p>
-          <p className="text-sm mb-6" style={{ color: "rgba(255,255,255,0.3)" }}>
+          <p style={{ fontSize: 13, color: "#9ca3af", lineHeight: 1.7, marginBottom: 28 }}>
             Após aprovação, você receberá um link para assinar o contrato digital e começar a fazer entregas.
           </p>
-          <a href="/" className="btn-ghost w-full justify-center">
+          <a
+            href="/"
+            style={{ display: "block", padding: "15px", borderRadius: 14, background: "#DC2626", color: "white", fontWeight: 800, textDecoration: "none", fontSize: 15, boxShadow: "0 4px 20px rgba(220,38,38,0.3)" }}
+          >
             Voltar ao início
           </a>
         </motion.div>
@@ -242,404 +670,142 @@ export default function CadastroMotoboy() {
     )
   }
 
+  // ─── Main form ──────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen p-6 flex flex-col items-center" style={{ background: "#0a0a0a" }}>
-      <div className="w-full max-w-md">
-        <div className="mb-7">
-          <a href="/" className="text-sm font-semibold" style={{ color: "rgba(255,255,255,0.3)" }}>
-            ← Voltar
-          </a>
-          <h1 className="text-2xl font-black text-white mt-3">Quero ser entregador</h1>
-          <p className="text-sm mt-1" style={{ color: "rgba(255,255,255,0.4)" }}>
-            Preencha seus dados. Nossa equipe analisará em até 48h.
-          </p>
+    <div style={{ minHeight: "100vh", background: "#F9FAFB" }} data-light-form="">
+      <style>{LIGHT_CSS}</style>
+
+      {/* ── Fixed header ─────────────────────────────────────────────────── */}
+      <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 50, background: "white", boxShadow: "0 1px 8px rgba(0,0,0,0.06)" }}>
+        {/* Progress bar */}
+        <div style={{ height: 3, background: "#f3f4f6" }}>
+          <motion.div
+            style={{ height: "100%", background: "#DC2626", borderRadius: "0 2px 2px 0", originX: 0 }}
+            animate={{ width: `${progress}%` }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+          />
         </div>
 
-        <StepIndicator current={step} total={TOTAL_STEPS} labels={STEP_LABELS} />
+        <div style={{ maxWidth: 480, margin: "0 auto", padding: "12px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+          {stepIdx > 0 ? (
+            <button
+              onClick={back}
+              style={{ background: "#f3f4f6", border: "none", cursor: "pointer", color: "#374151", width: 40, height: 40, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}
+            >
+              ←
+            </button>
+          ) : (
+            <a
+              href="/"
+              style={{ background: "#f3f4f6", border: "none", color: "#374151", width: 40, height: 40, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0, textDecoration: "none" }}
+            >
+              ←
+            </a>
+          )}
 
-        <AnimatePresence mode="wait">
-          <motion.div key={step} {...slide}>
+          <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
+            <img src="/logo-chego.png" alt="Chegô" style={{ height: 36, objectFit: "contain" }} />
+          </div>
 
-            {/* ── ETAPA 1 — Dados Pessoais ────────────────────────────── */}
-            {step === 1 && (
-              <div className="flex flex-col gap-4">
-                <FormInput
-                  label="Nome completo"
-                  placeholder="Seu nome completo"
-                  value={personal.nome}
-                  onChange={e => { setPersonal(p => ({ ...p, nome: e.target.value })); clearErr("nome") }}
-                  error={errors.nome}
-                  valid={!errors.nome && personal.nome.trim().length > 3}
-                  required
-                />
-                <FormInput
-                  label="CPF"
-                  placeholder="000.000.000-00"
-                  value={personal.cpf}
-                  onChange={e => {
-                    const v = maskCPF(e.target.value)
-                    setPersonal(p => ({ ...p, cpf: v }))
-                    clearErr("cpf")
-                  }}
-                  error={errors.cpf}
-                  valid={!errors.cpf && validateCPF(personal.cpf)}
-                  maxLength={14}
-                  required
-                />
-                <FormInput
-                  label="Data de nascimento"
-                  type="date"
-                  value={personal.nascimento}
-                  onChange={e => { setPersonal(p => ({ ...p, nascimento: e.target.value })); clearErr("nascimento") }}
-                  error={errors.nascimento}
-                  valid={!errors.nascimento && !!personal.nascimento && isAdult(personal.nascimento)}
-                  max={new Date(Date.now() - 18 * 365.25 * 86400000).toISOString().split("T")[0]}
-                  required
-                />
-                <div>
-                  <label htmlFor="genero-sel" className="label">Gênero</label>
-                  <select
-                    id="genero-sel"
-                    className="input"
-                    value={personal.genero}
-                    onChange={e => setPersonal(p => ({ ...p, genero: e.target.value }))}
-                  >
-                    <option>Masculino</option>
-                    <option>Feminino</option>
-                    <option>Prefiro não informar</option>
-                  </select>
-                </div>
-                <FormInput
-                  label="E-mail"
-                  type="email"
-                  placeholder="seu@email.com"
-                  value={personal.email}
-                  onChange={e => { setPersonal(p => ({ ...p, email: e.target.value })); clearErr("email") }}
-                  error={errors.email}
-                  valid={!errors.email && validateEmail(personal.email)}
-                  required
-                />
-                <FormInput
-                  label="Celular / WhatsApp"
-                  placeholder="(00) 00000-0000"
-                  value={personal.celular}
-                  onChange={e => {
-                    const v = maskPhone(e.target.value)
-                    setPersonal(p => ({ ...p, celular: v }))
-                    clearErr("celular")
-                  }}
-                  error={errors.celular}
-                  valid={!errors.celular && personal.celular.replace(/\D/g, "").length >= 10}
-                  maxLength={15}
-                  required
-                />
-                <PasswordField
-                  label="Senha"
-                  id="senha-motoboy"
-                  value={personal.senha}
-                  onChange={v => { setPersonal(p => ({ ...p, senha: v })); clearErr("senha") }}
-                  error={errors.senha}
-                  required
-                />
-                <PasswordField
-                  label="Confirmar senha"
-                  id="confirmar-senha-motoboy"
-                  value={personal.confirmarSenha}
-                  onChange={v => { setPersonal(p => ({ ...p, confirmarSenha: v })); clearErr("confirmarSenha") }}
-                  error={errors.confirmarSenha}
-                  required
-                />
-                <button onClick={next} className="btn-primary justify-center mt-2" style={{ padding: "14px" }}>
-                  Próximo →
-                </button>
-              </div>
-            )}
-
-            {/* ── ETAPA 2 — Endereço ──────────────────────────────────── */}
-            {step === 2 && (
-              <div className="flex flex-col gap-2">
-                <AddressFields
-                  data={address}
-                  onChange={setAddress}
-                  errors={{
-                    logradouro: errors.logradouro,
-                    numero: errors.numero,
-                    bairro: errors.bairro,
-                  }}
-                />
-                {errors.cep && (
-                  <p className="text-xs" style={{ color: "#ef4444" }}>❌ {errors.cep}</p>
-                )}
-                <div className="flex gap-3 mt-4">
-                  <button onClick={back} className="btn-ghost flex-1 justify-center">← Voltar</button>
-                  <button onClick={next} className="btn-primary flex-1 justify-center" style={{ padding: "14px" }}>
-                    Próximo →
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ── ETAPA 3 — Veículo ───────────────────────────────────── */}
-            {step === 3 && (
-              <div className="flex flex-col gap-5">
-                <div>
-                  <label className="label">Tipo de veículo *</label>
-                  <div className="grid grid-cols-4 gap-2 mt-1">
-                    {VEHICLE_TYPES.map(v => (
-                      <button
-                        key={v.id}
-                        type="button"
-                        onClick={() => setVehicle(veh => ({ ...veh, tipo: v.id }))}
-                        className="flex flex-col items-center gap-1.5 py-3 px-1 rounded-xl text-xs font-semibold transition-all duration-200"
-                        style={{
-                          background: vehicle.tipo === v.id ? "rgba(249,115,22,0.12)" : "#1a1a1a",
-                          border: `1.5px solid ${vehicle.tipo === v.id ? "#f97316" : "#2a2a2a"}`,
-                          color: vehicle.tipo === v.id ? "#f97316" : "rgba(255,255,255,0.45)",
-                        }}
-                      >
-                        <span className="text-2xl">{v.icon}</span>
-                        {v.id}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {needsVehicleDoc && (
-                  <>
-                    <FormInput
-                      label="Placa"
-                      placeholder="ABC-1234"
-                      value={vehicle.placa}
-                      onChange={e => {
-                        const v = maskPlaca(e.target.value)
-                        setVehicle(veh => ({ ...veh, placa: v }))
-                        clearErr("placa")
-                      }}
-                      error={errors.placa}
-                      maxLength={8}
-                      required
-                    />
-                    <FormInput
-                      label="Modelo do veículo"
-                      placeholder="Ex: Honda CG 160"
-                      value={vehicle.modelo}
-                      onChange={e => { setVehicle(veh => ({ ...veh, modelo: e.target.value })); clearErr("modelo") }}
-                      error={errors.modelo}
-                      required
-                    />
-                    <div>
-                      <label htmlFor="ano-sel" className="label">Ano do veículo *</label>
-                      <select
-                        id="ano-sel"
-                        className="input"
-                        value={vehicle.ano}
-                        onChange={e => setVehicle(veh => ({ ...veh, ano: e.target.value }))}
-                      >
-                        {ANOS.map(a => <option key={a}>{a}</option>)}
-                      </select>
-                    </div>
-                    <FormInput
-                      label="Número da CNH"
-                      placeholder="00000000000"
-                      value={vehicle.cnh}
-                      onChange={e => { setVehicle(veh => ({ ...veh, cnh: e.target.value.replace(/\D/g, "").slice(0, 11) })); clearErr("cnh") }}
-                      error={errors.cnh}
-                      required
-                    />
-                    <div>
-                      <label htmlFor="cat-cnh" className="label">Categoria da CNH *</label>
-                      <select
-                        id="cat-cnh"
-                        className="input"
-                        value={vehicle.categoriaCnh}
-                        onChange={e => setVehicle(veh => ({ ...veh, categoriaCnh: e.target.value }))}
-                      >
-                        <option value="A">A</option>
-                        <option value="AB">AB</option>
-                        <option value="B">B</option>
-                        <option value="ACC">ACC</option>
-                      </select>
-                    </div>
-                    <FormInput
-                      label="Validade da CNH"
-                      type="date"
-                      value={vehicle.validadeCnh}
-                      onChange={e => { setVehicle(veh => ({ ...veh, validadeCnh: e.target.value })); clearErr("validadeCnh") }}
-                      error={errors.validadeCnh}
-                      min={new Date().toISOString().split("T")[0]}
-                      required
-                    />
-                  </>
-                )}
-
-                <div className="flex gap-3">
-                  <button onClick={back} className="btn-ghost flex-1 justify-center">← Voltar</button>
-                  <button onClick={next} className="btn-primary flex-1 justify-center" style={{ padding: "14px" }}>
-                    Próximo →
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ── ETAPA 4 — Documentos ────────────────────────────────── */}
-            {step === 4 && (
-              <div className="flex flex-col gap-5">
-                <div
-                  className="rounded-xl px-4 py-3 text-xs"
-                  style={{ background: "rgba(249,115,22,0.06)", border: "1px solid rgba(249,115,22,0.15)", color: "rgba(255,255,255,0.5)" }}
-                >
-                  <span className="font-bold" style={{ color: "#f97316" }}>📋 Por que pedimos os documentos?</span>
-                  <br />
-                  Para garantir a segurança de todos os usuários, verificamos a identidade e habilitação de cada entregador.
-                </div>
-
-                <FileUpload
-                  label="CNH — Frente"
-                  value={docs.cnhFrente}
-                  onChange={f => { setDocs(d => ({ ...d, cnhFrente: f })); clearErr("cnhFrente") }}
-                  required
-                />
-                {errors.cnhFrente && <p className="text-xs -mt-3" style={{ color: "#ef4444" }}>❌ {errors.cnhFrente}</p>}
-
-                <FileUpload
-                  label="CNH — Verso"
-                  value={docs.cnhVerso}
-                  onChange={f => { setDocs(d => ({ ...d, cnhVerso: f })); clearErr("cnhVerso") }}
-                  required
-                />
-                {errors.cnhVerso && <p className="text-xs -mt-3" style={{ color: "#ef4444" }}>❌ {errors.cnhVerso}</p>}
-
-                {needsVehicleDoc && (
-                  <>
-                    <FileUpload
-                      label="CRLV (documento do veículo)"
-                      value={docs.crlv}
-                      onChange={f => { setDocs(d => ({ ...d, crlv: f })); clearErr("crlv") }}
-                      required
-                    />
-                    {errors.crlv && <p className="text-xs -mt-3" style={{ color: "#ef4444" }}>❌ {errors.crlv}</p>}
-                  </>
-                )}
-
-                <FileUpload
-                  label="Selfie segurando o documento"
-                  value={docs.selfie}
-                  onChange={f => { setDocs(d => ({ ...d, selfie: f })); clearErr("selfie") }}
-                  required
-                />
-                {errors.selfie && <p className="text-xs -mt-3" style={{ color: "#ef4444" }}>❌ {errors.selfie}</p>}
-
-                <div className="flex gap-3 mt-2">
-                  <button onClick={back} className="btn-ghost flex-1 justify-center">← Voltar</button>
-                  <button onClick={next} className="btn-primary flex-1 justify-center" style={{ padding: "14px" }}>
-                    Próximo →
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* ── ETAPA 5 — Banco + Resumo ────────────────────────────── */}
-            {step === 5 && (
-              <div className="flex flex-col gap-5">
-                <BankFields
-                  data={bank}
-                  onChange={setBank}
-                  autoFillDoc={personal.cpf}
-                  errors={{
-                    banco: errors.banco,
-                    agencia: errors.agencia,
-                    conta: errors.conta,
-                    cpfTitular: errors.cpfTitular,
-                  }}
-                />
-
-                {/* Resumo */}
-                <div className="rounded-xl p-4 mt-2" style={{ background: "#111", border: "1px solid #1e1e1e" }}>
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-bold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.3)" }}>
-                      Resumo do cadastro
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    <ResumoSecao titulo="Dados Pessoais" onEdit={() => { setErrors({}); setStep(1) }}>
-                      <ResumoLinha label="Nome" valor={personal.nome} />
-                      <ResumoLinha label="CPF" valor={personal.cpf} />
-                      <ResumoLinha label="E-mail" valor={personal.email} />
-                      <ResumoLinha label="Celular" valor={personal.celular} />
-                    </ResumoSecao>
-                    <ResumoSecao titulo="Endereço" onEdit={() => { setErrors({}); setStep(2) }}>
-                      <ResumoLinha label="CEP" valor={address.cep} />
-                      <ResumoLinha label="Logradouro" valor={`${address.logradouro}, ${address.numero}`} />
-                      <ResumoLinha label="Cidade" valor={`${address.cidade}/${address.estado}`} />
-                    </ResumoSecao>
-                    <ResumoSecao titulo="Veículo" onEdit={() => { setErrors({}); setStep(3) }}>
-                      <ResumoLinha label="Tipo" valor={vehicle.tipo} />
-                      {needsVehicleDoc && (
-                        <>
-                          <ResumoLinha label="Placa" valor={vehicle.placa} />
-                          <ResumoLinha label="Modelo" valor={`${vehicle.modelo} ${vehicle.ano}`} />
-                        </>
-                      )}
-                    </ResumoSecao>
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <button onClick={back} className="btn-ghost flex-1 justify-center">← Voltar</button>
-                  <button
-                    onClick={enviar}
-                    disabled={loading}
-                    className="btn-primary flex-1 justify-center"
-                    style={{ padding: "14px" }}
-                  >
-                    {loading ? (
-                      <span className="flex items-center gap-2">
-                        <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin inline-block" />
-                        Enviando...
-                      </span>
-                    ) : (
-                      "Enviar cadastro ✓"
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
-
-          </motion.div>
-        </AnimatePresence>
+          <div style={{ width: 40, flexShrink: 0, textAlign: "right" }}>
+            <span style={{ color: "#9ca3af", fontSize: 12, fontWeight: 700 }}>
+              {stepIdx + 1}/{totalSteps}
+            </span>
+          </div>
+        </div>
       </div>
-    </div>
-  )
-}
 
-function ResumoSecao({
-  titulo, onEdit, children,
-}: {
-  titulo: string; onEdit: () => void; children: React.ReactNode
-}) {
-  return (
-    <div className="rounded-lg p-3" style={{ background: "#1a1a1a" }}>
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.4)" }}>{titulo}</p>
-        <button
-          type="button"
-          onClick={onEdit}
-          className="text-xs font-semibold"
-          style={{ color: "#f97316" }}
-        >
-          Editar
-        </button>
+      {/* ── Main content ─────────────────────────────────────────────────── */}
+      <div style={{ paddingTop: 80, paddingBottom: 120, minHeight: "100vh" }}>
+        <div style={{ maxWidth: 480, margin: "0 auto", padding: "32px 20px 24px" }}>
+          <AnimatePresence mode="wait" custom={direction}>
+            <motion.div
+              key={currentStepId}
+              custom={direction}
+              variants={variants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={{ duration: 0.2, ease: "easeOut" }}
+            >
+              {/* Category badge */}
+              <p style={{ color: "#DC2626", fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 10 }}>
+                {meta.category}
+              </p>
+
+              {/* Big question */}
+              <h1 style={{ color: "#111827", fontSize: 26, fontWeight: 900, lineHeight: 1.25, marginBottom: meta.hint ? 10 : 28, letterSpacing: "-0.3px" }}>
+                {meta.question}
+              </h1>
+
+              {/* Hint */}
+              {meta.hint && (
+                <p style={{ color: "#6B7280", fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>
+                  {meta.hint}
+                </p>
+              )}
+
+              {/* Input area */}
+              {renderInput()}
+
+              {/* Error */}
+              <AnimatePresence>
+                {erro && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    style={{
+                      marginTop: 14, padding: "12px 16px", borderRadius: 12,
+                      background: "#FEF2F2", border: "1px solid #FECACA",
+                      color: "#DC2626", fontSize: 14, fontWeight: 500,
+                    }}
+                  >
+                    ⚠️ {erro}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+            </motion.div>
+          </AnimatePresence>
+        </div>
       </div>
-      <div className="flex flex-col gap-1">{children}</div>
-    </div>
-  )
-}
 
-function ResumoLinha({ label, valor }: { label: string; valor: string }) {
-  return (
-    <div className="flex justify-between text-xs gap-2">
-      <span style={{ color: "rgba(255,255,255,0.3)" }}>{label}</span>
-      <span className="text-white font-medium text-right">{valor || "—"}</span>
+      {/* ── Fixed bottom CTA ─────────────────────────────────────────────── */}
+      <div style={{
+        position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 50,
+        background: "white", borderTop: "1px solid #f3f4f6",
+        padding: "14px 20px",
+        paddingBottom: "calc(14px + env(safe-area-inset-bottom))",
+      }}>
+        <div style={{ maxWidth: 480, margin: "0 auto" }}>
+          <button
+            onClick={next}
+            disabled={loading}
+            style={{
+              width: "100%", padding: "17px 24px", borderRadius: 16,
+              background: loading ? "#fca5a5" : "#DC2626",
+              color: "white", fontWeight: 800, fontSize: 16,
+              border: "none", cursor: loading ? "not-allowed" : "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+              boxShadow: loading ? "none" : "0 4px 20px rgba(220,38,38,0.35)",
+              transition: "background 0.15s, box-shadow 0.15s",
+            }}
+          >
+            {loading ? (
+              <>
+                <span style={{ width: 18, height: 18, borderRadius: "50%", border: "2.5px solid white", borderTopColor: "transparent", animation: "chego-spin 0.8s linear infinite", display: "inline-block" }} />
+                Enviando...
+              </>
+            ) : isLastStep ? (
+              "Enviar cadastro ✓"
+            ) : (
+              "Continuar →"
+            )}
+          </button>
+        </div>
+      </div>
+
     </div>
   )
 }
