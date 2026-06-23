@@ -114,17 +114,17 @@ export default function ContratoMotoboyPage() {
     const assinatura = canvas.toDataURL("image/png")
     setSalvando(true)
 
-    // Upload selfie diretamente ao Storage para não limitar pelo servidor
+    // Upload selfie via rota de servidor (sem expor storage ao browser)
     let selfieContratoUrl: string | undefined
     try {
-      const ext = selfieContrato.name.split(".").pop()?.toLowerCase() ?? "jpg"
-      const path = `${motoboy.id}/selfie_contrato.${ext}`
-      const { error: upErr } = await supabase.storage
-        .from("motoboys-docs")
-        .upload(path, selfieContrato, { upsert: true })
-      if (!upErr) {
-        const { data: { publicUrl } } = supabase.storage.from("motoboys-docs").getPublicUrl(path)
-        selfieContratoUrl = publicUrl
+      const fd = new FormData()
+      fd.append("file", selfieContrato)
+      fd.append("key", "selfieContrato")
+      fd.append("slug", motoboy.id)
+      const upRes = await fetch("/api/upload-motoboy-docs", { method: "POST", body: fd })
+      if (upRes.ok) {
+        const { path } = await upRes.json()
+        selfieContratoUrl = path
       }
     } catch {}
 

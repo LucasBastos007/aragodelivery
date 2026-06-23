@@ -140,7 +140,43 @@ export default function MotoboyPage() {
   const [copiado,     setCopiado]     = useState(false)
   const [modalRejeicao, setModalRejeicao] = useState(false)
   const [aprovadoWhats, setAprovadoWhats] = useState<Motoboy | null>(null)
-  const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null)
+  const [fotoAmpliada,  setFotoAmpliada]  = useState<string | null>(null)
+  const [signedUrls,    setSignedUrls]    = useState<Record<string, string>>({})
+  const [loadingDocs,   setLoadingDocs]   = useState(false)
+
+  // Busca signed URLs sempre que um motoboy é selecionado
+  useEffect(() => {
+    if (!selecionado) { setSignedUrls({}); return }
+    const docs = selecionado.documentos
+    const entries: { key: string; value: string }[] = [
+      { key: "cnhFrente",      value: docs?.cnhFrente      ?? "" },
+      { key: "cnhVerso",       value: docs?.cnhVerso       ?? "" },
+      { key: "crlv",           value: docs?.crlv           ?? "" },
+      { key: "selfie",         value: docs?.selfie         ?? "" },
+      { key: "selfieContrato", value: selecionado.selfie_contrato ?? "" },
+    ].filter(e => e.value)
+
+    if (entries.length === 0) return
+
+    setLoadingDocs(true)
+    Promise.all(
+      entries.map(async ({ key, value }) => {
+        const res = await fetch("/api/admin/doc-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value }),
+        })
+        if (!res.ok) return { key, url: value } // fallback para URL original
+        const { signedUrl } = await res.json()
+        return { key, url: signedUrl as string }
+      })
+    ).then(results => {
+      const map: Record<string, string> = {}
+      results.forEach(({ key, url }) => { map[key] = url })
+      setSignedUrls(map)
+      setLoadingDocs(false)
+    })
+  }, [selecionado])
 
   async function load() {
     const { data } = await supabase
@@ -443,38 +479,43 @@ export default function MotoboyPage() {
             {(() => {
               const docs = selecionado.documentos
               const fotos = [
-                { key: "cnhFrente",      label: "Doc. Frente",    url: docs?.cnhFrente },
-                { key: "cnhVerso",       label: "Doc. Verso",     url: docs?.cnhVerso },
-                { key: "crlv",           label: "CRLV",           url: docs?.crlv },
-                { key: "selfie",         label: "Selfie",         url: docs?.selfie },
-                { key: "selfieContrato", label: "Selfie contrato", url: selecionado.selfie_contrato ?? undefined },
-              ].filter(d => d.url)
+                { key: "cnhFrente",      label: "Doc. Frente",     raw: docs?.cnhFrente },
+                { key: "cnhVerso",       label: "Doc. Verso",      raw: docs?.cnhVerso },
+                { key: "crlv",           label: "CRLV",            raw: docs?.crlv },
+                { key: "selfie",         label: "Selfie",          raw: docs?.selfie },
+                { key: "selfieContrato", label: "Selfie contrato", raw: selecionado.selfie_contrato ?? undefined },
+              ].filter(d => d.raw)
 
               if (fotos.length === 0) return null
               return (
                 <div style={{ padding: "14px 20px", borderTop: "1px solid #F1F5F9", borderBottom: "1px solid #F1F5F9" }}>
-                  <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Documentação enviada</p>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>
+                    Documentação enviada{loadingDocs && <span style={{ marginLeft: 8, opacity: 0.5 }}>carregando...</span>}
+                  </p>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    {fotos.map(doc => (
-                      <div
-                        key={doc.key}
-                        onClick={() => setFotoAmpliada(doc.url!)}
-                        style={{ position: "relative", cursor: "pointer", borderRadius: 8, overflow: "hidden", border: "1.5px solid #E2E8F0" }}
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={doc.url}
-                          alt={doc.label}
-                          style={{ width: "100%", height: 76, objectFit: "cover", display: "block" }}
-                        />
-                        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "3px 6px", background: "rgba(0,0,0,0.55)", fontSize: 10, color: "white", fontWeight: 600 }}>
-                          {doc.label}
+                    {fotos.map(doc => {
+                      const url = signedUrls[doc.key] ?? doc.raw!
+                      return (
+                        <div
+                          key={doc.key}
+                          onClick={() => !loadingDocs && setFotoAmpliada(url)}
+                          style={{ position: "relative", cursor: loadingDocs ? "wait" : "pointer", borderRadius: 8, overflow: "hidden", border: "1.5px solid #E2E8F0" }}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={url}
+                            alt={doc.label}
+                            style={{ width: "100%", height: 76, objectFit: "cover", display: "block" }}
+                          />
+                          <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "3px 6px", background: "rgba(0,0,0,0.55)", fontSize: 10, color: "white", fontWeight: 600 }}>
+                            {doc.label}
+                          </div>
+                          <div style={{ position: "absolute", top: 4, right: 4, width: 18, height: 18, borderRadius: 4, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><path d="M15 3h6v6M14 10l6.1-6.1M9 21H3v-6M10 14l-6.1 6.1"/></svg>
+                          </div>
                         </div>
-                        <div style={{ position: "absolute", top: 4, right: 4, width: 18, height: 18, borderRadius: 4, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><path d="M15 3h6v6M14 10l6.1-6.1M9 21H3v-6M10 14l-6.1 6.1"/></svg>
-                        </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               )

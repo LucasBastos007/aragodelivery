@@ -373,26 +373,26 @@ export default function CadastroMotoboy() {
       })
       if (authError && !authError.message.includes("already")) throw authError
 
-      // Upload docs diretamente ao Supabase Storage (evita limite de payload do servidor)
+      // Upload docs via rota de servidor (sem expor storage ao browser)
       const slug = personal.email.trim().toLowerCase().replace(/[^a-z0-9]/g, "_")
       const documentos: Record<string, string> = {}
 
       const tryUpload = async (file: File | null, key: string) => {
         if (!file) return
-        const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg"
-        const path = `${slug}/${key}.${ext}`
-        const { error: upErr } = await supabase.storage
-          .from("motoboys-docs")
-          .upload(path, file, { upsert: true })
-        if (!upErr) {
-          const { data: { publicUrl } } = supabase.storage.from("motoboys-docs").getPublicUrl(path)
-          documentos[key] = publicUrl
+        const fd = new FormData()
+        fd.append("file", file)
+        fd.append("key", key)
+        fd.append("slug", slug)
+        const res = await fetch("/api/upload-motoboy-docs", { method: "POST", body: fd })
+        if (res.ok) {
+          const { path } = await res.json()
+          documentos[key] = path
         }
       }
 
       await Promise.all([
-        tryUpload(docs.cnhFrente, "cnh_frente"),
-        tryUpload(docs.cnhVerso,  "cnh_verso"),
+        tryUpload(docs.cnhFrente, "cnhFrente"),
+        tryUpload(docs.cnhVerso,  "cnhVerso"),
         tryUpload(docs.crlv,      "crlv"),
         tryUpload(docs.selfie,    "selfie"),
       ])
