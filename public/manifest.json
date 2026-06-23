@@ -32,9 +32,14 @@
       "description": "Explorar restaurantes e lojas"
     },
     {
-      "name": "Meu perfil",
-      "url": "/cliente/meu-perfil",
-      "description": "Acessar meu perfil"
+      "name": "Portal do Lojista",
+      "url": "/entrar",
+      "description": "Acessar painel da loja"
+    },
+    {
+      "name": "Portal do Entregador",
+      "url": "/entrar/motoboy",
+      "description": "Acessar área do motoboy"
     }
   ]
 }

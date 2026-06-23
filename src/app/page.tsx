@@ -1319,11 +1319,16 @@ export default function Home() {
               </div>
               <div>
                 <p style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "#9CA3AF", marginBottom: 16 }}>Entregadores</p>
-                <Link href="/cadastro-motoboy" style={{ display: "block", color: "#6B7280", fontSize: 14, textDecoration: "none", marginBottom: 10, fontWeight: 400 }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = "#DC2626" }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = "#6B7280" }}>
-                  Quero ser motoboy
-                </Link>
+                {[
+                  { label: "Quero ser motoboy",     href: "/cadastro-motoboy" },
+                  { label: "Portal do entregador",  href: "/entrar/motoboy" },
+                ].map(({ label, href }) => (
+                  <Link key={href} href={href} style={{ display: "block", color: "#6B7280", fontSize: 14, textDecoration: "none", marginBottom: 10, fontWeight: 400 }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.color = "#DC2626" }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.color = "#6B7280" }}>
+                    {label}
+                  </Link>
+                ))}
               </div>
               <div>
                 <p style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "#9CA3AF", marginBottom: 16 }}>Redes sociais</p>

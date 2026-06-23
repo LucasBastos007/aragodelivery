@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import { useAuth } from "@/lib/auth"
+import InstallBanner from "@/components/InstallBanner"
 
 export default function EntrarPage() {
   const router = useRouter()
@@ -102,6 +103,8 @@ export default function EntrarPage() {
               </Link>
             </p>
           </div>
+
+          <InstallBanner />
         </div>
       </div>
     </div>
