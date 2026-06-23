@@ -7,12 +7,9 @@ const sb = createClient(
   { auth: { persistSession: false, autoRefreshToken: false } }
 )
 
-// Colunas reais da tabela motoboys (verificado no schema):
-// nome, email, telefone, cpf, veiculo, placa, pix_key, status, disponivel
-// NÃO existem: cnh, endereco, user_id
-
 export async function POST(req: NextRequest) {
-  const { nome, email, telefone, cpf, veiculo, placa, pix_key } = await req.json()
+  const body = await req.json()
+  const { nome, email, senha, telefone, cpf, veiculo, placa, pix_key, documentos } = body
 
   if (!nome || !email || !cpf) {
     return NextResponse.json({ error: "Dados obrigatórios ausentes" }, { status: 400 })
@@ -21,11 +18,13 @@ export async function POST(req: NextRequest) {
   const { error } = await sb.from("motoboys").insert({
     nome,
     email,
-    telefone: telefone || null,
+    senha:     senha     || null,
+    telefone:  telefone  || null,
     cpf,
-    veiculo: veiculo || null,
-    placa: placa || "N/A",
-    pix_key: pix_key || null,
+    veiculo:   veiculo   || null,
+    placa:     placa     || "N/A",
+    pix_key:   pix_key   || null,
+    documentos: documentos ?? null,
     status: "pendente",
     disponivel: false,
   })

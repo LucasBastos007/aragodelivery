@@ -13,6 +13,8 @@ export default function ContratoMotoboyPage() {
   const [assinado, setAssinado] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [temAssinatura, setTemAssinatura] = useState(false)
+  const [selfieContrato, setSelfieContrato] = useState<File | null>(null)
+  const [selfiePreview, setSelfiePreview] = useState<string | null>(null)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const drawing = useRef(false)
@@ -91,15 +93,45 @@ export default function ContratoMotoboyPage() {
     setTemAssinatura(false)
   }
 
+  function handleSelfie(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setSelfieContrato(file)
+    if (file.type.startsWith("image/")) {
+      const reader = new FileReader()
+      reader.onload = () => setSelfiePreview(reader.result as string)
+      reader.readAsDataURL(file)
+    }
+  }
+
   async function assinar() {
     const canvas = canvasRef.current
     if (!canvas || !motoboy) return
+    if (!selfieContrato) {
+      alert("Por favor, tire uma foto segurando o documento antes de assinar.")
+      return
+    }
     const assinatura = canvas.toDataURL("image/png")
     setSalvando(true)
+
+    // Upload selfie diretamente ao Storage para não limitar pelo servidor
+    let selfieContratoUrl: string | undefined
+    try {
+      const ext = selfieContrato.name.split(".").pop()?.toLowerCase() ?? "jpg"
+      const path = `${motoboy.id}/selfie_contrato.${ext}`
+      const { error: upErr } = await supabase.storage
+        .from("motoboys-docs")
+        .upload(path, selfieContrato, { upsert: true })
+      if (!upErr) {
+        const { data: { publicUrl } } = supabase.storage.from("motoboys-docs").getPublicUrl(path)
+        selfieContratoUrl = publicUrl
+      }
+    } catch {}
+
     const res = await fetch("/api/contrato-motoboy", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, assinatura }),
+      body: JSON.stringify({ token, assinatura, selfieContratoUrl }),
     })
     setSalvando(false)
     if (!res.ok) { alert("Erro ao salvar assinatura. Tente novamente."); return }
@@ -231,6 +263,67 @@ export default function ContratoMotoboyPage() {
           </div>
         </div>
 
+        {/* Selfie com documento */}
+        <div style={{ marginBottom: 24 }}>
+          <p className="text-sm font-bold mb-2" style={{ color: "rgba(255,255,255,0.5)" }}>
+            Foto segurando o documento *
+          </p>
+          <p className="text-xs mb-3" style={{ color: "rgba(255,255,255,0.3)" }}>
+            Segure um documento com foto (RG ou CNH) ao lado do rosto e tire uma selfie.
+          </p>
+          {selfiePreview ? (
+            <div style={{ position: "relative", marginBottom: 4 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={selfiePreview}
+                alt="Selfie com documento"
+                style={{ width: "100%", maxHeight: 240, objectFit: "cover", borderRadius: 14, border: "1.5px solid #2a2a2a" }}
+              />
+              <button
+                type="button"
+                onClick={() => { setSelfieContrato(null); setSelfiePreview(null) }}
+                style={{
+                  position: "absolute", top: 8, right: 8,
+                  width: 32, height: 32, borderRadius: "50%",
+                  background: "rgba(0,0,0,0.7)", border: "1.5px solid rgba(255,255,255,0.2)",
+                  color: "white", fontSize: 16, fontWeight: 700,
+                  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                ×
+              </button>
+              <div style={{ position: "absolute", bottom: 8, left: 8, background: "rgba(34,197,94,0.9)", borderRadius: 8, padding: "4px 10px", fontSize: 12, fontWeight: 700, color: "white" }}>
+                Foto enviada
+              </div>
+            </div>
+          ) : (
+            <label htmlFor="selfie-doc" style={{ display: "block", cursor: "pointer" }}>
+              <div style={{
+                border: "2px dashed #2a2a2a", borderRadius: 14, padding: "32px 16px",
+                textAlign: "center", background: "#0d0d0d",
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
+              }}>
+                <div style={{ width: 52, height: 52, borderRadius: 14, background: "#1a1a1a", border: "1.5px solid #2a2a2a", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                    <circle cx="12" cy="13" r="4"/>
+                  </svg>
+                </div>
+                <div>
+                  <p style={{ color: "rgba(255,255,255,0.6)", fontWeight: 600, fontSize: 14, margin: 0 }}>Toque para tirar uma foto</p>
+                  <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 12, marginTop: 4 }}>Segure o documento ao lado do rosto</p>
+                </div>
+              </div>
+              <input
+                id="selfie-doc"
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={handleSelfie}
+              />
+            </label>
+          )}
+        </div>
+
         {/* Assinatura */}
         <div style={{ marginBottom: 24 }}>
           <div className="flex items-center justify-between mb-2">
@@ -260,18 +353,27 @@ export default function ContratoMotoboyPage() {
           </p>
         </div>
 
+        {(!selfieContrato || !temAssinatura) && (
+          <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 10, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)" }}>
+            <p style={{ color: "rgba(245,158,11,0.8)", fontSize: 12, fontWeight: 600, margin: 0 }}>
+              {!selfieContrato && !temAssinatura ? "Tire a selfie com o documento e assine para continuar" :
+               !selfieContrato ? "Tire a selfie segurando o documento" :
+               "Assine na área acima para continuar"}
+            </p>
+          </div>
+        )}
         <button
           onClick={assinar}
-          disabled={salvando || !temAssinatura}
+          disabled={salvando || !temAssinatura || !selfieContrato}
           style={{
             width: "100%", padding: "16px", borderRadius: 14, border: "none",
-            background: temAssinatura ? "#f97316" : "rgba(255,255,255,0.06)",
-            color: temAssinatura ? "white" : "rgba(255,255,255,0.3)",
+            background: (temAssinatura && selfieContrato) ? "#f97316" : "rgba(255,255,255,0.06)",
+            color: (temAssinatura && selfieContrato) ? "white" : "rgba(255,255,255,0.3)",
             fontWeight: 800, fontSize: 16,
-            cursor: temAssinatura ? "pointer" : "not-allowed",
+            cursor: (temAssinatura && selfieContrato) ? "pointer" : "not-allowed",
             transition: "all 0.2s",
           }}>
-          {salvando ? "Registrando assinatura..." : "✓ Assinar contrato e iniciar parceria"}
+          {salvando ? "Registrando assinatura..." : "Assinar contrato e iniciar parceria"}
         </button>
         <p className="text-xs mt-3 text-center" style={{ color: "rgba(255,255,255,0.2)" }}>
           Ao assinar, você declara ter lido e concordado com todos os termos acima.

@@ -45,11 +45,19 @@ export interface Motoboy {
   criado_em: string
   cnh?: string
   pix_key?: string
+  senha?: string | null
   contrato_token?: string
   contrato_assinado?: boolean
   contrato_assinado_em?: string
   motivo_rejeicao?: string
   raio_km?: number
+  documentos?: {
+    cnhFrente?: string
+    cnhVerso?: string
+    crlv?: string
+    selfie?: string
+  } | null
+  selfie_contrato?: string | null
 }
 
 export interface Produto {

@@ -106,6 +106,30 @@ function IconMotoboy({ color = "rgba(249,115,22,0.7)", size = 22 }: { color?: st
   )
 }
 
+// ─── Lightbox ─────────────────────────────────────────────────────────────────
+function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, zIndex: 400, background: "rgba(0,0,0,0.93)", display: "flex", alignItems: "center", justifyContent: "center" }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt="Documento"
+        onClick={e => e.stopPropagation()}
+        style={{ maxWidth: "95vw", maxHeight: "90vh", objectFit: "contain", borderRadius: 10 }}
+      />
+      <button
+        onClick={onClose}
+        style={{ position: "absolute", top: 16, right: 16, width: 38, height: 38, borderRadius: "50%", background: "white", border: "none", fontSize: 18, fontWeight: 900, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#0F172A", boxShadow: "0 2px 12px rgba(0,0,0,0.4)" }}
+      >
+        ✕
+      </button>
+    </div>
+  )
+}
+
 // ─── Página ───────────────────────────────────────────────────────────────────
 export default function MotoboyPage() {
   const [motoboys,    setMotoboys]    = useState<Motoboy[]>([])
@@ -116,6 +140,7 @@ export default function MotoboyPage() {
   const [copiado,     setCopiado]     = useState(false)
   const [modalRejeicao, setModalRejeicao] = useState(false)
   const [aprovadoWhats, setAprovadoWhats] = useState<Motoboy | null>(null)
+  const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null)
 
   async function load() {
     const { data } = await supabase
@@ -179,6 +204,9 @@ export default function MotoboyPage() {
 
   return (
     <div style={{ padding: "32px 36px" }}>
+
+      {/* Lightbox de fotos */}
+      {fotoAmpliada && <Lightbox src={fotoAmpliada} onClose={() => setFotoAmpliada(null)} />}
 
       {/* Modal de rejeição */}
       {modalRejeicao && selecionado && (
@@ -410,6 +438,47 @@ export default function MotoboyPage() {
                 <Row label="Assinado em" value={new Date(selecionado.contrato_assinado_em).toLocaleDateString("pt-BR")} />
               )}
             </div>
+
+            {/* Documentação enviada */}
+            {(() => {
+              const docs = selecionado.documentos
+              const fotos = [
+                { key: "cnhFrente",      label: "Doc. Frente",    url: docs?.cnhFrente },
+                { key: "cnhVerso",       label: "Doc. Verso",     url: docs?.cnhVerso },
+                { key: "crlv",           label: "CRLV",           url: docs?.crlv },
+                { key: "selfie",         label: "Selfie",         url: docs?.selfie },
+                { key: "selfieContrato", label: "Selfie contrato", url: selecionado.selfie_contrato ?? undefined },
+              ].filter(d => d.url)
+
+              if (fotos.length === 0) return null
+              return (
+                <div style={{ padding: "14px 20px", borderTop: "1px solid #F1F5F9", borderBottom: "1px solid #F1F5F9" }}>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Documentação enviada</p>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                    {fotos.map(doc => (
+                      <div
+                        key={doc.key}
+                        onClick={() => setFotoAmpliada(doc.url!)}
+                        style={{ position: "relative", cursor: "pointer", borderRadius: 8, overflow: "hidden", border: "1.5px solid #E2E8F0" }}
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={doc.url}
+                          alt={doc.label}
+                          style={{ width: "100%", height: 76, objectFit: "cover", display: "block" }}
+                        />
+                        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "3px 6px", background: "rgba(0,0,0,0.55)", fontSize: 10, color: "white", fontWeight: 600 }}>
+                          {doc.label}
+                        </div>
+                        <div style={{ position: "absolute", top: 4, right: 4, width: 18, height: 18, borderRadius: 4, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><path d="M15 3h6v6M14 10l6.1-6.1M9 21H3v-6M10 14l-6.1 6.1"/></svg>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Motivo de rejeição */}
             {selecionado.motivo_rejeicao && (

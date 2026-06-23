@@ -11,7 +11,7 @@ function adminClient() {
 }
 
 export async function POST(req: NextRequest) {
-  const { token, assinatura } = await req.json()
+  const { token, assinatura, selfieContratoUrl } = await req.json()
   if (!token || !assinatura) return NextResponse.json({ error: "Dados incompletos." }, { status: 400 })
 
   const client = adminClient()
@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
     contrato_assinado: true,
     contrato_assinado_em: new Date().toISOString(),
     status: "ativo",
+    ...(selfieContratoUrl ? { selfie_contrato: selfieContratoUrl } : {}),
   }).eq("id", motoboy.id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

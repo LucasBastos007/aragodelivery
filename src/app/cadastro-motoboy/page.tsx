@@ -371,23 +371,47 @@ export default function CadastroMotoboy() {
         email: personal.email.trim().toLowerCase(),
         password: personal.senha,
       })
-      // signUp pode retornar erro de "email já cadastrado" — toleramos pois
-      // o cadastro no banco pode ser de um novo motoboy com e-mail existente.
       if (authError && !authError.message.includes("already")) throw authError
+
+      // Upload docs diretamente ao Supabase Storage (evita limite de payload do servidor)
+      const slug = personal.email.trim().toLowerCase().replace(/[^a-z0-9]/g, "_")
+      const documentos: Record<string, string> = {}
+
+      const tryUpload = async (file: File | null, key: string) => {
+        if (!file) return
+        const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg"
+        const path = `${slug}/${key}.${ext}`
+        const { error: upErr } = await supabase.storage
+          .from("motoboys-docs")
+          .upload(path, file, { upsert: true })
+        if (!upErr) {
+          const { data: { publicUrl } } = supabase.storage.from("motoboys-docs").getPublicUrl(path)
+          documentos[key] = publicUrl
+        }
+      }
+
+      await Promise.all([
+        tryUpload(docs.cnhFrente, "cnh_frente"),
+        tryUpload(docs.cnhVerso,  "cnh_verso"),
+        tryUpload(docs.crlv,      "crlv"),
+        tryUpload(docs.selfie,    "selfie"),
+      ])
 
       const res = await fetch("/api/cadastro-motoboy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          nome:     personal.nome.trim(),
-          email:    personal.email.trim().toLowerCase(),
-          telefone: personal.celular,
-          cpf:      personal.cpf,
-          veiculo:  vehicle.tipo,
-          placa:    vehicle.placa
+          nome:      personal.nome.trim(),
+          email:     personal.email.trim().toLowerCase(),
+          senha:     personal.senha,
+          telefone:  personal.celular,
+          cpf:       personal.cpf,
+          veiculo:   vehicle.tipo,
+          placa:     vehicle.placa
             ? `${vehicle.placa.toUpperCase()}${vehicle.marca ? ` — ${vehicle.marca} ${vehicle.modelo} ${vehicle.ano}` : ""}`
             : null,
-          pix_key:  bank.banco ? `${bank.banco} Ag:${bank.agencia} Cc:${bank.conta}` : null,
+          pix_key:   bank.banco ? `${bank.banco} Ag:${bank.agencia} Cc:${bank.conta}` : null,
+          documentos: Object.keys(documentos).length > 0 ? documentos : null,
         }),
       })
       const json = await res.json()
