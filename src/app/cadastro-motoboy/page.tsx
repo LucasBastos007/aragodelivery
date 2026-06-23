@@ -329,33 +329,25 @@ export default function CadastroMotoboy() {
   async function enviar() {
     setLoading(true)
     try {
-      const endStr = [
-        address.logradouro, address.numero,
-        address.complemento, `- ${address.bairro}`,
-        `${address.cidade}/${address.estado}`,
-        address.cep ? `CEP ${address.cep}` : "",
-      ].filter(Boolean).join(", ")
-
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      const { error: authError } = await supabase.auth.signUp({
         email: personal.email.trim().toLowerCase(),
         password: personal.senha,
       })
-      if (authError) throw authError
+      // signUp pode retornar erro de "email já cadastrado" — toleramos pois
+      // o cadastro no banco pode ser de um novo motoboy com e-mail existente.
+      if (authError && !authError.message.includes("already")) throw authError
 
       const res = await fetch("/api/cadastro-motoboy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          nome:      personal.nome.trim(),
-          email:     personal.email.trim().toLowerCase(),
-          telefone:  personal.celular,
-          cpf:       personal.cpf,
-          veiculo:   vehicle.tipo,
-          placa:     vehicle.placa.toUpperCase() || null,
-          cnh:       vehicle.cnh || null,
-          endereco:  endStr,
-          pix_key:   `${bank.banco} Ag:${bank.agencia} Cc:${bank.conta}`,
-          user_id:   authData?.user?.id ?? null,
+          nome:     personal.nome.trim(),
+          email:    personal.email.trim().toLowerCase(),
+          telefone: personal.celular,
+          cpf:      personal.cpf,
+          veiculo:  vehicle.tipo,
+          placa:    vehicle.placa.toUpperCase() || null,
+          pix_key:  bank.banco ? `${bank.banco} Ag:${bank.agencia} Cc:${bank.conta}` : null,
         }),
       })
       const json = await res.json()
