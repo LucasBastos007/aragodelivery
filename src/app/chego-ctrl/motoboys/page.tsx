@@ -96,13 +96,22 @@ function Row({ label, value }: { label: string; value: string }) {
   )
 }
 
-// ─── Ícone motoboy ────────────────────────────────────────────────────────────
-function IconMotoboy({ color = "rgba(249,115,22,0.7)", size = 22 }: { color?: string; size?: number }) {
+// ─── Avatar com iniciais ─────────────────────────────────────────────────────
+function Avatar({ nome, cor, size = 44 }: { nome: string; cor: string; size?: number }) {
+  const partes = nome.trim().split(" ").filter(Boolean)
+  const iniciais = partes.length >= 2
+    ? (partes[0][0] + partes[partes.length - 1][0]).toUpperCase()
+    : nome.slice(0, 2).toUpperCase()
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M5 17H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v9a2 2 0 0 1-2 2h-3"/>
-      <circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>
-    </svg>
+    <div style={{
+      width: size, height: size, borderRadius: "50%", flexShrink: 0,
+      background: `${cor}20`, border: `1.5px solid ${cor}45`,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontSize: size * 0.33, fontWeight: 800, color: cor, letterSpacing: "0.5px",
+      userSelect: "none",
+    }}>
+      {iniciais}
+    </div>
   )
 }
 
@@ -384,13 +393,7 @@ export default function MotoboyPage() {
                     borderRadius: 14, padding: "14px 16px", cursor: "pointer",
                     display: "flex", alignItems: "center", gap: 14, transition: "all 0.15s",
                   }}>
-                  <div style={{
-                    width: 44, height: 44, borderRadius: "50%", flexShrink: 0,
-                    background: `${cor}18`, border: `1.5px solid ${cor}40`,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}>
-                    <IconMotoboy color={cor} />
-                  </div>
+                  <Avatar nome={m.nome} cor={cor} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <p style={{ color: "#0F172A", fontWeight: 700, fontSize: 14 }}>{m.nome}</p>
@@ -445,8 +448,8 @@ export default function MotoboyPage() {
               <button onClick={() => setSelecionado(null)} style={{ position: "absolute", top: 10, right: 10, width: 28, height: 28, borderRadius: "50%", background: "white", border: "1.5px solid #E2E8F0", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#94a3b8", fontSize: 14, fontWeight: 700, boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}>✕</button>
             </div>
             <div style={{ padding: "0 20px", marginTop: -22, marginBottom: 4, display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: `${STATUS_COLOR[selecionado.status] ?? "#94a3b8"}18`, border: `2.5px solid white`, boxShadow: "0 4px 12px rgba(0,0,0,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <IconMotoboy color={STATUS_COLOR[selecionado.status] ?? "#64748b"} size={22} />
+              <div style={{ border: "2.5px solid white", borderRadius: 14, boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+                <Avatar nome={selecionado.nome} cor={STATUS_COLOR[selecionado.status] ?? "#64748b"} size={44} />
               </div>
               <span style={{ fontSize: 11, fontWeight: 800, padding: "3px 10px", borderRadius: 50, background: `${STATUS_COLOR[selecionado.status] ?? "#94a3b8"}18`, color: STATUS_COLOR[selecionado.status] ?? "#94a3b8", border: `1px solid ${STATUS_COLOR[selecionado.status] ?? "#94a3b8"}33`, display: "flex", alignItems: "center", gap: 5 }}>
                 <span style={{ width: 6, height: 6, borderRadius: "50%", background: STATUS_COLOR[selecionado.status] ?? "#94a3b8" }} />

@@ -99,36 +99,66 @@ export default function PedidosPage() {
         ) : filtrados.length === 0 ? (
           <p style={{ color: "#94a3b8", fontSize: 13 }}>Nenhum pedido encontrado.</p>
         ) : (
-          filtrados.map(p => (
-            <div key={p.id} className="card p-3 sm:p-4 flex items-start gap-3">
-              <div className="flex-shrink-0 text-center" style={{ minWidth: 48 }}>
-                <p className="text-xs font-black ">#{p.codigo}</p>
-                <p className="text-[10px] mt-0.5 ">
-                  {new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                </p>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                  <span className={`badge ${STATUS_BADGE[p.status]}`}>{STATUS_LABEL[p.status]}</span>
-                  <span className="text-xs  truncate">{(p.loja as any)?.nome ?? "—"}</span>
+          filtrados.map(p => {
+              const fmt = (iso: string) =>
+                new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+              const diffMin = (a: string, b: string) =>
+                Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60000)
+
+              return (
+                <div key={p.id} className="card p-3 sm:p-4 flex items-start gap-3">
+                  <div className="flex-shrink-0 text-center" style={{ minWidth: 48 }}>
+                    <p className="text-xs font-black">#{p.codigo}</p>
+                    <p className="text-[10px] mt-0.5" style={{ color: "#94a3b8" }}>
+                      {fmt(p.criado_em)}
+                    </p>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                      <span className={`badge ${STATUS_BADGE[p.status]}`}>{STATUS_LABEL[p.status]}</span>
+                      <span className="text-xs truncate" style={{ color: "#64748b" }}>{(p.loja as any)?.nome ?? "—"}</span>
+                    </div>
+                    <p className="text-xs truncate" style={{ color: "#94a3b8" }}>
+                      {(p.motoboy as any)?.nome ?? "Sem motoboy"}
+                    </p>
+                    <p className="text-xs truncate" style={{ color: "#94a3b8" }}>
+                      {p.endereco_entrega}
+                    </p>
+                    {p.status === "entregue" && (p.coletado_em || p.entregue_em) && (
+                      <div style={{
+                        marginTop: 6, padding: "6px 10px", borderRadius: 8,
+                        background: "rgba(34,197,94,0.07)", border: "1px solid rgba(34,197,94,0.15)",
+                        display: "flex", flexWrap: "wrap", gap: "4px 14px",
+                      }}>
+                        {p.coletado_em && (
+                          <span style={{ fontSize: 11, color: "#64748b" }}>
+                            Coletou <strong style={{ color: "#0F172A" }}>{fmt(p.coletado_em)}</strong>
+                          </span>
+                        )}
+                        {p.entregue_em && (
+                          <span style={{ fontSize: 11, color: "#64748b" }}>
+                            Entregou <strong style={{ color: "#0F172A" }}>{fmt(p.entregue_em)}</strong>
+                          </span>
+                        )}
+                        {p.coletado_em && p.entregue_em && (
+                          <span style={{ fontSize: 11, fontWeight: 700, color: "#22c55e" }}>
+                            {diffMin(p.coletado_em, p.entregue_em)} min
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="font-black text-sm" style={{ color: "#0F172A" }}>
+                      R$ {p.total.toFixed(2)}
+                    </p>
+                    <p className="text-[10px] mt-0.5" style={{ color: "#94a3b8" }}>
+                      {PAGAMENTO_ICON[p.forma_pagamento]}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-xs  truncate">
-                  {(p.motoboy as any)?.nome ?? "Sem motoboy"}
-                </p>
-                <p className="text-xs  truncate">
-                  {p.endereco_entrega}
-                </p>
-              </div>
-              <div className="text-right flex-shrink-0">
-                <p className="font-black text-white text-sm">
-                  R$ {p.total.toFixed(2)}
-                </p>
-                <p className="text-[10px] mt-0.5 ">
-                  {PAGAMENTO_ICON[p.forma_pagamento]}
-                </p>
-              </div>
-            </div>
-          ))
+              )
+            })
         )}
       </div>
     </div>

@@ -36,6 +36,9 @@ export async function POST(req: NextRequest) {
   const sb = adminClient()
 
   const updates: Record<string, any> = { status: nextStatus }
+  if (nextStatus === "em_rota") {
+    updates.coletado_em = new Date().toISOString()
+  }
   if (nextStatus === "entregue") {
     updates.entregue_em = new Date().toISOString()
     if (taxa_entrega != null) updates.ganho_motoboy = taxa_entrega

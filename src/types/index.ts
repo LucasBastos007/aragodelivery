@@ -105,6 +105,8 @@ export interface Pedido {
   nome_cliente?: string
   telefone_cliente?: string
   foto_entrega?: string
+  coletado_em?: string | null
+  entregue_em?: string | null
   loja?: Loja
   motoboy?: Motoboy
   itens?: ItemPedido[]
