@@ -35,7 +35,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function logout() {
     setSessao(null)
-    localStorage.removeItem("arago_sessao")
+    const KEYS = [
+      "arago_sessao",
+      "arago_cart", "arago_pedido_ativo", "arago_cartao",
+      "arago_last_address", "arago_endereco_salvo", "arago_enderecos",
+    ]
+    KEYS.forEach((k) => localStorage.removeItem(k))
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => {})
   }
 

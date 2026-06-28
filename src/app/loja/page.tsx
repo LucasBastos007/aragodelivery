@@ -156,6 +156,8 @@ export default function LojaDashboard() {
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [loading, setLoading] = useState(true)
   const [atualizando, setAtualizando] = useState<string | null>(null)
+  const [aberto, setAberto] = useState<boolean | null>(null)
+  const [togglingAberto, setTogglingAberto] = useState(false)
   const prevPendentesRef = useRef<Set<string>>(new Set())
   const isFirstLoad = useRef(true)
   const horariosRef = useRef<Horarios | null>(null)
@@ -184,30 +186,25 @@ export default function LojaDashboard() {
     setLoading(false)
   }
 
-  // Carregar horários e sincronizar aberto/fechado automaticamente
+  // Carregar status aberto/fechado da loja ao entrar
   useEffect(() => {
     if (!loja_id) return
-
-    async function sincronizarHorario() {
-      const { data } = await supabase.from("lojas").select("horarios, status").eq("id", loja_id!).single()
-      if (!data || data.status !== "ativo") return
-      const horarios: Horarios | null = data.horarios as any
-      horariosRef.current = horarios
-      if (!horarios || horarios.tipo === "sempre_aberto") return
-      const deveria = deveEstarAberto(horarios)
-      if (deveria !== null) {
-        await fetch("/api/loja/atualizar", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ loja_id, aberto: deveria }),
-        })
-      }
-    }
-
-    sincronizarHorario()
-    // Verificar a cada 5 minutos
-    const horarioInterval = setInterval(sincronizarHorario, 5 * 60 * 1000)
-    return () => clearInterval(horarioInterval)
+    supabase.from("lojas").select("aberto").eq("id", loja_id).single()
+      .then(({ data }) => { if (data) setAberto(data.aberto ?? false) })
   }, [loja_id])
+
+  async function toggleAberto() {
+    if (!loja_id || togglingAberto) return
+    const novoStatus = !aberto
+    setTogglingAberto(true)
+    setAberto(novoStatus)
+    await fetch("/api/loja/atualizar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ aberto: novoStatus }),
+    })
+    setTogglingAberto(false)
+  }
 
   useEffect(() => {
     if (!loja_id) return
@@ -327,6 +324,59 @@ export default function LojaDashboard() {
 
   return (
     <div style={{ minHeight: "100vh", padding: "20px 16px", maxWidth: 600, margin: "0 auto" }}>
+
+      {/* ── Toggle abrir/fechar loja ─────────────────────────────────── */}
+      <div style={{
+        background: aberto ? "rgba(22,163,74,0.07)" : "rgba(239,68,68,0.07)",
+        border: `1.5px solid ${aberto ? "rgba(22,163,74,0.25)" : "rgba(239,68,68,0.25)"}`,
+        borderRadius: 16,
+        padding: "18px 20px",
+        marginBottom: 16,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 12,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{
+            width: 13, height: 13, borderRadius: "50%", flexShrink: 0,
+            background: aberto ? "#16a34a" : "#9CA3AF",
+            boxShadow: aberto ? "0 0 0 4px rgba(22,163,74,0.18)" : "none",
+          }} />
+          <div>
+            <p style={{ fontWeight: 800, fontSize: 17, color: aberto ? "#15803d" : "#374151", margin: 0 }}>
+              {aberto === null ? "Carregando..." : aberto ? "Loja aberta" : "Loja fechada"}
+            </p>
+            <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>
+              {aberto ? "Aceitando pedidos agora" : "Toque para abrir e receber pedidos"}
+            </p>
+          </div>
+        </div>
+
+        {/* Switch */}
+        <button
+          onClick={toggleAberto}
+          disabled={togglingAberto || aberto === null}
+          style={{
+            position: "relative", width: 58, height: 32, borderRadius: 16,
+            border: "none", cursor: togglingAberto ? "not-allowed" : "pointer",
+            background: aberto ? "#16a34a" : "#D1D5DB",
+            transition: "background 0.25s",
+            flexShrink: 0,
+            opacity: aberto === null ? 0.5 : 1,
+          }}
+        >
+          <div style={{
+            position: "absolute", top: 4,
+            left: aberto ? 30 : 4,
+            width: 24, height: 24, borderRadius: "50%",
+            background: "white",
+            boxShadow: "0 1px 4px rgba(0,0,0,0.22)",
+            transition: "left 0.25s",
+          }} />
+        </button>
+      </div>
+
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div>

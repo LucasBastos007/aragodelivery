@@ -278,10 +278,17 @@ export default function CheckoutPage() {
   const [cardName,     setCardName]     = useState("")
   const [cardExpiry,   setCardExpiry]   = useState("")
   const [cardCvv,      setCardCvv]      = useState("")
+  const [cardCpf,      setCardCpf]      = useState("")
   const [lgpdConsent,  setLgpdConsent]  = useState(false)
   const [salvarCartao, setSalvarCartao] = useState(false)
   const [cartaoSalvo,  setCartaoSalvo]  = useState<{ last4: string; nome: string; validade: string } | null>(null)
   const [usarSalvo,    setUsarSalvo]    = useState(false)
+
+  // PIX modal
+  const [pixModal,     setPixModal]     = useState(false)
+  const [pixQrcode,    setPixQrcode]    = useState("")
+  const [pixCopiaECola,setPixCopiaECola]= useState("")
+  const [pixCopiado,   setPixCopiado]   = useState(false)
 
   // Endereço salvo
   type EnderecoSalvo = { display: string; rua: string; numero: string; bairro: string; cidade: string; complemento: string; lat: number; lng: number }
@@ -361,6 +368,21 @@ export default function CheckoutPage() {
     supabase.from("lojas").select("taxa_entrega,endereco,nome").eq("id", loja_id).single()
       .then(({ data }) => setLojaData(data as any))
   }, [loja_id])
+
+  // Polling PIX — verifica a cada 4s se o pagamento foi confirmado
+  useEffect(() => {
+    if (!pixModal || !pedidoId) return
+    const interval = setInterval(async () => {
+      const { data } = await supabase.from("pedidos").select("status").eq("id", pedidoId).single()
+      if (data?.status && data.status !== "aguardando_pagamento") {
+        clearInterval(interval)
+        setPixModal(false)
+        clear()
+        router.push(`/pedido/${pedidoId}`)
+      }
+    }, 4000)
+    return () => clearInterval(interval)
+  }, [pixModal, pedidoId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const taxa        = tipoEntrega === "retirada" ? 0 : (lojaData?.taxa_entrega ?? 0)
   const subtotal    = total
@@ -679,10 +701,12 @@ export default function CheckoutPage() {
       obs.trim(),
     ].filter(Boolean).join(" | ")
 
+    const statusInicial = (pagamento === "pix" || pagamento === "cartao") ? "aguardando_pagamento" : "pendente"
+
     const { data: pedido, error: pedidoErr, codigo } = await inserirPedidoComCodigo(codigoBase, {
       loja_id,
       cliente_id:       user?.id ?? null,
-      status:           "pendente",
+      status:           statusInicial,
       forma_pagamento:  pagamento,
       subtotal,
       taxa_entrega:     taxa,
@@ -718,6 +742,74 @@ export default function CheckoutPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: cupomValido.id }),
       }).catch(() => {})
+    }
+
+    // ─── PIX: gera QR code e abre modal ──────────────────────────────────
+    if (pagamento === "pix") {
+      const pixRes = await fetch("/api/pagamento/pix", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pedido_id: pedido.id,
+          valor:     totalFinal,
+          nome:      nome.trim(),
+          telefone:  telefone.trim(),
+          email:     user?.email,
+        }),
+      }).then(r => r.json())
+
+      if (pixRes.error) {
+        await supabase.from("pedidos").update({ status: "cancelado" }).eq("id", pedido.id)
+        setErro("Erro ao gerar PIX: " + pixRes.error)
+        setEnviando(false)
+        return
+      }
+
+      setPedidoId(pedido.id)
+      localStorage.setItem("arago_pedido_ativo", JSON.stringify({ codigo: codigo!, id: pedido.id }))
+      setPixQrcode(pixRes.qrcode)
+      setPixCopiaECola(pixRes.copia_cola)
+      setPixModal(true)
+      setEnviando(false)
+      return
+    }
+
+    // ─── Cartão: processa via Asaas ──────────────────────────────────────
+    if (pagamento === "cartao" && !usarSalvo) {
+      if (!cardCvv) { setErro("Informe o CVV do cartão"); setEnviando(false); return }
+      if (cardCpf.replace(/\D/g, "").length !== 11) {
+        setErro("Informe o CPF do titular do cartão")
+        setEnviando(false)
+        return
+      }
+      const [mes, anoShort] = cardExpiry.split("/")
+      const cartaoRes = await fetch("/api/pagamento/cartao", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pedido_id:      pedido.id,
+          valor:          totalFinal,
+          nome:           nome.trim(),
+          telefone:       telefone.trim(),
+          email:          user?.email,
+          cpf:            cardCpf,
+          cep:            (enderecoSalvo as any)?.cep || "77000000",
+          numero_endereco:(enderecoSalvo as any)?.numero || geoRef.current?.numero || "S/N",
+          card: {
+            numero: cardNumber,
+            nome:   cardName,
+            mes,
+            ano:    (anoShort?.length === 2 ? "20" : "") + anoShort,
+            cvv:    cardCvv,
+          },
+        }),
+      }).then(r => r.json())
+
+      if (cartaoRes.error) {
+        setErro(cartaoRes.error)
+        setEnviando(false)
+        return
+      }
     }
 
     if (tipoEntrega === "entrega" && geoRef.current?.geo?.rua) {
@@ -1109,6 +1201,21 @@ export default function CheckoutPage() {
                     </div>
                   </div>
 
+                  {/* CPF do titular */}
+                  <div>
+                    <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>CPF do titular *</label>
+                    <input
+                      value={cardCpf}
+                      onChange={e => {
+                        const d = e.target.value.replace(/\D/g, "").slice(0, 11)
+                        setCardCpf(d.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, "$1.$2.$3-$4").replace(/(\d{3})(\d{3})(\d{1,3})$/, "$1.$2.$3"))
+                      }}
+                      placeholder="000.000.000-00"
+                      inputMode="numeric"
+                      style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 14, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", boxSizing: "border-box", fontFamily: "monospace" }}
+                    />
+                  </div>
+
                   {/* LGPD */}
                   <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer", padding: "12px 14px", borderRadius: 10, background: "rgba(37,99,235,0.04)", border: "1px solid rgba(37,99,235,0.12)" }}>
                     <input
@@ -1168,6 +1275,60 @@ export default function CheckoutPage() {
           {enviando ? "Enviando..." : `✓ Confirmar pedido · R$ ${totalFinal.toFixed(2)}`}
         </button>
       </div>
+
+      {/* ═══ MODAL PIX ═══════════════════════════════════════════════════ */}
+      {pixModal && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div style={{ background: "#fff", borderRadius: "24px 24px 0 0", padding: "28px 24px 40px", width: "100%", maxWidth: 480, display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+            {/* Cabeçalho */}
+            <div style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <p style={{ fontWeight: 800, fontSize: 18, color: "#111827" }}>Pagar com PIX</p>
+              <div style={{ background: "#4DD0C4", borderRadius: 8, padding: "4px 10px" }}>
+                <p style={{ color: "#fff", fontWeight: 800, fontSize: 13 }}>R$ {totalFinal.toFixed(2)}</p>
+              </div>
+            </div>
+
+            <p style={{ color: "#6B7280", fontSize: 13, textAlign: "center" }}>
+              Escaneie o QR Code ou copie o código PIX.<br />O pagamento é confirmado automaticamente.
+            </p>
+
+            {/* QR Code */}
+            {pixQrcode ? (
+              <img
+                src={`data:image/png;base64,${pixQrcode}`}
+                alt="QR Code PIX"
+                style={{ width: 220, height: 220, borderRadius: 12, border: "2px solid #E5E7EB" }}
+              />
+            ) : (
+              <div style={{ width: 220, height: 220, borderRadius: 12, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <p style={{ color: "#9CA3AF", fontSize: 13 }}>Gerando QR Code…</p>
+              </div>
+            )}
+
+            {/* Copia e Cola */}
+            {pixCopiaECola && (
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(pixCopiaECola).then(() => {
+                    setPixCopiado(true)
+                    setTimeout(() => setPixCopiado(false), 3000)
+                  })
+                }}
+                style={{
+                  width: "100%", padding: "14px 16px", borderRadius: 12, cursor: "pointer", fontWeight: 700, fontSize: 15,
+                  background: pixCopiado ? "#16A34A" : "#111827", color: "#fff", border: "none", transition: "background 0.2s",
+                }}
+              >
+                {pixCopiado ? "✓ Código copiado!" : "📋 Copiar código PIX"}
+              </button>
+            )}
+
+            <p style={{ color: "#9CA3AF", fontSize: 12, textAlign: "center" }}>
+              Aguardando confirmação do pagamento…
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

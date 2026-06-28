@@ -1,8 +1,8 @@
-const CACHE_NAME = "chego-v1"
+// sw.js — bump CACHE_NAME a cada deploy para forçar atualização
+const CACHE_NAME = "chego-v4"
 
+// Só arquivos verdadeiramente estáticos (têm hash no nome → nunca mudam)
 const PRECACHE = [
-  "/",
-  "/lojas",
   "/logo-chego.png",
   "/manifest.json",
 ]
@@ -12,42 +12,45 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE))
   )
+  // Assume controle imediatamente, sem esperar aba fechar
   self.skipWaiting()
 })
 
-// ─── Ativação: limpa caches antigos ──────────────────────────────────────────
+// ─── Ativação: apaga TODOS os caches antigos ─────────────────────────────────
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
-    )
+    ).then(() => self.clients.claim())
   )
-  self.clients.claim()
 })
 
-// ─── Fetch: cache inteligente ─────────────────────────────────────────────────
+// ─── Fetch ────────────────────────────────────────────────────────────────────
 self.addEventListener("fetch", (event) => {
   const { request } = event
   const url = new URL(request.url)
 
+  // Ignorar não-GET e requisições de outros domínios
   if (request.method !== "GET") return
-  if (url.hostname.includes("supabase") || url.pathname.startsWith("/api/")) {
-    event.respondWith(
-      fetch(request).catch(() =>
-        new Response(JSON.stringify({ error: "offline" }), {
-          headers: { "Content-Type": "application/json" },
-        })
-      )
-    )
+  if (url.origin !== self.location.origin &&
+      !url.hostname.endsWith("supabase.co")) return
+
+  // APIs e Supabase: sempre rede, sem cache
+  if (url.pathname.startsWith("/api/") ||
+      url.hostname.includes("supabase")) {
+    event.respondWith(fetch(request))
     return
   }
 
+  // Assets estáticos do Next.js com hash no nome → cache permanente
   if (url.pathname.startsWith("/_next/static/")) {
     event.respondWith(
       caches.match(request).then((cached) => {
         if (cached) return cached
         return fetch(request).then((res) => {
-          caches.open(CACHE_NAME).then((c) => c.put(request, res.clone()))
+          if (res.ok) {
+            caches.open(CACHE_NAME).then((c) => c.put(request, res.clone()))
+          }
           return res
         })
       })
@@ -55,13 +58,31 @@ self.addEventListener("fetch", (event) => {
     return
   }
 
-  event.respondWith(
-    fetch(request)
-      .then((res) => {
-        if (res.ok) caches.open(CACHE_NAME).then((c) => c.put(request, res.clone()))
-        return res
+  // Imagens e ícones públicos → cache com fallback de rede
+  if (url.pathname.match(/\.(png|jpg|jpeg|webp|svg|ico|gif)$/)) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached
+        return fetch(request).then((res) => {
+          if (res.ok) {
+            caches.open(CACHE_NAME).then((c) => c.put(request, res.clone()))
+          }
+          return res
+        })
       })
-      .catch(() => caches.match(request))
+    )
+    return
+  }
+
+  // Páginas HTML (/, /lojas, /checkout etc.) → SEMPRE rede primeiro
+  // Nunca cachear HTML: o conteúdo muda a cada deploy
+  event.respondWith(
+    fetch(request).catch(() => {
+      // Só cai no cache se estiver offline
+      return caches.match(request) ??
+        new Response("<h1>Sem conexão</h1><p>Verifique sua internet e tente novamente.</p>",
+          { headers: { "Content-Type": "text/html" } })
+    })
   )
 })
 

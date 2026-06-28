@@ -112,6 +112,12 @@ export function useClienteAuth() {
 
   async function logout() {
     await supabase.auth.signOut()
+    // Limpa dados do cliente do localStorage — evita vazamento entre sessões
+    const KEYS = [
+      "arago_cart", "arago_pedido_ativo", "arago_cartao",
+      "arago_last_address", "arago_endereco_salvo", "arago_enderecos",
+    ]
+    KEYS.forEach((k) => localStorage.removeItem(k))
     setPerfUser(null)
     setPerfil(null)
   }

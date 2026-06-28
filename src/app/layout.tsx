@@ -14,15 +14,16 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/icon.png", type: "image/png" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
     ],
     apple: "/logo-chego.png",
-    shortcut: "/logo-chego.png",
+    shortcut: "/icon-192.png",
   },
 }
 
 export const viewport: Viewport = {
-  themeColor: "#f97316",
+  themeColor: "#DC2626",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
