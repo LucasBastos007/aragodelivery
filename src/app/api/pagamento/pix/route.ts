@@ -3,14 +3,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { criarCliente, criarPix, getPixQrCode } from "@/lib/asaas"
 
 export async function POST(req: NextRequest) {
-  const { pedido_id, valor, nome, telefone, email } = await req.json()
+  const { pedido_id, valor, nome, telefone, email, cpf } = await req.json()
 
-  if (!pedido_id || !valor || !nome) {
+  if (!pedido_id || !valor || !nome || !cpf) {
     return NextResponse.json({ error: "Dados incompletos" }, { status: 400 })
   }
 
   try {
-    const cliente  = await criarCliente(nome, { email, telefone })
+    const cliente  = await criarCliente(nome, { cpf, email, telefone })
     const cobranca = await criarPix(cliente.id, valor, pedido_id)
     const qr       = await getPixQrCode(cobranca.id)
 

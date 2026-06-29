@@ -239,6 +239,7 @@ export default function CheckoutPage() {
 
   const [nome, setNome]           = useState("")
   const [telefone, setTelefone]   = useState("")
+  const [cpf, setCpf]             = useState("")
   const [pagamento, setPagamento] = useState<FormaPagamento>("pix")
   const [obs, setObs]             = useState("")
   const [enviando, setEnviando]   = useState(false)
@@ -636,6 +637,10 @@ export default function CheckoutPage() {
     if (!nome.trim()) { setErro("Informe seu nome"); return }
     const telDigits = telefone.replace(/\D/g, "")
     if (telDigits.length < 8) { setErro("Informe um telefone válido (com DDD)"); return }
+    if (pagamento === "pix" && cpf.replace(/\D/g, "").length !== 11) {
+      setErro("Informe seu CPF para pagamento via PIX")
+      return
+    }
 
     let enderecoFinal = ""
     let latFinal: number | null = null
@@ -718,6 +723,7 @@ export default function CheckoutPage() {
           nome:      nome.trim(),
           telefone:  telefone.trim(),
           email:     user?.email,
+          cpf:       cpf.replace(/\D/g, ""),
         }),
       }).then(r => r.json())
 
@@ -1095,6 +1101,24 @@ export default function CheckoutPage() {
               </button>
             )
           })}
+
+          {/* CPF para PIX — aparece quando PIX está selecionado */}
+          {pagamento === "pix" && (
+            <div style={{ padding: "16px 18px", borderTop: "1px solid #F3F4F6" }}>
+              <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>CPF do pagador *</label>
+              <input
+                value={cpf}
+                onChange={e => {
+                  const d = e.target.value.replace(/\D/g, "").slice(0, 11)
+                  setCpf(d.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, "$1.$2.$3-$4").replace(/(\d{3})(\d{3})(\d{1,3})$/, "$1.$2.$3"))
+                }}
+                placeholder="000.000.000-00"
+                inputMode="numeric"
+                style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 16, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", boxSizing: "border-box", fontFamily: "monospace", letterSpacing: 1 }}
+              />
+              <p style={{ color: "#9CA3AF", fontSize: 11, marginTop: 6 }}>Obrigatório para gerar o QR Code PIX</p>
+            </div>
+          )}
 
           {/* Form de cartão — aparece quando selecionado */}
           {pagamento === "cartao" && (
