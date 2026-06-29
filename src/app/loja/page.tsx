@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
 import type { Pedido, StatusPedido } from "@/types"
@@ -162,6 +162,15 @@ export default function LojaDashboard() {
   const isFirstLoad = useRef(true)
   const horariosRef = useRef<Horarios | null>(null)
 
+  // ── Rastreio motoboy ────────────────────────────────────────────────────
+  const [lojaCoords, setLojaCoords]   = useState<{ lat: number; lng: number } | null>(null)
+  const [trackPedido, setTrackPedido] = useState<Pedido | null>(null)
+  const [motoboyPos, setMotoboyPos]   = useState<{ lat: number; lng: number } | null>(null)
+  const mapDivRef    = useRef<HTMLDivElement>(null)
+  const leafletRef   = useRef<any>(null)
+  const mbMarkerRef  = useRef<any>(null)
+  const routeLayerRef = useRef<any>(null)
+
   async function load() {
     if (!loja_id) return
     const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
@@ -223,6 +232,92 @@ export default function LojaDashboard() {
       .subscribe()
     return () => { clearInterval(interval); supabase.removeChannel(ch) }
   }, [loja_id])
+
+  // Carrega coordenadas da loja uma vez
+  useEffect(() => {
+    if (!loja_id) return
+    supabase.from("lojas").select("lat,lng").eq("id", loja_id).single()
+      .then(({ data }) => { if (data?.lat) setLojaCoords({ lat: Number(data.lat), lng: Number(data.lng) }) })
+  }, [loja_id])
+
+  // Subscrição realtime na posição do motoboy quando modal está aberto
+  useEffect(() => {
+    if (!trackPedido?.motoboy_id) return
+    supabase.from("motoboys").select("lat,lng").eq("id", trackPedido.motoboy_id).single()
+      .then(({ data }) => { if (data?.lat) setMotoboyPos({ lat: Number(data.lat), lng: Number(data.lng) }) })
+    const ch = supabase.channel(`mb-track-${trackPedido.motoboy_id}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "motoboys", filter: `id=eq.${trackPedido.motoboy_id}` },
+        ({ new: n }: any) => { if (n.lat && n.lng) setMotoboyPos({ lat: Number(n.lat), lng: Number(n.lng) }) })
+      .subscribe()
+    return () => { supabase.removeChannel(ch); setMotoboyPos(null) }
+  }, [trackPedido?.motoboy_id])
+
+  // Inicializa mapa Leaflet ao abrir modal
+  useEffect(() => {
+    if (!trackPedido || !mapDivRef.current || !lojaCoords) return
+    let cancelled = false
+    import("leaflet").then(L => {
+      if (cancelled || !mapDivRef.current) return
+      if (!document.getElementById("leaflet-css-loja")) {
+        const link = document.createElement("link")
+        link.id = "leaflet-css-loja"; link.rel = "stylesheet"
+        link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        document.head.appendChild(link)
+      }
+      if (leafletRef.current) { leafletRef.current.remove(); leafletRef.current = null }
+      mbMarkerRef.current = null; routeLayerRef.current = null
+      const map = (L as any).map(mapDivRef.current, { zoomControl: false, attributionControl: false })
+      ;(L as any).tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map)
+      leafletRef.current = map
+      const lojaIcon = (L as any).divIcon({
+        className: "",
+        html: `<div style="width:36px;height:36px;background:#DC2626;border-radius:50%;border:3px solid white;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 3px 10px rgba(0,0,0,0.35)">🏪</div>`,
+        iconSize: [36, 36], iconAnchor: [18, 18],
+      })
+      ;(L as any).marker([lojaCoords.lat, lojaCoords.lng], { icon: lojaIcon }).addTo(map).bindPopup("Sua loja")
+      map.setView([lojaCoords.lat, lojaCoords.lng], 14)
+    })
+    return () => {
+      cancelled = true
+      if (leafletRef.current) { leafletRef.current.remove(); leafletRef.current = null }
+      mbMarkerRef.current = null; routeLayerRef.current = null
+    }
+  }, [trackPedido?.id, lojaCoords])
+
+  // Atualiza marcador + rota quando posição do motoboy muda
+  const fetchRota = useCallback(async (mbLat: number, mbLng: number, lojaLat: number, lojaLng: number) => {
+    try {
+      const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${mbLng},${mbLat};${lojaLng},${lojaLat}?overview=full&geometries=geojson`)
+      const d = await r.json()
+      return d.routes?.[0]?.geometry?.coordinates as [number, number][] | undefined
+    } catch { return undefined }
+  }, [])
+
+  useEffect(() => {
+    if (!leafletRef.current || !motoboyPos) return
+    import("leaflet").then(async L => {
+      if (!leafletRef.current) return
+      if (mbMarkerRef.current) {
+        mbMarkerRef.current.setLatLng([motoboyPos.lat, motoboyPos.lng])
+      } else {
+        const mbIcon = (L as any).divIcon({
+          className: "",
+          html: `<div style="width:40px;height:40px;background:#f97316;border-radius:50%;border:3px solid white;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 3px 10px rgba(0,0,0,0.4)">🛵</div>`,
+          iconSize: [40, 40], iconAnchor: [20, 20],
+        })
+        mbMarkerRef.current = (L as any).marker([motoboyPos.lat, motoboyPos.lng], { icon: mbIcon })
+          .addTo(leafletRef.current).bindPopup("Entregador")
+      }
+      if (lojaCoords) {
+        leafletRef.current.fitBounds([[motoboyPos.lat, motoboyPos.lng], [lojaCoords.lat, lojaCoords.lng]], { padding: [50, 50], maxZoom: 16 })
+        const coords = await fetchRota(motoboyPos.lat, motoboyPos.lng, lojaCoords.lat, lojaCoords.lng)
+        if (coords && leafletRef.current) {
+          if (routeLayerRef.current) leafletRef.current.removeLayer(routeLayerRef.current)
+          routeLayerRef.current = (L as any).polyline(coords.map(([lng, lat]) => [lat, lng]), { color: "#f97316", weight: 4, opacity: 0.8 }).addTo(leafletRef.current)
+        }
+      }
+    })
+  }, [motoboyPos, lojaCoords, fetchRota])
 
   async function enviarPush(id: string, status: StatusPedido) {
     try {
@@ -324,6 +419,64 @@ export default function LojaDashboard() {
 
   return (
     <div style={{ minHeight: "100vh", padding: "20px 16px", maxWidth: 600, margin: "0 auto" }}>
+
+      {/* ── Modal de rastreio do motoboy ────────────────────────────────── */}
+      {trackPedido && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 200,
+          background: "rgba(0,0,0,0.55)", display: "flex", flexDirection: "column",
+          WebkitBackdropFilter: "blur(4px)", backdropFilter: "blur(4px)",
+        }}>
+          {/* Header */}
+          <div style={{
+            background: "#111827", padding: "16px 20px",
+            display: "flex", alignItems: "center", gap: 12,
+            paddingTop: "calc(env(safe-area-inset-top, 0px) + 16px)",
+          }}>
+            <button onClick={() => { setTrackPedido(null); setMotoboyPos(null) }} style={{
+              background: "rgba(255,255,255,0.1)", border: "none", color: "white",
+              width: 36, height: 36, borderRadius: "50%", cursor: "pointer", fontSize: 18,
+              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+            }}>←</button>
+            <div style={{ flex: 1 }}>
+              <p style={{ color: "white", fontWeight: 800, fontSize: 15 }}>
+                {trackPedido.status === "indo_para_loja" ? "🛵 Motoboy a caminho" : "🏪 Motoboy na loja"}
+              </p>
+              <p style={{ color: "#9CA3AF", fontSize: 12 }}>Pedido #{trackPedido.codigo}</p>
+            </div>
+            {motoboyPos
+              ? <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 8px #22c55e" }} />
+                  <span style={{ color: "#22c55e", fontSize: 12, fontWeight: 700 }}>Ao vivo</span>
+                </div>
+              : <span style={{ color: "#9CA3AF", fontSize: 12 }}>Aguardando GPS...</span>
+            }
+          </div>
+
+          {/* Mapa */}
+          <div ref={mapDivRef} style={{ flex: 1, background: "#1a1a2e" }} />
+
+          {/* Footer info */}
+          <div style={{
+            background: "#111827", padding: "14px 20px",
+            paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 14px)",
+            display: "flex", alignItems: "center", gap: 12,
+          }}>
+            <div style={{ width: 40, height: 40, borderRadius: "50%", background: "#f97316", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>🛵</div>
+            <div style={{ flex: 1 }}>
+              <p style={{ color: "white", fontWeight: 700, fontSize: 14 }}>
+                {trackPedido.status === "indo_para_loja" ? "Entregador indo até sua loja" : "Entregador chegou na loja"}
+              </p>
+              {motoboyPos
+                ? <p style={{ color: "#9CA3AF", fontSize: 12, marginTop: 2 }}>Localização atualizada em tempo real</p>
+                : <p style={{ color: "#eab308", fontSize: 12, marginTop: 2 }}>GPS do motoboy ainda não disponível</p>
+              }
+            </div>
+            <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#DC2626", border: "2px solid white" }} />
+            <span style={{ color: "#9CA3AF", fontSize: 11 }}>Loja</span>
+          </div>
+        </div>
+      )}
 
       {/* ── Toggle abrir/fechar loja ─────────────────────────────────── */}
       <div style={{
@@ -495,10 +648,34 @@ export default function LojaDashboard() {
                 )}
 
                 {p.status === "aguardando_aceite" && (
-                  <div style={{ flex: 1, padding: "8px 12px", borderRadius: 10, background: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.2)", display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#eab308", animation: "pulse 1.5s infinite" }} />
-                    <p style={{ color: "#eab308", fontSize: 12, fontWeight: 700 }}>Aguardando motoboy aceitar...</p>
+                  <div style={{ flex: 1, padding: "12px 16px", borderRadius: 12, background: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.25)", display: "flex", alignItems: "center", gap: 12 }}>
+                    <div style={{ position: "relative", width: 36, height: 36, flexShrink: 0 }}>
+                      <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "rgba(234,179,8,0.25)", animation: "pulse 1.2s ease-out infinite" }} />
+                      <div style={{ position: "absolute", inset: 4, borderRadius: "50%", background: "rgba(234,179,8,0.4)", animation: "pulse 1.2s ease-out infinite", animationDelay: "0.3s" }} />
+                      <div style={{ position: "absolute", inset: 8, borderRadius: "50%", background: "#eab308" }} />
+                      <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🛵</span>
+                    </div>
+                    <div>
+                      <p style={{ color: "#ca8a04", fontSize: 13, fontWeight: 800 }}>Buscando motoboy...</p>
+                      <p style={{ color: "#a16207", fontSize: 11, marginTop: 2 }}>Aguardando um entregador aceitar</p>
+                    </div>
                   </div>
+                )}
+
+                {(p.status === "indo_para_loja" || p.status === "na_loja") && (
+                  <button onClick={() => setTrackPedido(p)} style={{
+                    flex: 1, padding: "10px 14px", borderRadius: 12, border: "1.5px solid rgba(249,115,22,0.4)",
+                    background: "rgba(249,115,22,0.08)", cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
+                  }}>
+                    <span style={{ fontSize: 18 }}>📍</span>
+                    <div style={{ textAlign: "left" }}>
+                      <p style={{ color: "#ea580c", fontSize: 13, fontWeight: 800 }}>
+                        {p.status === "indo_para_loja" ? "Motoboy a caminho" : "Motoboy na loja"}
+                      </p>
+                      <p style={{ color: "#9a3412", fontSize: 11, marginTop: 1 }}>Toque para ver no mapa</p>
+                    </div>
+                    <div style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 6px #22c55e" }} />
+                  </button>
                 )}
 
                 <BotaoImprimir pedido={p} />
