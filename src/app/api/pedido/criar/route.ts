@@ -156,6 +156,7 @@ export async function POST(req: NextRequest) {
   })
 
   if (pedidoErr || !pedido) {
+    console.error("[pedido/criar] Supabase insert error:", JSON.stringify(pedidoErr))
     return NextResponse.json({ error: "Erro ao criar pedido." }, { status: 500 })
   }
 

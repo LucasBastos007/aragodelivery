@@ -13,11 +13,11 @@ import type { FormaPagamento } from "@/types"
 // Leaflet não funciona no SSR — importa só no client
 const MapaPicker = dynamic(() => import("@/components/MapaPicker"), { ssr: false })
 
-const PAGAMENTOS: { value: FormaPagamento; label: string; platforms: ("ios"|"android"|"other")[] }[] = [
+const PAGAMENTOS: { value: FormaPagamento; label: string; platforms: ("ios"|"android"|"other")[]; breve?: boolean }[] = [
   { value: "pix",        label: "PIX",        platforms: ["ios","android","other"] },
   { value: "cartao",     label: "Cartão",     platforms: ["ios","android","other"] },
-  { value: "apple_pay",  label: "Apple Pay",  platforms: ["ios","other"] },
-  { value: "google_pay", label: "Google Pay", platforms: ["android","other"] },
+  { value: "apple_pay",  label: "Apple Pay",  platforms: ["ios","other"],          breve: true },
+  { value: "google_pay", label: "Google Pay", platforms: ["android","other"],       breve: true },
 ]
 
 function PixLogo() {
@@ -1050,16 +1050,16 @@ export default function CheckoutPage() {
           {/* Lista vertical estilo iFood */}
           {PAGAMENTOS.filter(p => p.platforms.includes(plataforma)).map((p, idx, arr) => {
             const ativo = pagamento === p.value
-            const isWallet = p.value === "apple_pay" || p.value === "google_pay"
             const isLast = idx === arr.length - 1
             return (
-              <button key={p.value} onClick={() => setPagamento(p.value)} style={{
+              <button key={p.value} onClick={() => { if (!p.breve) setPagamento(p.value) }} disabled={p.breve} style={{
                 width: "100%", padding: "14px 18px",
                 display: "flex", alignItems: "center", gap: 14,
                 background: ativo ? "rgba(220,38,38,0.05)" : "transparent",
                 border: "none",
                 borderBottom: isLast ? "none" : "1px solid #F3F4F6",
-                cursor: "pointer", textAlign: "left",
+                cursor: p.breve ? "default" : "pointer", textAlign: "left",
+                opacity: p.breve ? 0.5 : 1,
               }}>
                 {/* Ícone */}
                 <div style={{
@@ -1074,12 +1074,15 @@ export default function CheckoutPage() {
 
                 {/* Texto */}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ color: ativo ? "#DC2626" : "#111827", fontWeight: 700, fontSize: 14 }}>{p.label}</p>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <p style={{ color: ativo ? "#DC2626" : "#111827", fontWeight: 700, fontSize: 14 }}>{p.label}</p>
+                    {p.breve && <span style={{ fontSize: 10, fontWeight: 700, color: "#6B7280", background: "#F3F4F6", borderRadius: 6, padding: "2px 6px" }}>Em breve</span>}
+                  </div>
                   <p style={{ color: "#9CA3AF", fontSize: 12, marginTop: 2 }}>
                     {p.value === "pix"        && "Confirmação imediata · sem taxas"}
-                    {p.value === "cartao"     && (cartaoSalvo ? `•••• ${cartaoSalvo.last4} — ${cartaoSalvo.nome}` : "Débito ou crédito")}
-                    {p.value === "apple_pay"  && "Pay com Touch ID ou Face ID"}
-                    {p.value === "google_pay" && "Pay com sua conta Google"}
+                    {p.value === "cartao"     && (cartaoSalvo ? `•••• ${cartaoSalvo.last4} — ${cartaoSalvo.nome}` : "Crédito ou débito")}
+                    {p.value === "apple_pay"  && "Em breve no Chegô"}
+                    {p.value === "google_pay" && "Em breve no Chegô"}
                   </p>
                 </div>
 
