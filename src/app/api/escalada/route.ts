@@ -12,7 +12,7 @@ function isInternalRequest(req: NextRequest): boolean {
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -38,17 +38,14 @@ function initVapid() {
 }
 
 export async function POST(req: NextRequest) {
-  // Aceita: sessão válida de qualquer role (browser) OU segredo interno (server-to-server)
+  // Aceita: SOMENTE admin autenticado OU segredo interno (server-to-server)
+  // Motoboys NÃO podem chamar escalada diretamente para evitar manipulação de despacho
   const sess = getSession(req)
-  if (!sess && !isInternalRequest(req)) return unauthorized()
+  const isAdmin = sess?.role === "admin"
+  if (!isAdmin && !isInternalRequest(req)) return unauthorized()
 
   const body = await req.json()
-  let { pedido_id, motoboy_recusou_id } = body
-
-  // BOLA fix: se o chamador é motoboy, impede que ele recuse no nome de outro
-  if (sess?.role === "motoboy") {
-    motoboy_recusou_id = sess.motoboy_id
-  }
+  const { pedido_id, motoboy_recusou_id } = body
 
   if (!pedido_id) return NextResponse.json({ error: "pedido_id obrigatório" }, { status: 400 })
 

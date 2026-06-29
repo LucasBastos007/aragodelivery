@@ -405,7 +405,7 @@ export default function OnboardingPage() {
         <button onClick={concluir} style={{
           background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)",
           color: "white", fontSize: 13, fontWeight: 700, padding: "6px 16px", borderRadius: 99,
-          cursor: "pointer", backdropFilter: "blur(8px)",
+          cursor: "pointer", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
         }}>
           Pular
         </button>
@@ -426,7 +426,7 @@ export default function OnboardingPage() {
       <div style={{
         margin: "0 0", padding: "32px 28px 40px",
         background: "rgba(255,255,255,0.12)",
-        backdropFilter: "blur(20px)",
+        backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
         borderTop: "1px solid rgba(255,255,255,0.2)",
         borderRadius: "32px 32px 0 0",
         position: "relative", zIndex: 10,

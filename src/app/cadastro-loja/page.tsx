@@ -397,7 +397,7 @@ export default function CadastroLoja() {
 
           <div style={{ position: "relative", zIndex: 1, maxWidth: 620, margin: "0 auto" }}>
             <span style={{
-              display: "inline-block", background: "rgba(255,255,255,0.15)", backdropFilter: "blur(8px)",
+              display: "inline-block", background: "rgba(255,255,255,0.15)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
               color: "white", fontSize: 13, fontWeight: 700, padding: "6px 16px", borderRadius: 50,
               marginBottom: 20, letterSpacing: 0.5,
             }}>

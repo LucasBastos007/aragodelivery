@@ -444,7 +444,7 @@ function ProdutoCard({ p, onEdit, onToggle, onDelete }: {
 
 function Modal({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(6px)", display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 0, overflowY: "auto" }}
+    <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 0, overflowY: "auto" }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="card" style={{ width: "100%", maxWidth: "min(520px, 100vw)", margin: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, padding: "20px 16px 32px", maxHeight: "90vh", overflowY: "auto", boxSizing: "border-box" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>

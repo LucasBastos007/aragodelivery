@@ -78,26 +78,6 @@ function PaymentIcon({ method }: { method: FormaPagamento }) {
 const LAT_DEFAULT = -17.6547
 const LNG_DEFAULT = -49.4378
 
-function codigoFromTelefone(tel: string): string {
-  const d = tel.replace(/\D/g, "")
-  return d.length >= 4 ? d.slice(-4) : Math.random().toString(36).slice(2, 6).toUpperCase()
-}
-
-async function inserirPedidoComCodigo(
-  base: string,
-  payload: Record<string, unknown>,
-  tentativa = 0
-): Promise<{ data: { id: string } | null; error: unknown; codigo: string }> {
-  const codigo = tentativa === 0 ? base : base + String.fromCharCode(64 + tentativa)
-  const { data, error } = await (supabase as any)
-    .from("pedidos")
-    .insert({ ...payload, codigo })
-    .select("id")
-    .single()
-  if ((error as any)?.code === "23505" && tentativa < 5)
-    return inserirPedidoComCodigo(base, payload, tentativa + 1)
-  return { data, error, codigo }
-}
 
 interface GeoResult {
   rua: string; bairro: string; cidade: string; lat: number; lng: number
@@ -196,7 +176,7 @@ function EnderecoMapa({ onResult }: {
       <div style={{ borderRadius: 14, overflow: "hidden", border: "1px solid #E5E7EB", position: "relative" }}>
         <MapaPicker lat={lat} lng={lng} onMove={handleMapMove} />
         <div style={{ position: "absolute", bottom: 8, left: 8, right: 8, zIndex: 999, pointerEvents: "none" }}>
-          <div style={{ background: "rgba(255,255,255,0.95)", backdropFilter: "blur(8px)", borderRadius: 10, padding: "7px 12px" }}>
+          <div style={{ background: "rgba(255,255,255,0.95)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", borderRadius: 10, padding: "7px 12px" }}>
             {geocodando ? (
               <p style={{ color: "#6B7280", fontSize: 12 }}>📍 Identificando endereço...</p>
             ) : geo?.rua ? (
@@ -399,7 +379,7 @@ export default function CheckoutPage() {
     const { data } = await supabase
       .from("cupons")
       .select("id, codigo, tipo, valor, pedido_minimo, validade, ativo")
-      .ilike("codigo", cupomInput.trim())
+      .eq("codigo", cupomInput.trim().toUpperCase())
       .or(`loja_id.is.null,loja_id.eq.${loja_id ?? "00000000-0000-0000-0000-000000000000"}`)
       .limit(1)
     const cupom = data?.[0]
@@ -693,7 +673,6 @@ export default function CheckoutPage() {
       if (!walletOk) { setEnviando(false); return }
     }
 
-    const codigoBase = codigoFromTelefone(telefone)
     const obsCompleta = [
       `Cliente: ${nome.trim()}`,
       `Tel: ${telefone.trim()}`,
@@ -701,48 +680,32 @@ export default function CheckoutPage() {
       obs.trim(),
     ].filter(Boolean).join(" | ")
 
-    const statusInicial = (pagamento === "pix" || pagamento === "cartao") ? "aguardando_pagamento" : "pendente"
+    // Cria pedido via API server-side — preços validados no servidor, nunca no cliente
+    const criarRes = await fetch("/api/pedido/criar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        loja_id,
+        cliente_id:       user?.id ?? null,
+        items:            items.map(i => ({ produto_id: i.id, quantidade: i.quantidade, observacao: "" })),
+        forma_pagamento:  pagamento,
+        tipo_entrega:     tipoEntrega,
+        endereco_entrega: enderecoFinal,
+        lat_entrega:      latFinal,
+        lng_entrega:      lngFinal,
+        observacao:       obsCompleta,
+        cupom_codigo:     cupomValido?.codigo ?? null,
+      }),
+    }).then(r => r.json())
 
-    const { data: pedido, error: pedidoErr, codigo } = await inserirPedidoComCodigo(codigoBase, {
-      loja_id,
-      cliente_id:       user?.id ?? null,
-      status:           statusInicial,
-      forma_pagamento:  pagamento,
-      subtotal,
-      taxa_entrega:     taxa,
-      desconto:         desconto,
-      cupom_codigo:     cupomValido?.codigo ?? null,
-      total:            totalFinal,
-      endereco_entrega: enderecoFinal,
-      observacao:       obsCompleta,
-      lat_entrega:      latFinal,
-      lng_entrega:      lngFinal,
-    })
-
-    if (pedidoErr || !pedido) {
-      setErro("Erro ao enviar pedido. Tente novamente.")
+    if (criarRes.error || !criarRes.pedido_id) {
+      setErro(criarRes.error ?? "Erro ao criar pedido. Tente novamente.")
       setEnviando(false)
       return
     }
 
-    await supabase.from("itens_pedido").insert(
-      items.map(i => ({
-        pedido_id:  pedido.id,
-        produto_id: i.id,
-        nome:       i.nome,
-        preco:      i.preco,
-        quantidade: i.quantidade,
-        observacao: "",
-      }))
-    )
-
-    // Incrementar uso do cupom via admin client (RLS bloqueia anon)
-    if (cupomValido) {
-      fetch("/api/admin/cupons/usar", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: cupomValido.id }),
-      }).catch(() => {})
-    }
+    const { pedido_id: pedidoIdNovo, codigo, total: totalServidor, cliente_push_token } = criarRes
+    const pedido = { id: pedidoIdNovo }
 
     // ─── PIX: gera QR code e abre modal ──────────────────────────────────
     if (pagamento === "pix") {
@@ -751,7 +714,7 @@ export default function CheckoutPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           pedido_id: pedido.id,
-          valor:     totalFinal,
+          valor:     totalServidor,
           nome:      nome.trim(),
           telefone:  telefone.trim(),
           email:     user?.email,
@@ -759,14 +722,13 @@ export default function CheckoutPage() {
       }).then(r => r.json())
 
       if (pixRes.error) {
-        await supabase.from("pedidos").update({ status: "cancelado" }).eq("id", pedido.id)
         setErro("Erro ao gerar PIX: " + pixRes.error)
         setEnviando(false)
         return
       }
 
       setPedidoId(pedido.id)
-      localStorage.setItem("arago_pedido_ativo", JSON.stringify({ codigo: codigo!, id: pedido.id }))
+      localStorage.setItem("arago_pedido_ativo", JSON.stringify({ codigo, id: pedido.id }))
       setPixQrcode(pixRes.qrcode)
       setPixCopiaECola(pixRes.copia_cola)
       setPixModal(true)
@@ -788,7 +750,7 @@ export default function CheckoutPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           pedido_id:      pedido.id,
-          valor:          totalFinal,
+          valor:          totalServidor,
           nome:           nome.trim(),
           telefone:       telefone.trim(),
           email:          user?.email,
@@ -855,11 +817,11 @@ export default function CheckoutPage() {
     } catch {}
 
     clear()
-    setPedidoCodigo(codigo!)
+    setPedidoCodigo(codigo)
     setPedidoId(pedido.id)
     setEnviando(false)
     // Salva referência do pedido ativo para o cliente conseguir voltar ao rastreamento
-    localStorage.setItem("arago_pedido_ativo", JSON.stringify({ codigo: codigo!, id: pedido.id }))
+    localStorage.setItem("arago_pedido_ativo", JSON.stringify({ codigo, id: pedido.id }))
   }
 
   return (
@@ -1022,7 +984,6 @@ export default function CheckoutPage() {
               <div>
                 <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
                   WhatsApp *
-                  <span style={{ color: "rgba(220,38,38,0.6)", marginLeft: 6, fontWeight: 400 }}>(código = últimos 4 dígitos)</span>
                 </label>
                 <input
                   value={telefone} onChange={e => setTelefone(e.target.value)}

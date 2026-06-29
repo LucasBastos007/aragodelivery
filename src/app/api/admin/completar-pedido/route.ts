@@ -5,13 +5,14 @@ import { requireAdmin, unauthorized } from "@/lib/session"
 function adminClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false, autoRefreshToken: false } }
   )
 }
 
 // GET — lista pedidos travados (em_rota, na_loja, indo_para_loja) há mais de 2h
-export async function GET() {
+export async function GET(req: NextRequest) {
+  if (!requireAdmin(req)) return unauthorized()
   const sb = adminClient()
   const { data, error } = await sb
     .from("pedidos")

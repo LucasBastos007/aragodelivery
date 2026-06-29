@@ -53,7 +53,7 @@ export default function ParceirosPage() {
 
       {/* ── NAVBAR ── */}
       <nav style={{
-        background: "rgba(255,255,255,0.97)", backdropFilter: "blur(12px)",
+        background: "rgba(255,255,255,0.97)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
         borderBottom: "1px solid #e5e7eb",
         position: "sticky", top: 0, zIndex: 40,
       }}>

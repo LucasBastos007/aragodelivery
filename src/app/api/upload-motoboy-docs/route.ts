@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { checkRateLimit } from "@/lib/rate-limit"
+import { validateFileType } from "@/lib/magic-bytes"
+import type { AllowedFileType } from "@/lib/magic-bytes"
 
 const ALLOWED_KEYS = new Set(["cnhFrente", "cnhVerso", "crlv", "selfie", "selfieContrato"])
-const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"])
+const ALLOWED_MIME = new Set<AllowedFileType>(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"])
 
 function adminClient() {
   return createClient(
@@ -28,11 +30,15 @@ export async function POST(req: NextRequest) {
   if (!ALLOWED_KEYS.has(key)) {
     return NextResponse.json({ error: "Tipo de documento inválido" }, { status: 400 })
   }
-  if (!ALLOWED_MIME.has(file.type)) {
-    return NextResponse.json({ error: "Formato não permitido. Use JPG, PNG ou WebP." }, { status: 400 })
-  }
   if (file.size > 10 * 1024 * 1024) {
     return NextResponse.json({ error: "Arquivo muito grande (máx. 10MB)" }, { status: 400 })
+  }
+
+  // Valida magic bytes — não confia apenas no file.type do cliente
+  try {
+    await validateFileType(file, ALLOWED_MIME)
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message ?? "Formato não permitido. Use JPG, PNG ou WebP." }, { status: 400 })
   }
 
   const safeSlug = slug.replace(/[^a-zA-Z0-9_\-]/g, "_").slice(0, 120)

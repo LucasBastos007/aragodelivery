@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import bcrypt from "bcryptjs"
 import { sessionResponse, unauthorized } from "@/lib/session"
 import { checkRateLimit } from "@/lib/rate-limit"
 
@@ -9,19 +10,24 @@ export async function POST(req: NextRequest) {
   const { email, senha } = await req.json()
 
   const adminEmail = process.env.ADMIN_EMAIL
-  const adminSenha = process.env.ADMIN_SENHA
-  if (!adminEmail || !adminSenha) {
+  const adminSenhaHash = process.env.ADMIN_SENHA_HASH
+
+  if (!adminEmail || !adminSenhaHash) {
     return NextResponse.json({ error: "Credenciais de admin não configuradas no servidor." }, { status: 500 })
   }
 
-  console.log(`[admin-auth] email_len=${(email ?? "").length} env_email_len=${adminEmail.length} senha_len=${(senha ?? "").length} env_senha_len=${adminSenha.length}`)
+  // Comparação de e-mail constante em tempo
+  const emailInput = (email ?? "").toLowerCase().trim()
+  const emailEnv   = adminEmail.toLowerCase().trim()
 
-  const emailOk = (email ?? "").toLowerCase().trim() === adminEmail.toLowerCase().trim()
-  const senhaOk = (senha ?? "").trim() === adminSenha.trim()
+  // Sempre roda bcrypt para evitar timing oracle (mesmo quando e-mail errado)
+  const DUMMY_HASH = "$2b$12$invalidhashfortimingequalityxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  const hashParaComparar = emailInput === emailEnv ? adminSenhaHash : DUMMY_HASH
+  const senhaOk = await bcrypt.compare(senha ?? "", hashParaComparar)
 
-  console.log(`[admin-auth] emailOk=${emailOk} senhaOk=${senhaOk}`)
-
-  if (!emailOk || !senhaOk) return unauthorized("Credenciais inválidas.")
+  if (emailInput !== emailEnv || !senhaOk) {
+    return unauthorized("Credenciais inválidas.")
+  }
 
   return sessionResponse({ role: "admin" }, { ok: true, role: "admin" })
 }

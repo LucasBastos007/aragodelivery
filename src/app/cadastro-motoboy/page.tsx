@@ -967,7 +967,7 @@ export default function CadastroMotoboy() {
       <div style={{
         position: "fixed", top: 4, left: 0, right: 0, zIndex: 50,
         background: "rgba(255,255,255,0.96)",
-        backdropFilter: "blur(12px)",
+        backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
         borderBottom: "1px solid #F1F5F9",
       }}>
         <div style={{ maxWidth: 560, margin: "0 auto", padding: "13px 20px", display: "flex", alignItems: "center", gap: 12 }}>
@@ -1100,7 +1100,7 @@ export default function CadastroMotoboy() {
       <div style={{
         position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 50,
         background: "rgba(255,255,255,0.96)",
-        backdropFilter: "blur(12px)",
+        backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
         borderTop: "1px solid #F1F5F9",
         padding: "16px 24px",
         paddingBottom: "calc(16px + env(safe-area-inset-bottom))",

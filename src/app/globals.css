@@ -65,6 +65,21 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ── Cross-platform fixes ───────────────────────────────────────────────── */
+/* Remove flash cinza ao tocar em links/botões no iOS/Android */
+a, button, [role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+/* Evita seleção de texto ao segurar botões no mobile */
+button, [role="button"] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+/* Inputs: font-size mínimo 16px no iOS para não dar zoom automático */
+input, textarea, select {
+  font-size: max(16px, 1em);
+}
+
 .card {
   background: #ffffff;
   border: 1px solid #e5e7eb;

@@ -66,7 +66,8 @@ export function MobileBottomNav() {
       position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100,
       background: "white", borderTop: "1px solid #e5e7eb",
       display: "flex", justifyContent: "space-around", alignItems: "center",
-      padding: "8px 0 16px",
+      paddingTop: 8,
+      paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)",
     }}>
       {tabs.map(item => (
         <Link key={item.label} href={item.href} style={{

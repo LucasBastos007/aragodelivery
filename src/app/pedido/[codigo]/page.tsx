@@ -468,7 +468,7 @@ export default function AcompanhamentoPedido() {
 
       {/* Modal de Avaliação */}
       {modalAvaliacao && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+        <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
           onClick={() => setModalAvaliacao(false)}>
           <div onClick={e => e.stopPropagation()} style={{ background: "#ffffff", borderRadius: "24px 24px 0 0", border: "1px solid #e5e7eb", padding: "24px 16px 36px", width: "100%", maxWidth: "min(520px, 100vw)", animation: "slideUp 0.3s ease" }}>
             {avaliacaoOk ? (

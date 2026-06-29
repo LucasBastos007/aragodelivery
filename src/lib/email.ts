@@ -48,7 +48,7 @@ const base = (conteudo: string) => `
 </html>
 `
 
-function credenciaisBox(email: string, senha: string) {
+function credenciaisBox(email: string) {
   return `
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:12px;margin:24px 0;">
     <tr>
@@ -61,7 +61,7 @@ function credenciaisBox(email: string, senha: string) {
           </tr>
           <tr>
             <td style="padding:4px 0;font-size:13px;color:#6b7280;">Senha</td>
-            <td style="padding:4px 0;font-size:13px;font-weight:700;color:#111827;">${senha}</td>
+            <td style="padding:4px 0;font-size:13px;font-weight:700;color:#111827;">A senha que você cadastrou no momento do cadastro.</td>
           </tr>
         </table>
       </td>
@@ -84,11 +84,10 @@ function botao(texto: string, url: string) {
 export async function enviarBoasVindasMotoboy({
   nome,
   email,
-  senha,
 }: {
   nome: string
   email: string
-  senha: string
+  senha?: string // mantido para compatibilidade mas não é usado
 }) {
   const resend = getResend()
   if (!resend) return
@@ -97,9 +96,9 @@ export async function enviarBoasVindasMotoboy({
     <h1 style="margin:0 0 6px;font-size:24px;font-weight:900;color:#111827;">Bem-vindo(a), ${nome}! 🎉</h1>
     <p style="margin:0 0 20px;font-size:15px;color:#6b7280;">Seu contrato foi assinado com sucesso. Você faz parte da equipe <strong style="color:#f97316;">Chegô Delivery</strong>!</p>
 
-    <p style="font-size:14px;color:#374151;margin:0 0 4px;">Sua conta já está <strong style="color:#16a34a;">ativa</strong>! Faça login agora e comece a receber pedidos.</p>
+    <p style="font-size:14px;color:#374151;margin:0 0 4px;">Sua conta será ativada em breve pela equipe Chegô. Assim que estiver ativa, você poderá fazer login e receber pedidos.</p>
 
-    ${credenciaisBox(email, senha)}
+    ${credenciaisBox(email)}
 
     <p style="font-size:13px;color:#6b7280;margin:0 0 4px;">⚠️ Guarde sua senha em local seguro. Não compartilhe com ninguém.</p>
 
@@ -117,22 +116,21 @@ export async function enviarBoasVindasMotoboy({
 export async function enviarBoasVindasLoja({
   nome,
   email,
-  senha,
 }: {
   nome: string
   email: string
-  senha: string
+  senha?: string // mantido para compatibilidade mas não é usado
 }) {
   const resend = getResend()
   if (!resend) return
 
   const html = base(`
     <h1 style="margin:0 0 6px;font-size:24px;font-weight:900;color:#111827;">Bem-vindo(a), ${nome}! 🎉</h1>
-    <p style="margin:0 0 20px;font-size:15px;color:#6b7280;">Seu contrato foi assinado com sucesso. Sua loja agora é parceira oficial do <strong style="color:#f97316;">Chegô Delivery</strong>!</p>
+    <p style="margin:0 0 20px;font-size:15px;color:#6b7280;">Sua loja agora é parceira oficial do <strong style="color:#f97316;">Chegô Delivery</strong>!</p>
 
-    <p style="font-size:14px;color:#374151;margin:0 0 4px;">Sua loja já está <strong style="color:#16a34a;">ativa</strong>! Faça login agora para cadastrar seu cardápio e começar a receber pedidos.</p>
+    <p style="font-size:14px;color:#374151;margin:0 0 4px;">Faça login agora para cadastrar seu cardápio e começar a receber pedidos.</p>
 
-    ${credenciaisBox(email, senha)}
+    ${credenciaisBox(email)}
 
     <p style="font-size:13px;color:#6b7280;margin:0 0 4px;">⚠️ Guarde sua senha em local seguro. Não compartilhe com ninguém.</p>
 

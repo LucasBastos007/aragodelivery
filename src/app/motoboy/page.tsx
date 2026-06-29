@@ -909,7 +909,7 @@ export default function MotoboyPage() {
           borderRadius: 12, padding: "8px 12px",
           background: "rgba(0,0,0,0.72)",
           border: "1px solid " + (corridaAtiva.status === "indo_para_loja" ? "rgba(249,115,22,0.5)" : corridaAtiva.status === "na_loja" ? "rgba(34,197,94,0.5)" : "rgba(99,102,241,0.5)"),
-          backdropFilter: "blur(10px)",
+          backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
           display: "flex", alignItems: "center", gap: 8,
           boxShadow: "0 2px 12px rgba(0,0,0,0.5)",
         }}>
@@ -951,7 +951,7 @@ export default function MotoboyPage() {
       {/* ── Ganhos do dia — badge central no topo ── */}
       <div style={{
         position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 20,
-        background: "rgba(0,0,0,0.78)", backdropFilter: "blur(10px)",
+        background: "rgba(0,0,0,0.78)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
         borderRadius: 999, padding: "8px 18px",
         border: "1px solid rgba(255,255,255,0.12)",
         display: "flex", alignItems: "center", gap: 8,
@@ -975,7 +975,7 @@ export default function MotoboyPage() {
         style={{
           position: "absolute", top: 12, right: 12, zIndex: 20,
           background: disponivel ? "rgba(34,197,94,0.14)" : "rgba(0,0,0,0.72)",
-          backdropFilter: "blur(10px)",
+          backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
           border: "1.5px solid " + (disponivel ? "rgba(34,197,94,0.55)" : "rgba(255,255,255,0.12)"),
           borderRadius: 999, padding: "8px 16px 8px 12px",
           display: "flex", alignItems: "center", gap: 8,
@@ -1029,7 +1029,7 @@ export default function MotoboyPage() {
           {/* Painel do slider */}
           {raioOpen && (
             <div style={{
-              background: "rgba(10,10,10,0.92)", backdropFilter: "blur(14px)",
+              background: "rgba(10,10,10,0.92)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
               borderRadius: 18, padding: "16px 18px",
               border: "1px solid rgba(249,115,22,0.35)",
               boxShadow: "0 4px 24px rgba(0,0,0,0.5)",
@@ -1067,7 +1067,7 @@ export default function MotoboyPage() {
             style={{
               width: 48, height: 48, borderRadius: "50%", border: "none",
               background: raioOpen ? "#f97316" : "rgba(10,10,10,0.82)",
-              backdropFilter: "blur(10px)",
+              backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
               boxShadow: raioOpen ? "0 0 0 3px rgba(249,115,22,0.4), 0 4px 16px rgba(0,0,0,0.5)" : "0 2px 14px rgba(0,0,0,0.5)",
               cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
               transition: "all 0.2s",
@@ -1087,7 +1087,7 @@ export default function MotoboyPage() {
       {compartilhando && (
         <div style={{
           position: "absolute", top: 12, left: 12, zIndex: 20,
-          background: "rgba(0,0,0,0.72)", backdropFilter: "blur(8px)",
+          background: "rgba(0,0,0,0.72)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
           borderRadius: 999, padding: "6px 11px",
           border: "1px solid rgba(34,197,94,0.3)",
           display: "flex", alignItems: "center", gap: 5,
@@ -1104,7 +1104,7 @@ export default function MotoboyPage() {
       {!corridaAtiva && !corridaConcluida && entregaAtiva && destinoLat && (
         <div style={{
           position: "absolute", bottom: sheetH + 12, left: 12, zIndex: 20,
-          background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)",
+          background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
           borderRadius: 12, padding: "8px 14px",
           border: "1px solid rgba(249,115,22,0.3)",
         }}>

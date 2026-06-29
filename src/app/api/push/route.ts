@@ -6,7 +6,7 @@ import { checkRateLimit } from "@/lib/rate-limit"
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
   { auth: { persistSession: false, autoRefreshToken: false } }
 )
 
@@ -41,11 +41,21 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const { action } = body
 
-  // ── Salvar subscription do cliente (pedido) — público ───────────────────────
+  // ── Salvar subscription do cliente (pedido) — exige token secreto do pedido ─
   if (action === "subscribe") {
-    const { pedido_id, subscription } = body
-    if (!pedido_id || !subscription) {
-      return NextResponse.json({ error: "pedido_id e subscription obrigatórios" }, { status: 400 })
+    const { pedido_id, subscription, cliente_push_token } = body
+    if (!pedido_id || !subscription || !cliente_push_token) {
+      return NextResponse.json({ error: "pedido_id, subscription e cliente_push_token obrigatórios" }, { status: 400 })
+    }
+    // Valida que o token pertence ao pedido (gerado server-side ao criar o pedido)
+    const { data: pedido } = await supabaseAdmin
+      .from("pedidos")
+      .select("id, cliente_push_token")
+      .eq("id", pedido_id)
+      .eq("cliente_push_token", cliente_push_token)
+      .single()
+    if (!pedido) {
+      return NextResponse.json({ error: "Token inválido." }, { status: 403 })
     }
     await supabaseAdmin.from("pedidos").update({ push_subscription: subscription }).eq("id", pedido_id)
     return NextResponse.json({ ok: true })

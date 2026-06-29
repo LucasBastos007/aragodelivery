@@ -1032,6 +1032,7 @@ export default function Home() {
                   borderRadius: 20, overflow: "hidden", cursor: "pointer",
                   position: "relative", height: 164,
                   boxShadow: `0 8px 28px ${b.shadow}`,
+                  touchAction: "pan-y",
                 }}>
 
                 {/* Foto ultra-realista */}
@@ -1166,7 +1167,7 @@ export default function Home() {
                     <p style={{ color: "white", fontWeight: 900, fontSize: 26, lineHeight: 1, marginBottom: 8 }}>Restaurantes</p>
                     <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 14 }}>Comida pronta na sua porta</p>
                   </div>
-                  <span style={{ display: "inline-flex", width: "fit-content", padding: "10px 20px", borderRadius: 12, background: "rgba(0,0,0,0.25)", backdropFilter: "blur(8px)", color: "white", fontWeight: 700, fontSize: 14 }}>
+                  <span style={{ display: "inline-flex", width: "fit-content", padding: "10px 20px", borderRadius: 12, background: "rgba(0,0,0,0.25)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", color: "white", fontWeight: 700, fontSize: 14 }}>
                     Ver opções ›
                   </span>
                 </div>
@@ -1188,7 +1189,7 @@ export default function Home() {
                     <p style={{ color: "white", fontWeight: 900, fontSize: 26, lineHeight: 1, marginBottom: 8 }}>Mercados</p>
                     <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 14 }}>Produtos do dia a dia sem sair</p>
                   </div>
-                  <span style={{ display: "inline-flex", width: "fit-content", padding: "10px 20px", borderRadius: 12, background: "rgba(0,0,0,0.25)", backdropFilter: "blur(8px)", color: "white", fontWeight: 700, fontSize: 14 }}>
+                  <span style={{ display: "inline-flex", width: "fit-content", padding: "10px 20px", borderRadius: 12, background: "rgba(0,0,0,0.25)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", color: "white", fontWeight: 700, fontSize: 14 }}>
                     Ver lojas ›
                   </span>
                 </div>

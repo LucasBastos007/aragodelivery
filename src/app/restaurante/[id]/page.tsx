@@ -53,7 +53,7 @@ function ProdutoModal({ prod, loja, qtdInCart, onClose, onConfirm }: {
       onClick={onClose}
       style={{
         position: "fixed", inset: 0, zIndex: 999,
-        background: "rgba(0,0,0,0.82)", backdropFilter: "blur(6px)",
+        background: "rgba(0,0,0,0.82)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
         display: "flex", alignItems: "flex-end", justifyContent: "center",
         padding: "0 0 0",
       }}>
@@ -275,7 +275,7 @@ export default function RestaurantePage() {
       {loginRequired && (
         <div onClick={() => setLoginRequired(false)} style={{
           position: "fixed", inset: 0, zIndex: 999,
-          background: "rgba(0,0,0,0.82)", backdropFilter: "blur(6px)",
+          background: "rgba(0,0,0,0.82)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
           display: "flex", alignItems: "center", justifyContent: "center", padding: 24,
         }}>
           <div onClick={e => e.stopPropagation()} style={{
@@ -494,7 +494,7 @@ export default function RestaurantePage() {
       {cartCount > 0 && (
         <div style={{
           position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 60, padding: "12px 20px",
-          background: "rgba(255,255,255,0.95)", backdropFilter: "blur(12px)",
+          background: "rgba(255,255,255,0.95)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
           borderTop: "1px solid #E5E7EB",
         }}>
           <div style={{ maxWidth: 720, margin: "0 auto" }}>
