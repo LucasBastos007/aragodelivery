@@ -38,11 +38,10 @@ function initVapid() {
 }
 
 export async function POST(req: NextRequest) {
-  // Aceita: SOMENTE admin autenticado OU segredo interno (server-to-server)
-  // Motoboys NÃO podem chamar escalada diretamente para evitar manipulação de despacho
   const sess = getSession(req)
-  const isAdmin = sess?.role === "admin"
-  if (!isAdmin && !isInternalRequest(req)) return unauthorized()
+  const isAdmin   = sess?.role === "admin"
+  const isLojista = sess?.role === "loja"
+  if (!isAdmin && !isLojista && !isInternalRequest(req)) return unauthorized()
 
   const body = await req.json()
   const { pedido_id, motoboy_recusou_id } = body
@@ -58,6 +57,11 @@ export async function POST(req: NextRequest) {
 
   if (pedidoErr || !pedido) {
     return NextResponse.json({ error: "pedido não encontrado", detail: pedidoErr?.message }, { status: 404 })
+  }
+
+  // Lojista só pode escalar pedidos da própria loja
+  if (isLojista && (sess as any).loja_id !== pedido.loja_id) {
+    return NextResponse.json({ error: "não autorizado" }, { status: 403 })
   }
 
   if (!["aguardando_aceite", "pronto", "preparando"].includes(pedido.status)) {
