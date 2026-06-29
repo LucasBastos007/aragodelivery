@@ -173,7 +173,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; img?: string; bg: strin
     label: "Pet Shops",
     bg: "linear-gradient(145deg,#AD1457,#E91E63)",
     img: "/icons/petshops.svg",
-    cat: "Outros", badge: null, action: "filter",
+    cat: null, badge: null, action: "breve",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
         {/* Large central pad */}
@@ -201,7 +201,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; img?: string; bg: strin
     label: "Bebidas",
     bg: "linear-gradient(145deg,#0288D1,#0277BD)",
     img: "/icons/bebidas.svg",
-    cat: "Outros", badge: null, action: "filter",
+    cat: null, badge: "Novo", action: "breve",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
         {/* Glass body */}
@@ -481,7 +481,10 @@ export default function Home() {
   }
   function handleHomeCat(c: typeof CATS_HOME[0]) {
     if (c.action === "filter" && c.cat) {
-      selectCat(c.cat)
+      // Sempre ativa o filtro, nunca faz toggle — evita desligar ao clicar
+      // em duas subcategorias que mapeiam para o mesmo cat (ex: Gourmet + Pizzarias → Restaurante)
+      setFiltro(c.cat)
+      setTimeout(scrollToLojas, 80)
     } else if (c.action === "busca") {
       router.push("/busca")
     } else {
