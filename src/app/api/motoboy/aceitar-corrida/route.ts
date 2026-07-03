@@ -10,6 +10,8 @@ function adminClient() {
   )
 }
 
+const STATUSES_ATIVO = ["indo_para_loja", "na_loja", "em_rota", "coletado", "aguardando_aceite"]
+
 export async function POST(req: NextRequest) {
   const _sess = requireMotoboy(req)
   if (!_sess) return unauthorized()
@@ -22,6 +24,27 @@ export async function POST(req: NextRequest) {
 
   const sb = adminClient()
 
+  // Busca o limite de pedidos simultâneos configurado
+  const { data: cfgRow } = await sb
+    .from("configuracoes")
+    .select("valor")
+    .eq("chave", "max_pedidos_motoboy")
+    .single()
+  const maxPedidos = cfgRow ? parseInt(cfgRow.valor, 10) : 2
+
+  // Conta pedidos ativos do motoboy
+  const { count } = await sb
+    .from("pedidos")
+    .select("id", { count: "exact", head: true })
+    .eq("motoboy_id", motoboy_id)
+    .in("status", STATUSES_ATIVO)
+
+  if ((count ?? 0) >= maxPedidos) {
+    return NextResponse.json({
+      error: `Você já tem ${count} entrega${(count ?? 0) > 1 ? "s" : ""} ativa${(count ?? 0) > 1 ? "s" : ""}. Limite: ${maxPedidos}.`,
+    }, { status: 422 })
+  }
+
   // Atualização atômica: só aceita se ainda estiver em aguardando_aceite
   const { data, error } = await sb
     .from("pedidos")
@@ -32,7 +55,6 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Se 0 linhas foram atualizadas, outro motoboy já aceitou (ou status mudou)
   if (!data || data.length === 0) {
     return NextResponse.json({ error: "Corrida não disponível" }, { status: 409 })
   }

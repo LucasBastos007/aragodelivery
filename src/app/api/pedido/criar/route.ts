@@ -53,6 +53,10 @@ export async function POST(req: NextRequest) {
     lng_entrega,
     observacao,
     cupom_codigo,
+    nome_cliente,
+    telefone_cliente,
+    email_cliente,
+    tipo = "normal", // "normal" | "manual"
   } = body
 
   if (!loja_id || !items?.length || !forma_pagamento) {
@@ -143,6 +147,7 @@ export async function POST(req: NextRequest) {
     cliente_id: cliente_id ?? null,
     status: statusInicial,
     forma_pagamento,
+    tipo,
     subtotal: Math.round(subtotal * 100) / 100,
     taxa_entrega,
     desconto: Math.round(desconto * 100) / 100,
@@ -153,6 +158,9 @@ export async function POST(req: NextRequest) {
     lng_entrega: lng_entrega ?? null,
     observacao: observacao ?? "",
     cliente_push_token,
+    nome_cliente:    nome_cliente    ?? null,
+    telefone_cliente: telefone_cliente ?? null,
+    email_cliente:   email_cliente   ?? null,
   })
 
   if (pedidoErr || !pedido) {

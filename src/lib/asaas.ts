@@ -54,6 +54,15 @@ export async function getPixQrCode(paymentId: string) {
   )
 }
 
+export async function estornarPagamento(paymentId: string, valor?: number) {
+  const body = valor != null ? { value: valor } : {}
+  return call<{ id: string; status: string }>(`/payments/${paymentId}/refund`, "POST", body)
+}
+
+export async function cancelarPagamento(paymentId: string) {
+  return call<{ deleted: boolean }>(`/payments/${paymentId}`, "DELETE")
+}
+
 export async function criarCartao(
   customerId: string,
   valor: number,

@@ -80,11 +80,14 @@ export default function LojaFinanceiroPage() {
     if (valor > saldo + 0.001) { setErroSaque("Valor maior que o saldo disponível"); return }
     if (!loja?.pix_chave) { setErroSaque("Cadastre sua chave PIX no perfil antes de solicitar"); return }
     setErroSaque(""); setEnviandoSaque(true)
-    const { error } = await supabase.from("saques").insert({
-      tipo: "lojista", loja_id, valor, pix_chave: loja.pix_chave, status: "solicitado",
+    const res = await fetch("/api/loja/saque", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ valor }),
     })
+    const data = await res.json()
     setEnviandoSaque(false)
-    if (error) { setErroSaque(error.message); return }
+    if (!res.ok) { setErroSaque(data.error ?? "Erro ao solicitar saque"); return }
     setValorSaque(""); setSolicitando(false)
     setSaqueSucesso(true); setTimeout(() => setSaqueSucesso(false), 5000)
     load()

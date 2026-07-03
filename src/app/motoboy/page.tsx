@@ -101,16 +101,21 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 const CIRCUM = 2 * Math.PI * 40 // circunferência do timer circular ≈ 251.3
 
 // ─── Mapa fullscreen com rota (Google Maps) ───────────────────────────────────
+type PinExtra = { lat: number; lng: number; type: "loja" | "destino"; label?: string }
+
 function MapaMotoboy({
   myLat, myLng,
   destinoLat, destinoLng,
   lojaLat, lojaLng,
   raioDisplay, raioOpen,
+  extrasLoja, extrasDestino,
 }: {
   myLat: number; myLng: number
   destinoLat?: number | null; destinoLng?: number | null
   lojaLat?: number | null; lojaLng?: number | null
   raioDisplay: number; raioOpen: boolean
+  extrasLoja?: PinExtra[]
+  extrasDestino?: PinExtra[]
 }) {
   const { isLoaded, loadError } = useJsApiLoader({
     id: "google-map-motoboy",
@@ -251,6 +256,24 @@ function MapaMotoboy({
         </OverlayView>
       )}
 
+      {/* Pins extras — lojas do 2º pedido */}
+      {extrasLoja?.map((p, i) => p.lat && p.lng && (
+        <OverlayView key={`el-${i}`} position={{ lat: p.lat, lng: p.lng }} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}>
+          <div style={{ transform: "translate(-50%,-50%)", width: 34, height: 34, borderRadius: "50%", background: "#fb923c", border: "2px solid white", boxShadow: "0 2px 8px rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ color: "white", fontWeight: 900, fontSize: 11 }}>2</span>
+          </div>
+        </OverlayView>
+      ))}
+
+      {/* Pins extras — destinos do 2º pedido */}
+      {extrasDestino?.map((p, i) => p.lat && p.lng && (
+        <OverlayView key={`ed-${i}`} position={{ lat: p.lat, lng: p.lng }} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}>
+          <div style={{ transform: "translate(-50%,-50%)", width: 34, height: 34, borderRadius: "50%", background: "#4ade80", border: "2px solid white", boxShadow: "0 2px 8px rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ color: "white", fontWeight: 900, fontSize: 11 }}>2</span>
+          </div>
+        </OverlayView>
+      ))}
+
       {/* Rota */}
       {directions && (
         <DirectionsRenderer
@@ -343,6 +366,18 @@ export default function MotoboyPage() {
   const [raioDisplay,      setRaioDisplay]      = useState<number>(5)
   const [fotoMotoboy,      setFotoMotoboy]      = useState<string | null>(null)
   const [sosModal,         setSosModal]         = useState(false)
+  const [maxPedidos,       setMaxPedidos]       = useState(2)
+  const [segundoAberto,    setSegundoAberto]    = useState(false)
+  const [disponiveisAberto, setDisponiveisAberto] = useState(false)
+
+  // ── Carrega config de max pedidos ──────────────────────────────────────────
+  useEffect(() => {
+    supabase.from("configuracoes")
+      .select("valor")
+      .eq("chave", "max_pedidos_motoboy")
+      .single()
+      .then(({ data }) => { if (data?.valor) setMaxPedidos(parseInt(data.valor, 10)) })
+  }, [])
 
   // ── Carrega motoboy ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -725,13 +760,29 @@ export default function MotoboyPage() {
   // ── Aceitar / Entregar ─────────────────────────────────────────────────────
   async function aceitarEntrega(pedido: Pedido) {
     if (!motoboy_id) return
+    // Verifica limite antes de tentar aceitar
+    const ativos = emAndamento.filter(p =>
+      ["indo_para_loja","na_loja","em_rota","coletado","aguardando_aceite"].includes(p.status)
+    )
+    if (ativos.length >= maxPedidos) {
+      setToastMsg(`Limite de ${maxPedidos} entregas simultâneas atingido`)
+      setTimeout(() => setToastMsg(null), 3000)
+      return
+    }
     setAtualizando(pedido.id)
-    const { error } = await supabase.from("pedidos").update({ status: "indo_para_loja", motoboy_id }).eq("id", pedido.id)
+    const { error } = await supabase.from("pedidos")
+      .update({ status: "indo_para_loja", motoboy_id })
+      .eq("id", pedido.id)
+      .eq("status", "pronto")  // race condition guard
     if (!error) {
       justAcceptedRef.current = true
       setTimeout(() => { justAcceptedRef.current = false }, 30_000)
-      setEmAndamento([{ ...pedido, status: "indo_para_loja" as any, motoboy_id }])
+      setEmAndamento(prev => [...prev, { ...pedido, status: "indo_para_loja" as any, motoboy_id }])
+      setDisponiveisAberto(false)
       setSheetH(SHEET_MID)
+    } else {
+      setToastMsg("Pedido já foi aceito por outro motoboy")
+      setTimeout(() => setToastMsg(null), 3000)
     }
     loadPedidos()
     setAtualizando(null)
@@ -802,7 +853,7 @@ export default function MotoboyPage() {
   }
 
   // ── Avançar etapa da corrida ativa (Tópico 03) ────────────────────────────
-  async function avancarEtapa(fotoUrl?: string) {
+  async function avancarEtapa(pedidoAlvo?: Pedido, fotoUrl?: string) {
     // Se já está concluída, volta para o estado normal
     if (corridaConcluida) {
       setCorridaConcluida(null)
@@ -810,7 +861,7 @@ export default function MotoboyPage() {
       await loadPedidos()
       return
     }
-    const ativa = emAndamento.find(p => ["indo_para_loja","na_loja","em_rota","coletado"].includes(p.status))
+    const ativa = pedidoAlvo ?? emAndamento.find(p => ["indo_para_loja","na_loja","em_rota","coletado"].includes(p.status))
     if (!ativa) {
       await loadPedidos()
       setAvancandoEtapa(false)
@@ -841,9 +892,10 @@ export default function MotoboyPage() {
 
     if (nextStatus === "entregue") {
       setCorridaConcluida(ativa)
-      setEmAndamento([])
+      setEmAndamento(prev => prev.filter(p => p.id !== ativa.id))
       setGanhosDia(prev => prev + (ativa.taxa_entrega ?? 0))
       setCorridasDia(prev => prev + 1)
+      setSegundoAberto(false)
       enviarPush(ativa.id, "entregue", ativa.codigo)
     } else {
       setEmAndamento(prev => prev.map(p => p.id === ativa.id ? { ...p, status: nextStatus as any } : p))
@@ -881,13 +933,23 @@ export default function MotoboyPage() {
   }
 
   const entregaAtiva = emAndamento[0] ?? null
-  const corridaAtiva = emAndamento.find(p =>
+  const corridasAtivas = emAndamento.filter(p =>
     ["indo_para_loja","na_loja","em_rota","coletado"].includes(p.status)
-  ) ?? null
+  )
+  const corridaAtiva = corridasAtivas[0] ?? null
+  const segundaEntrega = corridasAtivas[1] ?? null
 
   // Quando indo à loja, rota aponta para a loja; nas demais etapas, para o cliente
   const efetDestinoLat = corridaAtiva?.status === "indo_para_loja" ? (lojaLat ?? destinoLat) : destinoLat
   const efetDestinoLng = corridaAtiva?.status === "indo_para_loja" ? (lojaLng ?? destinoLng) : destinoLng
+
+  // Pins extras do 2º pedido para o mapa
+  const extrasLojaMap: PinExtra[] = segundaEntrega
+    ? [{ lat: (segundaEntrega as any).loja?.lat ?? (segundaEntrega as any).loja_lat, lng: (segundaEntrega as any).loja?.lng ?? (segundaEntrega as any).loja_lng, type: "loja" as const }].filter(p => p.lat && p.lng)
+    : []
+  const extrasDestinoMap: PinExtra[] = segundaEntrega && ["em_rota","coletado"].includes(segundaEntrega.status)
+    ? [{ lat: (segundaEntrega as any).lat_entrega, lng: (segundaEntrega as any).lng_entrega, type: "destino" as const }].filter(p => p.lat && p.lng)
+    : []
 
   return (
     <div style={{ position: "fixed", top: 52, left: 0, right: 0, bottom: 60, background: "#1a1a2e" }}>
@@ -898,6 +960,8 @@ export default function MotoboyPage() {
         destinoLat={efetDestinoLat} destinoLng={efetDestinoLng}
         lojaLat={lojaLat} lojaLng={lojaLng}
         raioDisplay={raioDisplay} raioOpen={raioOpen}
+        extrasLoja={extrasLojaMap}
+        extrasDestino={extrasDestinoMap}
       />
 
       {/* ── Toast de erro ── */}
@@ -1116,7 +1180,6 @@ export default function MotoboyPage() {
         </div>
       )}
 
-      {/* ── Painel de corrida ativa (Tópico 03) ── */}
       {/* ── Modal SOS — renderizado no nível raiz para escapar do overflow:hidden do painel ── */}
       {sosModal && motoboy_id && (
         <SOSModal
@@ -1128,13 +1191,149 @@ export default function MotoboyPage() {
         />
       )}
 
+      {/* ── Badge do 2º pedido ativo (botão flutuante) ── */}
+      {segundaEntrega && !corridaConcluida && (
+        <button
+          onClick={() => setSegundoAberto(o => !o)}
+          style={{
+            position: "absolute", top: 62, left: 12, zIndex: 36,
+            background: segundoAberto ? "#f97316" : "rgba(10,10,10,0.85)",
+            backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
+            border: `1.5px solid ${segundoAberto ? "transparent" : "rgba(249,115,22,0.6)"}`,
+            borderRadius: 999, padding: "7px 14px",
+            display: "flex", alignItems: "center", gap: 7,
+            color: "white", fontWeight: 800, fontSize: 12,
+            cursor: "pointer", boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
+          }}>
+          <span style={{ background: "rgba(255,255,255,0.25)", borderRadius: 999, padding: "1px 7px", fontSize: 10, fontWeight: 900 }}>2</span>
+          2° pedido #{segundaEntrega.codigo}
+          <span style={{ fontSize: 10, opacity: 0.7 }}>
+            {segundaEntrega.status === "indo_para_loja" ? "• indo à loja" : segundaEntrega.status === "na_loja" ? "• na loja" : "• em rota"}
+          </span>
+        </button>
+      )}
+
+      {/* ── Botão aceitar pedido disponível (quando carregando 1 de max=2) ── */}
+      {corridaAtiva && !corridaConcluida && !segundaEntrega && prontos.length > 0 && emAndamento.length < maxPedidos && (
+        <button
+          onClick={() => setDisponiveisAberto(o => !o)}
+          style={{
+            position: "absolute", top: 62, left: 12, zIndex: 36,
+            background: disponiveisAberto ? "#22c55e" : "rgba(10,10,10,0.85)",
+            backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
+            border: `1.5px solid ${disponiveisAberto ? "transparent" : "rgba(34,197,94,0.6)"}`,
+            borderRadius: 999, padding: "7px 14px",
+            display: "flex", alignItems: "center", gap: 7,
+            color: "white", fontWeight: 800, fontSize: 12,
+            cursor: "pointer", boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
+          }}>
+          <span style={{ fontSize: 14 }}>+</span>
+          {prontos.length} pedido{prontos.length > 1 ? "s" : ""} disponível{prontos.length > 1 ? "is" : ""}
+        </button>
+      )}
+
+      {/* ── Mini-sheet do 2º pedido ativo ── */}
+      {segundoAberto && segundaEntrega && !corridaConcluida && (
+        <div style={{
+          position: "absolute", top: 100, left: 10, right: 10, zIndex: 37,
+          background: "rgba(10,10,10,0.96)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
+          borderRadius: 20, padding: "16px",
+          border: "1px solid rgba(249,115,22,0.4)",
+          boxShadow: "0 4px 32px rgba(0,0,0,0.6)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <div>
+              <p style={{ color: "#f97316", fontWeight: 900, fontSize: 13 }}>
+                2° pedido — #{segundaEntrega.codigo}
+              </p>
+              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, marginTop: 2 }}>
+                R$ {(segundaEntrega.taxa_entrega ?? 0).toFixed(2)} • {(segundaEntrega as any).loja?.nome ?? "—"}
+              </p>
+            </div>
+            <button onClick={() => setSegundoAberto(false)} style={{ background: "transparent", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 20, cursor: "pointer" }}>×</button>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+            <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>
+              {segundaEntrega.status === "indo_para_loja" && `🏪 Indo buscar em ${(segundaEntrega as any).loja?.nome}`}
+              {segundaEntrega.status === "na_loja" && "📦 Aguardando coleta na loja"}
+              {["em_rota","coletado"].includes(segundaEntrega.status) && `🏠 Entregando em ${segundaEntrega.endereco_entrega}`}
+            </p>
+          </div>
+
+          {segundaEntrega.status === "indo_para_loja" && (
+            <button onClick={() => { avancarEtapa(segundaEntrega); setSegundoAberto(false) }} disabled={avancandoEtapa} style={{
+              width: "100%", padding: "12px", borderRadius: 12, border: "none",
+              background: "#f97316", color: "white", fontWeight: 900, fontSize: 13, cursor: "pointer",
+            }}>
+              {avancandoEtapa ? "..." : "Cheguei na loja"}
+            </button>
+          )}
+          {segundaEntrega.status === "na_loja" && (
+            <button onClick={() => { avancarEtapa(segundaEntrega); setSegundoAberto(false) }} disabled={avancandoEtapa} style={{
+              width: "100%", padding: "12px", borderRadius: 12, border: "none",
+              background: "#22c55e", color: "white", fontWeight: 900, fontSize: 13, cursor: "pointer",
+            }}>
+              {avancandoEtapa ? "..." : "Coletei o pedido"}
+            </button>
+          )}
+          {["em_rota","coletado"].includes(segundaEntrega.status) && (
+            <button onClick={() => { avancarEtapa(segundaEntrega); setSegundoAberto(false) }} disabled={avancandoEtapa} style={{
+              width: "100%", padding: "12px", borderRadius: 12, border: "none",
+              background: "#818cf8", color: "white", fontWeight: 900, fontSize: 13, cursor: "pointer",
+            }}>
+              {avancandoEtapa ? "..." : "Confirmar entrega"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── Mini-sheet de pedidos disponíveis (para aceitar 2° pedido) ── */}
+      {disponiveisAberto && !corridaConcluida && (
+        <div style={{
+          position: "absolute", top: 100, left: 10, right: 10, zIndex: 37,
+          background: "rgba(10,10,10,0.96)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
+          borderRadius: 20, padding: "16px",
+          border: "1px solid rgba(34,197,94,0.4)",
+          boxShadow: "0 4px 32px rgba(0,0,0,0.6)",
+          maxHeight: "40vh", overflowY: "auto",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <p style={{ color: "#22c55e", fontWeight: 900, fontSize: 13 }}>Pedidos disponíveis</p>
+            <button onClick={() => setDisponiveisAberto(false)} style={{ background: "transparent", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 20, cursor: "pointer" }}>×</button>
+          </div>
+          {prontos.map(p => (
+            <div key={p.id} style={{
+              background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: "12px",
+              marginBottom: 10, border: "1px solid rgba(34,197,94,0.2)",
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 11 }}>
+                  #{p.codigo} · {(p as any).loja?.nome ?? "—"}
+                </p>
+                <p style={{ color: "#22c55e", fontWeight: 900, fontSize: 15 }}>R$ {(p.taxa_entrega ?? 0).toFixed(2)}</p>
+              </div>
+              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, marginBottom: 10 }}>{p.endereco_entrega}</p>
+              <button onClick={() => aceitarEntrega(p)} disabled={!!atualizando} style={{
+                width: "100%", padding: "10px", borderRadius: 10, border: "none",
+                background: atualizando === p.id ? "rgba(34,197,94,0.3)" : "#22c55e",
+                color: "white", fontWeight: 900, fontSize: 13, cursor: "pointer",
+              }}>
+                {atualizando === p.id ? "..." : "Aceitar 2° pedido"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Painel de corrida ativa (Tópico 03) ── */}
       {(corridaAtiva || corridaConcluida) && (
         <CorridaAtivaPanel
           pedido={corridaAtiva}
           corridaConcluida={corridaConcluida}
           avancando={avancandoEtapa}
-          onAvancar={avancarEtapa}
-          onConcluir={avancarEtapa}
+          onAvancar={(fotoUrl) => avancarEtapa(corridaAtiva ?? undefined, fotoUrl)}
+          onConcluir={() => avancarEtapa()}
           motoboyId={motoboy_id ?? undefined}
           myLat={myLat}
           myLng={myLng}

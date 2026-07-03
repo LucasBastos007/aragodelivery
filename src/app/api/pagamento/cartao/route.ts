@@ -28,6 +28,9 @@ export async function POST(req: NextRequest) {
       { nome, cpf, cep: cep || "77000000", numeroEndereco: numero_endereco || "S/N", telefone }
     )
 
+    // Salva payment_id para permitir estorno posterior
+    await sb.from("pedidos").update({ asaas_payment_id: cobranca.id }).eq("id", pedido_id)
+
     const APROVADOS = ["CONFIRMED", "RECEIVED"]
     if (APROVADOS.includes(cobranca.status)) {
       await sb.from("pedidos").update({ status: "pendente" }).eq("id", pedido_id)

@@ -210,11 +210,8 @@ export default function PerfilPage() {
   }
 
   async function sincronizarHorarios(horariosAtuais: Horarios, loja_id_atual: string) {
-    if (horariosAtuais.tipo === "sempre_aberto") {
-      await supabase.from("lojas").update({ aberto: true }).eq("id", loja_id_atual)
-      setAberto(true)
-      return
-    }
+    // sempre_aberto = sem restrição de horário, mas o toggle manual controla o aberto
+    if (horariosAtuais.tipo === "sempre_aberto") return
     const deveEstarAberto = horariosEstaAberto(horariosAtuais)
     await supabase.from("lojas").update({ aberto: deveEstarAberto }).eq("id", loja_id_atual)
     setAberto(deveEstarAberto)

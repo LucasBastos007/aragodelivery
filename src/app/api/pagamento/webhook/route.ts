@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { enviarReciboPagamento } from "@/lib/email"
 
 function adminSb() {
   return createClient(
@@ -12,8 +13,9 @@ function adminSb() {
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://chegodelivery.com"
 
-const CONFIRMADOS = new Set(["CONFIRMED", "RECEIVED", "PAYMENT_CONFIRMED", "PAYMENT_RECEIVED"])
-const CANCELADOS  = new Set(["REFUNDED", "OVERDUE", "DELETED", "REFUND_REQUESTED", "PAYMENT_OVERDUE", "PAYMENT_DELETED"])
+const CONFIRMADOS  = new Set(["CONFIRMED", "RECEIVED", "PAYMENT_CONFIRMED", "PAYMENT_RECEIVED"])
+const CANCELADOS   = new Set(["OVERDUE", "DELETED", "PAYMENT_OVERDUE", "PAYMENT_DELETED"])
+const REEMBOLSADOS = new Set(["REFUNDED", "REFUND_IN_PROGRESS", "REFUND_REQUESTED", "PAYMENT_REFUND_IN_PROGRESS"])
 
 // GET — responde 200 para o teste de ativação do Asaas
 export async function GET() {
@@ -51,13 +53,15 @@ export async function POST(req: NextRequest) {
       .update({ status: "pendente" })
       .eq("id", pedidoId)
       .eq("status", "aguardando_pagamento")
-      .select("id, codigo, loja_id, total, observacao")
+      .select("id, codigo, loja_id, total, subtotal, taxa_entrega, desconto, forma_pagamento, observacao, nome_cliente, email_cliente, endereco_entrega, itens:itens_pedido(nome, quantidade, preco)")
       .maybeSingle()
 
     if (updated) {
-      const nomeCliente = (updated.observacao as string | null)
-        ?.match(/Cliente: ([^|]+)/)?.[1]?.trim() ?? "Cliente"
+      const nomeCliente = (updated as any).nome_cliente
+        ?? (updated.observacao as string | null)?.match(/Cliente: ([^|]+)/)?.[1]?.trim()
+        ?? "Cliente"
 
+      // Push para lojista
       fetch(`${SITE}/api/push`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -71,9 +75,50 @@ export async function POST(req: NextRequest) {
           qtd_itens:    0,
         }),
       }).catch(() => {})
+
+      // Recibo por email ao cliente
+      const emailCliente = (updated as any).email_cliente
+      if (emailCliente) {
+        const { data: loja } = await sb.from("lojas").select("nome").eq("id", updated.loja_id).single()
+        enviarReciboPagamento({
+          email:          emailCliente,
+          nomeLoja:       loja?.nome ?? "Chegô",
+          codigo:         updated.codigo,
+          nomeCliente,
+          itens:          ((updated as any).itens ?? []) as { nome: string; quantidade: number; preco: number }[],
+          subtotal:       Number((updated as any).subtotal ?? 0),
+          taxaEntrega:    Number((updated as any).taxa_entrega ?? 0),
+          desconto:       Number((updated as any).desconto ?? 0),
+          total:          Number(updated.total),
+          formaPagamento: (updated as any).forma_pagamento,
+          endereco:       (updated as any).endereco_entrega ?? "",
+        }).catch(() => {})
+      }
     }
   } else if (CANCELADOS.has(event) || CANCELADOS.has(status)) {
     await sb.from("pedidos").update({ status: "cancelado" }).eq("id", pedidoId)
+
+  } else if (REEMBOLSADOS.has(event) || REEMBOLSADOS.has(status)) {
+    // Marca o pedido como cancelado e o reembolso como concluído
+    const paymentId = payment.id
+    await sb.from("pedidos").update({ status: "cancelado" }).eq("id", pedidoId)
+
+    if (paymentId) {
+      // Atualiza reembolso associado (pelo asaas_refund_id ou pedido_id)
+      const isConcluido = event === "REFUNDED" || status === "REFUNDED"
+      const novoStatusRef = isConcluido ? "concluido" : "processando"
+      const { data: refunds } = await sb
+        .from("reembolsos")
+        .select("id")
+        .eq("pedido_id", pedidoId)
+        .in("status", ["solicitado", "aprovado", "processando"])
+
+      if (refunds && refunds.length > 0) {
+        await sb.from("reembolsos")
+          .update({ status: novoStatusRef, asaas_refund_id: paymentId, atualizado_em: new Date().toISOString() })
+          .in("id", refunds.map((r: any) => r.id))
+      }
+    }
   }
 
   return NextResponse.json({ received: true })

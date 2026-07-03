@@ -326,6 +326,18 @@ export default function AcompanhamentoPedido() {
   const prevStatusRef = useRef<string | null>(null)
   const pushDoneRef = useState(false)
 
+  const [clienteToken,      setClienteToken]      = useState<string | null>(null)
+  const [cancelando,        setCancelando]         = useState(false)
+  const [cancelModal,       setCancelModal]        = useState(false)
+  const [reembolsoModal,    setReembolsoModal]     = useState(false)
+  const [reembolsoMotivo,   setReembolsoMotivo]    = useState("")
+  const [reembolsoDesc,     setReembolsoDesc]      = useState("")
+  const [reembolsoFoto,     setReembolsoFoto]      = useState<File | null>(null)
+  const [envReembolso,      setEnvReembolso]       = useState(false)
+  const [reembolsoOk,       setReembolsoOk]        = useState(false)
+  const [reembolsoStatus,   setReembolsoStatus]    = useState<string | null>(null)
+  const [entregasAntes,     setEntregasAntes]      = useState<number | null>(null)
+
   async function load() {
     const { data: rows, error } = await supabase
       .from("pedidos")
@@ -401,6 +413,32 @@ export default function AcompanhamentoPedido() {
     else if (Notification.permission !== "denied") Notification.requestPermission().then(p => { if (p === "granted") subscribePush() })
   }, [pedido?.id])
 
+  // Lê token do cliente do localStorage
+  useEffect(() => {
+    const t = localStorage.getItem(`arago_tkn_${codigo.toUpperCase()}`)
+    setClienteToken(t)
+  }, [codigo])
+
+  // Conta entregas antes da sua (quando motoboy tem pedidos ativos antes)
+  useEffect(() => {
+    if (!pedido?.motoboy_id) { setEntregasAntes(null); return }
+    const STATUS_ATIVO = ["indo_para_loja","na_loja","em_rota","coletado","aguardando_aceite"]
+    if (!STATUS_ATIVO.includes(pedido.status)) { setEntregasAntes(null); return }
+    supabase.from("pedidos")
+      .select("id", { count: "exact", head: true })
+      .eq("motoboy_id", pedido.motoboy_id)
+      .neq("id", pedido.id)
+      .in("status", STATUS_ATIVO)
+      .then(({ count }) => setEntregasAntes(count ?? 0))
+  }, [pedido?.motoboy_id, pedido?.status, pedido?.id])
+
+  // Carrega status de reembolso se houver
+  useEffect(() => {
+    if (!pedido?.id || pedido.status !== "entregue") return
+    supabase.from("reembolsos" as any).select("status").eq("pedido_id", pedido.id).order("solicitado_em", { ascending: false }).limit(1)
+      .then(({ data }) => { if (data?.[0]) setReembolsoStatus((data[0] as any).status) })
+  }, [pedido?.id, pedido?.status])
+
   // Ouve mensagem do SW para tocar som de entregue mesmo com a aba em foco
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return
@@ -412,6 +450,46 @@ export default function AcompanhamentoPedido() {
     navigator.serviceWorker.addEventListener("message", onMsg)
     return () => navigator.serviceWorker.removeEventListener("message", onMsg)
   }, [])
+
+  async function cancelarPedido() {
+    if (!pedido || !clienteToken) return
+    setCancelando(true)
+    const res = await fetch("/api/pedido/cancelar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pedido_id: pedido.id, cliente_push_token: clienteToken }),
+    })
+    setCancelando(false)
+    setCancelModal(false)
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}))
+      alert(j.error ?? "Erro ao cancelar pedido")
+    }
+    await load()
+  }
+
+  async function enviarReembolso() {
+    if (!pedido || !clienteToken || !reembolsoMotivo) return
+    setEnvReembolso(true)
+    let fotoUrl = ""
+    if (reembolsoFoto) {
+      const ext = reembolsoFoto.name.split(".").pop()
+      const path = `reembolsos/${pedido.id}_${Date.now()}.${ext}`
+      const { error: upErr } = await supabase.storage.from("reembolsos-fotos").upload(path, reembolsoFoto, { upsert: true })
+      if (!upErr) {
+        const { data: urlData } = supabase.storage.from("reembolsos-fotos").getPublicUrl(path)
+        fotoUrl = urlData.publicUrl
+      }
+    }
+    const res = await fetch("/api/reembolso/solicitar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pedido_id: pedido.id, cliente_push_token: clienteToken, motivo: reembolsoMotivo, descricao: reembolsoDesc, foto_url: fotoUrl }),
+    })
+    setEnvReembolso(false)
+    if (res.ok) { setReembolsoOk(true); setReembolsoModal(false); setReembolsoStatus("solicitado") }
+    else { const j = await res.json().catch(() => ({})); alert(j.error ?? "Erro ao solicitar reembolso") }
+  }
 
   async function enviarAvaliacao() {
     if (!pedido || notaLoja === 0) return
@@ -455,13 +533,16 @@ export default function AcompanhamentoPedido() {
     </div>
   )
 
-  const etapaAtual = STATUS_INDEX[pedido.status] ?? 0
-  const cancelado  = pedido.status === "cancelado"
-  const entregue   = pedido.status === "entregue"
-  const coletado   = pedido.status === "coletado"
-  const emRota     = pedido.status === "em_rota"
-  const loja       = (pedido as any).loja
-  const motoboy    = (pedido as any).motoboy
+  const etapaAtual  = STATUS_INDEX[pedido.status] ?? 0
+  const cancelado   = pedido.status === "cancelado"
+  const entregue    = pedido.status === "entregue"
+  const coletado    = pedido.status === "coletado"
+  const emRota      = pedido.status === "em_rota"
+  const loja        = (pedido as any).loja
+  const motoboy     = (pedido as any).motoboy
+  const podeCancelar = clienteToken && ["aguardando_pagamento","pendente"].includes(pedido.status)
+  const podeReembolso = clienteToken && entregue && !reembolsoOk && !reembolsoStatus && ["pix","cartao"].includes(pedido.forma_pagamento)
+  const MOTIVOS_REEMBOLSO = ["Recebi errado","Item faltando","Comida estragada","Pedido nunca chegou","Outro"]
 
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc", overflowX: "hidden" }}>
@@ -511,6 +592,76 @@ export default function AcompanhamentoPedido() {
         <button onClick={() => setModalAvaliacao(true)} style={{ position: "fixed", bottom: 24, right: 16, zIndex: 50, background: "#DC2626", border: "none", borderRadius: 16, padding: "12px 16px", color: "white", fontWeight: 800, fontSize: 13, cursor: "pointer", boxShadow: "0 4px 20px rgba(220,38,38,0.35)", maxWidth: "calc(100vw - 32px)" }}>
           ⭐ Avaliar pedido
         </button>
+      )}
+
+      {/* Modal cancelar pedido */}
+      {cancelModal && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+          onClick={() => setCancelModal(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: "24px 24px 0 0", padding: "24px 20px 36px", width: "100%", maxWidth: "min(520px, 100vw)" }}>
+            <p style={{ fontWeight: 900, fontSize: 18, color: "#111827", marginBottom: 8 }}>Cancelar pedido?</p>
+            <p style={{ color: "#6B7280", fontSize: 13, marginBottom: 24, lineHeight: 1.5 }}>
+              Se o pagamento foi via PIX ou cartão, o valor será estornado automaticamente em até 10 dias úteis.
+            </p>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setCancelModal(false)} style={{ flex: 1, padding: "13px", borderRadius: 13, border: "1px solid #e5e7eb", background: "white", color: "#374151", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                Voltar
+              </button>
+              <button onClick={cancelarPedido} disabled={cancelando} style={{ flex: 1, padding: "13px", borderRadius: 13, border: "none", background: "#EF4444", color: "white", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>
+                {cancelando ? "Cancelando..." : "Sim, cancelar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal solicitar reembolso */}
+      {reembolsoModal && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+          onClick={() => setReembolsoModal(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: "24px 24px 0 0", padding: "24px 20px 36px", width: "100%", maxWidth: "min(520px, 100vw)", maxHeight: "80vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              <p style={{ fontWeight: 900, fontSize: 18, color: "#111827" }}>Solicitar reembolso</p>
+              <button onClick={() => setReembolsoModal(false)} style={{ background: "#F3F4F6", border: "none", borderRadius: 8, color: "#6B7280", fontSize: 18, cursor: "pointer", padding: "4px 10px" }}>✕</button>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 10 }}>Motivo *</p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {MOTIVOS_REEMBOLSO.map(m => (
+                  <button key={m} onClick={() => setReembolsoMotivo(m)} style={{
+                    padding: "8px 14px", borderRadius: 20, border: "1.5px solid",
+                    borderColor: reembolsoMotivo === m ? "#DC2626" : "#E5E7EB",
+                    background: reembolsoMotivo === m ? "#FEF2F2" : "white",
+                    color: reembolsoMotivo === m ? "#DC2626" : "#6B7280",
+                    fontWeight: reembolsoMotivo === m ? 700 : 500, fontSize: 13, cursor: "pointer",
+                  }}>{m}</button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 8 }}>Descrição (opcional)</p>
+              <textarea value={reembolsoDesc} onChange={e => setReembolsoDesc(e.target.value)}
+                placeholder="Descreva o problema em detalhes..." rows={3}
+                style={{ width: "100%", padding: "10px 13px", borderRadius: 10, fontSize: 13, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", resize: "none", boxSizing: "border-box" }} />
+            </div>
+
+            <div style={{ marginBottom: 24 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 8 }}>Foto (opcional)</p>
+              <input type="file" accept="image/*" onChange={e => setReembolsoFoto(e.target.files?.[0] ?? null)}
+                style={{ fontSize: 13, color: "#6B7280" }} />
+            </div>
+
+            <button onClick={enviarReembolso} disabled={!reembolsoMotivo || envReembolso} style={{
+              width: "100%", padding: "14px", borderRadius: 14, border: "none",
+              background: !reembolsoMotivo || envReembolso ? "rgba(220,38,38,0.4)" : "#DC2626",
+              color: "white", fontWeight: 800, fontSize: 15, cursor: !reembolsoMotivo || envReembolso ? "not-allowed" : "pointer",
+            }}>
+              {envReembolso ? "Enviando..." : "Enviar solicitação"}
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Navbar */}
@@ -615,6 +766,18 @@ export default function AcompanhamentoPedido() {
             {/* Chat com motoboy */}
             {coletado && <ChatMotoboy pedidoId={pedido.id} />}
 
+            {/* Banner: há entregas antes da sua */}
+            {entregasAntes !== null && entregasAntes > 0 && !entregue && !cancelado && (
+              <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 14, padding: "12px 16px", marginBottom: 12, display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 20 }}>🛵</span>
+                <p style={{ color: "#92400e", fontSize: 13, fontWeight: 600, lineHeight: 1.4 }}>
+                  {entregasAntes === 1
+                    ? "Há 1 entrega antes da sua. O motoboy está a caminho!"
+                    : `Há ${entregasAntes} entregas antes da sua. O motoboy está chegando!`}
+                </p>
+              </div>
+            )}
+
             {/* Motoboy + mapa Google Maps */}
             {motoboy && (emRota || coletado) && (
               <div style={{ background: "#ffffff", borderRadius: 16, marginBottom: 16, border: "1px solid rgba(220,38,38,0.2)", overflow: "hidden", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
@@ -645,6 +808,63 @@ export default function AcompanhamentoPedido() {
               </div>
             )}
           </>
+        )}
+
+        {/* Botão cancelar pedido */}
+        {podeCancelar && (
+          <button onClick={() => setCancelModal(true)} style={{
+            width: "100%", padding: "13px", borderRadius: 14, border: "1.5px solid #fca5a5",
+            background: "#FEF2F2", color: "#DC2626", fontWeight: 700, fontSize: 14, cursor: "pointer", marginBottom: 12,
+          }}>
+            Cancelar pedido
+          </button>
+        )}
+
+        {/* Botão solicitar reembolso */}
+        {podeReembolso && (
+          <button onClick={() => setReembolsoModal(true)} style={{
+            width: "100%", padding: "13px", borderRadius: 14, border: "1.5px solid #fdba74",
+            background: "#FFF7ED", color: "#ea580c", fontWeight: 700, fontSize: 14, cursor: "pointer", marginBottom: 12,
+          }}>
+            Solicitar reembolso
+          </button>
+        )}
+
+        {/* Status do reembolso */}
+        {(reembolsoStatus || reembolsoOk) && (
+          <div style={{
+            background: reembolsoStatus === "negado" ? "#FEF2F2" : "#F0FDF4",
+            border: `1px solid ${reembolsoStatus === "negado" ? "#fca5a5" : "#bbf7d0"}`,
+            borderRadius: 14, padding: "14px 16px", marginBottom: 12,
+            display: "flex", alignItems: "center", gap: 10,
+          }}>
+            <span style={{ fontSize: 20 }}>
+              {reembolsoStatus === "solicitado" && "🕐"}
+              {reembolsoStatus === "aprovado" && "✅"}
+              {reembolsoStatus === "processando" && "⏳"}
+              {reembolsoStatus === "concluido" && "💸"}
+              {reembolsoStatus === "negado" && "❌"}
+              {!reembolsoStatus && "✅"}
+            </span>
+            <div>
+              <p style={{ fontWeight: 700, fontSize: 13, color: reembolsoStatus === "negado" ? "#DC2626" : "#15803d" }}>
+                {reembolsoStatus === "solicitado" && "Reembolso solicitado"}
+                {reembolsoStatus === "aprovado" && "Reembolso aprovado"}
+                {reembolsoStatus === "processando" && "Reembolso em processamento"}
+                {reembolsoStatus === "concluido" && "Reembolso concluído"}
+                {reembolsoStatus === "negado" && "Reembolso negado"}
+                {!reembolsoStatus && "Solicitação enviada!"}
+              </p>
+              <p style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>
+                {reembolsoStatus === "solicitado" && "Em análise pela loja ou administrador"}
+                {reembolsoStatus === "aprovado" && "Será processado em breve"}
+                {reembolsoStatus === "processando" && "O valor está sendo devolvido"}
+                {reembolsoStatus === "concluido" && "Valor devolvido com sucesso"}
+                {reembolsoStatus === "negado" && "Entre em contato com a loja para mais informações"}
+                {!reembolsoStatus && "Aguarde a análise em breve"}
+              </p>
+            </div>
+          </div>
         )}
 
         {/* Resumo */}

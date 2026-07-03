@@ -41,7 +41,11 @@ export default function AdminSaquesPage() {
 
   async function marcarPago(id: string) {
     setProcessando(id)
-    await supabase.from("saques").update({ status: "pago", pago_em: new Date().toISOString() }).eq("id", id)
+    await fetch("/api/admin/saque-pagar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ saque_id: id }),
+    })
     await load()
     setProcessando(null)
   }

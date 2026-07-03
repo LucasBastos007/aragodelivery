@@ -81,6 +81,200 @@ function botao(texto: string, url: string) {
   `
 }
 
+export async function notificarSaqueLojistaSolicitado({
+  nomeLoja,
+  valor,
+  pixChave,
+  saqueId,
+}: {
+  nomeLoja: string
+  valor: number
+  pixChave: string
+  saqueId: string
+}) {
+  const resend = getResend()
+  if (!resend) return
+
+  const html = base(`
+    <h2 style="margin:0 0 6px;font-size:20px;font-weight:900;color:#111827;">🏪 Nova solicitação de saque — Lojista</h2>
+    <p style="margin:0 0 24px;font-size:14px;color:#6b7280;">Uma loja solicitou saque. Confira os dados e realize o PIX manualmente.</p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:12px;margin:0 0 24px;">
+      <tr><td style="padding:20px 24px;">
+        <p style="margin:0 0 14px;font-size:12px;font-weight:700;color:#ea580c;text-transform:uppercase;letter-spacing:1px;">Dados do saque</p>
+        <table cellpadding="0" cellspacing="0" width="100%">
+          <tr>
+            <td style="padding:5px 0;font-size:13px;color:#6b7280;width:110px;">Loja</td>
+            <td style="padding:5px 0;font-size:14px;font-weight:700;color:#111827;">${nomeLoja}</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 0;font-size:13px;color:#6b7280;">Valor</td>
+            <td style="padding:5px 0;font-size:20px;font-weight:900;color:#22c55e;">R$ ${valor.toFixed(2).replace(".", ",")}</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 0;font-size:13px;color:#6b7280;">Chave PIX</td>
+            <td style="padding:5px 0;font-size:14px;font-weight:700;color:#111827;font-family:monospace;">${pixChave}</td>
+          </tr>
+        </table>
+      </td></tr>
+    </table>
+
+    <p style="font-size:13px;color:#374151;margin:0 0 4px;">1. Abra seu banco e realize o PIX para a chave acima</p>
+    <p style="font-size:13px;color:#374151;margin:0 0 20px;">2. Depois acesse o painel e marque como pago</p>
+
+    ${botao("Abrir painel financeiro", `${BASE}/chego-ctrl/saques`)}
+  `)
+
+  await resend.emails.send({
+    from: "Chegô Delivery <noreply@chegodelivery.com>",
+    to: "lucasbastos1965@gmail.com",
+    subject: `🏪 Saque solicitado — ${nomeLoja} · R$ ${valor.toFixed(2)}`,
+    html,
+  })
+}
+
+export async function enviarReciboPagamento({
+  email,
+  nomeLoja,
+  codigo,
+  nomeCliente,
+  itens,
+  subtotal,
+  taxaEntrega,
+  desconto,
+  total,
+  formaPagamento,
+  endereco,
+}: {
+  email: string
+  nomeLoja: string
+  codigo: string
+  nomeCliente: string
+  itens: { nome: string; quantidade: number; preco: number }[]
+  subtotal: number
+  taxaEntrega: number
+  desconto: number
+  total: number
+  formaPagamento: string
+  endereco: string
+}) {
+  const resend = getResend()
+  if (!resend) return
+
+  const PGTO: Record<string, string> = {
+    pix: "PIX", cartao: "Cartão de crédito/débito",
+    dinheiro: "Dinheiro", maquininha: "Maquininha",
+  }
+
+  const itensHtml = itens.map(i => `
+    <tr>
+      <td style="padding:6px 0;font-size:13px;color:#374151;">${i.quantidade}x ${i.nome}</td>
+      <td style="padding:6px 0;font-size:13px;color:#374151;text-align:right;white-space:nowrap;">R$ ${(i.preco * i.quantidade).toFixed(2).replace(".", ",")}</td>
+    </tr>
+  `).join("")
+
+  const html = base(`
+    <h2 style="margin:0 0 4px;font-size:22px;font-weight:900;color:#111827;">Pedido confirmado! ✅</h2>
+    <p style="margin:0 0 24px;font-size:14px;color:#6b7280;">Olá, <strong>${nomeCliente}</strong>! Aqui está o seu recibo.</p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:12px;margin:0 0 20px;">
+      <tr><td style="padding:16px 20px;">
+        <p style="margin:0 0 3px;font-size:11px;font-weight:700;color:#ea580c;text-transform:uppercase;letter-spacing:1px;">Pedido</p>
+        <p style="margin:0;font-size:22px;font-weight:900;color:#111827;">#${codigo}</p>
+        <p style="margin:4px 0 0;font-size:13px;color:#6b7280;">${nomeLoja}</p>
+      </td></tr>
+    </table>
+
+    <p style="margin:0 0 10px;font-size:12px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Itens do pedido</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;">${itensHtml}</table>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e5e7eb;padding-top:12px;margin:0 0 20px;">
+      <tr>
+        <td style="padding:3px 0;font-size:13px;color:#6b7280;">Subtotal</td>
+        <td style="padding:3px 0;font-size:13px;color:#374151;text-align:right;">R$ ${subtotal.toFixed(2).replace(".", ",")}</td>
+      </tr>
+      ${taxaEntrega > 0 ? `<tr><td style="padding:3px 0;font-size:13px;color:#6b7280;">Taxa de entrega</td><td style="padding:3px 0;font-size:13px;color:#374151;text-align:right;">R$ ${taxaEntrega.toFixed(2).replace(".", ",")}</td></tr>` : ""}
+      ${desconto > 0 ? `<tr><td style="padding:3px 0;font-size:13px;color:#22c55e;">Desconto</td><td style="padding:3px 0;font-size:13px;color:#22c55e;text-align:right;">− R$ ${desconto.toFixed(2).replace(".", ",")}</td></tr>` : ""}
+      <tr>
+        <td style="padding:8px 0 0;font-size:16px;font-weight:900;color:#111827;">Total</td>
+        <td style="padding:8px 0 0;font-size:18px;font-weight:900;color:#f97316;text-align:right;">R$ ${total.toFixed(2).replace(".", ",")}</td>
+      </tr>
+    </table>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:10px;margin:0 0 20px;">
+      <tr><td style="padding:14px 16px;">
+        <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#6b7280;text-transform:uppercase;">Pagamento</p>
+        <p style="margin:0;font-size:13px;color:#111827;font-weight:600;">${PGTO[formaPagamento] ?? formaPagamento}</p>
+      </td></tr>
+    </table>
+
+    ${endereco ? `<table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:10px;">
+      <tr><td style="padding:14px 16px;">
+        <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#6b7280;text-transform:uppercase;">Endereço de entrega</p>
+        <p style="margin:0;font-size:13px;color:#111827;">${endereco}</p>
+      </td></tr>
+    </table>` : ""}
+  `)
+
+  await resend.emails.send({
+    from: "Chegô Delivery <noreply@chegodelivery.com>",
+    to: email,
+    subject: `Pedido #${codigo} confirmado — ${nomeLoja}`,
+    html,
+  })
+}
+
+export async function enviarComprovanteTransferencia({
+  email,
+  nome,
+  valor,
+  pixChave,
+  tipo,
+}: {
+  email: string
+  nome: string
+  valor: number
+  pixChave: string
+  tipo: "lojista" | "motoboy"
+}) {
+  const resend = getResend()
+  if (!resend) return
+
+  const html = base(`
+    <h2 style="margin:0 0 6px;font-size:20px;font-weight:900;color:#111827;">💸 Transferência realizada!</h2>
+    <p style="margin:0 0 24px;font-size:14px;color:#6b7280;">Olá, <strong>${nome}</strong>! O seu saque foi processado com sucesso.</p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:12px;margin:0 0 24px;">
+      <tr><td style="padding:20px 24px;">
+        <p style="margin:0 0 14px;font-size:12px;font-weight:700;color:#16a34a;text-transform:uppercase;letter-spacing:1px;">Comprovante de transferência</p>
+        <table cellpadding="0" cellspacing="0" width="100%">
+          <tr>
+            <td style="padding:5px 0;font-size:13px;color:#6b7280;width:110px;">Valor</td>
+            <td style="padding:5px 0;font-size:20px;font-weight:900;color:#22c55e;">R$ ${valor.toFixed(2).replace(".", ",")}</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 0;font-size:13px;color:#6b7280;">Chave PIX</td>
+            <td style="padding:5px 0;font-size:14px;font-weight:700;color:#111827;font-family:monospace;">${pixChave}</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 0;font-size:13px;color:#6b7280;">Data</td>
+            <td style="padding:5px 0;font-size:13px;color:#111827;">${new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}</td>
+          </tr>
+        </table>
+      </td></tr>
+    </table>
+
+    <p style="font-size:13px;color:#374151;margin:0;">Em caso de dúvidas, entre em contato com a equipe Chegô via WhatsApp.</p>
+  `)
+
+  await resend.emails.send({
+    from: "Chegô Delivery <noreply@chegodelivery.com>",
+    to: email,
+    subject: `✅ Transferência de R$ ${valor.toFixed(2)} realizada`,
+    html,
+  })
+}
+
 export async function enviarBoasVindasMotoboy({
   nome,
   email,
@@ -109,6 +303,58 @@ export async function enviarBoasVindasMotoboy({
     from: "Chegô Delivery <noreply@chegodelivery.com>",
     to: email,
     subject: "Bem-vindo(a) ao Chegô Delivery! 🛵",
+    html,
+  })
+}
+
+export async function notificarSaqueSolicitado({
+  nomeMotoboy,
+  valor,
+  pixChave,
+  saqueId,
+}: {
+  nomeMotoboy: string
+  valor: number
+  pixChave: string
+  saqueId: string
+}) {
+  const resend = getResend()
+  if (!resend) return
+
+  const html = base(`
+    <h2 style="margin:0 0 6px;font-size:20px;font-weight:900;color:#111827;">💸 Nova solicitação de saque</h2>
+    <p style="margin:0 0 24px;font-size:14px;color:#6b7280;">Um motoboy solicitou saque. Confira os dados e realize o PIX manualmente.</p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:12px;margin:0 0 24px;">
+      <tr><td style="padding:20px 24px;">
+        <p style="margin:0 0 14px;font-size:12px;font-weight:700;color:#ea580c;text-transform:uppercase;letter-spacing:1px;">Dados do saque</p>
+        <table cellpadding="0" cellspacing="0" width="100%">
+          <tr>
+            <td style="padding:5px 0;font-size:13px;color:#6b7280;width:110px;">Motoboy</td>
+            <td style="padding:5px 0;font-size:14px;font-weight:700;color:#111827;">${nomeMotoboy}</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 0;font-size:13px;color:#6b7280;">Valor</td>
+            <td style="padding:5px 0;font-size:20px;font-weight:900;color:#22c55e;">R$ ${valor.toFixed(2).replace(".", ",")}</td>
+          </tr>
+          <tr>
+            <td style="padding:5px 0;font-size:13px;color:#6b7280;">Chave PIX</td>
+            <td style="padding:5px 0;font-size:14px;font-weight:700;color:#111827;font-family:monospace;">${pixChave}</td>
+          </tr>
+        </table>
+      </td></tr>
+    </table>
+
+    <p style="font-size:13px;color:#374151;margin:0 0 4px;">1. Abra seu banco e realize o PIX para a chave acima</p>
+    <p style="font-size:13px;color:#374151;margin:0 0 20px;">2. Depois acesse o painel e marque como pago</p>
+
+    ${botao("Abrir painel financeiro", `${BASE}/chego-ctrl/saques`)}
+  `)
+
+  await resend.emails.send({
+    from: "Chegô Delivery <noreply@chegodelivery.com>",
+    to: "lucasbastos1965@gmail.com",
+    subject: `💸 Saque solicitado — ${nomeMotoboy} · R$ ${valor.toFixed(2)}`,
     html,
   })
 }

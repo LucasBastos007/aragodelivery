@@ -154,13 +154,49 @@ export default function LojaDashboard() {
   const loja_id = sessao?.role === "lojista" ? sessao.loja_id : null
 
   const [pedidos, setPedidos] = useState<Pedido[]>([])
+  const [contadorClientes, setContadorClientes] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [atualizando, setAtualizando] = useState<string | null>(null)
+  const [reembolsosPendentes, setReembolsosPendentes] = useState<any[]>([])
+  const [processandoReemb, setProcessandoReemb] = useState<string | null>(null)
   const [aberto, setAberto] = useState<boolean | null>(null)
   const [togglingAberto, setTogglingAberto] = useState(false)
   const prevPendentesRef = useRef<Set<string>>(new Set())
   const isFirstLoad = useRef(true)
   const horariosRef = useRef<Horarios | null>(null)
+
+  // ── Entrega manual ──────────────────────────────────────────────────────
+  const [modalManual, setModalManual]   = useState(false)
+  const [manualNome, setManualNome]     = useState("")
+  const [manualEndereco, setManualEndereco] = useState("")
+  const [manualObs, setManualObs]       = useState("")
+  const [manualTaxa, setManualTaxa]     = useState("")
+  const [enviandoManual, setEnviandoManual] = useState(false)
+  const [erroManual, setErroManual]     = useState("")
+  const [sucessoManual, setSucessoManual] = useState(false)
+
+  async function criarEntregaManual() {
+    if (!manualNome.trim()) { setErroManual("Informe o nome do cliente"); return }
+    if (!manualEndereco.trim()) { setErroManual("Informe o endereço de entrega"); return }
+    setErroManual(""); setEnviandoManual(true)
+    const res = await fetch("/api/loja/entrega-manual", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        nome_cliente:     manualNome.trim(),
+        endereco_entrega: manualEndereco.trim(),
+        observacao:       manualObs.trim(),
+        taxa_entrega:     parseFloat(manualTaxa) || 0,
+      }),
+    })
+    const data = await res.json()
+    setEnviandoManual(false)
+    if (!res.ok) { setErroManual(data.error ?? "Erro ao criar entrega"); return }
+    setManualNome(""); setManualEndereco(""); setManualObs(""); setManualTaxa("")
+    setModalManual(false)
+    setSucessoManual(true); setTimeout(() => setSucessoManual(false), 5000)
+    load()
+  }
 
   // ── Rastreio motoboy ────────────────────────────────────────────────────
   const [lojaCoords, setLojaCoords]   = useState<{ lat: number; lng: number } | null>(null)
@@ -174,13 +210,22 @@ export default function LojaDashboard() {
   async function load() {
     if (!loja_id) return
     const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
-    const { data } = await supabase
-      .from("pedidos")
-      .select("*, itens:itens_pedido(*)")
-      .eq("loja_id", loja_id)
-      .not("status", "in", '("coletado","entregue","cancelado")')
-      .gte("criado_em", hoje.toISOString())
-      .order("criado_em", { ascending: false })
+    const [{ data }, { data: historico }] = await Promise.all([
+      supabase
+        .from("pedidos")
+        .select("*, itens:itens_pedido(*)")
+        .eq("loja_id", loja_id)
+        .not("status", "in", '("coletado","entregue","cancelado")')
+        .gte("criado_em", hoje.toISOString())
+        .order("criado_em", { ascending: false }),
+      supabase
+        .from("pedidos")
+        .select("telefone_cliente")
+        .eq("loja_id", loja_id)
+        .eq("status", "entregue")
+        .not("telefone_cliente", "is", null),
+    ])
+
     const resultado = (data as Pedido[]) ?? []
     const novosPendentes = new Set(resultado.filter(p => p.status === "pendente").map(p => p.id))
 
@@ -189,10 +234,31 @@ export default function LojaDashboard() {
       if (chegaram.length > 0) beep()
     }
 
+    // Monta mapa telefone → quantidade de pedidos entregues
+    const contador: Record<string, number> = {}
+    for (const row of (historico ?? [])) {
+      const tel = row.telefone_cliente
+      if (tel) contador[tel] = (contador[tel] ?? 0) + 1
+    }
+
     prevPendentesRef.current = novosPendentes
     isFirstLoad.current = false
     setPedidos(resultado)
+    setContadorClientes(contador)
     setLoading(false)
+
+    // Auto-cancelamento: pedidos pendentes há mais de 5 minutos
+    const cincoMinAtras = new Date(Date.now() - 5 * 60 * 1000)
+    const expirados = resultado.filter(
+      p => p.status === "pendente" && new Date(p.criado_em) < cincoMinAtras
+    )
+    for (const p of expirados) {
+      fetch("/api/loja/status-pedido", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pedido_id: p.id, status: "cancelado", loja_id }),
+      }).catch(() => {})
+    }
   }
 
   // Carregar status aberto/fechado da loja ao entrar
@@ -393,8 +459,71 @@ export default function LojaDashboard() {
     return () => clearInterval(id)
   }, [pendentes.length])
 
+  // Carrega reembolsos pendentes para esta loja
+  useEffect(() => {
+    if (!loja_id) return
+    async function loadReembolsos() {
+      const res = await fetch("/api/reembolso/listar")
+      if (!res.ok) return
+      const j = await res.json()
+      setReembolsosPendentes((j.reembolsos ?? []).filter((r: any) => r.status === "solicitado"))
+    }
+    loadReembolsos()
+    const iv = setInterval(loadReembolsos, 15_000)
+    return () => clearInterval(iv)
+  }, [loja_id])
+
+  async function processarReembolso(reembolsoId: string, acao: "aprovar" | "negar", valorAprovado?: number) {
+    setProcessandoReemb(reembolsoId)
+    const res = await fetch("/api/reembolso/processar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reembolso_id: reembolsoId, acao, valor_aprovado: valorAprovado }),
+    })
+    setProcessandoReemb(null)
+    if (!res.ok) { const j = await res.json().catch(() => ({})); alert(j.error ?? "Erro"); return }
+    setReembolsosPendentes(prev => prev.filter(r => r.id !== reembolsoId))
+  }
+
   const PAGAMENTO_ICON: Record<string, string> = {
     pix: "PIX", cartao: "Cartão", dinheiro: "Dinheiro", maquininha: "Maquininha",
+  }
+
+  function ClienteInfo({ pedido }: { pedido: Pedido }) {
+    if (!pedido.nome_cliente && !pedido.endereco_entrega) return null
+    const totalPedidos = pedido.telefone_cliente ? (contadorClientes[pedido.telefone_cliente] ?? 0) : 0
+    const isPrimeiro = totalPedidos === 0
+    return (
+      <div style={{
+        background: "#F8FAFC", borderRadius: 12, padding: "10px 13px", marginBottom: 12,
+        border: "1px solid #E5E7EB", display: "flex", flexDirection: "column", gap: 5,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            <span style={{ fontSize: 14 }}>👤</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
+              {pedido.nome_cliente ?? "—"}
+            </span>
+            {pedido.telefone_cliente && (
+              <span style={{ fontSize: 12, color: "#6B7280" }}>{pedido.telefone_cliente}</span>
+            )}
+          </div>
+          <span style={{
+            fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap",
+            background: isPrimeiro ? "rgba(249,115,22,0.12)" : "rgba(34,197,94,0.1)",
+            color: isPrimeiro ? "#ea580c" : "#15803d",
+          }}>
+            {isPrimeiro ? "1º pedido" : `${totalPedidos + 1}º pedido`}
+          </span>
+        </div>
+        {pedido.endereco_entrega && (
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+            <span style={{ fontSize: 12, flexShrink: 0, marginTop: 1 }}>📍</span>
+            <span style={{ fontSize: 12, color: "#374151", lineHeight: 1.4 }}>{pedido.endereco_entrega}</span>
+          </div>
+        )}
+      </div>
+    )
   }
 
   function BotaoImprimir({ pedido }: { pedido: Pedido }) {
@@ -530,16 +659,75 @@ export default function LojaDashboard() {
         </button>
       </div>
 
+      {/* Modal entrega manual */}
+      {modalManual && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "flex-end", WebkitBackdropFilter: "blur(4px)", backdropFilter: "blur(4px)" }}
+          onClick={e => { if (e.target === e.currentTarget) setModalManual(false) }}>
+          <div style={{ background: "white", borderRadius: "20px 20px 0 0", width: "100%", padding: "24px 20px", paddingBottom: "calc(env(safe-area-inset-bottom,0px) + 24px)", maxHeight: "85vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+              <div>
+                <h2 style={{ margin: 0, fontWeight: 900, fontSize: 18, color: "#111827" }}>🛵 Chamar motoboy</h2>
+                <p style={{ margin: "4px 0 0", fontSize: 12, color: "#9CA3AF" }}>Entrega sem pedido no app — taxa descontada do repasse</p>
+              </div>
+              <button onClick={() => setModalManual(false)} style={{ background: "#F3F4F6", border: "none", borderRadius: "50%", width: 32, height: 32, cursor: "pointer", fontSize: 16 }}>✕</button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6B7280", marginBottom: 5, textTransform: "uppercase" }}>Nome do cliente *</label>
+                <input value={manualNome} onChange={e => setManualNome(e.target.value)} placeholder="Ex: João Silva"
+                  style={{ width: "100%", padding: "10px 13px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, color: "#111827", outline: "none", boxSizing: "border-box" as const }} />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6B7280", marginBottom: 5, textTransform: "uppercase" }}>Endereço de entrega *</label>
+                <input value={manualEndereco} onChange={e => setManualEndereco(e.target.value)} placeholder="Rua, número, bairro"
+                  style={{ width: "100%", padding: "10px 13px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, color: "#111827", outline: "none", boxSizing: "border-box" as const }} />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6B7280", marginBottom: 5, textTransform: "uppercase" }}>Taxa de entrega (R$)</label>
+                <input type="number" step="0.50" min="0" value={manualTaxa} onChange={e => setManualTaxa(e.target.value)} placeholder="0,00"
+                  style={{ width: "100%", padding: "10px 13px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, color: "#111827", outline: "none", boxSizing: "border-box" as const }} />
+                <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>Cobrada do cliente por fora. Será descontada do seu repasse.</p>
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#6B7280", marginBottom: 5, textTransform: "uppercase" }}>Observação (opcional)</label>
+                <input value={manualObs} onChange={e => setManualObs(e.target.value)} placeholder="Ex: Fragil, interfone 201..."
+                  style={{ width: "100%", padding: "10px 13px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 14, color: "#111827", outline: "none", boxSizing: "border-box" as const }} />
+              </div>
+              {erroManual && <p style={{ color: "#f87171", fontSize: 13, fontWeight: 600 }}>{erroManual}</p>}
+              <button onClick={criarEntregaManual} disabled={enviandoManual} style={{
+                width: "100%", padding: "13px", borderRadius: 12, border: "none",
+                background: enviandoManual ? "rgba(249,115,22,0.4)" : "#f97316",
+                color: "white", fontWeight: 800, fontSize: 15, cursor: "pointer", marginTop: 4,
+              }}>
+                {enviandoManual ? "Chamando motoboy..." : "🛵 Confirmar e chamar motoboy"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: sucessoManual ? 8 : 20 }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 900, color: "#111827", margin: 0 }}>Pedidos de hoje</h1>
           <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>Atualiza a cada 15 segundos</p>
         </div>
-        <button onClick={() => { setLoading(true); load() }} className="btn-ghost" style={{ fontSize: 12, padding: "8px 14px" }}>
-          ↻ Atualizar
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => { setModalManual(true); setErroManual("") }}
+            style={{ padding: "8px 14px", borderRadius: 10, border: "1.5px solid rgba(249,115,22,0.4)", background: "rgba(249,115,22,0.07)", color: "#ea580c", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+            + Entrega
+          </button>
+          <button onClick={() => { setLoading(true); load() }} className="btn-ghost" style={{ fontSize: 12, padding: "8px 14px" }}>
+            ↻
+          </button>
+        </div>
       </div>
+
+      {sucessoManual && (
+        <div style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 12, padding: "12px 16px", marginBottom: 16 }}>
+          <p style={{ color: "#16a34a", fontWeight: 700, fontSize: 13 }}>✅ Motoboy sendo buscado! Pedido criado com sucesso.</p>
+        </div>
+      )}
 
       {loading ? (
         <p style={{ textAlign: "center", marginTop: 48, color: "#9CA3AF" }}>Carregando pedidos...</p>
@@ -551,6 +739,42 @@ export default function LojaDashboard() {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+          {/* Reembolsos pendentes */}
+          {reembolsosPendentes.length > 0 && (
+            <div style={{ background: "#FFF7ED", border: "1.5px solid #fed7aa", borderRadius: 16, padding: "14px 16px" }}>
+              <p style={{ fontWeight: 800, fontSize: 14, color: "#9a3412", marginBottom: 10 }}>
+                🔄 {reembolsosPendentes.length} reembolso{reembolsosPendentes.length > 1 ? "s" : ""} aguardando análise
+              </p>
+              {reembolsosPendentes.map(r => (
+                <div key={r.id} style={{ background: "white", borderRadius: 12, padding: "12px 14px", marginBottom: 8, border: "1px solid #fde68a" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                    <div>
+                      <p style={{ fontWeight: 700, fontSize: 13, color: "#111827" }}>{r.motivo}</p>
+                      <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>Pedido #{r.pedido?.codigo ?? "—"} · R$ {(r.valor_solicitado ?? r.pedido?.total ?? 0).toFixed(2)}</p>
+                    </div>
+                    <span style={{ fontSize: 11, color: "#ea580c", fontWeight: 700, background: "#FFF7ED", padding: "3px 8px", borderRadius: 8 }}>
+                      {r.solicitado_por}
+                    </span>
+                  </div>
+                  {r.descricao && <p style={{ fontSize: 12, color: "#6B7280", marginBottom: 8 }}>{r.descricao}</p>}
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={() => processarReembolso(r.id, "negar")} disabled={processandoReemb === r.id} style={{
+                      flex: 1, padding: "9px", borderRadius: 10, border: "1px solid #fca5a5",
+                      background: "#FEF2F2", color: "#DC2626", fontWeight: 700, fontSize: 13, cursor: "pointer",
+                    }}>Negar</button>
+                    <button onClick={() => processarReembolso(r.id, "aprovar")} disabled={processandoReemb === r.id} style={{
+                      flex: 1, padding: "9px", borderRadius: 10, border: "none",
+                      background: "#22c55e", color: "white", fontWeight: 700, fontSize: 13, cursor: "pointer",
+                    }}>
+                      {processandoReemb === r.id ? "..." : "Aprovar"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Novos pedidos - destaque */}
           {pendentes.map(p => (
             <div key={p.id} className="card" style={{ padding: "18px 16px", border: "1px solid rgba(249,115,22,0.5)", background: "rgba(249,115,22,0.05)", animation: "pulse 2s infinite" }}>
@@ -575,17 +799,11 @@ export default function LojaDashboard() {
                 </div>
               )}
 
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 14, fontSize: 12, color: "#9CA3AF", flexWrap: "wrap" }}>
-                <span style={{ flexShrink: 0 }}>{PAGAMENTO_ICON[p.forma_pagamento] ?? p.forma_pagamento}</span>
-                <span style={{ flexShrink: 0 }}>·</span>
-                <span style={{ wordBreak: "break-word" }}>📍 {p.endereco_entrega}</span>
+              <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#9CA3AF" }}>
+                <span style={{ fontWeight: 600 }}>{PAGAMENTO_ICON[p.forma_pagamento] ?? p.forma_pagamento}</span>
               </div>
 
-              {p.nome_cliente && (
-                <p className="text-xs mb-3" style={{ color: "#6B7280" }}>
-                  Cliente: {p.nome_cliente}{p.telefone_cliente ? ` · ${p.telefone_cliente}` : ""}
-                </p>
-              )}
+              <ClienteInfo pedido={p} />
 
               {p.observacao && (
                 <p style={{ fontSize: 12, fontStyle: "italic", marginBottom: 14, padding: "8px 12px", borderRadius: 10, background: "#F3F4F6", color: "#6B7280" }}>
@@ -619,10 +837,12 @@ export default function LojaDashboard() {
               </div>
 
               {p.itens && (
-                <p style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 12 }}>
+                <p style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 8 }}>
                   {p.itens.map((i: any) => `${i.quantidade}x ${i.nome}`).join(", ")}
                 </p>
               )}
+
+              <ClienteInfo pedido={p} />
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {PROXIMO_STATUS[p.status] && (

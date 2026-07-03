@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/cancelar-pendentes",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}

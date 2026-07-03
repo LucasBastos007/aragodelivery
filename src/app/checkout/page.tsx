@@ -695,6 +695,9 @@ export default function CheckoutPage() {
         lng_entrega:      lngFinal,
         observacao:       obsCompleta,
         cupom_codigo:     cupomValido?.codigo ?? null,
+        nome_cliente:     nome.trim() || null,
+        telefone_cliente: telefone.trim() || null,
+        email_cliente:    user?.email ?? null,
       }),
     }).then(r => r.json())
 
@@ -706,6 +709,7 @@ export default function CheckoutPage() {
 
     const { pedido_id: pedidoIdNovo, codigo, total: totalServidor, cliente_push_token } = criarRes
     const pedido = { id: pedidoIdNovo }
+    if (cliente_push_token) localStorage.setItem(`arago_tkn_${codigo}`, cliente_push_token)
 
     // ─── PIX: gera QR code e abre modal ──────────────────────────────────
     if (pagamento === "pix") {

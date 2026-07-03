@@ -80,11 +80,14 @@ export default function MotoboyFinanceiroPage() {
     if (valor > saldo + 0.001) { setErroSaque("Valor maior que o saldo disponível"); return }
     if (!motoboy?.pix_chave) { setErroSaque("Cadastre sua chave PIX antes de solicitar"); return }
     setErroSaque(""); setEnviandoSaque(true)
-    const { error } = await supabase.from("saques").insert({
-      tipo: "motoboy", motoboy_id, valor, pix_chave: motoboy.pix_chave, status: "solicitado",
+    const res = await fetch("/api/motoboy/saque", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ valor }),
     })
+    const data = await res.json()
     setEnviandoSaque(false)
-    if (error) { setErroSaque(error.message); return }
+    if (!res.ok) { setErroSaque(data.error ?? "Erro ao solicitar saque"); return }
     setValorSaque(""); setSolicitando(false)
     setSaqueSucesso(true); setTimeout(() => setSaqueSucesso(false), 5000)
     load()
