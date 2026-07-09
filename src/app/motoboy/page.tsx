@@ -116,7 +116,7 @@ function getHtmlOverlayClass() {
       this.div.style.position = "absolute"
       this.div.innerHTML = html
     }
-    onAdd() { this.getPanes()!.overlayMouseTarget.appendChild(this.div) }
+    onAdd() { this.getPanes()?.overlayMouseTarget.appendChild(this.div) }
     draw() {
       const p = this.getProjection()?.fromLatLngToDivPixel(this.pos)
       if (!p) return
@@ -204,7 +204,6 @@ function MapaMotoboy({
     const Ov = getHtmlOverlayClass()
 
     const map = new google.maps.Map(containerRef.current, {
-      renderingType: google.maps.RenderingType.VECTOR,
       center: { lat: myLat, lng: myLng },
       zoom: 16,
       mapTypeId: "roadmap",
@@ -278,7 +277,7 @@ function MapaMotoboy({
   // ── Sincroniza directions com DirectionsRenderer e Polyline fallback ──────────
   useEffect(() => {
     if (dirRendererRef.current) {
-      dirRendererRef.current.setDirections(directions as any)
+      if (directions) dirRendererRef.current.setDirections(directions)
       dirRendererRef.current.setOptions({
         polylineOptions: {
           strokeColor: navMode ? "#22d3ee" : "#f97316",
