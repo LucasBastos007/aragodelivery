@@ -1116,6 +1116,9 @@ export default function MotoboyPage() {
   )
   const corridaAtiva = corridasAtivas[0] ?? null
   const segundaEntrega = corridasAtivas[1] ?? null
+  const ETAPA_MAP: Record<string, number> = { "indo_para_loja": 0, "na_loja": 1, "em_rota": 2, "coletado": 2, "entregue": 3 }
+  const etapaAtual = corridaConcluida ? 3 : (ETAPA_MAP[corridaAtiva?.status ?? ""] ?? 0)
+  const ETAPAS_LABEL = ["Indo à loja", "Na loja", "Em rota", "Entregue!"]
 
   // Quando indo à loja, rota aponta para a loja; nas demais etapas, para o cliente
   const efetDestinoLat = corridaAtiva?.status === "indo_para_loja" ? (lojaLat ?? destinoLat) : destinoLat
@@ -1146,25 +1149,51 @@ export default function MotoboyPage() {
 
       {/* ── Toast de erro ── */}
       {/* ── Banner de status no mapa ── */}
-      {corridaAtiva && !corridaConcluida && (
+      {(corridaAtiva || corridaConcluida) && (
         <div style={{
           position: "absolute",
           top: 12, left: 12, right: 12, zIndex: 30,
-          borderRadius: 12, padding: "8px 12px",
-          background: "rgba(0,0,0,0.72)",
-          border: "1px solid " + (corridaAtiva.status === "indo_para_loja" ? "rgba(249,115,22,0.5)" : corridaAtiva.status === "na_loja" ? "rgba(34,197,94,0.5)" : "rgba(99,102,241,0.5)"),
-          backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
-          display: "flex", alignItems: "center", gap: 8,
+          borderRadius: 14, padding: "10px 14px",
+          background: "rgba(0,0,0,0.78)",
+          backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
           boxShadow: "0 2px 12px rgba(0,0,0,0.5)",
         }}>
-          <span style={{ fontSize: 16 }}>
-            {corridaAtiva.status === "indo_para_loja" ? "🏪" : corridaAtiva.status === "na_loja" ? "📦" : "🏠"}
-          </span>
-          <p style={{ color: "white", fontWeight: 700, fontSize: 13, margin: 0, flex: 1 }}>
-            {corridaAtiva.status === "indo_para_loja" && "Indo buscar o pedido"}
-            {corridaAtiva.status === "na_loja" && "Na loja — pegue o pedido"}
-            {corridaAtiva.status === "em_rota" && "Em rota de entrega"}
-          </p>
+          <div style={{ display: "flex", alignItems: "flex-start" }}>
+            {ETAPAS_LABEL.map((label, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "flex-start", flex: i < 3 ? 1 : undefined }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, flexShrink: 0 }}>
+                  <div style={{
+                    width: 22, height: 22, borderRadius: "50%",
+                    background: i < etapaAtual ? "#22C55E" : i === etapaAtual ? "#FF8C00" : "#3A3A3C",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    transition: "background 0.35s",
+                  }}>
+                    {i < etapaAtual ? (
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                    ) : (
+                      <span style={{ color: "white", fontSize: 8, fontWeight: 900 }}>{i + 1}</span>
+                    )}
+                  </div>
+                  <p style={{
+                    color: i <= etapaAtual ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.25)",
+                    fontSize: 8, fontWeight: i === etapaAtual ? 800 : 500,
+                    textAlign: "center", maxWidth: 44, lineHeight: 1.2, margin: 0,
+                  }}>
+                    {label}
+                  </p>
+                </div>
+                {i < 3 && (
+                  <div style={{
+                    flex: 1, height: 2, marginTop: 10,
+                    background: i < etapaAtual ? "#22C55E" : "#3A3A3C",
+                    transition: "background 0.35s",
+                  }} />
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -1528,6 +1557,7 @@ export default function MotoboyPage() {
           destinoLat={destinoLat ?? undefined}
           destinoLng={destinoLng ?? undefined}
           onSOSOpen={() => setSosModal(true)}
+          onSetDestino={(lat, lng) => { setDestinoLat(lat); setDestinoLng(lng) }}
         />
       )}
 
@@ -1981,7 +2011,7 @@ function SOSModal({
 function CorridaAtivaPanel({
   pedido, corridaConcluida, avancando, onAvancar, onConcluir,
   motoboyId, myLat, myLng, lojaLat, lojaLng, destinoLat, destinoLng,
-  onSOSOpen,
+  onSOSOpen, onSetDestino,
 }: {
   pedido: any | null
   corridaConcluida: any | null
@@ -1996,6 +2026,7 @@ function CorridaAtivaPanel({
   destinoLat?: number
   destinoLng?: number
   onSOSOpen: () => void
+  onSetDestino?: (lat: number, lng: number) => void
 }) {
   const [navDestino,      setNavDestino]      = useState<{ texto: string; lat?: number; lng?: number } | null>(null)
   const [codigoInput,     setCodigoInput]     = useState("")
@@ -2009,7 +2040,6 @@ function CorridaAtivaPanel({
     "indo_para_loja": 0, "na_loja": 1, "em_rota": 2, "coletado": 2, "entregue": 3,
   }
   const etapa  = corridaConcluida ? 3 : (STATUS_TO_ETAPA[pedido?.status ?? ""] ?? 0)
-  const ETAPAS = ["Indo à loja", "Na loja", "Em rota", "Entregue!"]
 
   async function avisarCheguei() {
     if (!p?.id) return
@@ -2045,51 +2075,20 @@ function CorridaAtivaPanel({
       overflow: "hidden", boxSizing: "border-box",
     }}>
       {/* Modal de navegação */}
-      {navDestino && <NavModal destino={navDestino} onClose={() => setNavDestino(null)} onNavApp={() => setNavDestino(null)} />}
+      {navDestino && (
+        <NavModal
+          destino={navDestino}
+          onClose={() => setNavDestino(null)}
+          onNavApp={(lat, lng) => {
+            if (lat && lng && onSetDestino) onSetDestino(lat, lng)
+            setNavDestino(null)
+          }}
+        />
+      )}
 
       {/* Handle */}
-      <div style={{ padding: "10px 16px 0", display: "flex", alignItems: "center", flexShrink: 0 }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.1)", flex: 1 }} />
-      </div>
-
-      {/* Stepper */}
-      <div style={{ padding: "10px 16px 0", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "flex-start" }}>
-          {ETAPAS.map((label, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "flex-start", flex: i < 3 ? 1 : undefined }}>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flexShrink: 0 }}>
-                <div style={{
-                  width: 26, height: 26, borderRadius: "50%",
-                  background: i < etapa ? "#22C55E" : i === etapa ? "#FF8C00" : "#3A3A3C",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  transition: "background 0.35s",
-                }}>
-                  {i < etapa ? (
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12"/>
-                    </svg>
-                  ) : (
-                    <span style={{ color: "white", fontSize: 9, fontWeight: 900 }}>{i + 1}</span>
-                  )}
-                </div>
-                <p style={{
-                  color: i <= etapa ? "rgba(255,255,255,0.85)" : "rgba(255,255,255,0.25)",
-                  fontSize: 8, fontWeight: i === etapa ? 800 : 500,
-                  textAlign: "center", maxWidth: 48, lineHeight: 1.2,
-                }}>
-                  {label}
-                </p>
-              </div>
-              {i < 3 && (
-                <div style={{
-                  flex: 1, height: 2, marginTop: 12,
-                  background: i < etapa ? "#22C55E" : "#3A3A3C",
-                  transition: "background 0.35s",
-                }} />
-              )}
-            </div>
-          ))}
-        </div>
+      <div style={{ padding: "8px 0 4px", display: "flex", justifyContent: "center", flexShrink: 0 }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.1)" }} />
       </div>
 
       {/* Conteúdo */}
@@ -2593,7 +2592,7 @@ function FotoModal({
 }
 
 // ─── Modal de seleção de app de navegação (Tópico 04) ────────────────────────
-function NavModal({ destino, onClose, onNavApp }: { destino: { texto: string; lat?: number; lng?: number }; onClose: () => void; onNavApp?: () => void }) {
+function NavModal({ destino, onClose, onNavApp }: { destino: { texto: string; lat?: number; lng?: number }; onClose: () => void; onNavApp?: (lat?: number, lng?: number) => void }) {
   const lat    = destino.lat
   const lng    = destino.lng
   const coords = lat && lng ? `${lat},${lng}` : null
@@ -2657,7 +2656,7 @@ function NavModal({ destino, onClose, onNavApp }: { destino: { texto: string; la
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {onNavApp && (
             <button
-              onClick={() => { onNavApp(); onClose() }}
+              onClick={() => { onNavApp(lat ?? undefined, lng ?? undefined); onClose() }}
               style={{
                 display: "flex", alignItems: "center", gap: 14,
                 padding: "14px 18px", borderRadius: 16, border: "none",
