@@ -197,14 +197,12 @@ function MapaMotoboy({
       const map = mapInstanceRef.current
       if (!map) return
       if (navMode) {
-        map.setMapTypeId("hybrid")
         map.setZoom(17)
         map.setTilt(45)
         map.setHeading(headingRef.current)
         followRef.current = true
         setFollowing(true)
       } else {
-        map.setMapTypeId("roadmap")
         map.setTilt(0)
         map.setHeading(0)
       }
@@ -328,9 +326,10 @@ function MapaMotoboy({
       center={{ lat: myLat, lng: myLng }}
       zoom={16}
       options={{
-        // hybrid (satélite + labels) suporta tilt nativo mesmo em raster.
-        // roadmap com styles customizados força modo raster que bloqueia tilt.
-        mapTypeId: navMode ? "hybrid" : "roadmap",
+        // mapId força mapa vetorial — único modo que suporta tilt/heading
+        // em qualquer localização (satellite sem mapId só tem tilt em cidades com imagery 45°)
+        mapId: "DEMO_MAP_ID",
+        mapTypeId: "roadmap",
         disableDefaultUI: true,
         zoomControl: false,
         gestureHandling: "greedy",
@@ -340,11 +339,11 @@ function MapaMotoboy({
         clickableIcons: false,
         tilt: navMode ? 45 : 0,
         heading: navMode ? headingRef.current : 0,
-        styles: navMode ? undefined : DARK_MAP_STYLE,
+        // styles incompatível com mapId — dark theme via DARK_MAP_STYLE só funciona sem mapId
       }}
       onLoad={m => {
         mapInstanceRef.current = m
-        if (navMode) { m.setMapTypeId("hybrid"); m.setZoom(17); m.setTilt(45); m.setHeading(headingRef.current) }
+        if (navMode) { m.setZoom(17); m.setTilt(45); m.setHeading(headingRef.current) }
       }}
       onDragStart={() => { followRef.current = false; setFollowing(false) }}
     >
@@ -472,7 +471,7 @@ function MapaMotoboy({
           if (map) {
             map.panTo({ lat: myLat, lng: myLng })
             map.setZoom(navMode ? 17 : 16)
-            if (navMode) { map.setMapTypeId("hybrid"); map.setTilt(45); map.setHeading(headingRef.current) }
+            if (navMode) { map.setTilt(45); map.setHeading(headingRef.current) }
           }
           followRef.current = true
           setFollowing(true)
