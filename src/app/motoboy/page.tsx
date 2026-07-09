@@ -131,9 +131,26 @@ function MapaMotoboy({
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null)
 
   // Refs para posição atual — evitam que o efeito de rota re-execute a cada update de GPS
-  const myLatRef = useRef(myLat)
-  const myLngRef = useRef(myLng)
+  const myLatRef      = useRef(myLat)
+  const myLngRef      = useRef(myLng)
+  const gpsRealRef    = useRef(false)  // true quando GPS já tem posição real (não padrão)
   useEffect(() => { myLatRef.current = myLat; myLngRef.current = myLng }, [myLat, myLng])
+
+  // Quando GPS sai do ponto padrão, recalcula rota com posição real
+  useEffect(() => {
+    if (gpsRealRef.current) return
+    if (Math.abs(myLat - DEFAULT_LAT) < 0.001 && Math.abs(myLng - DEFAULT_LNG) < 0.001) return
+    gpsRealRef.current = true
+    const dLat = destinoLatRef.current; const dLng = destinoLngRef.current
+    if (!isLoaded || !dLat || !dLng || !mapInstanceRef.current) return
+    setDirections(null)
+    const svc = new google.maps.DirectionsService()
+    svc.route({
+      origin:      { lat: myLat, lng: myLng },
+      destination: { lat: dLat,  lng: dLng  },
+      travelMode:  google.maps.TravelMode.DRIVING,
+    }, (result, status) => { if (status === "OK" && result) setDirections(result) })
+  }, [myLat, myLng, isLoaded])
 
   // Navegação estilo Waze: heading e posição prévia
   const headingRef  = useRef(0)
@@ -208,8 +225,9 @@ function MapaMotoboy({
     const lLat = lojaLatRef.current;   const lLng = lojaLngRef.current
     const oLat = myLatRef.current;     const oLng = myLngRef.current
 
-    // Força recalcular rota (pode ter falhado na primeira vez)
+    // Limpa rota anterior e recalcula com posição GPS atual
     if (dLat && dLng) {
+      setDirections(null)  // mostra Polyline fallback enquanto recalcula
       const svc = new google.maps.DirectionsService()
       svc.route({
         origin:      { lat: oLat, lng: oLng },
@@ -242,7 +260,7 @@ function MapaMotoboy({
     return () => clearTimeout(t)
   }, [fitBoundsTrigger])
 
-  // Recalcula rota APENAS quando o destino ou loja mudam — não a cada update de GPS
+  // Recalcula rota quando destino/loja mudam
   useEffect(() => {
     if (!isLoaded || !destinoLat || !destinoLng) {
       setDirections(null)
@@ -263,6 +281,7 @@ function MapaMotoboy({
       mapInstanceRef.current.fitBounds(b, { top: 60, right: 24, bottom: 320, left: 24 })
     }
 
+    setDirections(null)
     const svc = new google.maps.DirectionsService()
     svc.route({
       origin:      { lat, lng },
