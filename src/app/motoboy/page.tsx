@@ -523,6 +523,8 @@ export default function MotoboyPage() {
   const dragStartH  = useRef(0)
   const isDragging  = useRef(false)
 
+  const [fullscreenMap, setFullscreenMap] = useState(false)
+
   const prevProntosRef  = useRef<Set<string>>(new Set())
   const isFirstLoad     = useRef(true)
   const justAcceptedRef  = useRef(false)
@@ -1079,6 +1081,18 @@ export default function MotoboyPage() {
     } catch {}
   }
 
+  // ── Priorizar 2ª entrega (troca posição no array emAndamento) ───────────────
+  function priorizarSegundaEntrega(segundaId: string) {
+    setEmAndamento(prev => {
+      const idx = prev.findIndex(p => p.id === segundaId)
+      if (idx <= 0) return prev
+      const arr = [...prev]
+      ;[arr[0], arr[idx]] = [arr[idx], arr[0]]
+      return arr
+    })
+    setSegundoAberto(false)
+  }
+
   // ── Avançar etapa da corrida ativa (Tópico 03) ────────────────────────────
   async function avancarEtapa(pedidoAlvo?: Pedido, fotoUrl?: string) {
     // Se já está concluída, volta para o estado normal
@@ -1182,7 +1196,15 @@ export default function MotoboyPage() {
     : []
 
   return (
-    <div style={{ position: "fixed", top: 52, left: 0, right: 0, bottom: 60, background: "#1a1a2e" }}>
+    <div style={{
+      position: "fixed",
+      top: fullscreenMap ? 0 : 52,
+      left: 0, right: 0,
+      bottom: fullscreenMap ? 0 : 60,
+      background: "#1a1a2e",
+      zIndex: fullscreenMap ? 999 : "auto" as any,
+      transition: "top 0.25s, bottom 0.25s",
+    }}>
 
       {/* Mapa */}
       <MapaMotoboy
@@ -1199,7 +1221,7 @@ export default function MotoboyPage() {
 
       {/* ── Toast de erro ── */}
       {/* ── Banner de status no mapa ── */}
-      {(corridaAtiva || corridaConcluida) && (
+      {(corridaAtiva || corridaConcluida) && !fullscreenMap && (
         <div style={{
           position: "absolute",
           top: 12, left: 12, right: 12, zIndex: 30,
@@ -1272,7 +1294,7 @@ export default function MotoboyPage() {
       )}
 
       {/* ── Ganhos do dia — badge central no topo ── */}
-      <div style={{
+      {!fullscreenMap && <div style={{
         position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 20,
         background: "rgba(0,0,0,0.78)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
         borderRadius: 999, padding: "8px 18px",
@@ -1290,10 +1312,10 @@ export default function MotoboyPage() {
         <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, fontWeight: 600 }}>
           {corridasDia > 0 ? `${corridasDia}x · hoje` : "hoje"}
         </span>
-      </div>
+      </div>}
 
       {/* ── Toggle online/offline — canto superior direito ── */}
-      <div
+      {!fullscreenMap && <div
         onClick={!dispLoading && !togglingDisp && !corridaAtiva && !corridaConcluida ? toggleDisponivel : undefined}
         style={{
           position: "absolute", top: 12, right: 12, zIndex: 20,
@@ -1341,7 +1363,7 @@ export default function MotoboyPage() {
         }}>
           {togglingDisp ? "..." : disponivel ? "Online" : "Offline"}
         </span>
-      </div>
+      </div>}
 
       {/* ── Botão de raio de atuação — canto inferior direito sobre o mapa ── */}
       {!corridaAtiva && !corridaConcluida && (
@@ -1406,8 +1428,44 @@ export default function MotoboyPage() {
         </div>
       )}
 
+      {/* ── Botão tela cheia — canto inferior esquerdo do mapa ── */}
+      {corridaAtiva && !corridaConcluida && (
+        <button
+          onClick={() => {
+            setFullscreenMap(f => {
+              if (!f) setSheetH(0)
+              else setSheetH(SHEET_MID)
+              return !f
+            })
+          }}
+          style={{
+            position: "absolute",
+            bottom: fullscreenMap ? 24 : sheetH + 16,
+            left: 16, zIndex: 40,
+            width: 44, height: 44, borderRadius: "50%", border: "none",
+            background: fullscreenMap ? "rgba(249,115,22,0.9)" : "rgba(10,10,10,0.82)",
+            backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
+            boxShadow: "0 2px 14px rgba(0,0,0,0.5)",
+            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+            transition: "all 0.25s",
+          }}
+        >
+          {fullscreenMap ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/>
+              <line x1="10" y1="14" x2="3" y2="21"/><line x1="21" y1="3" x2="14" y2="10"/>
+            </svg>
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(249,115,22,0.9)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+              <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+            </svg>
+          )}
+        </button>
+      )}
+
       {/* ── GPS badge + cidade — canto superior esquerdo ── */}
-      {disponivel && (
+      {disponivel && !fullscreenMap && (
         <div style={{
           position: "absolute", top: 12, left: 12, zIndex: 20,
           background: "rgba(0,0,0,0.72)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
@@ -1457,7 +1515,7 @@ export default function MotoboyPage() {
       )}
 
       {/* ── Badge do 2º pedido ativo (botão flutuante) ── */}
-      {segundaEntrega && !corridaConcluida && (
+      {segundaEntrega && !corridaConcluida && !fullscreenMap && (
         <button
           onClick={() => setSegundoAberto(o => !o)}
           style={{
@@ -1526,6 +1584,22 @@ export default function MotoboyPage() {
             </p>
           </div>
 
+          {/* Priorizar: troca a ordem — o mapa passa a rotear para este primeiro */}
+          <button
+            onClick={() => priorizarSegundaEntrega(segundaEntrega.id)}
+            style={{
+              width: "100%", padding: "11px", borderRadius: 12, border: "1.5px solid rgba(249,115,22,0.6)",
+              background: "transparent", color: "#f97316", fontWeight: 900, fontSize: 13, cursor: "pointer",
+              marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="17 11 21 7 17 3"/><line x1="21" y1="7" x2="9" y2="7"/>
+              <polyline points="7 21 3 17 7 13"/><line x1="15" y1="17" x2="3" y2="17"/>
+            </svg>
+            Priorizar esta entrega
+          </button>
+
           {segundaEntrega.status === "indo_para_loja" && (
             <button onClick={() => { avancarEtapa(segundaEntrega); setSegundoAberto(false) }} disabled={avancandoEtapa} style={{
               width: "100%", padding: "12px", borderRadius: 12, border: "none",
@@ -1592,7 +1666,7 @@ export default function MotoboyPage() {
       )}
 
       {/* ── Painel de corrida ativa (Tópico 03) ── */}
-      {(corridaAtiva || corridaConcluida) && (
+      {(corridaAtiva || corridaConcluida) && !fullscreenMap && (
         <CorridaAtivaPanel
           pedido={corridaAtiva}
           corridaConcluida={corridaConcluida}
@@ -1612,8 +1686,8 @@ export default function MotoboyPage() {
         />
       )}
 
-      {/* ── Bottom Sheet (só quando sem corrida ativa) ── */}
-      {!corridaAtiva && !corridaConcluida && <div
+      {/* ── Bottom Sheet (só quando sem corrida ativa e não em fullscreen) ── */}
+      {!corridaAtiva && !corridaConcluida && !fullscreenMap && <div
         style={{
           position: "absolute", left: 0, right: 0, bottom: 0,
           height: sheetH, background: "#111",
