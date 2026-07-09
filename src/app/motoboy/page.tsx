@@ -52,16 +52,17 @@ function urlBase64ToUint8Array(base64String: string) {
 
 async function geocodeAddress(address: string): Promise<[number, number] | null> {
   try {
-    const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY
-    const q   = encodeURIComponent(`${address}, Brasil`)
+    const q    = encodeURIComponent(`${address}, Brasil`)
     const ctrl = new AbortController()
-    const tid  = setTimeout(() => ctrl.abort(), 5000)
-    const res  = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${q}&key=${key}`, { signal: ctrl.signal })
+    const tid  = setTimeout(() => ctrl.abort(), 6000)
+    const res  = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&accept-language=pt-BR`,
+      { headers: { "User-Agent": "AragoDelivery/1.0" }, signal: ctrl.signal }
+    )
     clearTimeout(tid)
     const data = await res.json()
-    if (data.status === "OK" && data.results[0]) {
-      const loc = data.results[0].geometry.location
-      return [loc.lat, loc.lng]
+    if (Array.isArray(data) && data[0]?.lat && data[0]?.lon) {
+      return [parseFloat(data[0].lat), parseFloat(data[0].lon)]
     }
     return null
   } catch { return null }
@@ -69,24 +70,20 @@ async function geocodeAddress(address: string): Promise<[number, number] | null>
 
 async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
   try {
-    const key  = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY
     const ctrl = new AbortController()
     const tid  = setTimeout(() => ctrl.abort(), 5000)
     const res  = await fetch(
-      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${key}&language=pt-BR&result_type=locality|administrative_area_level_2`,
-      { signal: ctrl.signal }
+      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=pt-BR`,
+      { headers: { "User-Agent": "AragoDelivery/1.0" }, signal: ctrl.signal }
     )
     clearTimeout(tid)
     const data = await res.json()
-    if (data.status === "OK" && data.results[0]) {
-      const c = data.results[0].address_components as { types: string[]; short_name: string }[]
-      const city  = c?.find(x => x.types.includes("administrative_area_level_2"))?.short_name
-      const state = c?.find(x => x.types.includes("administrative_area_level_1"))?.short_name
-      if (city && state) return `${city} · ${state}`
-      return data.results[0].formatted_address.split(",")[0]
-    }
-  } catch {}
-  return null
+    const a = data?.address ?? {}
+    const city  = a.city || a.town || a.village || a.municipality || ""
+    const state = a.state_code || a.state || ""
+    if (city) return state ? `${city} · ${state}` : city
+    return null
+  } catch { return null }
 }
 
 
