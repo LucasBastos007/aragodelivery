@@ -197,12 +197,14 @@ function MapaMotoboy({
       const map = mapInstanceRef.current
       if (!map) return
       if (navMode) {
+        map.setMapTypeId("hybrid")
         map.setZoom(17)
         map.setTilt(45)
         map.setHeading(headingRef.current)
         followRef.current = true
         setFollowing(true)
       } else {
+        map.setMapTypeId("roadmap")
         map.setTilt(0)
         map.setHeading(0)
       }
@@ -326,7 +328,9 @@ function MapaMotoboy({
       center={{ lat: myLat, lng: myLng }}
       zoom={16}
       options={{
-        mapTypeId: "roadmap",
+        // hybrid (satélite + labels) suporta tilt nativo mesmo em raster.
+        // roadmap com styles customizados força modo raster que bloqueia tilt.
+        mapTypeId: navMode ? "hybrid" : "roadmap",
         disableDefaultUI: true,
         zoomControl: false,
         gestureHandling: "greedy",
@@ -336,13 +340,11 @@ function MapaMotoboy({
         clickableIcons: false,
         tilt: navMode ? 45 : 0,
         heading: navMode ? headingRef.current : 0,
-        // Em navMode: sem styles → mapa vetorial → suporta tilt/heading 3D
-        // Fora de navMode: dark styles (raster), tilt não necessário
         styles: navMode ? undefined : DARK_MAP_STYLE,
       }}
       onLoad={m => {
         mapInstanceRef.current = m
-        if (navMode) { m.setZoom(17); m.setTilt(45); m.setHeading(headingRef.current) }
+        if (navMode) { m.setMapTypeId("hybrid"); m.setZoom(17); m.setTilt(45); m.setHeading(headingRef.current) }
       }}
       onDragStart={() => { followRef.current = false; setFollowing(false) }}
     >
@@ -470,7 +472,7 @@ function MapaMotoboy({
           if (map) {
             map.panTo({ lat: myLat, lng: myLng })
             map.setZoom(navMode ? 17 : 16)
-            if (navMode) { map.setTilt(45); map.setHeading(headingRef.current) }
+            if (navMode) { map.setMapTypeId("hybrid"); map.setTilt(45); map.setHeading(headingRef.current) }
           }
           followRef.current = true
           setFollowing(true)
