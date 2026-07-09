@@ -2655,7 +2655,7 @@ function NavModal({ destino, onClose, onNavApp }: { destino: { texto: string; la
         <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>Navegar até</p>
         <p style={{ color: "white", fontWeight: 700, fontSize: 14, marginBottom: 20, lineHeight: 1.3 }}>{destino.texto}</p>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {coords && onNavApp && (
+          {onNavApp && (
             <button
               onClick={() => { onNavApp(); onClose() }}
               style={{
