@@ -193,17 +193,24 @@ function MapaMotoboy({
 
   // Configura zoom e perspectiva ao entrar/sair do modo navegação
   useEffect(() => {
-    const map = mapInstanceRef.current
-    if (!map) return
-    if (navMode) {
-      map.setZoom(17)
-      map.setTilt(45)
-      followRef.current = true
-      setFollowing(true)
-    } else {
-      map.setTilt(0)
-      map.setHeading(0)
+    const apply = () => {
+      const map = mapInstanceRef.current
+      if (!map) return
+      if (navMode) {
+        map.setZoom(17)
+        map.setTilt(45)
+        map.setHeading(headingRef.current)
+        followRef.current = true
+        setFollowing(true)
+      } else {
+        map.setTilt(0)
+        map.setHeading(0)
+      }
     }
+    apply()
+    // Retry após mapa carregar (mapInstanceRef pode ser null no primeiro render)
+    const t = setTimeout(apply, 800)
+    return () => clearTimeout(t)
   }, [navMode])
 
   // Refs para destino e loja — permite acessar valores atuais no closure do fitBoundsTrigger
@@ -329,22 +336,14 @@ function MapaMotoboy({
         clickableIcons: false,
         tilt: navMode ? 45 : 0,
         heading: navMode ? headingRef.current : 0,
-        styles: navMode ? [
-          { elementType: "geometry",              stylers: [{ color: "#0f1428" }] },
-          { elementType: "labels.text.fill",      stylers: [{ color: "#8899bb" }] },
-          { elementType: "labels.text.stroke",    stylers: [{ color: "#0f1428" }] },
-          { featureType: "road",           elementType: "geometry",        stylers: [{ color: "#1e2d5a" }] },
-          { featureType: "road",           elementType: "geometry.stroke", stylers: [{ color: "#0a0f24" }] },
-          { featureType: "road",           elementType: "labels.text.fill",stylers: [{ color: "#cdd5e0" }] },
-          { featureType: "road.highway",   elementType: "geometry",        stylers: [{ color: "#2a3d7c" }] },
-          { featureType: "road.highway",   elementType: "labels.text.fill",stylers: [{ color: "#e2e8f0" }] },
-          { featureType: "water",          elementType: "geometry",        stylers: [{ color: "#071020" }] },
-          { featureType: "poi",            stylers: [{ visibility: "off" }] },
-          { featureType: "transit",        stylers: [{ visibility: "off" }] },
-          { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#1e2d5a" }] },
-        ] : undefined,
+        // Em navMode: sem styles → mapa vetorial → suporta tilt/heading 3D
+        // Fora de navMode: dark styles (raster), tilt não necessário
+        styles: navMode ? undefined : DARK_MAP_STYLE,
       }}
-      onLoad={m => { mapInstanceRef.current = m }}
+      onLoad={m => {
+        mapInstanceRef.current = m
+        if (navMode) { m.setZoom(17); m.setTilt(45); m.setHeading(headingRef.current) }
+      }}
       onDragStart={() => { followRef.current = false; setFollowing(false) }}
     >
       {/* Marcador do motoboy */}
@@ -467,9 +466,11 @@ function MapaMotoboy({
     {!following && (
       <button
         onClick={() => {
-          if (mapInstanceRef.current) {
-            mapInstanceRef.current.panTo({ lat: myLat, lng: myLng })
-            mapInstanceRef.current.setZoom(16)
+          const map = mapInstanceRef.current
+          if (map) {
+            map.panTo({ lat: myLat, lng: myLng })
+            map.setZoom(navMode ? 17 : 16)
+            if (navMode) { map.setTilt(45); map.setHeading(headingRef.current) }
           }
           followRef.current = true
           setFollowing(true)
