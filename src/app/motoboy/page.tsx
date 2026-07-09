@@ -2033,6 +2033,7 @@ function CorridaAtivaPanel({
   const [erroConfirm,     setErroConfirm]     = useState("")
   const [chegueiEnviado,  setChegueiEnviado]  = useState(false)
   const [enviandoCheguei, setEnviandoCheguei] = useState(false)
+  const [collapsed,       setCollapsed]       = useState(false)
 
   const p    = corridaConcluida ?? pedido
   const loja = p?.loja
@@ -2065,14 +2066,25 @@ function CorridaAtivaPanel({
     onAvancar()
   }
 
+  const expandedH = etapa === 2 && !chegueiEnviado ? "38%" : "52%"
+  const STATUS_LABEL: Record<string, string> = {
+    "indo_para_loja": "🏪 Indo à loja",
+    "na_loja":        "📦 Na loja",
+    "em_rota":        "🏠 Em rota",
+    "coletado":       "🛵 Em rota",
+    "entregue":       "✅ Entregue",
+  }
+  const statusLabel = corridaConcluida ? "✅ Entregue" : STATUS_LABEL[pedido?.status ?? ""] ?? "Em andamento"
+
   return (
     <div style={{
       position: "absolute", left: 0, right: 0, bottom: 0,
-      height: etapa === 2 && !chegueiEnviado ? "38%" : "52%", background: "#1C1C1E",
+      height: collapsed ? 52 : expandedH, background: "#1C1C1E",
       borderRadius: "20px 20px 0 0",
       boxShadow: "0 -4px 32px rgba(0,0,0,0.7)",
       zIndex: 35, display: "flex", flexDirection: "column",
       overflow: "hidden", boxSizing: "border-box",
+      transition: "height 0.3s cubic-bezier(0.32,0.72,0,1)",
     }}>
       {/* Modal de navegação */}
       {navDestino && (
@@ -2086,13 +2098,29 @@ function CorridaAtivaPanel({
         />
       )}
 
-      {/* Handle */}
-      <div style={{ padding: "8px 0 4px", display: "flex", justifyContent: "center", flexShrink: 0 }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.1)" }} />
+      {/* Handle + toggle */}
+      <div
+        onClick={() => setCollapsed(c => !c)}
+        style={{ padding: "8px 16px 4px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, cursor: "pointer", userSelect: "none" }}
+      >
+        <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.15)" }} />
+        </div>
       </div>
 
+      {/* Barra de status colapsada */}
+      {collapsed && (
+        <div
+          onClick={() => setCollapsed(false)}
+          style={{ padding: "0 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}
+        >
+          <span style={{ color: "white", fontWeight: 700, fontSize: 13 }}>{statusLabel}</span>
+          <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>▲ expandir</span>
+        </div>
+      )}
+
       {/* Conteúdo */}
-      <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "10px 16px 16px", width: "100%", boxSizing: "border-box" }}>
+      {!collapsed && <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "2px 16px 16px", width: "100%", boxSizing: "border-box" }}>
 
         {/* ETAPA 4 — Entregue */}
         {etapa === 3 && (
@@ -2318,7 +2346,7 @@ function CorridaAtivaPanel({
             </div>
           </>
         )}
-      </div>
+      </div>}
     </div>
   )
 }
