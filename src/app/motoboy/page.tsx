@@ -437,36 +437,38 @@ function MapaMotoboy({
         </div>
       )}
 
-      {/* Botão Centralizar — overlay sobre o mapa */}
-      {!following && (
-        <button
-          onClick={() => {
-            const map = mapInstanceRef.current
-            if (map) {
-              map.panTo({ lat: myLat, lng: myLng })
-              map.setZoom(navMode ? 17 : 16)
-              if (navMode) { map.setTilt(45); map.setHeading(headingRef.current) }
-            }
-            followRef.current = true
-            setFollowing(true)
-          }}
-          style={{
-            position: "absolute", bottom: 24, right: 16, zIndex: 40,
-            display: "flex", alignItems: "center", gap: 6,
-            padding: "10px 16px", background: "rgba(26,26,46,0.92)",
-            border: "1.5px solid rgba(249,115,22,0.6)", borderRadius: 24,
-            color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer",
-            boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
-            backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
-          }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/>
-            <line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>
-          </svg>
-          Centralizar
-        </button>
-      )}
+      {/* Botão Centralizar — sempre visível */}
+      <button
+        onClick={() => {
+          const map = mapInstanceRef.current
+          if (map) {
+            map.panTo({ lat: myLat, lng: myLng })
+            map.setZoom(navMode ? 17 : 16)
+            if (navMode) { map.setTilt(45); map.setHeading(headingRef.current) }
+          }
+          followRef.current = true
+          setFollowing(true)
+        }}
+        style={{
+          position: "absolute", bottom: 24, right: 16, zIndex: 40,
+          display: "flex", alignItems: "center", gap: 6,
+          padding: "10px 16px",
+          background: following ? "rgba(249,115,22,0.18)" : "rgba(26,26,46,0.92)",
+          border: following ? "1.5px solid rgba(249,115,22,0.35)" : "1.5px solid rgba(249,115,22,0.7)",
+          borderRadius: 24,
+          color: following ? "rgba(255,255,255,0.5)" : "white",
+          fontSize: 13, fontWeight: 700, cursor: "pointer",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+          backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+          transition: "all 0.2s",
+        }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={following ? "rgba(249,115,22,0.5)" : "#f97316"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/>
+          <line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>
+        </svg>
+        Centralizar
+      </button>
     </>
   )
 }
