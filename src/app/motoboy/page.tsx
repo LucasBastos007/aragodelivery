@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
 import type { Pedido } from "@/types"
-import { GoogleMap, useJsApiLoader, OverlayView, DirectionsRenderer, Circle } from "@react-google-maps/api"
+import { GoogleMap, useJsApiLoader, OverlayView, DirectionsRenderer, Circle, Polyline } from "@react-google-maps/api"
 
 const GMAPS_LIBS: ("geometry" | "places")[] = []
 
@@ -204,18 +204,32 @@ function MapaMotoboy({
   useEffect(() => {
     if (!fitBoundsTrigger || !mapInstanceRef.current) return
     const map = mapInstanceRef.current
+    const dLat = destinoLatRef.current; const dLng = destinoLngRef.current
+    const lLat = lojaLatRef.current;   const lLng = lojaLngRef.current
+    const oLat = myLatRef.current;     const oLng = myLngRef.current
+
+    // Força recalcular rota (pode ter falhado na primeira vez)
+    if (dLat && dLng) {
+      const svc = new google.maps.DirectionsService()
+      svc.route({
+        origin:      { lat: oLat, lng: oLng },
+        destination: { lat: dLat, lng: dLng },
+        travelMode:  google.maps.TravelMode.DRIVING,
+      }, (result, status) => {
+        if (status === "OK" && result) setDirections(result)
+      })
+    }
+
     map.setTilt(0)
     map.setHeading(0)
     const b = new google.maps.LatLngBounds()
-    b.extend({ lat: myLatRef.current, lng: myLngRef.current })
-    const dLat = destinoLatRef.current; const dLng = destinoLngRef.current
+    b.extend({ lat: oLat, lng: oLng })
     if (dLat && dLng) b.extend({ lat: dLat, lng: dLng })
-    const lLat = lojaLatRef.current;   const lLng = lojaLngRef.current
     if (lLat && lLng) b.extend({ lat: lLat, lng: lLng })
     map.fitBounds(b, { top: 80, right: 32, bottom: 300, left: 32 })
     followRef.current = false
     setFollowing(false)
-    const isNav = !!(destinoLatRef.current && destinoLngRef.current)
+    const isNav = !!(dLat && dLng)
     const t = setTimeout(() => {
       if (isNav) {
         map.setZoom(17)
@@ -389,7 +403,7 @@ function MapaMotoboy({
         </OverlayView>
       ))}
 
-      {/* Rota */}
+      {/* Rota calculada pela Directions API */}
       {directions && (
         <DirectionsRenderer
           directions={directions}
@@ -402,6 +416,19 @@ function MapaMotoboy({
               strokeOpacity: 0.9,
             },
           }}
+        />
+      )}
+
+      {/* Fallback: linha reta quando Directions API não retornou rota */}
+      {!directions && destinoLat && destinoLng && (
+        <Polyline
+          path={[{ lat: myLat, lng: myLng }, { lat: destinoLat, lng: destinoLng }]}
+          options={{
+            strokeColor:   navMode ? "#22d3ee" : "#f97316",
+            strokeWeight:  navMode ? 5 : 4,
+            strokeOpacity: 0.6,
+            strokeDasharray: "8 6",
+          } as any}
         />
       )}
 
