@@ -1,14 +1,18 @@
 "use client"
 
 import { createContext, useContext, useEffect, useState } from "react"
+import type { AdicionalProduto } from "@/types"
 
 export type CartItem = {
   id: string
+  produto_id?: string
   nome: string
   preco: number
   quantidade: number
   loja_id: string
   loja_nome: string
+  observacao?: string
+  adicionais?: AdicionalProduto[]
 }
 
 type CartCtx = {

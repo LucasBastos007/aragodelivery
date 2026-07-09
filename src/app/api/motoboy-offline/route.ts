@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
 
     await supabase
       .from("motoboys")
-      .update({ disponivel: false, last_seen: new Date().toISOString() })
+      .update({ disponivel: false })
       .eq("id", motoboy_id)
   } catch {}
   return new Response("ok")

@@ -75,6 +75,23 @@ export default function CarrinhoPage() {
             }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ color: "#111827", fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{item.nome}</p>
+                {item.adicionais && item.adicionais.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 4 }}>
+                    {item.adicionais.map(a => (
+                      <span key={a.id} style={{
+                        fontSize: 11, fontWeight: 600, padding: "2px 7px", borderRadius: 20,
+                        background: "rgba(249,115,22,0.1)", color: "#c2410c",
+                      }}>
+                        {a.nome} +R${a.preco.toFixed(2)}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {item.observacao && (
+                  <p style={{ color: "#9CA3AF", fontSize: 12, fontStyle: "italic", marginBottom: 2 }}>
+                    Obs: {item.observacao}
+                  </p>
+                )}
                 <p style={{ color: "#DC2626", fontWeight: 700, fontSize: 13 }}>R$ {item.preco.toFixed(2)} / un.</p>
               </div>
 
@@ -94,7 +111,7 @@ export default function CarrinhoPage() {
                   {item.quantidade}
                 </span>
                 <button
-                  onClick={() => add({ id: item.id, nome: item.nome, preco: item.preco, loja_id: item.loja_id, loja_nome: item.loja_nome })}
+                  onClick={() => add({ id: item.id, produto_id: item.produto_id ?? item.id, nome: item.nome, preco: item.preco, loja_id: item.loja_id, loja_nome: item.loja_nome, observacao: item.observacao, adicionais: item.adicionais })}
                   style={{
                     width: 30, height: 30, borderRadius: 8, border: "none",
                     background: "#DC2626", color: "white", fontSize: 18, cursor: "pointer",

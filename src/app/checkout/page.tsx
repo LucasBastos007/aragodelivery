@@ -16,61 +16,64 @@ const MapaPicker = dynamic(() => import("@/components/MapaPicker"), { ssr: false
 const PAGAMENTOS: { value: FormaPagamento; label: string; platforms: ("ios"|"android"|"other")[]; breve?: boolean }[] = [
   { value: "pix",        label: "PIX",        platforms: ["ios","android","other"] },
   { value: "cartao",     label: "Cartão",     platforms: ["ios","android","other"] },
-  { value: "apple_pay",  label: "Apple Pay",  platforms: ["ios","other"],          breve: true },
-  { value: "google_pay", label: "Google Pay", platforms: ["android","other"],       breve: true },
+  { value: "google_pay", label: "Google Pay", platforms: ["android"] },
 ]
 
+// Logo PIX — diamante arredondado + 2 lentes diagonais brancas (padrão oficial BCB)
 function PixLogo() {
   return (
-    <svg width="26" height="26" viewBox="0 0 100 100" fill="none">
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
       <defs>
-        <linearGradient id="pixg" x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse">
-          <stop offset="0%" stopColor="#4DD0C4"/>
-          <stop offset="100%" stopColor="#1FAF9F"/>
-        </linearGradient>
+        <clipPath id="pix-clip">
+          <rect x="7" y="7" width="22" height="22" rx="5" transform="rotate(45 18 18)"/>
+        </clipPath>
       </defs>
-      <rect width="100" height="100" rx="22" fill="url(#pixg)"/>
-      {/* 4 quadrilateral "key" shapes forming the Pix cross-diamond */}
-      <path d="M50 14 L37 27 L50 40 L63 27 Z" fill="white"/>
-      <path d="M50 86 L63 73 L50 60 L37 73 Z" fill="white"/>
-      <path d="M14 50 L27 37 L40 50 L27 63 Z" fill="white"/>
-      <path d="M86 50 L73 63 L60 50 L73 37 Z" fill="white"/>
+      <rect x="7" y="7" width="22" height="22" rx="5" transform="rotate(45 18 18)" fill="#32BCAD"/>
+      {/* Lente diagonal NW→SE (cria pétalas N e S) */}
+      <path d="M10,10 C22,8 28,14 26,26 C14,28 8,22 10,10 Z"
+            fill="white" clipPath="url(#pix-clip)"/>
+      {/* Lente diagonal NE→SW (cria pétalas L e O) */}
+      <path d="M26,10 C28,22 22,28 10,26 C8,14 14,8 26,10 Z"
+            fill="white" clipPath="url(#pix-clip)"/>
     </svg>
   )
 }
 
+// Cartão com chip dourado + Mastercard
 function CardLogo() {
   return (
-    <svg width="30" height="22" viewBox="0 0 120 88" fill="none">
-      <rect width="120" height="88" rx="12" fill="#1E293B"/>
-      <rect x="0" y="22" width="120" height="18" fill="#2563EB"/>
-      <rect x="10" y="52" width="28" height="6" rx="3" fill="rgba(255,255,255,0.45)"/>
-      <rect x="10" y="62" width="18" height="4" rx="2" fill="rgba(255,255,255,0.25)"/>
-      <rect x="10" y="10" width="22" height="16" rx="3" fill="#F59E0B" opacity="0.9"/>
-      <circle cx="96" cy="62" r="11" fill="#EB001B" opacity="0.85"/>
-      <circle cx="109" cy="62" r="11" fill="#F79E1B" opacity="0.85"/>
+    <svg width="42" height="28" viewBox="0 0 84 56" fill="none">
+      <rect width="84" height="56" rx="7" fill="#1A1F36"/>
+      <rect y="14" width="84" height="11" fill="#2D3561"/>
+      <rect x="7" y="6" width="14" height="10" rx="2" fill="#F5B800"/>
+      <line x1="7" y1="11" x2="21" y2="11" stroke="#C49800" strokeWidth="0.8"/>
+      <line x1="14" y1="6" x2="14" y2="16" stroke="#C49800" strokeWidth="0.8"/>
+      <circle cx="57" cy="39" r="9" fill="#EB001B"/>
+      <circle cx="68" cy="39" r="9" fill="#F79E1B"/>
+      <path d="M62.5 32.5 A9 9 0 0 1 62.5 45.5 A9 9 0 0 1 62.5 32.5" fill="#FF5F00"/>
     </svg>
+  )
+}
+
+// Google Pay: G oficial (paths do "Sign in with Google") + "Pay" em HTML
+function GooglePayLogo() {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+      <svg width="20" height="20" viewBox="0 0 48 48" fill="none">
+        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+      </svg>
+      <span style={{ fontSize: 13, fontWeight: 600, color: "#3C4043", fontFamily: "Arial, sans-serif" }}>Pay</span>
+    </div>
   )
 }
 
 function PaymentIcon({ method }: { method: FormaPagamento }) {
-  if (method === "pix")    return <PixLogo />
-  if (method === "cartao") return <CardLogo />
-  if (method === "apple_pay") return (
-    <svg width="44" height="18" viewBox="0 0 165 67" fill="currentColor">
-      <path d="M31.8 9.7c-1.8 2.1-4.7 3.8-7.6 3.5-.4-3 1.1-6.1 2.8-8 1.9-2.2 5-3.7 7.6-3.8.3 3.1-0.9 6.1-2.8 8.3zm2.7 4.3c-4.2-.2-7.8 2.4-9.8 2.4-2 0-5.1-2.3-8.4-2.2-4.3.1-8.3 2.5-10.5 6.4-4.5 7.8-1.2 19.3 3.2 25.6 2.1 3.1 4.7 6.6 8 6.5 3.2-.1 4.4-2.1 8.3-2.1 3.9 0 5 2.1 8.4 2 3.4-.1 5.6-3.1 7.7-6.2 2.4-3.5 3.4-6.9 3.5-7.1-.1-.1-6.7-2.6-6.7-10.2-.1-6.4 5.2-9.5 5.5-9.7-3-4.5-7.7-5-9.2-5.4z"/>
-      <path d="M72.5 4.5h-9.2v47.2h5.6V35.5h7.8c7.1 0 12-4.9 12-15.6 0-9.6-4.8-15.4-16.2-15.4zm1.3 26.2h-4.9V9.4h4.4c7.2 0 10 3.5 10 10.7 0 7.1-3.2 10.6-9.5 10.6zM96.6 52.2c3.5 0 6.7-1.7 8.2-4.5h.1v4.1h5.2V31.4c0-7-4.7-10.1-10.5-10.1-6 0-10.4 3.3-10.6 8.4h5c.5-2.4 2.3-4 5.3-4s4.8 1.5 4.8 4.8v2.4l-7 .4c-6.2.4-9.8 3.2-9.8 8.5-.1 5.4 3.6 10.4 9.3 10.4zm1.5-4.5c-2.9 0-5.1-1.6-5.1-4.5 0-2.7 1.9-4.4 5.8-4.6l6.1-.4v2.5c0 4-2.8 7-6.8 7zM120 64.8c5.2 0 7.7-2 10-8l10.9-29.2h-5.8l-7.2 22.7h-.1L120.5 27.6h-6l10.2 27.1-.6 1.7c-1 2.8-2.5 3.9-5.2 3.9-.5 0-1.5-.1-1.9-.1v4.5c.4 0 2.3.1 3 .1z"/>
-    </svg>
-  )
-  if (method === "google_pay") return (
-    <svg width="46" height="18" viewBox="0 0 80 32" fill="none">
-      <path d="M38.5 16.1c0 3.9-3 6.7-6.7 6.7s-6.7-2.8-6.7-6.7 3-6.7 6.7-6.7c1.9 0 3.4.7 4.6 1.8L34.2 13c-.7-.6-1.5-1-2.4-1-2.2 0-4 1.8-4 4.1s1.8 4.1 4 4.1c2 0 3.3-1.1 3.6-2.7h-3.6v-2.4h6.6c.1.3.1.7.1 1z" fill="#4285F4"/>
-      <path d="M49.1 16.1c0 3.7-2.8 6.7-6.4 6.7-3.6 0-6.4-3-6.4-6.7s2.8-6.7 6.4-6.7 6.4 3 6.4 6.7zm-2.8 0c0-2.3-1.7-3.9-3.6-3.9s-3.6 1.6-3.6 3.9 1.7 3.9 3.6 3.9 3.6-1.6 3.6-3.9z" fill="#EA4335"/>
-      <path d="M61.5 16.1c0 3.7-2.8 6.7-6.4 6.7-3.6 0-6.4-3-6.4-6.7s2.8-6.7 6.4-6.7 6.4 3 6.4 6.7zm-2.8 0c0-2.3-1.7-3.9-3.6-3.9s-3.6 1.6-3.6 3.9 1.7 3.9 3.6 3.9 3.6-1.6 3.6-3.9z" fill="#FBBC05"/>
-      <path d="M72.5 9.8v11.6c0 4.8-2.8 6.7-6.2 6.7-3.2 0-5.1-2.1-5.8-3.8l2.4-1c.4 1.1 1.4 2.3 3.4 2.3 2.2 0 3.6-1.4 3.6-3.9v-1h-.1c-.7.8-1.9 1.5-3.5 1.5-3.3 0-6.4-2.9-6.4-6.6s3.1-6.7 6.4-6.7c1.6 0 2.8.7 3.5 1.5h.1V9.8h2.6zm-2.4 6.4c0-2.2-1.5-3.8-3.4-3.8-1.9 0-3.5 1.6-3.5 3.8s1.6 3.8 3.5 3.8 3.4-1.6 3.4-3.8z" fill="#4285F4"/>
-      <text x="76" y="22" fontFamily="Arial" fontSize="14" fontWeight="700" fill="#5F6368">Pay</text>
-    </svg>
-  )
+  if (method === "pix")        return <PixLogo />
+  if (method === "cartao")     return <CardLogo />
+  if (method === "google_pay") return <GooglePayLogo />
   return null
 }
 
@@ -157,18 +160,10 @@ function EnderecoMapa({ onResult }: {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {/* Status GPS */}
+      {/* Status GPS — só mostra enquanto detecta */}
       {gpsStatus === "loading" && (
         <div style={{ background: "rgba(220,38,38,0.04)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: 12, padding: "10px 14px" }}>
           <p style={{ color: "#6B7280", fontSize: 13 }}>📡 Detectando sua localização...</p>
-        </div>
-      )}
-      {gpsStatus === "denied" && (
-        <div style={{ background: "rgba(234,179,8,0.06)", border: "1px solid rgba(234,179,8,0.2)", borderRadius: 12, padding: "10px 14px", display: "flex", gap: 8, alignItems: "center" }}>
-          <span>⚠️</span>
-          <p style={{ color: "#eab308", fontSize: 12, fontWeight: 500 }}>
-            GPS não disponível — arraste o pin ou clique no mapa para definir o local de entrega.
-          </p>
         </div>
       )}
 
@@ -239,6 +234,7 @@ export default function CheckoutPage() {
 
   const [nome, setNome]           = useState("")
   const [telefone, setTelefone]   = useState("")
+  const [cpf, setCpf]             = useState("")
   const [pagamento, setPagamento] = useState<FormaPagamento>("pix")
   const [obs, setObs]             = useState("")
   const [enviando, setEnviando]   = useState(false)
@@ -261,7 +257,8 @@ export default function CheckoutPage() {
   const [cardCpf,      setCardCpf]      = useState("")
   const [lgpdConsent,  setLgpdConsent]  = useState(false)
   const [salvarCartao, setSalvarCartao] = useState(false)
-  const [cartaoSalvo,  setCartaoSalvo]  = useState<{ last4: string; nome: string; validade: string } | null>(null)
+  const [cartaoSalvo,  setCartaoSalvo]  = useState<{ last4: string; nome: string; validade: string; token?: string } | null>(null)
+  const [cardToken,    setCardToken]    = useState<string | null>(null)
   const [usarSalvo,    setUsarSalvo]    = useState(false)
 
   // PIX modal
@@ -274,6 +271,8 @@ export default function CheckoutPage() {
   type EnderecoSalvo = { display: string; rua: string; numero: string; bairro: string; cidade: string; complemento: string; lat: number; lng: number }
   const [enderecoSalvo,    setEnderecoSalvo]    = useState<EnderecoSalvo | null>(null)
   const [editandoEndereco, setEditandoEndereco] = useState(false)
+  // Coordenadas do cliente vindas do mapa (usadas quando não há endereço salvo)
+  const [clienteCoords, setClienteCoords] = useState<{lat:number;lng:number}|null>(null)
 
   const geoRef = useRef<{ geo: GeoResult; numero: string; complemento: string } | null>(null)
 
@@ -320,7 +319,7 @@ export default function CheckoutPage() {
     }
   }, [perfil, enderecoSalvo])
 
-  // Carrega cartão salvo
+  // Carrega cartão salvo — se tiver token, habilita pagamento sem re-digitar número
   useEffect(() => {
     try {
       const raw = localStorage.getItem("arago_cartao")
@@ -328,26 +327,50 @@ export default function CheckoutPage() {
         const c = JSON.parse(raw)
         if (c?.last4 && c?.nome && c?.validade) {
           setCartaoSalvo(c)
-          setUsarSalvo(true)
+          setCardName(c.nome)
+          setCardExpiry(c.validade)
+          if (c.token) { setCardToken(c.token); setUsarSalvo(true) }
         }
       }
     } catch {}
   }, [])
 
-  // Pré-preenche do perfil do cliente logado
+  // Pré-preenche do perfil do cliente logado (DB ou metadados Auth como fallback)
   useEffect(() => {
     if (perfil?.nome)     setNome(perfil.nome)
     if (perfil?.telefone) setTelefone(perfil.telefone)
-  }, [perfil])
+    const cpfCarregado = perfil?.cpf || user?.user_metadata?.cpf
+    if (cpfCarregado)     setCpf(cpfCarregado)
+  }, [perfil, user])
 
   const loja_id    = items[0]?.loja_id ?? null
-  const [lojaData, setLojaData] = useState<{ taxa_entrega: number; endereco: string; nome: string } | null>(null)
+  const [lojaData, setLojaData] = useState<{ lat: number | null; lng: number | null; endereco: string; nome: string; taxa_entrega: number | null } | null>(null)
 
   useEffect(() => {
     if (!loja_id) return
-    supabase.from("lojas").select("taxa_entrega,endereco,nome").eq("id", loja_id).single()
+    supabase.from("lojas").select("lat,lng,endereco,nome,taxa_entrega").eq("id", loja_id).single()
       .then(({ data }) => setLojaData(data as any))
   }, [loja_id])
+
+  function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
+    const R = 6371
+    const dLat = (lat2 - lat1) * Math.PI / 180
+    const dLng = (lng2 - lng1) * Math.PI / 180
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  }
+
+  function calcularTaxa(): number {
+    if (tipoEntrega === "retirada") return 0
+    const base = lojaData?.taxa_entrega ?? 6.00
+    const latL = lojaData?.lat, lngL = lojaData?.lng
+    const latC = enderecoSalvo?.lat || clienteCoords?.lat
+    const lngC = enderecoSalvo?.lng || clienteCoords?.lng
+    if (!latL || !lngL || !latC || !lngC) return base
+    const dist = haversineKm(latL, lngL, latC, lngC)
+    if (dist <= 6) return base
+    return Math.round((base + (dist - 6) * 1.00) * 100) / 100
+  }
 
   // Polling PIX — verifica a cada 4s se o pagamento foi confirmado
   useEffect(() => {
@@ -364,7 +387,7 @@ export default function CheckoutPage() {
     return () => clearInterval(interval)
   }, [pixModal, pedidoId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const taxa        = tipoEntrega === "retirada" ? 0 : (lojaData?.taxa_entrega ?? 0)
+  const taxa        = calcularTaxa()
   const subtotal    = total
   const desconto    = cupomValido
     ? cupomValido.tipo === "percentual"
@@ -376,20 +399,15 @@ export default function CheckoutPage() {
   async function aplicarCupom() {
     if (!cupomInput.trim()) return
     setValidandoCupom(true); setCupomErro(""); setCupomValido(null)
-    const { data } = await supabase
-      .from("cupons")
-      .select("id, codigo, tipo, valor, pedido_minimo, validade, ativo")
-      .eq("codigo", cupomInput.trim().toUpperCase())
-      .or(`loja_id.is.null,loja_id.eq.${loja_id ?? "00000000-0000-0000-0000-000000000000"}`)
-      .limit(1)
-    const cupom = data?.[0]
-    if (!cupom || !cupom.ativo) { setCupomErro("Cupom inválido ou expirado."); setValidandoCupom(false); return }
-    if (cupom.validade && new Date(cupom.validade) < new Date()) { setCupomErro("Este cupom expirou."); setValidandoCupom(false); return }
-    if (cupom.pedido_minimo > 0 && subtotal < cupom.pedido_minimo) {
-      setCupomErro(`Pedido mínimo de R$ ${Number(cupom.pedido_minimo).toFixed(2)} para este cupom.`)
-      setValidandoCupom(false); return
-    }
-    setCupomValido(cupom); setValidandoCupom(false)
+    const params = new URLSearchParams({
+      codigo:   cupomInput.trim().toUpperCase(),
+      subtotal: String(subtotal),
+      ...(loja_id ? { loja_id } : {}),
+    })
+    const res  = await fetch(`/api/cupom/validar?${params}`)
+    const json = await res.json()
+    if (!res.ok) { setCupomErro(json.error ?? "Cupom inválido."); setValidandoCupom(false); return }
+    setCupomValido(json); setValidandoCupom(false)
   }
 
   function fmtCardNumber(v: string) {
@@ -411,7 +429,7 @@ export default function CheckoutPage() {
           <line x1="24" y1="24" x2="19" y2="20" stroke="#9CA3AF" strokeWidth="2.5" strokeLinecap="round"/>
         </svg>
         <p style={{ color: "#6B7280", fontWeight: 600 }}>Seu carrinho está vazio</p>
-        <Link href="/lojas" style={{ color: "#DC2626", fontWeight: 700 }}>← Ver lojas</Link>
+        <Link href="/" style={{ color: "#DC2626", fontWeight: 700 }}>← Ver lojas</Link>
       </div>
     )
   }
@@ -573,7 +591,7 @@ export default function CheckoutPage() {
             </Link>
           )}
 
-          <Link href="/lojas" style={{
+          <Link href="/" style={{
             display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
             padding: "14px 24px", borderRadius: 16,
             background: "#F9FAFB", border: "1.5px solid #e5e7eb",
@@ -593,19 +611,12 @@ export default function CheckoutPage() {
 
   async function processWalletPayment(total: number): Promise<boolean> {
     if (typeof window === "undefined" || !("PaymentRequest" in window)) {
-      setErro(
-        pagamento === "apple_pay"
-          ? "Apple Pay requer Safari no iPhone ou Mac com cartão configurado."
-          : "Google Pay requer Chrome com um cartão configurado na conta Google."
-      )
+      setErro("Google Pay requer Chrome com um cartão configurado na conta Google.")
       setEnviando(false)
       return false
     }
     try {
-      const methods: PaymentMethodData[] =
-        pagamento === "apple_pay"
-          ? [{ supportedMethods: "https://apple.com/apple-pay", data: { version: 3, merchantIdentifier: "merchant.delivery.arago", merchantCapabilities: ["supports3DS"], supportedNetworks: ["visa", "masterCard"], countryCode: "BR" } }]
-          : [{ supportedMethods: "https://google.com/pay", data: { environment: "PRODUCTION", apiVersion: 2, apiVersionMinor: 0, allowedPaymentMethods: [{ type: "CARD", parameters: { allowedAuthMethods: ["PAN_ONLY", "CRYPTOGRAM_3DS"], allowedCardNetworks: ["MASTERCARD", "VISA", "ELO"] } }], merchantInfo: { merchantName: "Chegô Delivery" } } }]
+      const methods: PaymentMethodData[] = [{ supportedMethods: "https://google.com/pay", data: { environment: "PRODUCTION", apiVersion: 2, apiVersionMinor: 0, allowedPaymentMethods: [{ type: "CARD", parameters: { allowedAuthMethods: ["PAN_ONLY", "CRYPTOGRAM_3DS"], allowedCardNetworks: ["MASTERCARD", "VISA", "ELO"] } }], merchantInfo: { merchantName: "Chegô Delivery" } } }]
 
       const pr = new PaymentRequest(methods, {
         total: { label: "Chegô Delivery", amount: { currency: "BRL", value: total.toFixed(2) } },
@@ -613,11 +624,7 @@ export default function CheckoutPage() {
 
       const canMake = await pr.canMakePayment()
       if (!canMake) {
-        setErro(
-          pagamento === "apple_pay"
-            ? "Apple Pay indisponível. Adicione um cartão no Wallet do iPhone ou use PIX/Cartão."
-            : "Google Pay indisponível. Adicione um cartão na sua conta Google ou use PIX/Cartão."
-        )
+        setErro("Google Pay indisponível. Adicione um cartão na sua conta Google ou use PIX/Cartão.")
         setEnviando(false)
         return false
       }
@@ -627,8 +634,9 @@ export default function CheckoutPage() {
       return true
     } catch (err: any) {
       if (err?.name === "AbortError") { setEnviando(false); return false }
-      // Outro erro (ex: merchant validation) — prossegue sem pagamento eletrônico
-      return true
+      setErro("Erro ao processar Google Pay. Use PIX ou Cartão.")
+      setEnviando(false)
+      return false
     }
   }
 
@@ -636,6 +644,21 @@ export default function CheckoutPage() {
     if (!nome.trim()) { setErro("Informe seu nome"); return }
     const telDigits = telefone.replace(/\D/g, "")
     if (telDigits.length < 8) { setErro("Informe um telefone válido (com DDD)"); return }
+
+    // CPF: estado local → perfil DB → metadados auth → busca no banco
+    let cpfFinal = cpf.replace(/\D/g, "")
+    if (cpfFinal.length !== 11) cpfFinal = (perfil?.cpf ?? "").replace(/\D/g, "")
+    if (cpfFinal.length !== 11) cpfFinal = (user?.user_metadata?.cpf ?? "").replace(/\D/g, "")
+    if (cpfFinal.length !== 11 && user?.id) {
+      const { data: dbCliente } = await supabase.from("clientes").select("cpf").eq("id", user.id).maybeSingle()
+      if (dbCliente?.cpf) { cpfFinal = dbCliente.cpf.replace(/\D/g, ""); setCpf(dbCliente.cpf) }
+    }
+
+    // PIX exige CPF (obrigação Asaas/Banco Central para pagamentos PIX)
+    if (pagamento === "pix" && cpfFinal.length !== 11) {
+      setErro("Informe seu CPF para pagar via PIX (obrigatório pelo Banco Central)")
+      return
+    }
 
     let enderecoFinal = ""
     let latFinal: number | null = null
@@ -668,7 +691,7 @@ export default function CheckoutPage() {
     setEnviando(true)
 
     // Carteiras digitais: tenta abrir UI nativa antes de salvar o pedido
-    if (pagamento === "apple_pay" || pagamento === "google_pay") {
+    if (pagamento === "google_pay") {
       const walletOk = await processWalletPayment(totalFinal)
       if (!walletOk) { setEnviando(false); return }
     }
@@ -687,7 +710,7 @@ export default function CheckoutPage() {
       body: JSON.stringify({
         loja_id,
         cliente_id:       user?.id ?? null,
-        items:            items.map(i => ({ produto_id: i.id, quantidade: i.quantidade, observacao: "" })),
+        items:            items.map(i => ({ produto_id: i.produto_id ?? i.id, quantidade: i.quantidade, observacao: i.observacao ?? "", adicionais: i.adicionais ?? [] })),
         forma_pagamento:  pagamento,
         tipo_entrega:     tipoEntrega,
         endereco_entrega: enderecoFinal,
@@ -698,6 +721,7 @@ export default function CheckoutPage() {
         nome_cliente:     nome.trim() || null,
         telefone_cliente: telefone.trim() || null,
         email_cliente:    user?.email ?? null,
+        cpf_cliente:      cpfFinal || null,
       }),
     }).then(r => r.json())
 
@@ -717,11 +741,13 @@ export default function CheckoutPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          pedido_id: pedido.id,
-          valor:     totalServidor,
-          nome:      nome.trim(),
-          telefone:  telefone.trim(),
-          email:     user?.email,
+          pedido_id:   pedido.id,
+          valor:       totalServidor,
+          nome:        nome.trim(),
+          telefone:    telefone.trim(),
+          email:       user?.email,
+          cpf_cliente: cpfFinal || null,
+          loja_id,
         }),
       }).then(r => r.json())
 
@@ -741,40 +767,91 @@ export default function CheckoutPage() {
     }
 
     // ─── Cartão: processa via Asaas ──────────────────────────────────────
-    if (pagamento === "cartao" && !usarSalvo) {
-      if (!cardCvv) { setErro("Informe o CVV do cartão"); setEnviando(false); return }
-      if (cardCpf.replace(/\D/g, "").length !== 11) {
+    if (pagamento === "cartao") {
+      const cpfCartao = (usarSalvo && cardToken) ? (cardCpf || cpfFinal) : cardCpf
+      if (cpfCartao.replace(/\D/g, "").length !== 11) {
         setErro("Informe o CPF do titular do cartão")
         setEnviando(false)
         return
       }
-      const [mes, anoShort] = cardExpiry.split("/")
-      const cartaoRes = await fetch("/api/pagamento/cartao", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          pedido_id:      pedido.id,
-          valor:          totalServidor,
-          nome:           nome.trim(),
-          telefone:       telefone.trim(),
-          email:          user?.email,
-          cpf:            cardCpf,
-          cep:            (enderecoSalvo as any)?.cep || "77000000",
-          numero_endereco:(enderecoSalvo as any)?.numero || geoRef.current?.numero || "S/N",
-          card: {
-            numero: cardNumber,
-            nome:   cardName,
-            mes,
-            ano:    (anoShort?.length === 2 ? "20" : "") + anoShort,
-            cvv:    cardCvv,
-          },
-        }),
-      }).then(r => r.json())
+
+      let cartaoRes: any
+
+      if (usarSalvo && cardToken) {
+        // Pagamento com token — não precisa de número completo
+        cartaoRes = await fetch("/api/pagamento/cartao-token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pedido_id:      pedido.id,
+            valor:          totalServidor,
+            nome:           nome.trim(),
+            telefone:       telefone.trim(),
+            email:          user?.email || `cliente_${cpfCartao.replace(/\D/g, "")}@chegodelivery.com`,
+            cpf:            cpfCartao,
+            cep:            ((enderecoSalvo as any)?.cep || "75370000").replace(/\D/g, ""),
+            numero_endereco:(enderecoSalvo as any)?.numero || geoRef.current?.numero || "S/N",
+            token:          cardToken,
+            loja_id,
+          }),
+        }).then(r => r.json())
+      } else {
+        if (!cardCvv) { setErro("Informe o CVV do cartão"); setEnviando(false); return }
+        const [mes, anoShort] = cardExpiry.split("/")
+        cartaoRes = await fetch("/api/pagamento/cartao", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pedido_id:      pedido.id,
+            valor:          totalServidor,
+            nome:           nome.trim(),
+            telefone:       telefone.trim(),
+            email:          user?.email || `cliente_${cpfCartao.replace(/\D/g, "")}@chegodelivery.com`,
+            cpf:            cpfCartao,
+            cep:            ((enderecoSalvo as any)?.cep || (geoRef.current as any)?.cep || "75370000").replace(/\D/g, ""),
+            numero_endereco:(enderecoSalvo as any)?.numero || geoRef.current?.numero || "S/N",
+            card: {
+              numero: cardNumber,
+              nome:   cardName,
+              mes,
+              ano:    (anoShort?.length === 2 ? "20" : "") + anoShort,
+              cvv:    cardCvv,
+            },
+            loja_id,
+          }),
+        }).then(r => r.json())
+      }
 
       if (cartaoRes.error) {
         setErro(cartaoRes.error)
         setEnviando(false)
         return
+      }
+
+      // Atualiza token se Asaas retornou um novo
+      if (cartaoRes.cardToken) setCardToken(cartaoRes.cardToken)
+
+      // Se Asaas retornou PENDING (análise antifraude), aguarda confirmação por até 30s
+      if (cartaoRes.aguardando) {
+        let confirmado = false
+        for (let i = 0; i < 10; i++) {
+          await new Promise(r => setTimeout(r, 3000))
+          const verificar = await fetch("/api/pagamento/verificar", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pedido_id: pedido.id }),
+          }).then(r => r.json()).catch(() => ({}))
+          if (verificar.confirmado) { confirmado = true; break }
+          if (verificar.status === "cancelado") {
+            setErro("Pagamento recusado. Verifique os dados do cartão e tente novamente.")
+            setEnviando(false)
+            return
+          }
+        }
+        if (!confirmado) {
+          router.push(`/pedido/${codigo}`)
+          return
+        }
       }
     }
 
@@ -792,14 +869,16 @@ export default function CheckoutPage() {
       }))
     }
 
-    // Salva cartão (sem CVV) se LGPD consentido
-    if (pagamento === "cartao" && salvarCartao && lgpdConsent && !usarSalvo) {
+    // Salva cartão (sem CVV, com token se disponível) se LGPD consentido
+    if (pagamento === "cartao" && salvarCartao && lgpdConsent) {
       const digits = cardNumber.replace(/\D/g, "")
-      if (digits.length >= 4) {
+      const last4  = digits.length >= 4 ? digits.slice(-4) : cartaoSalvo?.last4 ?? ""
+      if (last4) {
         localStorage.setItem("arago_cartao", JSON.stringify({
-          last4:   digits.slice(-4),
-          nome:    cardName.trim(),
-          validade: cardExpiry,
+          last4,
+          nome:    (cardName || cartaoSalvo?.nome || "").trim(),
+          validade: cardExpiry || cartaoSalvo?.validade || "",
+          token:   cardToken ?? undefined,
         }))
       }
     }
@@ -976,25 +1055,43 @@ export default function CheckoutPage() {
             </div>
           ) : (
             /* Não logado — pede os dados */
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
-              <div>
-                <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Seu nome *</label>
-                <input
-                  value={nome} onChange={e => setNome(e.target.value)}
-                  placeholder="João Silva"
-                  style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 14, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", boxSizing: "border-box" }}
-                />
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Seu nome *</label>
+                  <input
+                    value={nome} onChange={e => setNome(e.target.value)}
+                    placeholder="João Silva"
+                    style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 16, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", boxSizing: "border-box" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
+                    WhatsApp *
+                  </label>
+                  <input
+                    value={telefone} onChange={e => setTelefone(e.target.value)}
+                    placeholder="(64) 9 9999-1234" inputMode="tel"
+                    style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 16, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", boxSizing: "border-box" }}
+                  />
+                </div>
               </div>
-              <div>
-                <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
-                  WhatsApp *
-                </label>
-                <input
-                  value={telefone} onChange={e => setTelefone(e.target.value)}
-                  placeholder="(64) 9 9999-1234" inputMode="tel"
-                  style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 14, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", boxSizing: "border-box" }}
-                />
-              </div>
+              {/* CPF: oculta quando já está no perfil OU nos metadados auth */}
+              {!(user && (perfil?.cpf || user?.user_metadata?.cpf)) && (
+                <div>
+                  <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
+                    CPF{pagamento === "pix"
+                      ? <span style={{ color: "#DC2626", fontWeight: 600 }}> * obrigatório para PIX</span>
+                      : <span style={{ color: "#9CA3AF", fontWeight: 400 }}> (opcional)</span>
+                    }
+                  </label>
+                  <input
+                    value={cpf} onChange={e => setCpf(e.target.value)}
+                    placeholder="000.000.000-00" inputMode="numeric" maxLength={14}
+                    style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 16, background: "#F9FAFB", border: `1px solid ${pagamento === "pix" && !cpf ? "#FCA5A5" : "#E5E7EB"}`, color: "#111827", outline: "none", boxSizing: "border-box" }}
+                  />
+                </div>
+              )}
             </div>
           )}
 
@@ -1040,6 +1137,7 @@ export default function CheckoutPage() {
                 <EnderecoMapa
                   onResult={(geo, numero, complemento) => {
                     geoRef.current = { geo, numero, complemento }
+                    if (geo.lat && geo.lng) setClienteCoords({ lat: geo.lat, lng: geo.lng })
                   }}
                 />
               )}
@@ -1067,11 +1165,13 @@ export default function CheckoutPage() {
               }}>
                 {/* Ícone */}
                 <div style={{
-                  width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+                  width: p.value === "google_pay" ? 72 : 44,
+                  height: 44, borderRadius: 12, flexShrink: 0,
                   display: "flex", alignItems: "center", justifyContent: "center",
                   background: ativo ? "rgba(220,38,38,0.08)" : "#F9FAFB",
                   border: ativo ? "1.5px solid rgba(220,38,38,0.25)" : "1px solid #E5E7EB",
                   overflow: "hidden",
+                  padding: p.value === "google_pay" ? "0 8px" : 0,
                 }}>
                   <PaymentIcon method={p.value} />
                 </div>
@@ -1085,8 +1185,7 @@ export default function CheckoutPage() {
                   <p style={{ color: "#9CA3AF", fontSize: 12, marginTop: 2 }}>
                     {p.value === "pix"        && "Confirmação imediata · sem taxas"}
                     {p.value === "cartao"     && (cartaoSalvo ? `•••• ${cartaoSalvo.last4} — ${cartaoSalvo.nome}` : "Crédito ou débito")}
-                    {p.value === "apple_pay"  && "Em breve no Chegô"}
-                    {p.value === "google_pay" && "Em breve no Chegô"}
+                    {p.value === "google_pay" && "Pague com sua conta Google"}
                   </p>
                 </div>
 
@@ -1104,22 +1203,34 @@ export default function CheckoutPage() {
           {pagamento === "cartao" && (
             <div style={{ padding: "16px 18px", borderTop: "1px solid #F3F4F6", display: "flex", flexDirection: "column", gap: 12 }}>
 
-              {/* Cartão salvo */}
-              {cartaoSalvo && usarSalvo ? (
-                <div style={{ background: "#1E293B", borderRadius: 14, padding: "16px 18px", display: "flex", alignItems: "center", gap: 12 }}>
-                  <CardLogo />
-                  <div style={{ flex: 1 }}>
-                    <p style={{ color: "white", fontWeight: 700, fontSize: 14 }}>•••• •••• •••• {cartaoSalvo.last4}</p>
-                    <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>{cartaoSalvo.nome} · {cartaoSalvo.validade}</p>
-                  </div>
-                  <button
-                    onClick={() => { setUsarSalvo(false); setCartaoSalvo(null); localStorage.removeItem("arago_cartao") }}
-                    style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "white", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>
-                    Trocar
-                  </button>
-                </div>
-              ) : (
+              {/* Cartão salvo com token — UI compacta */}
+              {cartaoSalvo && usarSalvo && cardToken ? (
                 <>
+                  <div style={{ background: "#1E293B", borderRadius: 14, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
+                    <CardLogo />
+                    <div style={{ flex: 1 }}>
+                      <p style={{ color: "white", fontWeight: 700, fontSize: 14 }}>•••• •••• •••• {cartaoSalvo.last4}</p>
+                      <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>{cartaoSalvo.nome} · {cartaoSalvo.validade}</p>
+                    </div>
+                    <button onClick={() => { setCartaoSalvo(null); setCardToken(null); setUsarSalvo(false); localStorage.removeItem("arago_cartao") }}
+                      style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "white", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>
+                      Trocar
+                    </button>
+                  </div>
+                  {/* CPF do titular só se ainda não tiver */}
+                  {cardCpf.replace(/\D/g, "").length !== 11 && cpf.replace(/\D/g, "").length !== 11 && (perfil?.cpf ?? "").replace(/\D/g, "").length !== 11 && (
+                    <div>
+                      <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>CPF do titular *</label>
+                      <input value={cardCpf} onChange={e => {
+                        const d = e.target.value.replace(/\D/g, "").slice(0, 11)
+                        setCardCpf(d.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, "$1.$2.$3-$4").replace(/(\d{3})(\d{3})(\d{1,3})$/, "$1.$2.$3"))
+                      }} placeholder="000.000.000-00" inputMode="numeric"
+                        style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 14, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", boxSizing: "border-box", fontFamily: "monospace" }} />
+                    </div>
+                  )}
+                </>
+              ) : (
+              <>
                   {/* Número */}
                   <div>
                     <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Número do cartão *</label>

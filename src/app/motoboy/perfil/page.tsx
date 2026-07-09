@@ -20,12 +20,12 @@ export default function MotoboyPerfilPage() {
     email:     "",
     telefone:  "",
     cpf:       "",
-    pix_chave: "",
+    pix_key: "",
   })
 
   useEffect(() => {
     if (!motoboy_id) return
-    supabase.from("motoboys").select("nome, email, telefone, cpf, pix_chave, foto").eq("id", motoboy_id).single()
+    supabase.from("motoboys").select("nome, email, telefone, cpf, pix_key, foto").eq("id", motoboy_id).single()
       .then(({ data }) => {
         if (data) {
           setForm({
@@ -33,7 +33,7 @@ export default function MotoboyPerfilPage() {
             email:     data.email     ?? "",
             telefone:  data.telefone  ?? "",
             cpf:       data.cpf       ?? "",
-            pix_chave: data.pix_chave ?? "",
+            pix_key: data.pix_key ?? "",
           })
           setFoto(data.foto ?? null)
         }
@@ -62,7 +62,7 @@ export default function MotoboyPerfilPage() {
     await supabase.from("motoboys").update({
       nome:      form.nome.trim(),
       telefone:  form.telefone.trim(),
-      pix_chave: form.pix_chave.trim(),
+      pix_key: form.pix_key.trim(),
     }).eq("id", motoboy_id)
     setSalvando(false)
     setSucesso(true)
@@ -122,7 +122,7 @@ export default function MotoboyPerfilPage() {
           { key: "email",     label: "E-mail",         placeholder: "email@exemplo.com", disabled: true },
           { key: "telefone",  label: "Telefone",       placeholder: "(62) 9 0000-0000" },
           { key: "cpf",       label: "CPF",            placeholder: "000.000.000-00",   disabled: true },
-          { key: "pix_chave", label: "Chave PIX",      placeholder: "CPF, e-mail ou telefone" },
+          { key: "pix_key", label: "Chave PIX",      placeholder: "CPF, e-mail ou telefone" },
         ].map(({ key, label, placeholder, disabled }) => (
           <div key={key}>
             <label style={{ display: "block", color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>

@@ -19,10 +19,28 @@ export async function POST(req: NextRequest) {
   if (lat == null || lng == null) {
     return NextResponse.json({ error: "lat e lng obrigatórios" }, { status: 400 })
   }
+
   const { error } = await adminClient()
     .from("motoboys")
-    .update({ lat, lng, last_seen: new Date().toISOString() })
+    .update({ lat, lng })
     .eq("id", motoboy_id)
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Broadcast via Supabase Realtime HTTP — sem WebSocket, funciona em serverless
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY!
+  fetch(`${supabaseUrl}/realtime/v1/api/broadcast`, {
+    method: "POST",
+    headers: {
+      "Content-Type":  "application/json",
+      "Authorization": `Bearer ${serviceKey}`,
+      "apikey":        serviceKey,
+    },
+    body: JSON.stringify({
+      messages: [{ topic: `motoboy-loc-${motoboy_id}`, event: "location", payload: { lat, lng } }],
+    }),
+  }).catch(() => {})
+
   return NextResponse.json({ ok: true })
 }

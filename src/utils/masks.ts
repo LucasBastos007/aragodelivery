@@ -42,9 +42,9 @@ export function maskPlaca(v: string): string {
 }
 
 export function maskConta(v: string): string {
-  const d = v.replace(/\D/g, "").slice(0, 6)
-  if (d.length <= 5) return d
-  return d.slice(0, 5) + "-" + d.slice(5)
+  const d = v.replace(/\D/g, "").slice(0, 13)
+  if (d.length <= 1) return d
+  return d.slice(0, -1) + "-" + d.slice(-1)
 }
 
 export function maskCurrency(v: string): string {

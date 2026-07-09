@@ -368,8 +368,8 @@ export default function ParceirosPage() {
           </div>
           <p style={{ color: "#D1D5DB", fontSize: 12 }}>
             © 2026 Chegô Delivery · Aragoiânia, GO · Instagram{" "}
-            <a href="https://instagram.com/ChegoAragyn" target="_blank" rel="noopener noreferrer" style={{ color: "#f97316", textDecoration: "none" }}>
-              @ChegoAragyn
+            <a href="https://www.instagram.com/appchegodelivery?igsh=MW92Nnljcjdua2J0Zg==" target="_blank" rel="noopener noreferrer" style={{ color: "#f97316", textDecoration: "none" }}>
+              @AppChegoDelivery
             </a>
           </p>
         </div>

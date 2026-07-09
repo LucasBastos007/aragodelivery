@@ -125,6 +125,7 @@ function MapaMotoboy({
 
   const mapInstanceRef = useRef<google.maps.Map | null>(null)
   const followRef      = useRef(true)
+  const [following, setFollowing] = useState(true)
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null)
 
   // Refs para posição atual — evitam que o efeito de rota re-execute a cada update de GPS
@@ -132,11 +133,62 @@ function MapaMotoboy({
   const myLngRef = useRef(myLng)
   useEffect(() => { myLatRef.current = myLat; myLngRef.current = myLng }, [myLat, myLng])
 
-  // Pan para seguir o motoboy apenas quando não há destino ativo
+  // Navegação estilo Waze: heading e posição prévia
+  const headingRef  = useRef(0)
+  const prevNavPos  = useRef<{ lat: number; lng: number } | null>(null)
+  const navMode     = !!(destinoLat && destinoLng)
+
+  function calcBearing(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const dLng = (lng2 - lng1) * Math.PI / 180
+    const y = Math.sin(dLng) * Math.cos(lat2 * Math.PI / 180)
+    const x = Math.cos(lat1 * Math.PI / 180) * Math.sin(lat2 * Math.PI / 180)
+           - Math.sin(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.cos(dLng)
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360
+  }
+
+  // Segue o motoboy — em navMode usa heading-up + perspectiva 3D
   useEffect(() => {
-    if (!mapInstanceRef.current || !followRef.current) return
-    mapInstanceRef.current.panTo({ lat: myLat, lng: myLng })
-  }, [myLat, myLng])
+    const map = mapInstanceRef.current
+    if (!map || !followRef.current) return
+
+    if (!navMode) {
+      map.panTo({ lat: myLat, lng: myLng })
+      return
+    }
+
+    // Calcula heading a partir do deslocamento (só atualiza se moveu > 5m)
+    const prev = prevNavPos.current
+    if (prev) {
+      const dLat = (myLat - prev.lat) * 111000
+      const dLng = (myLng - prev.lng) * 111000
+      if (dLat * dLat + dLng * dLng > 25) {
+        headingRef.current = calcBearing(prev.lat, prev.lng, myLat, myLng)
+      }
+    }
+    prevNavPos.current = { lat: myLat, lng: myLng }
+
+    // Desloca o centro ~250m à frente para o motoboy aparecer no terço inferior
+    const hr = headingRef.current * Math.PI / 180
+    const AHEAD = 0.0022
+    map.setCenter({ lat: myLat + AHEAD * Math.cos(hr), lng: myLng + AHEAD * Math.sin(hr) })
+    map.setHeading(headingRef.current)
+    map.setTilt(45)
+  }, [myLat, myLng, navMode])
+
+  // Configura zoom e perspectiva ao entrar/sair do modo navegação
+  useEffect(() => {
+    const map = mapInstanceRef.current
+    if (!map) return
+    if (navMode) {
+      map.setZoom(17)
+      map.setTilt(45)
+      followRef.current = true
+      setFollowing(true)
+    } else {
+      map.setTilt(0)
+      map.setHeading(0)
+    }
+  }, [navMode])
 
   // Recalcula rota APENAS quando o destino ou loja mudam — não a cada update de GPS
   useEffect(() => {
@@ -148,9 +200,10 @@ function MapaMotoboy({
     const lat = myLatRef.current
     const lng = myLngRef.current
 
-    // Posiciona o mapa para mostrar motoboy + destino + loja antes da rota carregar
-    if (mapInstanceRef.current) {
+    // Em modo navegação mantém o seguimento — sem fitBounds que quebraria a perspectiva
+    if (!navMode && mapInstanceRef.current) {
       followRef.current = false
+      setFollowing(false)
       const b = new google.maps.LatLngBounds()
       b.extend({ lat, lng })
       b.extend({ lat: destinoLat, lng: destinoLng })
@@ -158,7 +211,6 @@ function MapaMotoboy({
       mapInstanceRef.current.fitBounds(b, { top: 60, right: 24, bottom: 320, left: 24 })
     }
 
-    // Calcula a rota de navegação
     const svc = new google.maps.DirectionsService()
     svc.route({
       origin:      { lat, lng },
@@ -167,8 +219,7 @@ function MapaMotoboy({
     }, (result, status) => {
       if (status === "OK" && result) {
         setDirections(result)
-        // Ajusta bounds com a rota real — apenas uma vez ao carregar, não a cada GPS update
-        if (mapInstanceRef.current && result.routes[0]?.bounds) {
+        if (!navMode && mapInstanceRef.current && result.routes[0]?.bounds) {
           mapInstanceRef.current.fitBounds(result.routes[0].bounds, {
             top: 60, right: 24, bottom: 320, left: 24,
           })
@@ -194,6 +245,7 @@ function MapaMotoboy({
   )
 
   return (
+    <>
     <GoogleMap
       mapContainerStyle={{ position: "absolute", inset: 0 } as React.CSSProperties}
       center={{ lat: myLat, lng: myLng }}
@@ -207,31 +259,56 @@ function MapaMotoboy({
         fullscreenControl: false,
         streetViewControl: false,
         clickableIcons: false,
+        tilt: navMode ? 45 : 0,
+        heading: navMode ? headingRef.current : 0,
+        styles: navMode ? [
+          { elementType: "geometry",              stylers: [{ color: "#0f1428" }] },
+          { elementType: "labels.text.fill",      stylers: [{ color: "#8899bb" }] },
+          { elementType: "labels.text.stroke",    stylers: [{ color: "#0f1428" }] },
+          { featureType: "road",           elementType: "geometry",        stylers: [{ color: "#1e2d5a" }] },
+          { featureType: "road",           elementType: "geometry.stroke", stylers: [{ color: "#0a0f24" }] },
+          { featureType: "road",           elementType: "labels.text.fill",stylers: [{ color: "#cdd5e0" }] },
+          { featureType: "road.highway",   elementType: "geometry",        stylers: [{ color: "#2a3d7c" }] },
+          { featureType: "road.highway",   elementType: "labels.text.fill",stylers: [{ color: "#e2e8f0" }] },
+          { featureType: "water",          elementType: "geometry",        stylers: [{ color: "#071020" }] },
+          { featureType: "poi",            stylers: [{ visibility: "off" }] },
+          { featureType: "transit",        stylers: [{ visibility: "off" }] },
+          { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#1e2d5a" }] },
+        ] : undefined,
       }}
       onLoad={m => { mapInstanceRef.current = m }}
-      onDragStart={() => { followRef.current = false }}
+      onDragStart={() => { followRef.current = false; setFollowing(false) }}
     >
-      {/* Marcador do motoboy — ponto azul estilo Google Maps */}
+      {/* Marcador do motoboy */}
       <OverlayView position={{ lat: myLat, lng: myLng }} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}>
-        <div style={{ transform: "translate(-50%,-50%)", position: "relative", width: 24, height: 24 }}>
-          <style>{`@keyframes gpsPulse{0%{transform:translate(-50%,-50%) scale(1);opacity:.6}100%{transform:translate(-50%,-50%) scale(2.8);opacity:0}}`}</style>
-          {/* Anel pulsante */}
-          <div style={{
-            position: "absolute", top: "50%", left: "50%",
-            width: 24, height: 24, borderRadius: "50%",
-            background: "rgba(66,133,244,0.3)",
-            animation: "gpsPulse 2s ease-out infinite",
-            pointerEvents: "none",
-          }} />
-          {/* Ponto principal */}
-          <div style={{
-            position: "absolute", top: "50%", left: "50%",
-            transform: "translate(-50%,-50%)",
-            width: 20, height: 20, borderRadius: "50%",
-            background: "#4285F4", border: "3px solid white",
-            boxShadow: "0 2px 8px rgba(66,133,244,0.7)",
-          }} />
-        </div>
+        {navMode ? (
+          /* Modo navegação: seta direcional apontando para cima (o mapa já gira com o heading) */
+          <div style={{ transform: "translate(-50%,-50%)" }}>
+            <svg width="44" height="44" viewBox="0 0 44 44" style={{ filter: "drop-shadow(0 3px 8px rgba(0,0,0,0.55))" }}>
+              <circle cx="22" cy="22" r="20" fill="rgba(15,20,40,0.75)" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5"/>
+              <polygon points="22,7 31,34 22,28 13,34" fill="#22d3ee" stroke="white" strokeWidth="2" strokeLinejoin="round"/>
+            </svg>
+          </div>
+        ) : (
+          /* Modo normal: ponto GPS azul pulsante */
+          <div style={{ transform: "translate(-50%,-50%)", position: "relative", width: 24, height: 24 }}>
+            <style>{`@keyframes gpsPulse{0%{transform:translate(-50%,-50%) scale(1);opacity:.6}100%{transform:translate(-50%,-50%) scale(2.8);opacity:0}}`}</style>
+            <div style={{
+              position: "absolute", top: "50%", left: "50%",
+              width: 24, height: 24, borderRadius: "50%",
+              background: "rgba(66,133,244,0.3)",
+              animation: "gpsPulse 2s ease-out infinite",
+              pointerEvents: "none",
+            }} />
+            <div style={{
+              position: "absolute", top: "50%", left: "50%",
+              transform: "translate(-50%,-50%)",
+              width: 20, height: 20, borderRadius: "50%",
+              background: "#4285F4", border: "3px solid white",
+              boxShadow: "0 2px 8px rgba(66,133,244,0.7)",
+            }} />
+          </div>
+        )}
       </OverlayView>
 
       {/* Marcador da loja */}
@@ -280,7 +357,12 @@ function MapaMotoboy({
           directions={directions}
           options={{
             suppressMarkers: true,
-            polylineOptions: { strokeColor: "#f97316", strokeWeight: 5, strokeOpacity: 0.85 },
+            preserveViewport: true,
+            polylineOptions: {
+              strokeColor:   navMode ? "#22d3ee" : "#f97316",
+              strokeWeight:  navMode ? 7 : 5,
+              strokeOpacity: 0.9,
+            },
           }}
         />
       )}
@@ -297,7 +379,49 @@ function MapaMotoboy({
           fillOpacity: raioOpen ? 0.1 : 0.04,
         }}
       />
+
     </GoogleMap>
+
+    {/* Botão Centralizar — overlay sobre o mapa */}
+    {!following && (
+      <button
+        onClick={() => {
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.panTo({ lat: myLat, lng: myLng })
+            mapInstanceRef.current.setZoom(16)
+          }
+          followRef.current = true
+          setFollowing(true)
+        }}
+        style={{
+          position: "absolute",
+          bottom: 24,
+          right: 16,
+          zIndex: 40,
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "10px 16px",
+          background: "rgba(26,26,46,0.92)",
+          border: "1.5px solid rgba(249,115,22,0.6)",
+          borderRadius: 24,
+          color: "white",
+          fontSize: 13,
+          fontWeight: 700,
+          cursor: "pointer",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+          backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
+        }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/>
+          <line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>
+        </svg>
+        Centralizar
+      </button>
+    )}
+  </>
   )
 }
 
@@ -327,10 +451,14 @@ export default function MotoboyPage() {
 
   const [myLat,  setMyLat]  = useState(DEFAULT_LAT)
   const [myLng,  setMyLng]  = useState(DEFAULT_LNG)
+  const [gpsReady, setGpsReady] = useState(false)
   const [compartilhando, setCompartilhando] = useState(false)
   const [cidadeAtual, setCidadeAtual] = useState<string | null>(null)
   const watchIdRef    = useRef<number | null>(null)
   const firstGeoRef   = useRef(true)
+  const forceIvRef    = useRef<ReturnType<typeof setInterval> | null>(null)
+  const lastPosRef    = useRef<{lat:number;lng:number}|null>(null)
+  const wakeLockRef   = useRef<any>(null)
 
   const [destinoLat, setDestinoLat] = useState<number | null>(null)
   const [destinoLng, setDestinoLng] = useState<number | null>(null)
@@ -360,10 +488,10 @@ export default function MotoboyPage() {
   const [toastMsg,        setToastMsg]        = useState<string | null>(null)
   const [corridaConcluida, setCorridaConcluida] = useState<any | null>(null)
   const [avancandoEtapa,   setAvancandoEtapa]   = useState(false)
-  const [raioKm,           setRaioKm]           = useState<number>(5)
+  const [raioKm,           setRaioKm]           = useState<number>(20)
   const [salvandoRaio,     setSalvandoRaio]     = useState(false)
   const [raioOpen,         setRaioOpen]         = useState(false)
-  const [raioDisplay,      setRaioDisplay]      = useState<number>(5)
+  const [raioDisplay,      setRaioDisplay]      = useState<number>(20)
   const [fotoMotoboy,      setFotoMotoboy]      = useState<string | null>(null)
   const [sosModal,         setSosModal]         = useState(false)
   const [maxPedidos,       setMaxPedidos]       = useState(2)
@@ -638,39 +766,64 @@ export default function MotoboyPage() {
   }, [emAndamento[0]?.id])
 
   // ── GPS tracking ───────────────────────────────────────────────────────────
+  const sendLocation = useCallback((lat: number, lng: number) => {
+    fetch("/api/motoboy/update-location", {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lat, lng }),
+    }).catch(() => {})
+    // Armazena no SW para envio em background sync
+    navigator.serviceWorker?.controller?.postMessage({ type: "store-location", lat, lng })
+  }, [])
+
   const iniciarRastreamento = useCallback(() => {
     if (!motoboy_id || !navigator.geolocation) return
     if (watchIdRef.current !== null) return
     setCompartilhando(true)
     firstGeoRef.current = true
+    // Wake Lock: impede que a tela desligue e o browser suspenda a aba
+    if ("wakeLock" in navigator) {
+      (navigator as any).wakeLock.request("screen").then((wl: any) => {
+        wakeLockRef.current = wl
+        // Reaquire automaticamente se o sistema liberar (ex: bateria fraca)
+        wl.addEventListener("release", () => {
+          if (watchIdRef.current !== null && "wakeLock" in navigator) {
+            (navigator as any).wakeLock.request("screen")
+              .then((w2: any) => { wakeLockRef.current = w2 })
+              .catch(() => {})
+          }
+        })
+      }).catch(() => {})
+    }
     watchIdRef.current = navigator.geolocation.watchPosition(
-      async ({ coords }) => {
+      ({ coords }) => {
         setMyLat(coords.latitude); setMyLng(coords.longitude)
-        const { error } = await supabase.from("motoboys")
-          .update({ lat: coords.latitude, lng: coords.longitude, last_seen: new Date().toISOString() })
-          .eq("id", motoboy_id)
-        if (error) {
-          // RLS bloqueou ou conexão falhou — tenta via API
-          fetch("/api/motoboy/update-location", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ motoboy_id, lat: coords.latitude, lng: coords.longitude }),
-          }).catch(() => {})
-        }
+        lastPosRef.current = { lat: coords.latitude, lng: coords.longitude }
+        setGpsReady(true)
+        sendLocation(coords.latitude, coords.longitude)
         if (firstGeoRef.current) {
           firstGeoRef.current = false
           reverseGeocode(coords.latitude, coords.longitude).then(c => { if (c) setCidadeAtual(c) })
         }
       },
       () => setCompartilhando(false),
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
     )
-  }, [motoboy_id])
+    // Envio forçado a cada 8s para garantir atualização mesmo sem mudança de GPS
+    forceIvRef.current = setInterval(() => {
+      if (lastPosRef.current) sendLocation(lastPosRef.current.lat, lastPosRef.current.lng)
+    }, 8000)
+  }, [motoboy_id, sendLocation])
 
   const pararRastreamento = useCallback(() => {
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current)
       watchIdRef.current = null
     }
+    if (forceIvRef.current !== null) { clearInterval(forceIvRef.current); forceIvRef.current = null }
+    // Libera Wake Lock ao parar
+    wakeLockRef.current?.release().catch(() => {})
+    wakeLockRef.current = null
     setCompartilhando(false)
     setCidadeAtual(null)
     if (motoboy_id) supabase.from("motoboys").update({ lat: null, lng: null }).eq("id", motoboy_id)
@@ -683,6 +836,7 @@ export default function MotoboyPage() {
       ({ coords }) => {
         setMyLat(coords.latitude)
         setMyLng(coords.longitude)
+        setGpsReady(true)
         reverseGeocode(coords.latitude, coords.longitude).then(c => { if (c) setCidadeAtual(c) })
       },
       () => {},
@@ -709,6 +863,30 @@ export default function MotoboyPage() {
   }, [motoboy_id, disponivel])
 
   useEffect(() => () => pararRastreamento(), [pararRastreamento])
+
+  // ── Background: reinicia GPS e reaquire WakeLock ao voltar para a aba ──────
+  useEffect(() => {
+    function onVisibility() {
+      if (document.visibilityState === "hidden") {
+        // Registra Background Sync para enviar última posição enquanto em background
+        navigator.serviceWorker?.ready.then(sw => {
+          (sw as any).sync?.register("bg-location").catch(() => {})
+        }).catch(() => {})
+      } else {
+        // Voltou para a aba: reaquire wake lock e reinicia GPS se necessário
+        if (disponivel && watchIdRef.current === null) {
+          iniciarRastreamento()
+        }
+        if (disponivel && !wakeLockRef.current && "wakeLock" in navigator) {
+          (navigator as any).wakeLock.request("screen")
+            .then((wl: any) => { wakeLockRef.current = wl })
+            .catch(() => {})
+        }
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibility)
+    return () => document.removeEventListener("visibilitychange", onVisibility)
+  }, [disponivel, iniciarRastreamento])
 
   // ── Push — registrar SW + salvar subscription do motoboy ─────────────────
   useEffect(() => {
@@ -957,8 +1135,10 @@ export default function MotoboyPage() {
       {/* Mapa */}
       <MapaMotoboy
         myLat={myLat} myLng={myLng}
-        destinoLat={efetDestinoLat} destinoLng={efetDestinoLng}
-        lojaLat={lojaLat} lojaLng={lojaLng}
+        destinoLat={gpsReady ? efetDestinoLat : null}
+        destinoLng={gpsReady ? efetDestinoLng : null}
+        lojaLat={gpsReady ? lojaLat : null}
+        lojaLng={gpsReady ? lojaLng : null}
         raioDisplay={raioDisplay} raioOpen={raioOpen}
         extrasLoja={extrasLojaMap}
         extrasDestino={extrasDestinoMap}
@@ -1148,18 +1328,24 @@ export default function MotoboyPage() {
       )}
 
       {/* ── GPS badge + cidade — canto superior esquerdo ── */}
-      {compartilhando && (
+      {disponivel && (
         <div style={{
           position: "absolute", top: 12, left: 12, zIndex: 20,
           background: "rgba(0,0,0,0.72)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
           borderRadius: 999, padding: "6px 11px",
-          border: "1px solid rgba(34,197,94,0.3)",
+          border: `1px solid ${compartilhando ? "rgba(34,197,94,0.3)" : "rgba(249,115,22,0.3)"}`,
           display: "flex", alignItems: "center", gap: 5,
         }}>
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e", display: "inline-block", flexShrink: 0 }} />
-          <span style={{ color: "#22c55e", fontSize: 10, fontWeight: 700 }}>GPS</span>
-          {cidadeAtual && (
-            <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 10, fontWeight: 600 }}>· {cidadeAtual}</span>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: compartilhando ? "#22c55e" : "#f97316", display: "inline-block", flexShrink: 0 }} />
+          {compartilhando ? (
+            <>
+              <span style={{ color: "#22c55e", fontSize: 10, fontWeight: 700 }}>GPS</span>
+              {cidadeAtual && (
+                <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 10, fontWeight: 600 }}>· {cidadeAtual}</span>
+              )}
+            </>
+          ) : (
+            <span style={{ color: "#f97316", fontSize: 10, fontWeight: 700 }}>Sem GPS · ative a localização</span>
           )}
         </div>
       )}
@@ -1811,9 +1997,11 @@ function CorridaAtivaPanel({
   destinoLng?: number
   onSOSOpen: () => void
 }) {
-  const [navDestino,  setNavDestino]  = useState<{ texto: string; lat?: number; lng?: number } | null>(null)
-  const [codigoInput, setCodigoInput] = useState("")
-  const [erroConfirm, setErroConfirm] = useState("")
+  const [navDestino,      setNavDestino]      = useState<{ texto: string; lat?: number; lng?: number } | null>(null)
+  const [codigoInput,     setCodigoInput]     = useState("")
+  const [erroConfirm,     setErroConfirm]     = useState("")
+  const [chegueiEnviado,  setChegueiEnviado]  = useState(false)
+  const [enviandoCheguei, setEnviandoCheguei] = useState(false)
 
   const p    = corridaConcluida ?? pedido
   const loja = p?.loja
@@ -1823,33 +2011,45 @@ function CorridaAtivaPanel({
   const etapa  = corridaConcluida ? 3 : (STATUS_TO_ETAPA[pedido?.status ?? ""] ?? 0)
   const ETAPAS = ["Indo à loja", "Na loja", "Em rota", "Entregue!"]
 
+  async function avisarCheguei() {
+    if (!p?.id) return
+    setEnviandoCheguei(true)
+    try {
+      await fetch("/api/push", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "send", pedido_id: p.id, status: "cheguei", codigo: p.codigo }),
+      })
+    } catch {}
+    setChegueiEnviado(true)
+    setEnviandoCheguei(false)
+  }
+
+  function confirmarEntrega() {
+    if (!codigoInput.trim()) { setErroConfirm("Digite o código do cliente."); return }
+    if (codigoInput.trim().toUpperCase() !== (p?.codigo ?? "").toUpperCase()) {
+      setErroConfirm("Código incorreto. Peça ao cliente para mostrar novamente.")
+      return
+    }
+    setErroConfirm("")
+    onAvancar()
+  }
+
   return (
     <div style={{
       position: "absolute", left: 0, right: 0, bottom: 0,
-      height: "52%", background: "#1C1C1E",
+      height: etapa === 2 && !chegueiEnviado ? "38%" : "52%", background: "#1C1C1E",
       borderRadius: "20px 20px 0 0",
       boxShadow: "0 -4px 32px rgba(0,0,0,0.7)",
       zIndex: 35, display: "flex", flexDirection: "column",
       overflow: "hidden", boxSizing: "border-box",
     }}>
       {/* Modal de navegação */}
-      {navDestino && <NavModal destino={navDestino} onClose={() => setNavDestino(null)} />}
+      {navDestino && <NavModal destino={navDestino} onClose={() => setNavDestino(null)} onNavApp={() => setNavDestino(null)} />}
 
-      {/* Handle + SOS */}
-      <div style={{ padding: "10px 16px 0", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.1)", flex: 1, marginRight: 8 }} />
-        {!corridaConcluida && (
-          <button
-            onClick={onSOSOpen}
-            style={{
-              padding: "5px 12px", borderRadius: 999,
-              border: "1.5px solid rgba(239,68,68,0.6)", background: "rgba(239,68,68,0.12)",
-              color: "#ef4444", fontWeight: 900, fontSize: 11, cursor: "pointer",
-              letterSpacing: 0.5, flexShrink: 0,
-            }}>
-            SOS
-          </button>
-        )}
+      {/* Handle */}
+      <div style={{ padding: "10px 16px 0", display: "flex", alignItems: "center", flexShrink: 0 }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.1)", flex: 1 }} />
       </div>
 
       {/* Stepper */}
@@ -1993,42 +2193,38 @@ function CorridaAtivaPanel({
               )}
             </div>
 
-            {/* Input de código do cliente */}
-            <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: "12px 14px", marginBottom: 8 }}>
-              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, marginBottom: 8 }}>
-                Peça o código ao cliente e digite abaixo:
-              </p>
-              <input
-                value={codigoInput}
-                onChange={e => { setCodigoInput(e.target.value.toUpperCase()); setErroConfirm("") }}
-                onKeyDown={e => {
-                  if (e.key === "Enter" && codigoInput.trim()) {
-                    if (codigoInput.trim().toUpperCase() === (p?.codigo ?? "").toUpperCase()) {
-                      setErroConfirm(""); onAvancar()
-                    } else {
-                      setErroConfirm("Código incorreto. Peça ao cliente para mostrar novamente.")
-                    }
-                  }
-                }}
-                placeholder="Digite o código"
-                maxLength={8}
-                inputMode="text"
-                autoComplete="off"
-                style={{
-                  width: "100%", boxSizing: "border-box",
-                  padding: "14px", borderRadius: 12,
-                  fontSize: 26, fontWeight: 900, letterSpacing: 10, textAlign: "center",
-                  background: "rgba(255,255,255,0.07)",
-                  border: erroConfirm ? "1.5px solid rgba(239,68,68,0.6)" : "1.5px solid rgba(255,255,255,0.15)",
-                  color: "white", outline: "none",
-                }}
-              />
-              {erroConfirm && (
-                <p style={{ color: "#f87171", fontSize: 11, fontWeight: 600, marginTop: 8, padding: "6px 10px", background: "rgba(239,68,68,0.08)", borderRadius: 8 }}>
-                  {erroConfirm}
+            {/* Input de código — só aparece após "Cheguei no local" */}
+            {chegueiEnviado && (
+              <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: "12px 14px", marginBottom: 8 }}>
+                <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, marginBottom: 8 }}>
+                  Peça o código ao cliente:
                 </p>
-              )}
-            </div>
+                <input
+                  value={codigoInput}
+                  onChange={e => { setCodigoInput(e.target.value.toUpperCase()); setErroConfirm("") }}
+                  onKeyDown={e => { if (e.key === "Enter") confirmarEntrega() }}
+                  placeholder="Digite o código"
+                  maxLength={8}
+                  inputMode="text"
+                  autoComplete="off"
+                  autoFocus
+                  style={{
+                    width: "100%", boxSizing: "border-box",
+                    padding: "14px", borderRadius: 12,
+                    fontSize: 26, fontWeight: 900, letterSpacing: 10, textAlign: "center",
+                    background: "rgba(255,255,255,0.07)",
+                    border: erroConfirm ? "1.5px solid rgba(239,68,68,0.6)" : "1.5px solid rgba(255,255,255,0.15)",
+                    color: "white", outline: "none",
+                  }}
+                />
+                {erroConfirm && (
+                  <p style={{ color: "#f87171", fontSize: 11, fontWeight: 600, marginTop: 8, padding: "6px 10px", background: "rgba(239,68,68,0.08)", borderRadius: 8 }}>
+                    {erroConfirm}
+                  </p>
+                )}
+              </div>
+            )}
+
             <button
               onClick={() => setNavDestino({ texto: p?.endereco_entrega ?? "", lat: destinoLat ?? (p as any).lat_entrega ?? undefined, lng: destinoLng ?? (p as any).lng_entrega ?? undefined })}
               style={{
@@ -2038,25 +2234,33 @@ function CorridaAtivaPanel({
               }}>
               🗺 Navegar até o cliente
             </button>
-            <button
-              onClick={() => {
-                if (!codigoInput.trim()) { setErroConfirm("Digite o código do cliente."); return }
-                if (codigoInput.trim().toUpperCase() !== (p?.codigo ?? "").toUpperCase()) {
-                  setErroConfirm("Código incorreto. Peça ao cliente para mostrar novamente.")
-                  return
-                }
-                setErroConfirm("")
-                onAvancar()
-              }}
-              disabled={avancando}
-              style={{
-                width: "100%", padding: "14px", borderRadius: 14, border: "none",
-                background: codigoInput.trim() ? "#22c55e" : "rgba(34,197,94,0.2)",
-                color: "white", fontWeight: 900, fontSize: 14,
-                cursor: avancando ? "not-allowed" : "pointer", marginBottom: 8,
-              }}>
-              {avancando ? "Confirmando..." : "Confirmar entrega"}
-            </button>
+
+            {!chegueiEnviado ? (
+              <button
+                onClick={avisarCheguei}
+                disabled={enviandoCheguei}
+                style={{
+                  width: "100%", padding: "14px", borderRadius: 14, border: "none",
+                  background: enviandoCheguei ? "rgba(34,211,238,0.3)" : "#0891b2",
+                  color: "white", fontWeight: 900, fontSize: 14,
+                  cursor: enviandoCheguei ? "not-allowed" : "pointer", marginBottom: 8,
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                }}>
+                {enviandoCheguei ? "Avisando..." : "📍 Cheguei no local"}
+              </button>
+            ) : (
+              <button
+                onClick={confirmarEntrega}
+                disabled={avancando}
+                style={{
+                  width: "100%", padding: "14px", borderRadius: 14, border: "none",
+                  background: codigoInput.trim() ? "#22c55e" : "rgba(34,197,94,0.2)",
+                  color: "white", fontWeight: 900, fontSize: 14,
+                  cursor: avancando ? "not-allowed" : "pointer", marginBottom: 8,
+                }}>
+                {avancando ? "Confirmando..." : "✓ Confirmar entrega"}
+              </button>
+            )}
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {/* Contato do cliente (mascarado) */}
               {p?.telefone_cliente && (
@@ -2074,15 +2278,16 @@ function CorridaAtivaPanel({
                       {mascaraTelefone(p.telefone_cliente)}
                     </a>
                     <a
-                      href={`https://wa.me/55${p.telefone_cliente.replace(/\D/g, "")}?text=${encodeURIComponent(`Olá! Sou o entregador do pedido #${p?.codigo}. Estou a caminho!`)}`}
+                      href={`https://wa.me/55${p.telefone_cliente.replace(/\D/g, "")}?text=${encodeURIComponent(`Olá! Sou o entregador da Chegô Delivery com o seu pedido #${p?.codigo}. Estou a caminho!`)}`}
                       target="_blank" rel="noreferrer"
                       style={{
                         padding: "9px 14px", borderRadius: 10,
-                        border: "1px solid rgba(37,211,102,0.3)", background: "transparent",
-                        color: "#25D366", fontSize: 11, fontWeight: 700,
-                        textDecoration: "none",
+                        border: "1px solid rgba(37,211,102,0.4)", background: "rgba(37,211,102,0.12)",
+                        color: "#25D366", fontSize: 12, fontWeight: 800,
+                        textDecoration: "none", display: "flex", alignItems: "center", gap: 5,
                       }}>
-                      WA
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.125.558 4.122 1.532 5.855L.057 23.885l6.174-1.618A11.944 11.944 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.9a9.9 9.9 0 01-5.031-1.374l-.361-.214-3.741.981.999-3.647-.235-.374A9.861 9.861 0 012.1 12C2.1 6.533 6.533 2.1 12 2.1c5.467 0 9.9 4.433 9.9 9.9 0 5.467-4.433 9.9-9.9 9.9z"/></svg>
+                      WhatsApp
                     </a>
                   </div>
                 </div>
@@ -2388,7 +2593,7 @@ function FotoModal({
 }
 
 // ─── Modal de seleção de app de navegação (Tópico 04) ────────────────────────
-function NavModal({ destino, onClose }: { destino: { texto: string; lat?: number; lng?: number }; onClose: () => void }) {
+function NavModal({ destino, onClose, onNavApp }: { destino: { texto: string; lat?: number; lng?: number }; onClose: () => void; onNavApp?: () => void }) {
   const lat    = destino.lat
   const lng    = destino.lng
   const coords = lat && lng ? `${lat},${lng}` : null
@@ -2450,6 +2655,22 @@ function NavModal({ destino, onClose }: { destino: { texto: string; lat?: number
         <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>Navegar até</p>
         <p style={{ color: "white", fontWeight: 700, fontSize: 14, marginBottom: 20, lineHeight: 1.3 }}>{destino.texto}</p>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {coords && onNavApp && (
+            <button
+              onClick={() => { onNavApp(); onClose() }}
+              style={{
+                display: "flex", alignItems: "center", gap: 14,
+                padding: "14px 18px", borderRadius: 16, border: "none",
+                background: "linear-gradient(135deg, #0891b2, #0e7490)",
+                cursor: "pointer", width: "100%",
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+              </svg>
+              <span style={{ color: "white", fontWeight: 800, fontSize: 15 }}>Chegô — Ver no mapa</span>
+            </button>
+          )}
           {APPS.map(app => (
             <a
               key={app.label}

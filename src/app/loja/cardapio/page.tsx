@@ -3,7 +3,12 @@
 import { useEffect, useRef, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
-import type { Produto, CategoriaProduto } from "@/types"
+import type { Produto, CategoriaProduto, AdicionalProduto } from "@/types"
+
+const DIAS = [
+  { v: 1, l: "Seg" }, { v: 2, l: "Ter" }, { v: 3, l: "Qua" },
+  { v: 4, l: "Qui" }, { v: 5, l: "Sex" }, { v: 6, l: "Sáb" }, { v: 0, l: "Dom" },
+]
 
 type ProdutoForm = {
   nome: string
@@ -12,8 +17,10 @@ type ProdutoForm = {
   categoria_id: string
   disponivel: boolean
   foto_url: string
+  dias_semana: number[]
+  ncm: string
 }
-const FORM_VAZIO: ProdutoForm = { nome: "", descricao: "", preco: "", categoria_id: "", disponivel: true, foto_url: "" }
+const FORM_VAZIO: ProdutoForm = { nome: "", descricao: "", preco: "", categoria_id: "", disponivel: true, foto_url: "", dias_semana: [], ncm: "" }
 
 async function uploadFoto(file: File, path: string): Promise<{ url: string; erro?: string }> {
   const form = new FormData()
@@ -43,6 +50,9 @@ export default function CardapioPage() {
   const [salvando, setSalvando] = useState(false)
   const [erroSalvar, setErroSalvar] = useState("")
   const fotoInputRef = useRef<HTMLInputElement>(null)
+  const [adicionais, setAdicionais] = useState<AdicionalProduto[]>([])
+  const [novoAdicNome, setNovoAdicNome] = useState("")
+  const [novoAdicPreco, setNovoAdicPreco] = useState("")
 
   useEffect(() => {
     if (!lojaId) return
@@ -90,12 +100,34 @@ export default function CardapioPage() {
     await carregarTudo()
   }
 
+  function uid() {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID()
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0
+      return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16)
+    })
+  }
+
+  function adicionarAdicional() {
+    if (!novoAdicNome.trim() || !novoAdicPreco) return
+    setAdicionais(prev => [...prev, {
+      id: uid(),
+      nome: novoAdicNome.trim(),
+      preco: parseFloat(novoAdicPreco),
+    }])
+    setNovoAdicNome("")
+    setNovoAdicPreco("")
+  }
+
   function abrirNovoProduto() {
     setEditando(null)
     setFormProd(FORM_VAZIO)
     setFotoFile(null)
     setFotoPreview("")
     setErroSalvar("")
+    setAdicionais([])
+    setNovoAdicNome("")
+    setNovoAdicPreco("")
     setModalProd(true)
   }
 
@@ -107,10 +139,15 @@ export default function CardapioPage() {
       categoria_id: p.categoria_id ?? "",
       disponivel: p.disponivel,
       foto_url: p.foto_url ?? "",
+      dias_semana: p.dias_semana ?? [],
+      ncm: p.ncm ?? "",
     })
     setFotoFile(null)
     setFotoPreview(p.foto_url ?? "")
     setErroSalvar("")
+    setAdicionais(p.adicionais ?? [])
+    setNovoAdicNome("")
+    setNovoAdicPreco("")
     setModalProd(true)
   }
 
@@ -119,6 +156,7 @@ export default function CardapioPage() {
     setFotoFile(null)
     setFotoPreview("")
     setErroSalvar("")
+    setAdicionais([])
   }
 
   async function salvarProduto() {
@@ -147,11 +185,15 @@ export default function CardapioPage() {
       categoria_id: formProd.categoria_id || null,
       disponivel: formProd.disponivel,
       foto_url: fotoUrlFinal || null,
+      adicionais: adicionais,
+      dias_semana: formProd.dias_semana,
+      ncm: formProd.ncm.replace(/\D/g, "") || null,
     }
 
     const res = await fetch("/api/loja/produtos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify(body),
     })
 
@@ -171,6 +213,7 @@ export default function CardapioPage() {
     await fetch("/api/loja/produtos", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ id: p.id, loja_id: lojaId, disponivel: !p.disponivel }),
     })
     await carregarTudo()
@@ -181,6 +224,7 @@ export default function CardapioPage() {
     await fetch("/api/loja/produtos", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ id, loja_id: lojaId }),
     })
     await carregarTudo()
@@ -344,6 +388,106 @@ export default function CardapioPage() {
                 {formProd.disponivel ? "Disponível para pedidos" : "Indisponível (oculto no cardápio)"}
               </span>
             </label>
+
+            {/* Dias da semana */}
+            <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16 }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 4 }}>Dias disponíveis</p>
+              <p style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 10 }}>Deixe todos desmarcados para aparecer em todos os dias</p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {DIAS.map(d => {
+                  const sel = formProd.dias_semana.includes(d.v)
+                  return (
+                    <button key={d.v} type="button"
+                      onClick={() => setFormProd(f => ({
+                        ...f,
+                        dias_semana: sel ? f.dias_semana.filter(x => x !== d.v) : [...f.dias_semana, d.v],
+                      }))}
+                      style={{
+                        padding: "6px 14px", borderRadius: 20, fontSize: 13, fontWeight: 700,
+                        border: sel ? "none" : "1.5px solid #E5E7EB",
+                        background: sel ? "#f97316" : "transparent",
+                        color: sel ? "#fff" : "#6B7280",
+                        cursor: "pointer",
+                      }}>
+                      {d.l}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* NCM */}
+            <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16 }}>
+              <label className="label">Código NCM <span style={{ fontWeight: 400, color: "#9CA3AF" }}>(para nota fiscal)</span></label>
+              <input
+                className="input"
+                value={formProd.ncm}
+                onChange={e => setFormProd(f => ({ ...f, ncm: e.target.value }))}
+                placeholder="Ex: 21069090 (alimentos preparados)"
+                maxLength={10}
+                inputMode="numeric"
+                style={{ fontSize: 14 }}
+              />
+              <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>
+                Restaurantes: 21069090 · Bebidas: 22029000 · Deixe em branco se não souber
+              </p>
+            </div>
+
+            {/* Adicionais */}
+            <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16 }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 10 }}>Adicionais (opcional)</p>
+              {adicionais.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+                  {adicionais.map(a => (
+                    <div key={a.id} style={{
+                      display: "flex", alignItems: "center", justifyContent: "space-between",
+                      padding: "8px 12px", borderRadius: 8, background: "#F9FAFB", border: "1px solid #E5E7EB",
+                    }}>
+                      <span style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>{a.nome}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 13, color: "#f97316", fontWeight: 700 }}>R$ {a.preco.toFixed(2)}</span>
+                        <button
+                          type="button"
+                          onClick={() => setAdicionais(prev => prev.filter(x => x.id !== a.id))}
+                          style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 0 }}>
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  className="input"
+                  placeholder="Ex: Extra queijo"
+                  value={novoAdicNome}
+                  onChange={e => setNovoAdicNome(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && adicionarAdicional()}
+                  style={{ flex: 2, fontSize: 13 }}
+                />
+                <input
+                  className="input"
+                  type="number"
+                  step="0.50"
+                  min="0"
+                  placeholder="R$"
+                  value={novoAdicPreco}
+                  onChange={e => setNovoAdicPreco(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && adicionarAdicional()}
+                  style={{ flex: 1, fontSize: 13 }}
+                />
+                <button
+                  type="button"
+                  onClick={adicionarAdicional}
+                  disabled={!novoAdicNome.trim() || !novoAdicPreco}
+                  className="btn-primary"
+                  style={{ fontSize: 13, padding: "0 12px", flexShrink: 0 }}>
+                  +
+                </button>
+              </div>
+            </div>
+
             {erroSalvar && (
               <p style={{ color: "#ef4444", fontSize: 13, fontWeight: 600, background: "rgba(239,68,68,0.08)", padding: "10px 14px", borderRadius: 10 }}>
                 ⚠️ {erroSalvar}
@@ -416,6 +560,11 @@ function ProdutoCard({ p, onEdit, onToggle, onDelete }: {
                 {p.descricao}
               </p>
             )}
+            {p.dias_semana && p.dias_semana.length > 0 && (
+              <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 3 }}>
+                📅 {DIAS.filter(d => p.dias_semana!.includes(d.v)).map(d => d.l).join(" · ")}
+              </p>
+            )}
           </div>
           <p style={{ fontSize: 15, fontWeight: 900, color: "#f97316", flexShrink: 0 }}>
             R$ {p.preco.toFixed(2).replace(".", ",")}
@@ -446,7 +595,7 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 0, overflowY: "auto" }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="card" style={{ width: "100%", maxWidth: "min(520px, 100vw)", margin: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, padding: "20px 16px 32px", maxHeight: "90vh", overflowY: "auto", boxSizing: "border-box" }}>
+      <div className="card" style={{ width: "100%", maxWidth: "min(520px, 100vw)", margin: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, padding: "20px 16px 32px", maxHeight: "90vh", overflowY: "auto", WebkitOverflowScrolling: "touch", boxSizing: "border-box" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <p style={{ fontWeight: 900, fontSize: 16, color: "#111827", margin: 0 }}>{title}</p>
           <button onClick={onClose} style={{ color: "#9CA3AF", fontSize: 20, lineHeight: 1, background: "none", border: "none", cursor: "pointer" }}>✕</button>

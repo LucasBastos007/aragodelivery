@@ -266,7 +266,7 @@ export default function AdminDespachoPage() {
         .eq("status", "pronto").is("motoboy_id", null)
         .order("criado_em", { ascending: true }),
       supabase.from("motoboys")
-        .select("id, nome, disponivel, status, lat, lng, veiculo, last_seen")
+        .select("id, nome, disponivel, status, lat, lng, veiculo")
         .order("nome"),
       supabase.from("alertas_sos")
         .select("*, motoboy:motoboys(nome, telefone)")
@@ -566,8 +566,7 @@ export default function AdminDespachoPage() {
 
 function MotoboyStat({ mb, online, alertas }: { mb: any; online: boolean; alertas: any[] }) {
   const isSOS = alertas.some(a => a.motoboy_id === mb.id && a.status === "pendente")
-  const lastSeen = mb.last_seen ? new Date(mb.last_seen) : null
-  const minsAgo  = lastSeen ? Math.round((Date.now() - lastSeen.getTime()) / 60000) : null
+  const minsAgo: number | null = null
 
   return (
     <div style={{

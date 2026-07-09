@@ -6,6 +6,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { useAuth } from "@/lib/auth"
 import InstallBanner from "@/components/InstallBanner"
+import { EsqueceuSenha } from "@/components/EsqueceuSenha"
 
 export default function EntrarPage() {
   const router = useRouter()
@@ -95,7 +96,8 @@ export default function EntrarPage() {
             </button>
           </div>
 
-          <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid #e5e7eb", textAlign: "center" }}>
+          <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid #e5e7eb", textAlign: "center", display: "flex", flexDirection: "column", gap: 10 }}>
+            <EsqueceuSenha tipo="lojista" />
             <p style={{ color: "#9CA3AF", fontSize: 13 }}>
               Ainda não tem conta?{" "}
               <Link href="/cadastro-loja" style={{ color: "#f97316", fontWeight: 700 }}>

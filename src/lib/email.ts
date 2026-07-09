@@ -359,6 +359,42 @@ export async function notificarSaqueSolicitado({
   })
 }
 
+export async function enviarContratoLoja({
+  nome,
+  email,
+  linkContrato,
+  linkPdf,
+}: {
+  nome: string
+  email: string
+  linkContrato: string
+  linkPdf: string
+}) {
+  const resend = getResend()
+  if (!resend) return
+
+  const html = base(`
+    <h1 style="margin:0 0 6px;font-size:22px;font-weight:900;color:#111827;">Seu contrato está pronto, ${nome}!</h1>
+    <p style="margin:0 0 24px;font-size:15px;color:#6b7280;">A equipe Chegô preparou o contrato de parceria para você. Leia com atenção e assine para ativar sua loja.</p>
+
+    ${botao("📄 Ler e assinar o contrato", linkContrato)}
+
+    <p style="font-size:13px;color:#6b7280;margin:24px 0 8px;">Prefere assinar presencialmente? Baixe o PDF, imprima, assine e entregue à nossa equipe:</p>
+    <p style="margin:0;">
+      <a href="${linkPdf}" style="font-size:13px;color:#f97316;font-weight:700;text-decoration:none;">⬇ Baixar PDF para impressão</a>
+    </p>
+
+    <p style="font-size:12px;color:#9ca3af;margin:24px 0 0;">Dúvidas? Entre em contato via WhatsApp: <strong>(62) 9 9391-0717</strong></p>
+  `)
+
+  await resend.emails.send({
+    from: "Chegô Delivery <noreply@chegodelivery.com>",
+    to: email,
+    subject: "📋 Contrato de parceria Chegô Delivery — assine agora",
+    html,
+  })
+}
+
 export async function enviarBoasVindasLoja({
   nome,
   email,

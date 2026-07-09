@@ -20,6 +20,7 @@ const STATUS_MSG_CLIENTE: Record<string, { title: string; body: string }> = {
   na_loja:         { title: "📦 Motoboy na loja", body: "O motoboy está coletando seu pedido agora." },
   em_rota:         { title: "🚀 Saiu para entrega!", body: "O motoboy está a caminho. Aguarde!" },
   coletado:        { title: "🛵 Saiu para entrega!", body: "O motoboy está a caminho. Aguarde!" },
+  cheguei:         { title: "🛵 Seu pedido chegou!", body: "O motoboy está na sua porta. Vá buscar!" },
   entregue:        { title: "🎉 Pedido entregue!", body: "Aproveite! Que tal avaliar seu pedido?" },
   cancelado:       { title: "❌ Pedido cancelado", body: "Seu pedido foi cancelado. Entre em contato com a loja." },
 }
@@ -34,6 +35,24 @@ function initVapid() {
 
 async function sendPush(subscription: any, payload: object) {
   await webpush.sendNotification(subscription, JSON.stringify(payload))
+}
+
+// Envia para todos os dispositivos do motoboy (array ou objeto legado)
+async function sendPushToAll(
+  raw: any,
+  payload: object,
+  onExpired?: (endpoint: string) => void
+): Promise<void> {
+  const subs: any[] = Array.isArray(raw) ? raw : raw ? [raw] : []
+  await Promise.allSettled(
+    subs.map(async sub => {
+      try {
+        await webpush.sendNotification(sub, JSON.stringify(payload))
+      } catch (err: any) {
+        if (err.statusCode === 410 && onExpired) onExpired(sub.endpoint)
+      }
+    })
+  )
 }
 
 export async function POST(req: NextRequest) {
@@ -69,9 +88,17 @@ export async function POST(req: NextRequest) {
     if (!subscription) {
       return NextResponse.json({ error: "subscription obrigatório" }, { status: 400 })
     }
+    // Acumula subscriptions (suporte multi-dispositivo) — máx 5, sem duplicatas de endpoint
+    const { data: mb } = await supabaseAdmin
+      .from("motoboys").select("push_subscription").eq("id", _sess.motoboy_id).single()
+    const existentes: any[] = Array.isArray(mb?.push_subscription)
+      ? mb.push_subscription
+      : mb?.push_subscription ? [mb.push_subscription] : []
+    const semDup = existentes.filter((s: any) => s?.endpoint !== subscription.endpoint)
+    const novaLista = [...semDup, subscription].slice(-5)
     const { error } = await supabaseAdmin
       .from("motoboys")
-      .update({ push_subscription: subscription })
+      .update({ push_subscription: novaLista })
       .eq("id", _sess.motoboy_id)
     if (error) return NextResponse.json({ ok: false, error: error.message })
     return NextResponse.json({ ok: true })
@@ -150,10 +177,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, skipped: "no subscription" })
     }
 
+    const isCheguei = status === "cheguei"
     try {
       await sendPush(pedido.push_subscription, {
         title: msg.title, body: msg.body,
-        tag: `pedido-${pedido_id}`, url: `/pedido/${codigo}`,
+        tag:   isCheguei ? `cheguei-${pedido_id}` : `pedido-${pedido_id}`,
+        url:   `/pedido/${codigo}`,
       })
       return NextResponse.json({ ok: true })
     } catch (err: any) {
@@ -179,21 +208,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, skipped: "no subscription" })
     }
 
-    try {
-      await sendPush(motoboy.push_subscription, {
+    const expiredEndpoints: string[] = []
+    await sendPushToAll(
+      motoboy.push_subscription,
+      {
         title: title ?? "Nova corrida disponível!",
         body:  msgBody ?? "Você recebeu uma nova oferta de entrega.",
         tag:   `motoboy-${motoboy_id}`,
         url:   url ?? "/motoboy",
         requireInteraction: true,
-      })
-      return NextResponse.json({ ok: true })
-    } catch (err: any) {
-      if (err.statusCode === 410) {
-        await supabaseAdmin.from("motoboys").update({ push_subscription: null }).eq("id", motoboy_id)
-      }
-      return NextResponse.json({ ok: false, error: String(err.message) })
+      },
+      ep => expiredEndpoints.push(ep)
+    )
+    // Remove subscriptions expiradas
+    if (expiredEndpoints.length > 0) {
+      const { data: fresh } = await supabaseAdmin.from("motoboys").select("push_subscription").eq("id", motoboy_id).single()
+      const subs: any[] = Array.isArray(fresh?.push_subscription) ? fresh.push_subscription : fresh?.push_subscription ? [fresh.push_subscription] : []
+      const filtradas = subs.filter((s: any) => !expiredEndpoints.includes(s?.endpoint))
+      await supabaseAdmin.from("motoboys").update({ push_subscription: filtradas.length ? filtradas : null }).eq("id", motoboy_id)
     }
+    return NextResponse.json({ ok: true })
   }
 
   return NextResponse.json({ error: "action inválida" }, { status: 400 })

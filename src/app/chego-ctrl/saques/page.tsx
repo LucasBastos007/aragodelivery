@@ -28,7 +28,7 @@ export default function AdminSaquesPage() {
   async function load() {
     const [{ data: saq }, { data: loj }, { data: mens }] = await Promise.all([
       supabase.from("saques").select("*, loja:lojas(nome), motoboy:motoboys(nome)").order("criado_em", { ascending: false }),
-      supabase.from("lojas").select("id, nome, comissao, plano_mensalidade, pix_chave").eq("status", "ativo").order("nome"),
+      supabase.from("lojas").select("id, nome, comissao, plano_mensalidade, pix_key").eq("status", "ativo").order("nome"),
       supabase.from("mensalidades").select("*, loja:lojas(nome)").order("criado_em", { ascending: false }),
     ])
     setSaques(saq ?? [])
@@ -381,9 +381,9 @@ export default function AdminSaquesPage() {
                       <span style={{ color: "#64748B" }}>
                         Comissão: <strong style={{ color: "#f97316" }}>{l.comissao ?? 0}%</strong>
                       </span>
-                      {l.pix_chave && (
+                      {l.pix_key && (
                         <span style={{ color: "#64748B" }}>
-                          PIX: <strong style={{ color: "#0F172A" }}>{l.pix_chave}</strong>
+                          PIX: <strong style={{ color: "#0F172A" }}>{l.pix_key}</strong>
                         </span>
                       )}
                     </div>

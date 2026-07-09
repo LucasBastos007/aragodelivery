@@ -9,6 +9,7 @@ export async function POST(req: NextRequest) {
       email, senha, nome, descricao, categoria, endereco, telefone,
       taxa_entrega, tempo_min, tempo_max, comissao, nome_responsavel,
       cpf_responsavel, cnpj, pix_key, valor_minimo, aceita_retirada,
+      banco, banco_agencia, banco_conta, banco_tipo_conta,
     } = body
 
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -60,6 +61,10 @@ export async function POST(req: NextRequest) {
       email: email.trim().toLowerCase(),
       senha: senhaHash,
       pix_key,
+      banco:           banco           ?? null,
+      banco_agencia:   banco_agencia   ?? null,
+      banco_conta:     banco_conta     ?? null,
+      banco_tipo_conta:banco_tipo_conta ?? "Corrente",
       valor_minimo: Math.max(0, Number(valor_minimo) || 0),
       aceita_retirada,
       ...(userId ? { user_id: userId } : {}),

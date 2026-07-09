@@ -27,16 +27,16 @@ export async function POST(req: NextRequest) {
 
   const { data: loja } = await sb
     .from("lojas")
-    .select("nome, pix_chave, comissao, plano_mensalidade")
+    .select("nome, pix_key, comissao, plano_mensalidade")
     .eq("id", loja_id)
     .single()
 
   if (!loja) return NextResponse.json({ error: "Loja não encontrada" }, { status: 404 })
-  if (!loja.pix_chave) return NextResponse.json({ error: "Cadastre sua chave PIX no perfil antes de solicitar" }, { status: 422 })
+  if (!loja.pix_key) return NextResponse.json({ error: "Cadastre sua chave PIX no perfil antes de solicitar" }, { status: 422 })
 
   const { data: saque, error } = await sb
     .from("saques")
-    .insert({ tipo: "lojista", loja_id, valor, pix_chave: loja.pix_chave, status: "solicitado" })
+    .insert({ tipo: "lojista", loja_id, valor, pix_chave: loja.pix_key, status: "solicitado" })
     .select("id")
     .single()
 
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
   notificarSaqueLojistaSolicitado({
     nomeLoja: loja.nome,
     valor,
-    pixChave: loja.pix_chave,
+    pixChave: loja.pix_key,
     saqueId: saque.id,
   }).catch(() => {})
 

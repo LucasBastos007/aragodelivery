@@ -2,7 +2,7 @@ import crypto from "crypto"
 import { NextRequest, NextResponse } from "next/server"
 
 const COOKIE  = "arago_sess"
-const MAX_AGE = 60 * 60 * 24 // 24 horas
+const MAX_AGE = 60 * 60 * 24 * 30 // 30 dias
 
 function getSecret(): string {
   const s = process.env.SESSION_SECRET

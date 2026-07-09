@@ -1,7 +1,8 @@
 export type StatusLoja = "pendente" | "aprovado" | "contrato_assinado" | "ativo" | "suspenso"
+export type PlanoLoja = "select" | "prime" | "black" | "gold"
 export type StatusMotoboy = "pendente" | "aprovado" | "contrato_assinado" | "ativo" | "suspenso" | "offline"
-export type StatusPedido = "pendente" | "aceito" | "preparando" | "pronto" | "aguardando_aceite" | "indo_para_loja" | "na_loja" | "em_rota" | "coletado" | "entregue" | "cancelado"
-export type FormaPagamento = "pix" | "cartao" | "dinheiro" | "maquininha" | "apple_pay" | "google_pay"
+export type StatusPedido = "aguardando_pagamento" | "pendente" | "aceito" | "preparando" | "pronto" | "aguardando_aceite" | "indo_para_loja" | "na_loja" | "em_rota" | "coletado" | "entregue" | "cancelado"
+export type FormaPagamento = "pix" | "cartao" | "dinheiro" | "maquininha" | "google_pay"
 export type CategoriaLoja = "Restaurante" | "Mercadinho" | "Farmácia" | "Outros"
 
 export interface Loja {
@@ -27,9 +28,54 @@ export interface Loja {
   contrato_token?: string
   contrato_assinado?: boolean
   contrato_assinado_em?: string
+  contrato_assinatura?: string | null
   motivo_rejeicao?: string
   nota_media?: number | null
   total_avaliacoes?: number | null
+  plano?: PlanoLoja | null
+  plano_ativo_desde?: string | null
+  asaas_customer_id?: string | null
+  asaas_subscription_id?: string | null
+  asaas_wallet_id?: string | null
+  modalidade_assinatura?: "digital" | "gov_br" | "presencial" | null
+  contrato_pdf_url?: string | null
+  // FASE 2 — dados fiscais
+  inscricao_estadual?: string | null
+  inscricao_municipal?: string | null
+  regime_tributario?: "mei" | "simples" | "lucro_presumido" | "lucro_real" | null
+  cnae?: string | null
+  nfce_serie?: number | null
+  fiscal_ativo?: boolean | null
+  focusnfe_cadastrado?: boolean | null
+  // Endereço estruturado (para NFC-e)
+  logradouro?: string | null
+  numero?: string | null
+  complemento?: string | null
+  bairro?: string | null
+  cidade?: string | null
+  estado?: string | null
+  cep?: string | null
+  // FASE 3 — certificado digital e CSC
+  cert_a1_path?: string | null
+  cert_a1_expires_at?: string | null
+  cert_a1_senha_vault_id?: string | null
+  csc_id?: string | null
+  csc_token_vault_id?: string | null
+}
+
+export interface EntregaAvulsa {
+  id: string
+  loja_id: string
+  motoboy_id?: string | null
+  cliente_nome: string
+  cliente_tel: string
+  endereco: string
+  valor_pedido: number
+  taxa_entrega: number
+  observacao: string
+  status: "aguardando" | "aceito" | "em_rota" | "entregue" | "cancelado"
+  codigo: string
+  criado_em: string
 }
 
 export interface Motoboy {
@@ -49,6 +95,7 @@ export interface Motoboy {
   contrato_token?: string
   contrato_assinado?: boolean
   contrato_assinado_em?: string
+  contrato_assinatura?: string | null
   motivo_rejeicao?: string
   raio_km?: number
   documentos?: {
@@ -58,6 +105,14 @@ export interface Motoboy {
     selfie?: string
   } | null
   selfie_contrato?: string | null
+  modalidade_assinatura?: "digital" | "gov_br" | "presencial" | null
+  contrato_pdf_url?: string | null
+}
+
+export interface AdicionalProduto {
+  id: string
+  nome: string
+  preco: number
 }
 
 export interface Produto {
@@ -70,6 +125,9 @@ export interface Produto {
   foto_url: string
   disponivel: boolean
   criado_em: string
+  adicionais?: AdicionalProduto[]
+  dias_semana?: number[]  // 0=Dom 1=Seg 2=Ter 3=Qua 4=Qui 5=Sex 6=Sáb — vazio = todos os dias
+  ncm?: string | null     // Nomenclatura Comum do Mercosul (para NFC-e)
 }
 
 export interface CategoriaProduto {
@@ -87,6 +145,7 @@ export interface ItemPedido {
   preco: number
   quantidade: number
   observacao: string
+  adicionais?: AdicionalProduto[]
 }
 
 export interface Pedido {

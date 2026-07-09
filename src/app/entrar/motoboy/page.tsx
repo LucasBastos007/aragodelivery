@@ -6,6 +6,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { useAuth } from "@/lib/auth"
 import InstallBanner from "@/components/InstallBanner"
+import { EsqueceuSenha } from "@/components/EsqueceuSenha"
 
 export default function EntrarMotoboyPage() {
   const router = useRouter()
@@ -95,7 +96,8 @@ export default function EntrarMotoboyPage() {
             </button>
           </div>
 
-          <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid rgba(255,255,255,0.06)", textAlign: "center" }}>
+          <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid rgba(255,255,255,0.06)", textAlign: "center", display: "flex", flexDirection: "column", gap: 10 }}>
+            <EsqueceuSenha tipo="motoboy" />
             <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13 }}>
               Ainda não tem conta?{" "}
               <Link href="/cadastro-motoboy" style={{ color: "#f97316", fontWeight: 700 }}>

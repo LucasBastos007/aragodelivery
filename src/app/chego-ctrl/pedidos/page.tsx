@@ -4,7 +4,38 @@ import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import type { Pedido, StatusPedido } from "@/types"
 
+function ConfirmarCartaoBtn({ pedidoId, onConfirmado }: { pedidoId: string; onConfirmado: () => void }) {
+  const [loading, setLoading] = useState(false)
+  const [msg, setMsg] = useState("")
+
+  async function verificar() {
+    setLoading(true)
+    setMsg("")
+    const r = await fetch("/api/pagamento/verificar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pedido_id: pedidoId }),
+    }).then(r => r.json()).catch(() => ({}))
+    if (r.confirmado) { onConfirmado() }
+    else { setMsg(r.status === "cancelado" ? "Recusado" : "Pendente") }
+    setLoading(false)
+  }
+
+  return (
+    <div style={{ marginTop: 4 }}>
+      <button onClick={verificar} disabled={loading} style={{
+        fontSize: 10, padding: "2px 6px", borderRadius: 6, border: "1px solid #f97316",
+        background: "none", color: "#f97316", cursor: loading ? "not-allowed" : "pointer", fontWeight: 700,
+      }}>
+        {loading ? "..." : "Confirmar"}
+      </button>
+      {msg && <p style={{ fontSize: 9, color: msg === "Recusado" ? "#DC2626" : "#6B7280", marginTop: 2 }}>{msg}</p>}
+    </div>
+  )
+}
+
 const STATUS_LABEL: Record<StatusPedido, string> = {
+  aguardando_pagamento: "Aguard. pagamento",
   pendente:          "Pendente",
   aceito:            "Aceito",
   preparando:        "Preparando",
@@ -18,6 +49,7 @@ const STATUS_LABEL: Record<StatusPedido, string> = {
   cancelado:         "Cancelado",
 }
 const STATUS_BADGE: Record<StatusPedido, string> = {
+  aguardando_pagamento: "badge-yellow",
   pendente:          "badge-yellow",
   aceito:            "badge-blue",
   preparando:        "badge-orange",
@@ -155,6 +187,11 @@ export default function PedidosPage() {
                     <p className="text-[10px] mt-0.5" style={{ color: "#94a3b8" }}>
                       {PAGAMENTO_ICON[p.forma_pagamento]}
                     </p>
+                    {p.status === "aguardando_pagamento" && p.forma_pagamento === "cartao" && (
+                      <ConfirmarCartaoBtn pedidoId={p.id} onConfirmado={() => setPedidos(prev =>
+                        prev.map(x => x.id === p.id ? { ...x, status: "pendente" as StatusPedido } : x)
+                      )} />
+                    )}
                   </div>
                 </div>
               )

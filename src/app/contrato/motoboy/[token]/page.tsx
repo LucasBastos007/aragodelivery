@@ -45,35 +45,26 @@ export default function ContratoMotoboyPage() {
     ctx.lineJoin = "round"
   }, [motoboy])
 
-  function getPos(e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement) {
+  function getPos(e: React.PointerEvent, canvas: HTMLCanvasElement) {
     const rect = canvas.getBoundingClientRect()
-    const scaleX = canvas.width / rect.width
-    const scaleY = canvas.height / rect.height
-    if ("touches" in e) {
-      return {
-        x: (e.touches[0].clientX - rect.left) * scaleX,
-        y: (e.touches[0].clientY - rect.top) * scaleY,
-      }
-    }
     return {
-      x: (e.clientX - rect.left) * scaleX,
-      y: (e.clientY - rect.top) * scaleY,
+      x: (e.clientX - rect.left) * (canvas.width / rect.width),
+      y: (e.clientY - rect.top)  * (canvas.height / rect.height),
     }
   }
 
-  function startDraw(e: React.MouseEvent | React.TouchEvent) {
+  function startDraw(e: React.PointerEvent) {
     const canvas = canvasRef.current
     if (!canvas) return
-    e.preventDefault()
+    canvas.setPointerCapture(e.pointerId)
     drawing.current = true
     lastPos.current = getPos(e, canvas)
   }
 
-  function draw(e: React.MouseEvent | React.TouchEvent) {
+  function draw(e: React.PointerEvent) {
     if (!drawing.current) return
     const canvas = canvasRef.current
     if (!canvas) return
-    e.preventDefault()
     const ctx = canvas.getContext("2d")!
     const pos = getPos(e, canvas)
     ctx.beginPath()
@@ -134,7 +125,7 @@ export default function ContratoMotoboyPage() {
       body: JSON.stringify({ token, assinatura, selfieContratoUrl }),
     })
     setSalvando(false)
-    if (!res.ok) { alert("Erro ao salvar assinatura. Tente novamente."); return }
+    if (!res.ok) { const e = await res.json().catch(() => ({})); alert("Erro ao salvar assinatura: " + (e.error ?? res.status)); return }
     setAssinado(true)
   }
 
@@ -201,65 +192,105 @@ export default function ContratoMotoboyPage() {
           <p className="text-xs font-bold uppercase tracking-wider mb-4" style={{ color: "rgba(255,255,255,0.3)" }}>Contrato completo</p>
           <div className="text-sm leading-relaxed flex flex-col gap-4" style={{ color: "rgba(255,255,255,0.65)" }}>
 
-            <div style={{ textAlign: "center", marginBottom: 8 }}>
+            <div style={{ textAlign: "center", marginBottom: 12 }}>
               <p style={{ color: "white", fontWeight: 900, fontSize: 15 }}>TERMO DE PARCERIA PARA PRESTAÇÃO DE SERVIÇOS DE ENTREGA</p>
-              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}>PLATAFORMA CHEGÔ DELIVERY E ENTREGADOR PARCEIRO (MOTOBOY) AUTÔNOMO</p>
+              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, marginTop: 4 }}>PLATAFORMA CHEGÔ DELIVERY E ENTREGADOR PARCEIRO (MOTOBOY) AUTÔNOMO</p>
             </div>
 
             <p>Pelo presente instrumento particular, de um lado:</p>
-            <p><strong style={{ color: "white" }}>CHEGÔ DELIVERY</strong> (67.543.510 LIVIA RAYANE SOUSA DA SILVA), pessoa jurídica de direito privado, inscrita no CNPJ sob o nº 67.543.510/0001-86, na modalidade de Microempreendedor Individual (MEI), com sede na Rua Pedro Nestor Pereira, nº 0, Quadra 14, Lote 24, Aragoiânia/GO, CEP 75330-000, representada por sua titular, Sra. Livia Rayane Sousa da Silva, doravante <strong style={{ color: "white" }}>"PLATAFORMA"</strong>;</p>
+            <p>
+              <strong style={{ color: "white" }}>CHEGÔ DELIVERY</strong>, pessoa jurídica de direito privado, inscrita no CNPJ sob o nº 67.543.510/0001-86, na modalidade de Microempreendedor Individual (MEI), com sede na Rua Pedro Nestor Pereira, nº 0, Quadra 14, Lote 24, Aragoiânia/GO, CEP 75330-000, representada por sua titular, Sra. Livia Rayane Sousa da Silva, doravante denominada simplesmente <strong style={{ color: "white" }}>"PLATAFORMA"</strong>;
+            </p>
             <p>e, de outro lado:</p>
-            <p><strong style={{ color: "white" }}>{motoboy!.nome}</strong>, pessoa física, portador(a) do CPF nº {motoboy!.cpf}{motoboy!.cnh ? ` e da CNH nº ${motoboy!.cnh}` : ""}, doravante <strong style={{ color: "white" }}>"ENTREGADOR"</strong> ou <strong style={{ color: "white" }}>"MOTOBOY"</strong>.</p>
+            <p>
+              <strong style={{ color: "white" }}>{motoboy!.nome}</strong>, pessoa física, portador(a) do CPF nº {motoboy!.cpf}{motoboy!.cnh ? ` e da CNH nº ${motoboy!.cnh}` : ""}, doravante denominado simplesmente <strong style={{ color: "white" }}>"ENTREGADOR"</strong> ou <strong style={{ color: "white" }}>"MOTOBOY"</strong>.
+            </p>
+            <p>PLATAFORMA e ENTREGADOR, quando referidos conjuntamente, serão denominados "PARTES", tendo entre si justo e contratado o presente Termo de Parceria ("Contrato" ou "Termo"), que se regerá pelas cláusulas seguintes.</p>
 
-            <div style={{ height: 1, background: "rgba(255,255,255,0.07)" }} />
+            <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "12px 0" }} />
 
             <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 1ª — DO OBJETO</p>
-            <p>1.1. O presente Termo disciplina a parceria entre as PARTES, por meio da qual a PLATAFORMA disponibilizará ao ENTREGADOR acesso ao aplicativo "Chegô Delivery", pelo qual poderá visualizar e aceitar, de forma livre e espontânea, solicitações de entrega de estabelecimentos parceiros ("Lojistas") a consumidores finais ("Clientes").</p>
-            <p>1.2. A PLATAFORMA atua exclusivamente como intermediadora tecnológica, não se confundindo com transportadora, operadora logística ou empregadora do ENTREGADOR.</p>
+            <p>1.1. O presente Termo tem por objeto disciplinar a parceria firmada entre as PARTES, por meio da qual a PLATAFORMA disponibilizará ao ENTREGADOR acesso a sistema de tecnologia próprio (aplicativo "Chegô Delivery"), por meio do qual o ENTREGADOR poderá visualizar e aceitar, de forma livre e espontânea, solicitações de entrega oferecidas por estabelecimentos parceiros ("Lojistas") em favor de consumidores finais ("Clientes").</p>
+            <p>1.2. A PLATAFORMA atua exclusivamente como intermediadora tecnológica, conectando ENTREGADOR, LOJISTA e Cliente, não se confundindo com transportadora, operadora logística ou empregadora do ENTREGADOR.</p>
 
-            <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 2ª — DA NATUREZA AUTÔNOMA DA RELAÇÃO</p>
-            <p>2.1. O ENTREGADOR presta seus serviços de forma absolutamente autônoma, eventual e por sua livre iniciativa, <strong style={{ color: "white" }}>sem vínculo de emprego, subordinação, hierarquia ou exclusividade</strong> com a PLATAFORMA.</p>
-            <p>2.2. O ENTREGADOR tem plena liberdade para: (a) conectar-se e desconectar-se nos dias e horários que melhor lhe convierem, sem obrigação de cumprir jornada ou meta; (b) aceitar ou recusar qualquer solicitação de entrega, sem penalidade pela simples recusa; (c) prestar serviços para outras plataformas ou estabelecimentos, sem cláusula de exclusividade.</p>
-            <p>2.3. Em razão da natureza autônoma, o ENTREGADOR não terá direito a férias, 13º salário, FGTS, aviso prévio ou quaisquer verbas rescisórias trabalhistas, sendo responsável pelo próprio recolhimento previdenciário e obrigações fiscais.</p>
+            <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 2ª — DA NATUREZA AUTÔNOMA DA RELAÇÃO (CLÁUSULA ESSENCIAL)</p>
+            <p>2.1. O ENTREGADOR presta seus serviços de forma absolutamente autônoma, eventual e por sua livre iniciativa, <strong style={{ color: "white" }}>não havendo qualquer relação de emprego, subordinação, hierarquia ou exclusividade</strong> entre o ENTREGADOR e a PLATAFORMA, nos termos do art. 442 e seguintes da CLT e da legislação aplicável aos trabalhadores autônomos.</p>
+            <p>2.2. O ENTREGADOR tem plena liberdade para:</p>
+            <p>a) Conectar-se e desconectar-se do aplicativo nos dias e horários que melhor lhe convierem, sem qualquer obrigação de cumprimento de jornada, escala ou meta;</p>
+            <p>b) Aceitar ou recusar, livremente, qualquer solicitação de entrega oferecida pelo sistema, sem necessidade de justificativa e sem aplicação de penalidade pela simples recusa;</p>
+            <p>c) Prestar serviços de entrega para outras plataformas, aplicativos ou estabelecimentos concorrentes, simultaneamente ou não à utilização do aplicativo "Chegô Delivery", não havendo cláusula de exclusividade.</p>
+            <p>2.3. A PLATAFORMA não exerce fiscalização, controle de jornada, supervisão direta de desempenho com fins disciplinares, nem impõe ordens diretas ao ENTREGADOR durante a execução das entregas, limitando-se a fornecer a tecnologia de conexão entre as partes.</p>
+            <p>2.4. Em razão da natureza autônoma da prestação de serviços, o ENTREGADOR não terá direito a férias, 13º salário, FGTS, aviso prévio, verbas rescisórias trabalhistas ou qualquer outro direito previsto na legislação celetista, sendo o próprio responsável por seu enquadramento previdenciário e por suas obrigações fiscais.</p>
 
             <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 3ª — DAS OBRIGAÇÕES DA PLATAFORMA</p>
-            <p>3.1. A PLATAFORMA se obriga a: (a) disponibilizar o aplicativo para visualização e aceite de entregas; (b) informar, em cada solicitação, a origem, o destino aproximado e o valor a ser pago antes do aceite; (c) efetuar o repasse dos valores devidos na periodicidade prevista na Cláusula 4ª; (d) prestar suporte técnico ao ENTREGADOR.</p>
+            <p>3.1. A PLATAFORMA se obriga a:</p>
+            <p>a) Disponibilizar o aplicativo para visualização e aceite de solicitações de entrega;</p>
+            <p>b) Informar, em cada solicitação, a origem, o destino aproximado e o valor a ser pago ao ENTREGADOR pela entrega, antes de seu aceite;</p>
+            <p>c) Efetuar o repasse dos valores devidos ao ENTREGADOR na periodicidade e forma previstas na Cláusula 4ª;</p>
+            <p>d) Prestar suporte técnico ao ENTREGADOR quanto ao funcionamento do aplicativo.</p>
 
             <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 4ª — DA REMUNERAÇÃO</p>
-            <p>4.1. Por cada entrega efetivamente realizada e confirmada, o ENTREGADOR receberá valor fixo informado previamente no momento do oferecimento da corrida, podendo variar conforme política da PLATAFORMA, sempre informada antes do aceite.</p>
-            <p>4.2. O repasse dos valores será realizado semanalmente, mediante transferência para conta bancária ou chave PIX indicada pelo ENTREGADOR.</p>
-            <p>4.3. Eventuais bonificações, incentivos por meta ou taxas dinâmicas poderão ser oferecidos a critério exclusivo da PLATAFORMA, mediante comunicação prévia.</p>
+            <p>4.1. Por cada entrega efetivamente realizada e confirmada no aplicativo, o ENTREGADOR receberá valor fixo, informado previamente no momento do oferecimento da corrida, podendo variar conforme política comercial da PLATAFORMA, sempre informada previamente ao aceite.</p>
+            <p>4.2. O repasse dos valores devidos será realizado semanalmente, toda <strong style={{ color: "white" }}>terça-feira</strong> e <strong style={{ color: "white" }}>quinta-feira</strong>, referente às entregas realizadas no período anterior, mediante transferência para conta bancária ou chave PIX indicada pelo ENTREGADOR.</p>
+            <p>4.3. Eventuais taxas de processamento de pagamento, quando existentes, serão informadas previamente ao ENTREGADOR.</p>
+            <p>4.4. Eventuais bonificações, incentivos por meta ou valores adicionais em horários de pico ("taxa dinâmica") poderão ser oferecidos a critério exclusivo da PLATAFORMA, mediante comunicação prévia.</p>
 
             <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 5ª — DO VEÍCULO E EQUIPAMENTOS</p>
-            <p>5.1. O ENTREGADOR utilizará veículo próprio ou alugado, sendo de sua exclusiva responsabilidade: (a) manter o veículo em bom estado e com documentação regular (CRLV e CNH compatível); (b) possuir seguro pessoal e/ou do veículo quando aplicável; (c) utilizar equipamentos de proteção (capacete e bag adequado); (d) custear combustível, manutenção e multas, sem reembolso da PLATAFORMA.</p>
-            <p>5.2. O ENTREGADOR deverá possuir smartphone próprio com plano de dados ativo e compatível com o aplicativo, arcando com os custos de aquisição e manutenção.</p>
+            <p>5.1. O ENTREGADOR utilizará veículo próprio ou alugado, de sua livre escolha, sendo de sua exclusiva responsabilidade:</p>
+            <p>a) Manter o veículo em bom estado de conservação, segurança e funcionamento;</p>
+            <p>b) Manter regularizados todos os documentos do veículo (CRLV) e sua própria habilitação (CNH categoria compatível) junto ao DETRAN;</p>
+            <p>c) Possuir e manter vigente, quando aplicável, seguro do veículo e/ou seguro pessoal contra acidentes;</p>
+            <p>d) Utilizar equipamentos de proteção individual (capacete, conforme exigência legal) e baú/bag adequado para transporte dos pedidos;</p>
+            <p>e) Custear despesas de combustível, manutenção, multas e demais custos relacionados ao uso do veículo, sem qualquer reembolso pela PLATAFORMA, salvo disposição expressa em contrário.</p>
+            <p>5.2. O ENTREGADOR deverá possuir smartphone próprio com plano de dados móveis ativo e compatível com os requisitos técnicos do aplicativo, sendo o custo de aquisição e manutenção do aparelho e do plano de dados de sua exclusiva responsabilidade.</p>
 
-            <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 6ª — DA RESPONSABILIDADE</p>
-            <p>6.1. O ENTREGADOR é o único e exclusivo responsável por acidentes de trânsito, infrações e danos causados a si, a Clientes, a Lojistas ou a terceiros durante as entregas, <strong style={{ color: "white" }}>isentando a PLATAFORMA de qualquer responsabilidade civil, trabalhista, criminal ou administrativa</strong> decorrente de tais eventos, ressalvada falha comprovada e exclusiva do sistema tecnológico da PLATAFORMA.</p>
-            <p>6.2. Em caso de avaria, perda ou extravio de produto, o ENTREGADOR deverá comunicar imediatamente o ocorrido, podendo responder pelo ressarcimento quando comprovada sua culpa.</p>
+            <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 6ª — DA RESPONSABILIDADE POR ACIDENTES E DANOS A TERCEIROS</p>
+            <p>6.1. O ENTREGADOR é o único e exclusivo responsável por acidentes de trânsito, infrações, danos materiais ou pessoais causados a si, a Clientes, a Lojistas ou a terceiros durante a execução das entregas, <strong style={{ color: "white" }}>isentando a PLATAFORMA de qualquer responsabilidade civil, trabalhista, criminal ou administrativa</strong> decorrente de tais eventos, ressalvada falha comprovada e exclusiva do próprio sistema tecnológico da PLATAFORMA.</p>
+            <p>6.2. Em caso de avaria, perda ou extravio de produto transportado, o ENTREGADOR deverá comunicar imediatamente o ocorrido à PLATAFORMA e ao Lojista, podendo responder, conforme as circunstâncias do caso e a política vigente da PLATAFORMA, pelo ressarcimento do valor do pedido quando comprovada sua culpa.</p>
 
             <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 7ª — DA CONDUTA</p>
-            <p>7.1. O ENTREGADOR se obriga a tratar Clientes e Lojistas com urbanidade e respeito, manter a integridade dos pedidos e não consumir bebida alcoólica ou substância que comprometa sua capacidade de condução durante as entregas.</p>
-            <p>7.2. Reclamações fundamentadas e reiteradas poderão resultar em suspensão ou bloqueio do acesso, assegurado o direito de manifestação prévia, salvo em casos graves (violência, assédio, fraude).</p>
+            <p>7.1. O ENTREGADOR se obriga a tratar Clientes e Lojistas com urbanidade e respeito, a manter a integridade dos pedidos transportados e a não consumir bebida alcoólica ou substância que comprometa sua capacidade de condução durante a realização das entregas.</p>
+            <p>7.2. Reclamações fundamentadas e reiteradas sobre a conduta do ENTREGADOR poderão resultar em suspensão ou bloqueio de seu acesso ao aplicativo, conforme política de uso da PLATAFORMA, assegurado o direito de manifestação prévia do ENTREGADOR, salvo em casos graves (ex.: violência, assédio, fraude, conduta sob efeito de substâncias).</p>
 
             <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 8ª — DA PROTEÇÃO DE DADOS (LGPD)</p>
-            <p>8.1. As PARTES se obrigam a tratar os dados pessoais de Clientes e Lojistas em conformidade com a Lei nº 13.709/2018 (LGPD), utilizando-os exclusivamente para a execução das entregas.</p>
+            <p>8.1. As PARTES se obrigam a tratar os dados pessoais de Clientes e Lojistas aos quais tiverem acesso em razão deste Termo em conformidade com a Lei nº 13.709/2018 (LGPD), utilizando-os exclusivamente para a execução das entregas, sendo vedado seu uso para qualquer outra finalidade, inclusive contato direto não autorizado com o Cliente após a conclusão do pedido.</p>
 
             <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 9ª — DA VIGÊNCIA E DO DESCADASTRAMENTO</p>
-            <p>9.1. O presente Termo vigerá por prazo indeterminado, podendo ser encerrado a qualquer tempo por qualquer das PARTES mediante simples descadastramento no aplicativo ou comunicação por escrito, sem necessidade de aviso prévio.</p>
-            <p>9.2. A PLATAFORMA poderá suspender ou bloquear o acesso do ENTREGADOR de forma imediata em caso de fraude, conduta inadequada grave, descumprimento de obrigações legais (ex.: CNH vencida) ou descumprimento reiterado deste Termo.</p>
+            <p>9.1. O presente Termo vigerá por prazo indeterminado, podendo ser encerrado a qualquer tempo, por qualquer das PARTES, mediante simples descadastramento do ENTREGADOR no aplicativo ou comunicação por escrito, sem necessidade de aviso prévio, dada a natureza eventual e não exclusiva da relação.</p>
+            <p>9.2. A PLATAFORMA poderá suspender ou bloquear o acesso do ENTREGADOR de forma imediata em caso de fraude, conduta inadequada grave, descumprimento de obrigações legais (ex.: CNH vencida ou inválida) ou descumprimento reiterado das condições deste Termo.</p>
 
             <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 10ª — DISPOSIÇÕES GERAIS</p>
-            <p>10.1. Este Termo representa a totalidade do acordo entre as PARTES, substituindo entendimentos anteriores sobre o mesmo objeto.</p>
-            <p>10.2. O ENTREGADOR declara ter lido e compreendido integralmente este Termo, manifestando sua livre e espontânea concordância.</p>
+            <p>10.1. Este Termo representa a totalidade do acordo entre as PARTES quanto à parceria de entregas, substituindo entendimentos anteriores sobre o mesmo objeto.</p>
+            <p>10.2. A tolerância de uma PARTE quanto ao descumprimento de qualquer obrigação pela outra não implica novação, renúncia ou alteração contratual.</p>
+            <p>10.3. O ENTREGADOR declara ter lido e compreendido integralmente este Termo, manifestando sua livre e espontânea concordância, inclusive por meio de aceite eletrônico no momento de seu cadastro no aplicativo, quando aplicável.</p>
 
             <p style={{ color: "white", fontWeight: 800 }}>CLÁUSULA 11ª — DO FORO</p>
-            <p>11.1. As PARTES elegem o foro da Comarca de Aragoiânia, Estado de Goiás, para dirimir quaisquer controvérsias decorrentes deste Termo.</p>
+            <p>11.1. As PARTES elegem o foro da Comarca de Aragoiânia, Estado de Goiás, para dirimir quaisquer controvérsias decorrentes deste Termo, com renúncia expressa a qualquer outro, por mais privilegiado que seja.</p>
 
-            <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "8px 0" }} />
+            <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "16px 0" }} />
             <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 12 }}>
               Aragoiânia/GO, {new Date().toLocaleDateString("pt-BR")}
             </p>
+            <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 16 }}>
+              <div>
+                <div style={{ borderBottom: "1px solid rgba(255,255,255,0.15)", marginBottom: 4, paddingBottom: 2 }}></div>
+                <p style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>CHEGÔ DELIVERY — Representante legal / PLATAFORMA</p>
+              </div>
+              <div>
+                <div style={{ borderBottom: "1px solid rgba(255,255,255,0.15)", marginBottom: 4, paddingBottom: 2 }}></div>
+                <p style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>{motoboy!.nome} — ENTREGADOR / MOTOBOY</p>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                <div>
+                  <div style={{ borderBottom: "1px solid rgba(255,255,255,0.15)", marginBottom: 4, paddingBottom: 2 }}></div>
+                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>Testemunha 1 — CPF: ___________</p>
+                </div>
+                <div>
+                  <div style={{ borderBottom: "1px solid rgba(255,255,255,0.15)", marginBottom: 4, paddingBottom: 2 }}></div>
+                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.3)" }}>Testemunha 2 — CPF: ___________</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -333,19 +364,17 @@ export default function ContratoMotoboyPage() {
               Limpar
             </button>
           </div>
-          <div style={{ border: "1.5px solid #2a2a2a", borderRadius: 14, overflow: "hidden", touchAction: "none" }}>
+          <div style={{ border: "1.5px solid #2a2a2a", borderRadius: 14, overflow: "hidden" }}>
             <canvas
               ref={canvasRef}
               width={640}
               height={200}
-              style={{ width: "100%", height: 160, background: "#0d0d0d", display: "block", cursor: "crosshair" }}
-              onMouseDown={startDraw}
-              onMouseMove={draw}
-              onMouseUp={stopDraw}
-              onMouseLeave={stopDraw}
-              onTouchStart={startDraw}
-              onTouchMove={draw}
-              onTouchEnd={stopDraw}
+              style={{ width: "100%", height: 160, background: "#0d0d0d", display: "block", cursor: "crosshair", touchAction: "none" }}
+              onPointerDown={startDraw}
+              onPointerMove={draw}
+              onPointerUp={stopDraw}
+              onPointerLeave={stopDraw}
+              onPointerCancel={stopDraw}
             />
           </div>
           <p className="text-xs mt-2 text-center" style={{ color: "rgba(255,255,255,0.25)" }}>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useClienteAuth } from "@/lib/auth-cliente"
+import { supabase } from "@/lib/supabase"
 
 const inp: React.CSSProperties = {
   width: "100%", padding: "12px 14px", borderRadius: 10, fontSize: 14,
@@ -23,6 +24,10 @@ export default function ClienteEntrarPage() {
   const [loading, setLoading]   = useState(false)
   const [erro, setErro]         = useState("")
   const [sucesso, setSucesso]   = useState("")
+  const [resetEmail, setResetEmail] = useState("")
+  const [resetModal, setResetModal] = useState(false)
+  const [resetOk,    setResetOk]    = useState(false)
+  const [resetLoad,  setResetLoad]  = useState(false)
 
   useEffect(() => {
     if (user) router.push("/")
@@ -146,12 +151,57 @@ export default function ClienteEntrarPage() {
             }}>
               {loading ? "Aguarde..." : modo === "entrar" ? "Entrar →" : "Criar conta →"}
             </button>
+
+            {modo === "entrar" && (
+              <div style={{ textAlign: "center" }}>
+                <button onClick={() => setResetModal(true)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", fontSize: 13, padding: 0 }}>
+                  Esqueceu a senha?
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
-        <p style={{ textAlign: "center", marginTop: 16, color: "#D1D5DB", fontSize: 12 }}>
-          <Link href="/lojas" style={{ color: "#9CA3AF", textDecoration: "none" }}>← Voltar para as lojas</Link>
-        </p>
+        {/* Modal reset senha cliente */}
+        {resetModal && (
+          <div onClick={e => { if (e.target === e.currentTarget) setResetModal(false) }}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 16px" }}>
+            <div style={{ background: "#fff", borderRadius: 20, padding: "28px 24px", width: "100%", maxWidth: 380, boxShadow: "0 8px 40px rgba(0,0,0,0.18)" }}>
+              {resetOk ? (
+                <div style={{ textAlign: "center" }}>
+                  <p style={{ fontSize: 40, marginBottom: 12 }}>📧</p>
+                  <p style={{ color: "#111827", fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Email enviado!</p>
+                  <p style={{ color: "#6B7280", fontSize: 13, marginBottom: 20 }}>Verifique sua caixa de entrada para redefinir a senha.</p>
+                  <button onClick={() => { setResetModal(false); setResetOk(false); setResetEmail("") }}
+                    style={{ background: "#DC2626", border: "none", color: "white", borderRadius: 10, padding: "12px 24px", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+                    Fechar
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <p style={{ color: "#111827", fontWeight: 800, fontSize: 16, marginBottom: 16 }}>Recuperar senha</p>
+                  <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Seu email cadastrado</label>
+                  <input type="email" value={resetEmail} onChange={e => setResetEmail(e.target.value)} placeholder="seu@email.com"
+                    style={{ ...inp, marginBottom: 16 }} />
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button onClick={() => setResetModal(false)} style={{ flex: 1, padding: "12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "#fff", color: "#6B7280", fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
+                      Cancelar
+                    </button>
+                    <button disabled={resetLoad} onClick={async () => {
+                        setResetLoad(true)
+                        await supabase.auth.resetPasswordForEmail(resetEmail.trim(), { redirectTo: "https://chegodelivery.com/redefinir-senha-cliente" })
+                        setResetLoad(false); setResetOk(true)
+                      }}
+                      style={{ flex: 2, padding: "12px", borderRadius: 10, border: "none", background: resetLoad ? "rgba(220,38,38,0.4)" : "#DC2626", color: "white", fontWeight: 700, fontSize: 14, cursor: resetLoad ? "not-allowed" : "pointer" }}>
+                      {resetLoad ? "Enviando..." : "Enviar link →"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   )

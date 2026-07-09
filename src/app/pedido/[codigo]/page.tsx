@@ -37,8 +37,14 @@ function MapaRastreamento({
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null)
   const mapRef = useRef<google.maps.Map | null>(null)
 
-  // Rastreamento em tempo real via Supabase
+  // Rastreamento em tempo real: polling a cada 4s + realtime como reforço
   useEffect(() => {
+    async function fetchPos() {
+      const { data } = await supabase.from("motoboys").select("lat,lng").eq("id", motoboyId).single()
+      if (data?.lat && data?.lng) { setMotoLat(Number(data.lat)); setMotoLng(Number(data.lng)) }
+    }
+    fetchPos()
+    const iv = setInterval(fetchPos, 4000)
     const ch = supabase.channel(`track-motoboy-${motoboyId}`)
       .on("postgres_changes", {
         event: "UPDATE", schema: "public", table: "motoboys",
@@ -48,12 +54,17 @@ function MapaRastreamento({
         if (n.lat && n.lng) { setMotoLat(n.lat); setMotoLng(n.lng) }
       })
       .subscribe()
-    return () => { supabase.removeChannel(ch) }
+    return () => { clearInterval(iv); supabase.removeChannel(ch) }
   }, [motoboyId])
 
-  // Pan suave quando motoboy se move
+  // Centraliza só se o motoboy sair da área visível do mapa
   useEffect(() => {
-    if (mapRef.current) mapRef.current.panTo({ lat: motoLat, lng: motoLng })
+    const map = mapRef.current
+    if (!map) return
+    const bounds = map.getBounds()
+    if (!bounds || !bounds.contains({ lat: motoLat, lng: motoLng })) {
+      map.panTo({ lat: motoLat, lng: motoLng })
+    }
   }, [motoLat, motoLng])
 
   // Geocoding do destino via Google Geocoder
@@ -131,6 +142,7 @@ function MapaRastreamento({
           directions={directions}
           options={{
             suppressMarkers: true,
+            preserveViewport: true,
             polylineOptions: { strokeColor: "#f97316", strokeWeight: 4, strokeOpacity: 0.8 },
           }}
         />
@@ -217,20 +229,82 @@ const PAGAMENTO_LABEL: Record<string, string> = {
 
 function StarRow({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   const [hover, setHover] = useState(0)
+  const active = hover || value
   return (
     <div>
       <p style={{ color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 8 }}>{label}</p>
-      <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", gap: 6 }}>
         {[1, 2, 3, 4, 5].map(n => (
           <button key={n}
             onClick={() => onChange(n)}
             onMouseEnter={() => setHover(n)}
             onMouseLeave={() => setHover(0)}
-            style={{ background: "none", border: "none", cursor: "pointer", fontSize: 32, padding: 0, transition: "transform 0.1s", transform: hover === n ? "scale(1.2)" : "scale(1)" }}>
-            {n <= (hover || value) ? "⭐" : "☆"}
+            onTouchStart={() => setHover(n)}
+            onTouchEnd={() => { onChange(n); setHover(0) }}
+            style={{
+              background: "none", border: "none", cursor: "pointer", padding: 2,
+              fontSize: 36, lineHeight: 1,
+              color: n <= active ? "#f59e0b" : "#D1D5DB",
+              transition: "color 0.1s, transform 0.1s",
+              transform: hover === n ? "scale(1.25)" : "scale(1)",
+            }}>
+            ★
           </button>
         ))}
       </div>
+    </div>
+  )
+}
+
+function CartaoProcessando({ pedidoId, onConfirmado }: { pedidoId: string; onConfirmado: () => void }) {
+  const [verificando, setVerificando] = useState(false)
+  const [erro, setErro] = useState("")
+
+  const [cancelado, setCancelado] = useState(false)
+
+  async function verificar() {
+    setVerificando(true)
+    setErro("")
+    try {
+      const r = await fetch("/api/pagamento/verificar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pedido_id: pedidoId }),
+      }).then(r => r.json())
+      if (r.confirmado) { onConfirmado() }
+      else if (r.sem_pagamento) { setCancelado(true) }
+      else if (r.status === "cancelado") { setErro("Pagamento recusado pela operadora. Tente com outro cartão.") }
+      else { setErro("Pagamento ainda em análise. Aguarde alguns segundos e tente novamente.") }
+    } catch { setErro("Erro ao verificar. Tente novamente.") }
+    finally { setVerificando(false) }
+  }
+
+  if (cancelado) {
+    return (
+      <div style={{ background: "#FEF2F2", border: "1.5px solid #FECACA", borderRadius: 16, padding: "20px 16px", marginBottom: 16, textAlign: "center" }}>
+        <p style={{ fontSize: 28, marginBottom: 8 }}>❌</p>
+        <p style={{ color: "#DC2626", fontWeight: 700, fontSize: 14, marginBottom: 8 }}>Pagamento não foi processado</p>
+        <p style={{ color: "#6B7280", fontSize: 12, marginBottom: 16 }}>Este pedido foi cancelado. Por favor, faça um novo pedido e insira os dados do cartão novamente.</p>
+        <a href="/" style={{ display: "inline-block", background: "#DC2626", color: "#fff", borderRadius: 12, padding: "10px 24px", fontWeight: 700, fontSize: 14, textDecoration: "none" }}>
+          Fazer novo pedido
+        </a>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ background: "#fff", border: "1.5px solid #f97316", borderRadius: 16, padding: "20px 16px", marginBottom: 16, textAlign: "center" }}>
+      <p style={{ fontSize: 28, marginBottom: 8 }}>💳</p>
+      <p style={{ color: "#111827", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Processando pagamento no cartão</p>
+      <p style={{ color: "#6B7280", fontSize: 12, marginBottom: 16 }}>Seu pagamento está sendo analisado. Isso costuma levar alguns segundos.</p>
+      {erro && <p style={{ color: "#DC2626", fontSize: 12, marginBottom: 12 }}>{erro}</p>}
+      <button
+        onClick={verificar}
+        disabled={verificando}
+        style={{ background: verificando ? "#9CA3AF" : "#f97316", color: "#fff", border: "none", borderRadius: 12, padding: "10px 24px", fontWeight: 700, fontSize: 14, cursor: verificando ? "not-allowed" : "pointer" }}
+      >
+        {verificando ? "Verificando..." : "Verificar pagamento"}
+      </button>
     </div>
   )
 }
@@ -323,9 +397,11 @@ export default function AcompanhamentoPedido() {
   const [enviandoAval,   setEnviandoAval]   = useState(false)
   const [avaliacaoOk,    setAvaliacaoOk]    = useState(false)
 
-  const prevStatusRef = useRef<string | null>(null)
+  const prevStatusRef   = useRef<string | null>(null)
+  const audioUnlockedRef = useRef(false)
   const pushDoneRef = useState(false)
 
+  const [pixCopiado,        setPixCopiado]         = useState(false)
   const [clienteToken,      setClienteToken]      = useState<string | null>(null)
   const [cancelando,        setCancelando]         = useState(false)
   const [cancelModal,       setCancelModal]        = useState(false)
@@ -439,11 +515,26 @@ export default function AcompanhamentoPedido() {
       .then(({ data }) => { if (data?.[0]) setReembolsoStatus((data[0] as any).status) })
   }, [pedido?.id, pedido?.status])
 
+  // Desbloqueia áudio no primeiro toque (obrigatório no iOS/Safari)
+  useEffect(() => {
+    const unlock = () => {
+      if (audioUnlockedRef.current) return
+      audioUnlockedRef.current = true
+      // Cria e resume um AudioContext silencioso para liberar o contexto de áudio
+      try {
+        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
+        ctx.resume().then(() => ctx.close())
+      } catch {}
+    }
+    window.addEventListener("pointerdown", unlock, { once: true })
+    return () => window.removeEventListener("pointerdown", unlock)
+  }, [])
+
   // Ouve mensagem do SW para tocar som de entregue mesmo com a aba em foco
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return
     function onMsg(e: MessageEvent) {
-      if (e.data?.type === "push-received" && e.data?.isEntregue) {
+      if (e.data?.type === "push-received" && (e.data?.isEntregue || e.data?.isCheguei)) {
         try { const a = new Audio("/splash.mp3"); a.volume = 0.9; a.play().catch(() => {}) } catch {}
       }
     }
@@ -470,6 +561,7 @@ export default function AcompanhamentoPedido() {
 
   async function enviarReembolso() {
     if (!pedido || !clienteToken || !reembolsoMotivo) return
+    if (!reembolsoFoto) { alert("Anexe uma foto ou vídeo do problema para continuar."); return }
     setEnvReembolso(true)
     let fotoUrl = ""
     if (reembolsoFoto) {
@@ -533,6 +625,7 @@ export default function AcompanhamentoPedido() {
     </div>
   )
 
+  const aguardandoPagamento = pedido.status === "aguardando_pagamento"
   const etapaAtual  = STATUS_INDEX[pedido.status] ?? 0
   const cancelado   = pedido.status === "cancelado"
   const entregue    = pedido.status === "entregue"
@@ -648,15 +741,29 @@ export default function AcompanhamentoPedido() {
             </div>
 
             <div style={{ marginBottom: 24 }}>
-              <p style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 8 }}>Foto (opcional)</p>
-              <input type="file" accept="image/*" onChange={e => setReembolsoFoto(e.target.files?.[0] ?? null)}
-                style={{ fontSize: 13, color: "#6B7280" }} />
+              <p style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 4 }}>Foto ou vídeo *</p>
+              <p style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 10 }}>Obrigatório — mostre o problema claramente</p>
+              <label style={{
+                display: "flex", alignItems: "center", gap: 10, cursor: "pointer",
+                padding: "12px 16px", borderRadius: 12, border: `1.5px dashed ${reembolsoFoto ? "#22c55e" : "#E5E7EB"}`,
+                background: reembolsoFoto ? "#F0FDF4" : "#F9FAFB",
+              }}>
+                <span style={{ fontSize: 22 }}>{reembolsoFoto ? "✅" : "📎"}</span>
+                <div>
+                  <p style={{ color: reembolsoFoto ? "#15803d" : "#374151", fontWeight: 700, fontSize: 13 }}>
+                    {reembolsoFoto ? reembolsoFoto.name : "Clique para anexar arquivo"}
+                  </p>
+                  <p style={{ color: "#9CA3AF", fontSize: 11, marginTop: 2 }}>Foto ou vídeo (JPG, PNG, MP4, MOV...)</p>
+                </div>
+                <input type="file" accept="image/*,video/*" onChange={e => setReembolsoFoto(e.target.files?.[0] ?? null)}
+                  style={{ display: "none" }} />
+              </label>
             </div>
 
-            <button onClick={enviarReembolso} disabled={!reembolsoMotivo || envReembolso} style={{
+            <button onClick={enviarReembolso} disabled={!reembolsoMotivo || !reembolsoFoto || envReembolso} style={{
               width: "100%", padding: "14px", borderRadius: 14, border: "none",
-              background: !reembolsoMotivo || envReembolso ? "rgba(220,38,38,0.4)" : "#DC2626",
-              color: "white", fontWeight: 800, fontSize: 15, cursor: !reembolsoMotivo || envReembolso ? "not-allowed" : "pointer",
+              background: !reembolsoMotivo || !reembolsoFoto || envReembolso ? "rgba(220,38,38,0.4)" : "#DC2626",
+              color: "white", fontWeight: 800, fontSize: 15, cursor: !reembolsoMotivo || !reembolsoFoto || envReembolso ? "not-allowed" : "pointer",
             }}>
               {envReembolso ? "Enviando..." : "Enviar solicitação"}
             </button>
@@ -689,6 +796,61 @@ export default function AcompanhamentoPedido() {
                 style={{ display: "inline-block", marginTop: 14, color: "#16a34a", fontWeight: 700, fontSize: 13 }}>
                 Falar com a loja via WhatsApp
               </a>
+            )}
+          </div>
+        ) : aguardandoPagamento ? (
+          <div style={{ marginBottom: 24 }}>
+            {/* Banner aguardando pagamento */}
+            <div style={{ background: "#FFFBEB", border: "1.5px solid #FDE68A", borderRadius: 20, padding: "24px 20px", marginBottom: 16, textAlign: "center" }}>
+              <p style={{ fontSize: 44, marginBottom: 10 }}>⏳</p>
+              <p style={{ color: "#92400E", fontWeight: 900, fontSize: 18, marginBottom: 6 }}>Pagamento pendente</p>
+              <p style={{ color: "#78350F", fontSize: 13, lineHeight: 1.5 }}>
+                Seu pedido foi criado mas ainda não foi pago.<br />
+                Finalize o pagamento para confirmar o pedido.
+              </p>
+            </div>
+
+            {/* PIX copia e cola */}
+            {pedido.forma_pagamento === "pix" && (pedido as any).pix_copia_cola && (
+              <div style={{ background: "#fff", border: "1.5px solid #E5E7EB", borderRadius: 16, padding: "20px 16px", marginBottom: 16 }}>
+                <p style={{ color: "#111827", fontWeight: 800, fontSize: 15, marginBottom: 4 }}>Pagar com PIX</p>
+                <p style={{ color: "#6B7280", fontSize: 13, marginBottom: 16 }}>Copie o código abaixo e cole no app do seu banco:</p>
+                <div style={{
+                  background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 10,
+                  padding: "12px 14px", fontSize: 11, color: "#374151",
+                  wordBreak: "break-all", fontFamily: "monospace", marginBottom: 12, lineHeight: 1.6,
+                }}>
+                  {(pedido as any).pix_copia_cola}
+                </div>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText((pedido as any).pix_copia_cola).then(() => {
+                      setPixCopiado(true)
+                      setTimeout(() => setPixCopiado(false), 3000)
+                    })
+                  }}
+                  style={{
+                    width: "100%", padding: "13px", borderRadius: 12, border: "none",
+                    background: pixCopiado ? "#16A34A" : "#111827",
+                    color: "#fff", fontWeight: 800, fontSize: 15, cursor: "pointer",
+                    transition: "background 0.2s",
+                  }}
+                >
+                  {pixCopiado ? "✓ Código copiado!" : "📋 Copiar código PIX"}
+                </button>
+                <p style={{ color: "#9CA3AF", fontSize: 11, textAlign: "center", marginTop: 10 }}>
+                  Esta página atualiza automaticamente após o pagamento
+                </p>
+              </div>
+            )}
+
+            {pedido.forma_pagamento === "cartao" && (
+              <CartaoProcessando pedidoId={pedido.id} onConfirmado={load} />
+            )}
+            {pedido.forma_pagamento !== "pix" && pedido.forma_pagamento !== "cartao" && (
+              <div style={{ background: "#fff", border: "1.5px solid #E5E7EB", borderRadius: 16, padding: "20px 16px", marginBottom: 16, textAlign: "center" }}>
+                <p style={{ color: "#6B7280", fontSize: 13 }}>Volte ao app para finalizar o pagamento com {pedido.forma_pagamento}.</p>
+              </div>
             )}
           </div>
         ) : (

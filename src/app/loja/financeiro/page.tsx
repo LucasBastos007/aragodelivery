@@ -78,7 +78,7 @@ export default function LojaFinanceiroPage() {
     const valor = parseFloat(valorSaque.replace(",", "."))
     if (!valor || valor <= 0) { setErroSaque("Informe um valor válido"); return }
     if (valor > saldo + 0.001) { setErroSaque("Valor maior que o saldo disponível"); return }
-    if (!loja?.pix_chave) { setErroSaque("Cadastre sua chave PIX no perfil antes de solicitar"); return }
+    if (!loja?.pix_key) { setErroSaque("Cadastre sua chave PIX no perfil antes de solicitar"); return }
     setErroSaque(""); setEnviandoSaque(true)
     const res = await fetch("/api/loja/saque", {
       method: "POST",
@@ -106,7 +106,7 @@ export default function LojaFinanceiroPage() {
       </p>
 
       {/* Aviso sem PIX */}
-      {!loja?.pix_chave && (
+      {!loja?.pix_key && (
         <div style={{
           background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)",
           borderRadius: 14, padding: "14px 16px", marginBottom: 20,
@@ -154,9 +154,38 @@ export default function LojaFinanceiroPage() {
           <p style={{ color: "#f97316", fontWeight: 900, fontSize: 18 }}>R$ {Number(loja?.plano_mensalidade ?? 0).toFixed(2)}</p>
         </div>
         <div>
-          <p style={{ color: "#9CA3AF", fontSize: 11, fontWeight: 700, marginBottom: 4 }}>PIX CADASTRADO</p>
-          <p style={{ color: loja?.pix_chave ? "#111827" : "#f87171", fontWeight: 700, fontSize: 14 }}>
-            {loja?.pix_chave ?? "Não cadastrado"}
+          <p style={{ color: "#9CA3AF", fontSize: 11, fontWeight: 700, marginBottom: 4 }}>CHAVE PIX</p>
+          <p style={{ color: loja?.pix_key ? "#111827" : "#f87171", fontWeight: 700, fontSize: 14 }}>
+            {loja?.pix_key ?? "Não cadastrado"}
+          </p>
+        </div>
+        {loja?.banco && (
+          <div>
+            <p style={{ color: "#9CA3AF", fontSize: 11, fontWeight: 700, marginBottom: 4 }}>DADOS BANCÁRIOS</p>
+            <p style={{ color: "#111827", fontWeight: 700, fontSize: 13 }}>{loja.banco}</p>
+            <p style={{ color: "#6B7280", fontSize: 12 }}>
+              {loja.banco_tipo_conta ?? "Corrente"} · Ag: {loja.banco_agencia} · Cc: {loja.banco_conta}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Repasse */}
+      <div style={{
+        background: loja?.asaas_wallet_id ? "#ECFDF5" : "#FFF7ED",
+        border: `1.5px solid ${loja?.asaas_wallet_id ? "#A7F3D0" : "#FED7AA"}`,
+        borderRadius: 14, padding: "14px 16px", marginBottom: 20,
+        display: "flex", alignItems: "flex-start", gap: 12,
+      }}>
+        <span style={{ fontSize: 22, flexShrink: 0 }}>{loja?.asaas_wallet_id ? "⚡" : "🏦"}</span>
+        <div>
+          <p style={{ fontSize: 13, fontWeight: 800, color: loja?.asaas_wallet_id ? "#059669" : "#d97706", marginBottom: 2 }}>
+            {loja?.asaas_wallet_id ? "Repasse automático (split)" : "Repasse manual (saque)"}
+          </p>
+          <p style={{ fontSize: 12, color: "#6B7280" }}>
+            {loja?.asaas_wallet_id
+              ? `Você recebe ${100 - (loja?.comissao ?? 0)}% de cada pedido diretamente na sua conta Asaas, sem precisar solicitar saque.`
+              : "Seus ganhos acumulam aqui e você solicita saque manualmente. Em breve será migrado para repasse automático."}
           </p>
         </div>
       </div>
@@ -171,11 +200,11 @@ export default function LojaFinanceiroPage() {
               <p style={{ color: "#111827", fontWeight: 700 }}>Solicitar saque</p>
               {!solicitando && (
                 <button onClick={() => { setSolicitando(true); setErroSaque("") }}
-                  disabled={saldo <= 0 || !loja?.pix_chave}
+                  disabled={saldo <= 0 || !loja?.pix_key}
                   style={{
-                    padding: "7px 16px", borderRadius: 10, border: "none", cursor: saldo <= 0 || !loja?.pix_chave ? "not-allowed" : "pointer",
-                    background: saldo > 0 && loja?.pix_chave ? "#f97316" : "#F3F4F6",
-                    color: saldo > 0 && loja?.pix_chave ? "white" : "#9CA3AF",
+                    padding: "7px 16px", borderRadius: 10, border: "none", cursor: saldo <= 0 || !loja?.pix_key ? "not-allowed" : "pointer",
+                    background: saldo > 0 && loja?.pix_key ? "#f97316" : "#F3F4F6",
+                    color: saldo > 0 && loja?.pix_key ? "white" : "#9CA3AF",
                     fontWeight: 700, fontSize: 13,
                   }}>
                   + Novo saque
@@ -192,7 +221,7 @@ export default function LojaFinanceiroPage() {
                     value={valorSaque} onChange={e => setValorSaque(e.target.value)} />
                 </div>
                 <div style={{ background: "#F9FAFB", borderRadius: 10, padding: "10px 14px" }}>
-                  <p style={{ color: "#6B7280", fontSize: 12 }}>PIX: <strong style={{ color: "#111827" }}>{loja?.pix_chave}</strong></p>
+                  <p style={{ color: "#6B7280", fontSize: 12 }}>PIX: <strong style={{ color: "#111827" }}>{loja?.pix_key}</strong></p>
                   <p style={{ color: "#9CA3AF", fontSize: 11, marginTop: 3 }}>Prazo: até 2 dias úteis</p>
                 </div>
                 {erroSaque && <p style={{ color: "#f87171", fontSize: 13, fontWeight: 600 }}>{erroSaque}</p>}
@@ -221,7 +250,7 @@ export default function LojaFinanceiroPage() {
                         <div>
                           <p style={{ color: "#111827", fontWeight: 700, fontSize: 14 }}>R$ {Number(s.valor).toFixed(2)}</p>
                           <p style={{ color: "#9CA3AF", fontSize: 12 }}>
-                            {new Date(s.criado_em).toLocaleDateString("pt-BR")} · {s.pix_chave}
+                            {new Date(s.criado_em).toLocaleDateString("pt-BR")} · {s.pix_key}
                           </p>
                         </div>
                         <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 999, background: "rgba(245,158,11,0.12)", color: "#f59e0b" }}>

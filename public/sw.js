@@ -1,5 +1,32 @@
 // sw.js — bump CACHE_NAME a cada deploy para forçar atualização
-const CACHE_NAME = "chego-v4"
+const CACHE_NAME = "chego-v6"
+
+// ─── Background Location ──────────────────────────────────────────────────────
+// Armazena última posição recebida da aba principal para envio em background
+let bgLocation = null
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "store-location") {
+    bgLocation = { lat: event.data.lat, lng: event.data.lng }
+  }
+})
+
+// Background Sync: quando o browser resgata a aba do background, envia a posição armazenada
+self.addEventListener("sync", (event) => {
+  if (event.tag === "bg-location") {
+    event.waitUntil(
+      (async () => {
+        if (!bgLocation) return
+        await fetch("/api/motoboy/update-location", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(bgLocation),
+        }).catch(() => {})
+      })()
+    )
+  }
+})
 
 // Só arquivos verdadeiramente estáticos (têm hash no nome → nunca mudam)
 const PRECACHE = [
@@ -93,6 +120,7 @@ self.addEventListener("push", (event) => {
   const tag = data.tag ?? "chego-update"
   const isMotoboy = tag.startsWith("motoboy-")
   const isEntregue = title.includes("entregue") || title.includes("Entregue")
+  const isCheguei  = tag.startsWith("cheguei-")
 
   const options = {
     body:    data.body ?? "",
@@ -108,8 +136,16 @@ self.addEventListener("push", (event) => {
     requireInteraction: data.requireInteraction ?? isMotoboy ?? isEntregue,
     renotify: true,
     silent: false,
+    data: {
+      url:       data.url ?? (isMotoboy ? "/motoboy" : "/"),
+      pedido_id: data.pedido_id ?? null,
+      motoboy_id: data.motoboy_id ?? null,
+    },
     actions: isMotoboy
-      ? [{ action: "open", title: "Ver corrida 🛵" }]
+      ? [
+          { action: "aceitar", title: "✅ Aceitar corrida" },
+          { action: "open",    title: "🛵 Ver detalhes"   },
+        ]
       : isEntregue
         ? [{ action: "open", title: "Avaliar pedido ⭐" }]
         : [],
@@ -119,7 +155,7 @@ self.addEventListener("push", (event) => {
     Promise.all([
       self.registration.showNotification(title, options),
       clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) =>
-        list.forEach((c) => c.postMessage({ type: "push-received", tag, isMotoboy, isEntregue }))
+        list.forEach((c) => c.postMessage({ type: "push-received", tag, isMotoboy, isEntregue, isCheguei }))
       ),
     ])
   )
@@ -128,7 +164,37 @@ self.addEventListener("push", (event) => {
 // ─── Clique na notificação ────────────────────────────────────────────────────
 self.addEventListener("notificationclick", (event) => {
   event.notification.close()
-  const url = event.notification.data?.url ?? "/"
+  const notifData = event.notification.data ?? {}
+  const action    = event.action
+
+  // Aceite direto da notificação (sem abrir app)
+  if (action === "aceitar" && notifData.pedido_id && notifData.motoboy_id) {
+    event.waitUntil(
+      fetch("/api/motoboy/aceitar-corrida", {
+        method:      "POST",
+        credentials: "include",
+        headers:     { "Content-Type": "application/json" },
+        body:        JSON.stringify({ pedido_id: notifData.pedido_id }),
+      }).then(() => {
+        // Abre o app após aceitar para acompanhar a entrega
+        return clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
+          for (const c of list) {
+            if (c.url.includes("/motoboy") && "focus" in c) return c.focus()
+          }
+          if (clients.openWindow) return clients.openWindow("/motoboy")
+        })
+      }).catch(() => {
+        // Fallback: abre o app
+        return clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
+          if (clients.openWindow) return clients.openWindow("/motoboy")
+        })
+      })
+    )
+    return
+  }
+
+  // Ação "open" ou clique normal → abre o app
+  const url = notifData.url ?? "/"
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
       for (const c of list) {

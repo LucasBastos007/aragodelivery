@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
   const lojaLat = (pedido as any).loja_lat ?? (pedido.loja as any)?.lat ?? null
   const lojaLng = (pedido.loja as any)?.lng ?? null
 
-  // Busca motoboys disponíveis
+  // Busca motoboys disponíveis e ativos
   const { data: motoboyData } = await supabase
     .from("motoboys")
     .select("id, lat, lng, push_subscription")
@@ -138,22 +138,34 @@ export async function POST(req: NextRequest) {
     await updateQuery.is("motoboy_id", null)
   }
 
-  // Push notification para o motoboy
-  if (escolhido.push_subscription) {
-    try {
-      if (initVapid()) {
-        await webpush.sendNotification(
-          escolhido.push_subscription as any,
-          JSON.stringify({
-            title: "Nova corrida disponível!",
-            body:  `Pedido #${pedido.codigo} — R$ ${(pedido.taxa_entrega ?? 0).toFixed(2)}`,
-            tag:   `motoboy-${escolhido.id}`,
-            url:   "/motoboy",
-            requireInteraction: true,
-          })
-        )
-      }
-    } catch {}
+  // Push notification para todos os dispositivos do motoboy
+  if (escolhido.push_subscription && initVapid()) {
+    const subs: any[] = Array.isArray(escolhido.push_subscription)
+      ? escolhido.push_subscription
+      : [escolhido.push_subscription]
+    const payload = JSON.stringify({
+      title:      "Nova corrida disponível!",
+      body:       `Pedido #${pedido.codigo} — R$ ${(pedido.taxa_entrega ?? 0).toFixed(2)}`,
+      tag:        `motoboy-${escolhido.id}`,
+      url:        "/motoboy",
+      pedido_id:  pedido_id,
+      motoboy_id: escolhido.id,
+      requireInteraction: true,
+    })
+    const expiredEndpoints: string[] = []
+    await Promise.allSettled(
+      subs.map(async sub => {
+        try { await webpush.sendNotification(sub, payload) }
+        catch (e: any) { if (e.statusCode === 410) expiredEndpoints.push(sub.endpoint) }
+      })
+    )
+    // Limpa subscrições expiradas
+    if (expiredEndpoints.length > 0) {
+      const filtradas = subs.filter(s => !expiredEndpoints.includes(s?.endpoint))
+      await supabase.from("motoboys")
+        .update({ push_subscription: filtradas.length ? filtradas : null })
+        .eq("id", escolhido.id)
+    }
   }
 
   return NextResponse.json({ ok: true, motoboy_id: escolhido.id })

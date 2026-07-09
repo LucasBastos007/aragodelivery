@@ -12,6 +12,7 @@ import type { Loja, CategoriaLoja } from "@/types"
 import { LogoClean } from "@/components/LogoClean"
 import { MobileBottomNav } from "@/components/MobileBottomNav"
 import AddressBottomSheet from "@/components/AddressBottomSheet"
+import ModalCompletarPerfil from "@/components/ModalCompletarPerfil"
 
 const CAT_IMG: Record<string, string> = {
   Restaurante: "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f354.png",
@@ -374,9 +375,9 @@ const BANNERS = [
     overlay: "linear-gradient(100deg,rgba(140,10,10,0.90) 0%,rgba(160,20,20,0.65) 50%,rgba(0,0,0,0.08) 100%)",
     shadow: "rgba(160,20,20,0.40)",
     cta_bg: "#DC2626",
-    eyebrow: "Promoção do dia",
-    title: "Frete Grátis",
-    sub: "nos seus primeiros pedidos",
+    eyebrow: "Chegô Delivery",
+    title: "Entrega Rápida",
+    sub: "do seu restaurante favorito até você",
     cta: "Pedir agora →",
   },
   {
@@ -427,6 +428,8 @@ export default function Home() {
   const touchStartX = useRef(0)
   // step: 0=nenhum 1=hamburguer 2=carrinho 3=farmácia 4=logo
   const [step, setStep] = useState(0)
+  const [splashStarted, setSplashStarted] = useState(false)
+  const splashTimers = useRef<ReturnType<typeof setTimeout>[]>([])
   const [pedidoAtivo, setPedidoAtivo] = useState<{ codigo: string; id: string } | null>(null)
 
   const isMobile    = useIsMobile()
@@ -443,6 +446,24 @@ export default function Home() {
     }
   }, [])
 
+  function iniciarSplash() {
+    if (splashStarted) return
+    setSplashStarted(true)
+    playSound()
+    const mk = (fn: () => void, ms: number) => setTimeout(fn, ms)
+    splashTimers.current = [
+      mk(() => setStep(1),                                              0),
+      mk(() => setStep(0),                                            800),
+      mk(() => setStep(2),                                           1050),
+      mk(() => setStep(0),                                           1850),
+      mk(() => setStep(3),                                           2100),
+      mk(() => setStep(0),                                           2900),
+      mk(() => setStep(4),                                           3150),
+      mk(() => setSplashFade(true),                                  4650),
+      mk(() => { setSplashVis(false); sessionStorage.setItem("arago_splash_done", "1") }, 5250),
+    ]
+  }
+
   useEffect(() => {
     if (typeof window !== "undefined" && !localStorage.getItem("arago_onboarded")) {
       router.replace("/onboarding"); return
@@ -451,20 +472,13 @@ export default function Home() {
       .order("aberto", { ascending: false }).order("nome")
       .then(({ data }) => { setLojas((data as Loja[]) ?? []); setLoading(false) })
 
-    // Splash já foi exibido nesta sessão — pula animação e som
-    if (sessionStorage.getItem("arago_splash_done")) return
+    // Splash já foi exibido nesta sessão — fecha imediatamente
+    if (sessionStorage.getItem("arago_splash_done")) { setSplashVis(false); return }
 
-    // sequência: cada ícone entra e sai antes do próximo
-    const t1  = setTimeout(() => { setStep(1); playSound() },         150)
-    const t2  = setTimeout(() => setStep(0),                          950)
-    const t3  = setTimeout(() => setStep(2),                         1200)
-    const t4  = setTimeout(() => setStep(0),                         2000)
-    const t5  = setTimeout(() => setStep(3),                         2250)
-    const t6  = setTimeout(() => setStep(0),                         3050)
-    const t7  = setTimeout(() => setStep(4),                         3300)
-    const t8  = setTimeout(() => setSplashFade(true),                4800)
-    const t9  = setTimeout(() => { setSplashVis(false); sessionStorage.setItem("arago_splash_done", "1") }, 5400)
-    return () => [t1,t2,t3,t4,t5,t6,t7,t8,t9].forEach(clearTimeout)
+    // Inicia splash automaticamente sem exigir toque
+    iniciarSplash()
+
+    return () => splashTimers.current.forEach(clearTimeout)
   }, [])
 
   useEffect(() => {
@@ -523,12 +537,16 @@ export default function Home() {
 
       {/* ── SPLASH ─────────────────────────────────────────── */}
       {splashVis && (
-        <div style={{
-          position: "fixed", inset: 0, zIndex: 9999, background: "#ffffff",
-          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-          opacity: splashFade ? 0 : 1, transition: "opacity 0.6s ease",
-          pointerEvents: splashFade ? "none" : "all",
-        }}>
+        <div
+          onClick={iniciarSplash}
+          style={{
+            position: "fixed", inset: 0, zIndex: 9999, background: "#ffffff",
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+            opacity: splashFade ? 0 : 1, transition: "opacity 0.6s ease",
+            pointerEvents: splashFade ? "none" : "all",
+            cursor: splashStarted ? "default" : "pointer",
+            userSelect: "none",
+          }}>
           {/* Partículas de fundo */}
           <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
             {Array.from({ length: 12 }).map((_, i) => (
@@ -610,10 +628,15 @@ export default function Home() {
            : ""}
           </p>
 
+
           <style>{`
             @keyframes splashFloat {
               from { transform: translateY(0px) rotate(0deg); }
               to   { transform: translateY(-18px) rotate(180deg); }
+            }
+            @keyframes splashPulse {
+              0%, 100% { transform: scale(1); opacity: 0.7; }
+              50%       { transform: scale(1.15); opacity: 1; }
             }
           `}</style>
         </div>
@@ -1336,7 +1359,7 @@ export default function Home() {
               </div>
               <div>
                 <p style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "#9CA3AF", marginBottom: 16 }}>Redes sociais</p>
-                <a href="https://instagram.com/ChegoAragyn" target="_blank" rel="noopener noreferrer"
+                <a href="https://www.instagram.com/appchegodelivery?igsh=MW92Nnljcjdua2J0Zg==" target="_blank" rel="noopener noreferrer"
                   style={{ display: "inline-flex", alignItems: "center", gap: 10, textDecoration: "none", padding: "10px 14px", borderRadius: 12, background: "#ffffff", border: "1px solid #e5e7eb" }}>
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <defs>
@@ -1350,7 +1373,7 @@ export default function Home() {
                     <circle cx="12" cy="12" r="4.5" fill="none" stroke="white" strokeWidth="1.8"/>
                     <circle cx="17.5" cy="6.5" r="1.2" fill="white"/>
                   </svg>
-                  <span style={{ color: "#374151", fontSize: 14, fontWeight: 500 }}>@ChegoAragyn</span>
+                  <span style={{ color: "#374151", fontSize: 14, fontWeight: 500 }}>@AppChegoDelivery</span>
                 </a>
               </div>
               <div>
@@ -1392,6 +1415,9 @@ export default function Home() {
           onClose={() => setAddrSheetOpen(false)}
         />
       )}
+
+      {/* Modal de completar perfil — aparece após primeiro login sem CPF */}
+      <ModalCompletarPerfil />
     </div>
   )
 }

@@ -26,6 +26,7 @@ export default function MotoboyFinanceiroPage() {
 
   const [editandoPix,   setEditandoPix]   = useState(false)
   const [pixInput,      setPixInput]      = useState("")
+  const [bancoInput,    setBancoInput]    = useState("")
   const [salvandoPix,   setSalvandoPix]   = useState(false)
 
   const [solicitando,   setSolicitando]   = useState(false)
@@ -39,7 +40,15 @@ export default function MotoboyFinanceiroPage() {
 
     const { data: mb } = await supabase.from("motoboys").select("*").eq("id", motoboy_id).single()
     setMotoboy(mb)
-    setPixInput(mb?.pix_chave ?? "")
+    // pix_key pode ser JSON { pix, banco } ou string legada
+    try {
+      const parsed = mb?.pix_key ? JSON.parse(mb.pix_key) : {}
+      setPixInput(parsed.pix ?? "")
+      setBancoInput(parsed.banco ?? "")
+    } catch {
+      setPixInput(mb?.pix_key ?? "")
+      setBancoInput("")
+    }
 
     const { data: ped } = await supabase
       .from("pedidos").select("id, codigo, taxa_entrega, criado_em, loja:lojas(nome)")
@@ -68,7 +77,8 @@ export default function MotoboyFinanceiroPage() {
   async function salvarPix() {
     if (!motoboy_id || !pixInput.trim()) return
     setSalvandoPix(true)
-    await supabase.from("motoboys").update({ pix_chave: pixInput.trim() }).eq("id", motoboy_id)
+    const payload = JSON.stringify({ pix: pixInput.trim(), banco: bancoInput.trim() })
+    await supabase.from("motoboys").update({ pix_key: payload }).eq("id", motoboy_id)
     setSalvandoPix(false)
     setEditandoPix(false)
     load()
@@ -78,10 +88,11 @@ export default function MotoboyFinanceiroPage() {
     const valor = parseFloat(valorSaque.replace(",", "."))
     if (!valor || valor <= 0) { setErroSaque("Informe um valor válido"); return }
     if (valor > saldo + 0.001) { setErroSaque("Valor maior que o saldo disponível"); return }
-    if (!motoboy?.pix_chave) { setErroSaque("Cadastre sua chave PIX antes de solicitar"); return }
+    if (!temPix) { setErroSaque("Cadastre sua chave PIX antes de solicitar"); return }
     setErroSaque(""); setEnviandoSaque(true)
     const res = await fetch("/api/motoboy/saque", {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ valor }),
     })
@@ -96,6 +107,18 @@ export default function MotoboyFinanceiroPage() {
   if (loading) return <div style={{ padding: 32 }}><p style={{ color: "rgba(255,255,255,0.3)" }}>Carregando...</p></div>
 
   const pendentes = saques.filter(s => s.status === "solicitado")
+
+  // Parse pix_key (pode ser JSON { pix, banco } ou string legada)
+  let pixChaveDisplay = ""
+  let bancoDadosDisplay = ""
+  try {
+    const pk = motoboy?.pix_key ? JSON.parse(motoboy.pix_key) : {}
+    pixChaveDisplay   = pk.pix   ?? ""
+    bancoDadosDisplay = pk.banco ?? ""
+  } catch {
+    pixChaveDisplay = motoboy?.pix_key ?? ""
+  }
+  const temPix = !!pixChaveDisplay
 
   return (
     <div style={{ maxWidth: 600, margin: "0 auto", padding: "24px 16px" }}>
@@ -124,29 +147,45 @@ export default function MotoboyFinanceiroPage() {
         ))}
       </div>
 
-      {/* Chave PIX */}
+      {/* Dados bancários + Chave PIX */}
       <div style={{ background: "#111", borderRadius: 14, padding: "16px 18px", marginBottom: 16, border: "1px solid rgba(255,255,255,0.08)" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: editandoPix ? 12 : 0 }}>
-          <div>
-            <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, fontWeight: 700, marginBottom: 4 }}>SUA CHAVE PIX</p>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: editandoPix ? 14 : 0 }}>
+          <div style={{ flex: 1 }}>
             {!editandoPix && (
-              <p style={{ color: motoboy?.pix_chave ? "white" : "#f87171", fontWeight: 700, fontSize: 14 }}>
-                {motoboy?.pix_chave ?? "Não cadastrada"}
-              </p>
+              <>
+                <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, fontWeight: 700, marginBottom: 4 }}>DADOS BANCÁRIOS</p>
+                <p style={{ color: bancoInput ? "white" : "#f87171", fontWeight: 600, fontSize: 13, marginBottom: 10 }}>
+                  {bancoInput || "Não cadastrado"}
+                </p>
+                <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, fontWeight: 700, marginBottom: 4 }}>CHAVE PIX</p>
+                <p style={{ color: pixInput ? "white" : "#f87171", fontWeight: 700, fontSize: 14 }}>
+                  {pixInput || "Não cadastrada"}
+                </p>
+              </>
             )}
           </div>
           <button onClick={() => setEditandoPix(e => !e)}
-            style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(255,255,255,0.4)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+            style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(255,255,255,0.4)", fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
             {editandoPix ? "Cancelar" : "Editar"}
           </button>
         </div>
         {editandoPix && (
-          <div style={{ display: "flex", gap: 8 }}>
-            <input style={inp} value={pixInput} onChange={e => setPixInput(e.target.value)}
-              placeholder="CPF, CNPJ, email, telefone ou chave aleatória" />
-            <button onClick={salvarPix} disabled={salvandoPix} style={{
-              padding: "10px 18px", borderRadius: 10, border: "none",
-              background: "#f97316", color: "white", fontWeight: 700, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap",
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div>
+              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, marginBottom: 5 }}>DADOS BANCÁRIOS (banco, agência, conta)</p>
+              <input style={inp} value={bancoInput} onChange={e => setBancoInput(e.target.value)}
+                placeholder="Ex: Inter, Ag: 0001, Cc: 12345-6" />
+            </div>
+            <div>
+              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, marginBottom: 5 }}>CHAVE PIX</p>
+              <input style={inp} value={pixInput} onChange={e => setPixInput(e.target.value)}
+                placeholder="CPF, CNPJ, email, telefone ou chave aleatória" />
+            </div>
+            <button onClick={salvarPix} disabled={salvandoPix || !pixInput.trim()} style={{
+              padding: "10px 18px", borderRadius: 10, border: "none", alignSelf: "flex-end",
+              background: pixInput.trim() ? "#f97316" : "rgba(255,255,255,0.1)",
+              color: pixInput.trim() ? "white" : "rgba(255,255,255,0.3)",
+              fontWeight: 700, fontSize: 13, cursor: pixInput.trim() ? "pointer" : "not-allowed",
             }}>
               {salvandoPix ? "..." : "Salvar"}
             </button>
@@ -160,12 +199,12 @@ export default function MotoboyFinanceiroPage() {
           <p style={{ color: "white", fontWeight: 700 }}>Solicitar saque</p>
           {!solicitando && (
             <button onClick={() => { setSolicitando(true); setErroSaque("") }}
-              disabled={saldo <= 0 || !motoboy?.pix_chave}
+              disabled={saldo <= 0 || !temPix}
               style={{
                 padding: "7px 16px", borderRadius: 10, border: "none",
-                background: saldo > 0 && motoboy?.pix_chave ? "#f97316" : "rgba(255,255,255,0.08)",
-                color: saldo > 0 && motoboy?.pix_chave ? "white" : "rgba(255,255,255,0.25)",
-                fontWeight: 700, fontSize: 13, cursor: saldo > 0 && motoboy?.pix_chave ? "pointer" : "not-allowed",
+                background: saldo > 0 && temPix ? "#f97316" : "rgba(255,255,255,0.08)",
+                color: saldo > 0 && temPix ? "white" : "rgba(255,255,255,0.25)",
+                fontWeight: 700, fontSize: 13, cursor: saldo > 0 && temPix ? "pointer" : "not-allowed",
               }}>
               + Novo saque
             </button>
@@ -182,7 +221,14 @@ export default function MotoboyFinanceiroPage() {
                 value={valorSaque} onChange={e => setValorSaque(e.target.value)} />
             </div>
             <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: "10px 14px" }}>
-              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}>PIX: <strong style={{ color: "white" }}>{motoboy?.pix_chave}</strong></p>
+              {bancoDadosDisplay && (
+                <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, marginBottom: 4 }}>
+                  Banco: <strong style={{ color: "white" }}>{bancoDadosDisplay}</strong>
+                </p>
+              )}
+              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}>
+                Chave PIX: <strong style={{ color: "white" }}>{pixChaveDisplay}</strong>
+              </p>
               <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, marginTop: 3 }}>Prazo: até 2 dias úteis</p>
             </div>
             {erroSaque && <p style={{ color: "#f87171", fontSize: 13, fontWeight: 600 }}>{erroSaque}</p>}

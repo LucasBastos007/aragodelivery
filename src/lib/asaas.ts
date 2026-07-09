@@ -1,6 +1,11 @@
 const BASE = process.env.ASAAS_BASE_URL ?? "https://api.asaas.com/v3"
 const KEY  = process.env.ASAAS_API_KEY!
 
+export interface AsaasSplit {
+  walletId: string
+  percentualValue: number  // percentual que vai para o lojista (ex: 90 = 90%)
+}
+
 async function call<T = unknown>(path: string, method = "GET", body?: object): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method,
@@ -14,8 +19,9 @@ async function call<T = unknown>(path: string, method = "GET", body?: object): P
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({})) as Record<string, unknown>
-    const errs = err.errors as { description?: string }[] | undefined
-    const msg = errs?.[0]?.description ?? `Asaas HTTP ${res.status}`
+    const errs = err.errors as { code?: string; description?: string }[] | undefined
+    const msgs = errs?.map(e => [e.code, e.description].filter(Boolean).join(": ")).join(" | ")
+    const msg = msgs || `Asaas HTTP ${res.status}`
     throw new Error(msg)
   }
   return res.json() as Promise<T>
@@ -37,7 +43,7 @@ export async function criarCliente(nome: string, opts: { cpf?: string; email?: s
   })
 }
 
-export async function criarPix(customerId: string, valor: number, pedidoId: string) {
+export async function criarPix(customerId: string, valor: number, pedidoId: string, split?: AsaasSplit) {
   return call<{ id: string; status: string }>("/payments", "POST", {
     customer:          customerId,
     billingType:       "PIX",
@@ -45,6 +51,7 @@ export async function criarPix(customerId: string, valor: number, pedidoId: stri
     dueDate:           amanha(),
     externalReference: pedidoId,
     description:       "Pedido Chegô",
+    ...(split ? { split: [{ walletId: split.walletId, percentualValue: split.percentualValue }] } : {}),
   })
 }
 
@@ -63,14 +70,33 @@ export async function cancelarPagamento(paymentId: string) {
   return call<{ deleted: boolean }>(`/payments/${paymentId}`, "DELETE")
 }
 
+export async function criarAssinatura(customerId: string, valor: number, descricao: string) {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  const nextDueDate = d.toISOString().split("T")[0]
+  return call<{ id: string; status: string }>("/subscriptions", "POST", {
+    customer:    customerId,
+    billingType: "BOLETO",
+    value:       valor,
+    nextDueDate,
+    cycle:       "MONTHLY",
+    description: descricao,
+  })
+}
+
+export async function cancelarAssinatura(subscriptionId: string) {
+  return call<{ deleted: boolean }>(`/subscriptions/${subscriptionId}`, "DELETE")
+}
+
 export async function criarCartao(
   customerId: string,
   valor: number,
   pedidoId: string,
   card: { numero: string; nome: string; mes: string; ano: string; cvv: string },
-  holder: { nome: string; cpf: string; cep: string; numeroEndereco: string; telefone: string }
+  holder: { nome: string; cpf: string; email: string; cep: string; numeroEndereco: string; telefone: string },
+  split?: AsaasSplit
 ) {
-  return call<{ id: string; status: string }>("/payments", "POST", {
+  return call<{ id: string; status: string; creditCard?: { creditCardToken?: string } }>("/payments", "POST", {
     customer:          customerId,
     billingType:       "CREDIT_CARD",
     value:             valor,
@@ -86,10 +112,62 @@ export async function criarCartao(
     },
     creditCardHolderInfo: {
       name:          holder.nome,
+      email:         holder.email,
       cpfCnpj:       holder.cpf.replace(/\D/g, ""),
       postalCode:    holder.cep.replace(/\D/g, ""),
       addressNumber: holder.numeroEndereco || "S/N",
       phone:         holder.telefone.replace(/\D/g, ""),
     },
+    ...(split ? { split: [{ walletId: split.walletId, percentualValue: split.percentualValue }] } : {}),
   })
+}
+
+export async function criarCartaoToken(
+  customerId: string,
+  valor: number,
+  pedidoId: string,
+  token: string,
+  holder: { nome: string; cpf: string; email: string; cep: string; numeroEndereco: string; telefone: string },
+  split?: AsaasSplit
+) {
+  return call<{ id: string; status: string; creditCard?: { creditCardToken?: string } }>("/payments", "POST", {
+    customer:          customerId,
+    billingType:       "CREDIT_CARD",
+    value:             valor,
+    dueDate:           amanha(),
+    externalReference: pedidoId,
+    description:       "Pedido Chegô",
+    creditCardToken:   token,
+    creditCardHolderInfo: {
+      name:          holder.nome,
+      email:         holder.email,
+      cpfCnpj:       holder.cpf.replace(/\D/g, ""),
+      postalCode:    holder.cep.replace(/\D/g, ""),
+      addressNumber: holder.numeroEndereco || "S/N",
+      phone:         holder.telefone.replace(/\D/g, ""),
+    },
+    ...(split ? { split: [{ walletId: split.walletId, percentualValue: split.percentualValue }] } : {}),
+  })
+}
+
+export async function buscarPagamento(paymentId: string) {
+  return call<{ id: string; status: string; externalReference: string }>(`/payments/${paymentId}`)
+}
+
+export async function criarSubconta(dados: {
+  nome: string
+  email: string
+  cpfCnpj: string
+  telefone?: string
+  tipoEmpresa?: "MEI" | "LTDA" | "SA" | "INDIVIDUAL"
+}) {
+  return call<{ id: string; walletId: string; accountNumber: { agency: string; account: string; accountDigit: string } }>(
+    "/accounts", "POST", {
+      name:        dados.nome,
+      email:       dados.email,
+      cpfCnpj:     dados.cpfCnpj.replace(/\D/g, ""),
+      ...(dados.telefone    ? { mobilePhone:  dados.telefone.replace(/\D/g, "")  } : {}),
+      ...(dados.tipoEmpresa ? { companyType:  dados.tipoEmpresa                  } : {}),
+    }
+  )
 }

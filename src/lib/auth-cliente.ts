@@ -8,6 +8,8 @@ export interface ClientePerfil {
   id: string
   nome: string
   telefone: string
+  cpf?: string
+  email?: string
   endereco_rua?: string
   endereco_numero?: string
   endereco_bairro?: string
@@ -110,6 +112,36 @@ export function useClienteAuth() {
     )
   }
 
+  async function completarPerfil(dados: {
+    nome: string
+    telefone: string
+    cpf: string
+    endereco?: { rua?: string; numero?: string; bairro?: string; complemento?: string; cep?: string; cidade?: string }
+  }) {
+    if (!user) return
+    const cpfDigits = dados.cpf.replace(/\D/g, "")
+    const payload: any = {
+      id: user.id,
+      nome: dados.nome.trim(),
+      telefone: dados.telefone.trim(),
+      cpf: cpfDigits,
+    }
+    if (dados.endereco) {
+      const e = dados.endereco
+      if (e.rua        !== undefined) payload.endereco_rua         = e.rua
+      if (e.numero     !== undefined) payload.endereco_numero      = e.numero
+      if (e.bairro     !== undefined) payload.endereco_bairro      = e.bairro
+      if (e.complemento !== undefined) payload.endereco_complemento = e.complemento
+      if (e.cep        !== undefined) payload.endereco_cep         = e.cep
+      if (e.cidade     !== undefined) payload.endereco_cidade      = e.cidade
+    }
+    // Salva no banco (pode falhar se coluna cpf não existir — ignoramos silenciosamente)
+    await supabase.from("clientes").upsert(payload)
+    // Salva também nos metadados do usuário Supabase Auth — sempre funciona
+    await supabase.auth.updateUser({ data: { cpf: cpfDigits, nome: payload.nome, telefone: payload.telefone } })
+    setPerfil(p => p ? { ...p, ...payload } : { nome: "", telefone: "", ...payload })
+  }
+
   async function logout() {
     await supabase.auth.signOut()
     // Limpa dados do cliente do localStorage — evita vazamento entre sessões
@@ -122,5 +154,5 @@ export function useClienteAuth() {
     setPerfil(null)
   }
 
-  return { user, perfil, loading, loginGoogle, loginApple, loginEmail, cadastrar, salvarPerfil, logout }
+  return { user, perfil, loading, loginGoogle, loginApple, loginEmail, cadastrar, salvarPerfil, completarPerfil, logout }
 }

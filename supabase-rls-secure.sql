@@ -125,6 +125,22 @@ create policy "enderecos_own_delete"
   on enderecos_cliente for delete
   using (cliente_id = auth.uid());
 
+-- ── FASE 0 (20260704): reembolsos e configuracoes ───────────
+DROP POLICY IF EXISTS "allow_all" ON reembolsos;
+DROP POLICY IF EXISTS "allow_all" ON configuracoes;
+
+-- reembolsos: cliente autenticado vê apenas reembolsos de pedidos próprios
+CREATE POLICY "reembolsos_owner_read"
+  ON reembolsos FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM pedidos p
+      WHERE p.id = reembolsos.pedido_id
+        AND p.cliente_id = auth.uid()
+    )
+  );
+-- configuracoes: sem acesso algum via anon/auth — só service role
+
 -- ── Resumo das permissões após aplicação ─────────────────────
 -- Tabela               | anon SELECT | anon WRITE | Supabase Auth | Service Role
 -- ---------------------|-------------|------------|---------------|-------------
@@ -138,3 +154,6 @@ create policy "enderecos_own_delete"
 -- motoboys             | ✗           | ✗          | —             | ✓
 -- clientes             | ✗ (outros)  | ✗          | ✓ próprio     | ✓
 -- enderecos_cliente    | ✗ (outros)  | ✗          | ✓ próprio     | ✓
+-- reembolsos           | ✗           | ✗          | ✓ pedido próprio | ✓
+-- configuracoes        | ✗           | ✗          | ✗             | ✓
+-- webhook_events       | ✗           | ✗          | ✗             | ✓

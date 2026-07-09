@@ -1,27 +1,49 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
 import type { Pedido, StatusPedido } from "@/types"
 
-function beep() {
+// AudioContext persistente e desbloqueado pelo primeiro toque do usuário
+let _audioCtx: AudioContext | null = null
+
+function getAudioCtx(): AudioContext | null {
   try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
-    const play = (freq: number, start: number, dur: number) => {
-      const o = ctx.createOscillator()
-      const g = ctx.createGain()
-      o.connect(g); g.connect(ctx.destination)
-      o.type = "sine"
-      o.frequency.value = freq
-      g.gain.setValueAtTime(0.4, ctx.currentTime + start)
-      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur)
-      o.start(ctx.currentTime + start)
-      o.stop(ctx.currentTime + start + dur)
+    if (!_audioCtx) {
+      _audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
     }
-    play(880, 0, 0.15)
-    play(1100, 0.18, 0.15)
-    play(880, 0.36, 0.2)
+    if (_audioCtx.state === "suspended") _audioCtx.resume()
+    return _audioCtx
+  } catch { return null }
+}
+
+function tocaSomPedido() {
+  try {
+    // Tenta tocar o arquivo de áudio primeiro
+    const audio = new Audio("/novo-pedido.mp3")
+    audio.volume = 0.8
+    audio.play().catch(() => {
+      // Fallback: sintetiza som via Web Audio API (funciona sem arquivo)
+      const ctx = getAudioCtx()
+      if (!ctx) return
+      const play = (freq: number, start: number, dur: number, vol = 0.5) => {
+        const o = ctx.createOscillator()
+        const g = ctx.createGain()
+        o.connect(g); g.connect(ctx.destination)
+        o.type = "sine"
+        o.frequency.value = freq
+        g.gain.setValueAtTime(vol, ctx.currentTime + start)
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur)
+        o.start(ctx.currentTime + start)
+        o.stop(ctx.currentTime + start + dur + 0.05)
+      }
+      // Ding-dong — dois tons agradáveis
+      play(1047, 0,    0.3, 0.5)  // Dó
+      play(784,  0.35, 0.4, 0.4)  // Sol
+      play(1047, 0.75, 0.3, 0.3)  // Dó de novo
+    })
   } catch {}
 }
 
@@ -43,7 +65,7 @@ function deveEstarAberto(horarios: Horarios | null): boolean | null {
   return minutos >= hIni * 60 + mIni && minutos < hFim * 60 + mFim
 }
 
-function imprimirPedido(pedido: Pedido) {
+function imprimirPedido(pedido: Pedido, largura: "80mm" | "58mm" = "80mm") {
   const now  = new Date(pedido.criado_em)
   const data = now.toLocaleDateString("pt-BR")
   const hora = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
@@ -61,6 +83,10 @@ function imprimirPedido(pedido: Pedido) {
     ${i.observacao ? `<tr><td colspan="2" class="obs">  obs: ${i.observacao}</td></tr>` : ""}
   `).join("")
 
+  const bodyW  = largura === "58mm" ? "54mm" : "76mm"
+  const pageW  = largura
+  const fsBase = largura === "58mm" ? "10px" : "11px"
+
   const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -70,9 +96,9 @@ function imprimirPedido(pedido: Pedido) {
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: 'Courier New', Courier, monospace;
-      font-size: 11px;
-      width: 76mm;
-      padding: 3mm 4mm;
+      font-size: ${fsBase};
+      width: ${bodyW};
+      padding: 3mm 3mm;
       color: #000;
     }
     h1 { font-size: 15px; text-align: center; letter-spacing: 1px; margin-bottom: 2px; }
@@ -82,18 +108,19 @@ function imprimirPedido(pedido: Pedido) {
     .dash { border-top: 1px dashed #000; margin: 5px 0; }
     table { width: 100%; border-collapse: collapse; }
     td { padding: 1.5px 0; vertical-align: top; }
-    .obs { color: #555; font-size: 10px; }
+    .obs { color: #555; font-size: 9px; }
     .total-row td { font-size: 13px; font-weight: bold; padding-top: 4px; }
-    .section { font-weight: bold; margin: 4px 0 2px; font-size: 11px; text-transform: uppercase; }
+    .section { font-weight: bold; margin: 4px 0 2px; font-size: ${fsBase}; text-transform: uppercase; }
     @media print {
       body { margin: 0; }
-      @page { margin: 2mm; size: 80mm auto; }
+      @page { margin: 2mm; size: ${pageW} auto; }
     }
   </style>
 </head>
 <body>
-  <h1>CHEGÔ</h1>
-  <p class="center" style="font-size:10px;margin-bottom:4px;">DELIVERY</p>
+  <div class="center" style="margin-bottom:6px;">
+    <img src="https://chegodelivery.com/logo-chego.jpg" alt="Chegô" style="width:64px;height:64px;object-fit:contain;border-radius:8px;" />
+  </div>
   <div class="dash"></div>
   <p class="bold" style="font-size:14px;">PEDIDO #${pedido.codigo}</p>
   <p>${data} às ${hora}</p>
@@ -113,6 +140,7 @@ function imprimirPedido(pedido: Pedido) {
   ${pedido.observacao ? `<div class="dash"></div><p class="section">Observação</p><p>${pedido.observacao}</p>` : ""}
   <div class="dash"></div>
   <p class="center bold" style="font-size:13px;">*** CHEGÔ DELIVERY ***</p>
+  <br><br>
 </body>
 </html>`
 
@@ -121,11 +149,19 @@ function imprimirPedido(pedido: Pedido) {
     win.document.write(html)
     win.document.close()
     win.focus()
-    setTimeout(() => { win.print(); win.close() }, 400)
+    const img = win.document.querySelector("img")
+    if (img && !img.complete) {
+      img.onload = () => { win.print(); win.close() }
+      img.onerror = () => { win.print(); win.close() }
+      setTimeout(() => { win.print(); win.close() }, 3000)
+    } else {
+      setTimeout(() => { win.print(); win.close() }, 400)
+    }
   }
 }
 
 const STATUS_LABEL: Record<StatusPedido, string> = {
+  aguardando_pagamento: "Aguard. pagamento",
   pendente:          "Novo pedido",
   aceito:            "Aceito",
   preparando:        "Preparando",
@@ -145,12 +181,13 @@ const PROXIMO_STATUS: Partial<Record<StatusPedido, StatusPedido>> = {
 }
 const PROXIMO_LABEL: Partial<Record<StatusPedido, string>> = {
   pendente:   "✓ Aceitar pedido",
-  aceito:     "Iniciar preparo e chamar motoboy",
+  aceito:     "Iniciar preparo",
   preparando: "Marcar como pronto",
 }
 
 export default function LojaDashboard() {
-  const { sessao } = useAuth()
+  const { sessao, logout } = useAuth()
+  const router = useRouter()
   const loja_id = sessao?.role === "lojista" ? sessao.loja_id : null
 
   const [pedidos, setPedidos] = useState<Pedido[]>([])
@@ -164,6 +201,24 @@ export default function LojaDashboard() {
   const prevPendentesRef = useRef<Set<string>>(new Set())
   const isFirstLoad = useRef(true)
   const horariosRef = useRef<Horarios | null>(null)
+  const [larguraPapel, setLarguraPapel] = useState<"80mm" | "58mm">(() => {
+    if (typeof window !== "undefined") return (localStorage.getItem("print_largura") as "80mm" | "58mm") ?? "80mm"
+    return "80mm"
+  })
+  const [modalImpressao, setModalImpressao] = useState(false)
+  const audioUnlocked = useRef(false)
+
+  // Desbloqueia AudioContext no primeiro toque (obrigatório no iOS/Safari)
+  useEffect(() => {
+    if (audioUnlocked.current) return
+    const unlock = () => {
+      if (audioUnlocked.current) return
+      audioUnlocked.current = true
+      getAudioCtx() // inicializa e resume o contexto
+    }
+    window.addEventListener("pointerdown", unlock, { once: true })
+    return () => window.removeEventListener("pointerdown", unlock)
+  }, [])
 
   // ── Entrega manual ──────────────────────────────────────────────────────
   const [modalManual, setModalManual]   = useState(false)
@@ -181,6 +236,7 @@ export default function LojaDashboard() {
     setErroManual(""); setEnviandoManual(true)
     const res = await fetch("/api/loja/entrega-manual", {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         nome_cliente:     manualNome.trim(),
@@ -215,7 +271,7 @@ export default function LojaDashboard() {
         .from("pedidos")
         .select("*, itens:itens_pedido(*)")
         .eq("loja_id", loja_id)
-        .not("status", "in", '("coletado","entregue","cancelado")')
+        .not("status", "in", '("aguardando_pagamento","coletado","entregue","cancelado")')
         .gte("criado_em", hoje.toISOString())
         .order("criado_em", { ascending: false }),
       supabase
@@ -231,7 +287,7 @@ export default function LojaDashboard() {
 
     if (!isFirstLoad.current) {
       const chegaram = [...novosPendentes].filter(id => !prevPendentesRef.current.has(id))
-      if (chegaram.length > 0) beep()
+      if (chegaram.length > 0) tocaSomPedido()
     }
 
     // Monta mapa telefone → quantidade de pedidos entregues
@@ -275,6 +331,7 @@ export default function LojaDashboard() {
     setAberto(novoStatus)
     await fetch("/api/loja/atualizar", {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ aberto: novoStatus }),
     })
@@ -306,43 +363,73 @@ export default function LojaDashboard() {
       .then(({ data }) => { if (data?.lat) setLojaCoords({ lat: Number(data.lat), lng: Number(data.lng) }) })
   }, [loja_id])
 
-  // Subscrição realtime na posição do motoboy quando modal está aberto
+  // Rastreamento motoboy: broadcast realtime + polling a cada 5s como fallback
   useEffect(() => {
     if (!trackPedido?.motoboy_id) return
-    supabase.from("motoboys").select("lat,lng").eq("id", trackPedido.motoboy_id).single()
-      .then(({ data }) => { if (data?.lat) setMotoboyPos({ lat: Number(data.lat), lng: Number(data.lng) }) })
-    const ch = supabase.channel(`mb-track-${trackPedido.motoboy_id}`)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "motoboys", filter: `id=eq.${trackPedido.motoboy_id}` },
-        ({ new: n }: any) => { if (n.lat && n.lng) setMotoboyPos({ lat: Number(n.lat), lng: Number(n.lng) }) })
+    const mbId = trackPedido.motoboy_id
+
+    async function fetchPos() {
+      const { data } = await supabase.from("motoboys").select("lat,lng").eq("id", mbId).single()
+      if (data?.lat && data?.lng) setMotoboyPos({ lat: Number(data.lat), lng: Number(data.lng) })
+    }
+    fetchPos()
+    const iv = setInterval(fetchPos, 5000)
+
+    // Canal broadcast — recebe localização instantânea via HTTP broadcast do servidor
+    const ch = supabase.channel(`motoboy-loc-${mbId}`)
+      .on("broadcast", { event: "location" },
+        ({ payload }: any) => { if (payload?.lat && payload?.lng) setMotoboyPos({ lat: Number(payload.lat), lng: Number(payload.lng) }) })
       .subscribe()
-    return () => { supabase.removeChannel(ch); setMotoboyPos(null) }
+
+    return () => { clearInterval(iv); supabase.removeChannel(ch); setMotoboyPos(null) }
   }, [trackPedido?.motoboy_id])
 
   // Inicializa mapa Leaflet ao abrir modal
   useEffect(() => {
-    if (!trackPedido || !mapDivRef.current || !lojaCoords) return
+    if (!trackPedido || !mapDivRef.current) return
     let cancelled = false
-    import("leaflet").then(L => {
-      if (cancelled || !mapDivRef.current) return
+    // Fallback para Aragoiânia-GO caso a loja não tenha coords cadastradas
+    const centro = lojaCoords ?? { lat: -16.9095, lng: -49.4295 }
+
+    async function initMap() {
+      // Garante que o CSS do Leaflet está carregado antes de iniciar
       if (!document.getElementById("leaflet-css-loja")) {
-        const link = document.createElement("link")
-        link.id = "leaflet-css-loja"; link.rel = "stylesheet"
-        link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-        document.head.appendChild(link)
+        await new Promise<void>(resolve => {
+          const link = document.createElement("link")
+          link.id = "leaflet-css-loja"; link.rel = "stylesheet"
+          link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          link.onload = () => resolve()
+          link.onerror = () => resolve() // continua mesmo sem CSS
+          document.head.appendChild(link)
+        })
       }
+      if (cancelled || !mapDivRef.current) return
+
+      const L = await import("leaflet")
+      if (cancelled || !mapDivRef.current) return
+
       if (leafletRef.current) { leafletRef.current.remove(); leafletRef.current = null }
       mbMarkerRef.current = null; routeLayerRef.current = null
+
       const map = (L as any).map(mapDivRef.current, { zoomControl: false, attributionControl: false })
       ;(L as any).tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png").addTo(map)
       leafletRef.current = map
-      const lojaIcon = (L as any).divIcon({
-        className: "",
-        html: `<div style="width:36px;height:36px;background:#DC2626;border-radius:50%;border:3px solid white;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 3px 10px rgba(0,0,0,0.35)">🏪</div>`,
-        iconSize: [36, 36], iconAnchor: [18, 18],
-      })
-      ;(L as any).marker([lojaCoords.lat, lojaCoords.lng], { icon: lojaIcon }).addTo(map).bindPopup("Sua loja")
-      map.setView([lojaCoords.lat, lojaCoords.lng], 14)
-    })
+      map.setView([centro.lat, centro.lng], 14)
+
+      // Força recalculo do tamanho (necessário ao abrir em modal)
+      setTimeout(() => { if (!cancelled && leafletRef.current) leafletRef.current.invalidateSize() }, 150)
+
+      if (lojaCoords) {
+        const lojaIcon = (L as any).divIcon({
+          className: "",
+          html: `<div style="width:36px;height:36px;background:#DC2626;border-radius:50%;border:3px solid white;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 3px 10px rgba(0,0,0,0.35)">🏪</div>`,
+          iconSize: [36, 36], iconAnchor: [18, 18],
+        })
+        ;(L as any).marker([lojaCoords.lat, lojaCoords.lng], { icon: lojaIcon }).addTo(map).bindPopup("Sua loja")
+      }
+    }
+
+    initMap()
     return () => {
       cancelled = true
       if (leafletRef.current) { leafletRef.current.remove(); leafletRef.current = null }
@@ -391,6 +478,7 @@ export default function LojaDashboard() {
       if (data) {
         await fetch("/api/push", {
           method: "POST",
+          credentials: "include",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "send", pedido_id: id, status, codigo: data.codigo }),
         })
@@ -398,37 +486,40 @@ export default function LojaDashboard() {
     } catch {}
   }
 
+  async function chamarApiLoja(pedido_id: string, status: string): Promise<boolean> {
+    const res = await fetch("/api/loja/status-pedido", {
+      method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pedido_id, status, loja_id }),
+    })
+    if (res.status === 401) {
+      alert("Sua sessão expirou. Faça login novamente.")
+      logout()
+      router.push("/entrar")
+      return false
+    }
+    return true
+  }
+
   async function avancarStatus(id: string, statusAtual: StatusPedido) {
     const proximo = PROXIMO_STATUS[statusAtual]
     if (!proximo || !loja_id) return
     setAtualizando(id)
-    await fetch("/api/loja/status-pedido", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pedido_id: id, status: proximo, loja_id }),
-    })
-    enviarPush(id, proximo)
-
-    // Ao iniciar preparo, aciona motoboy imediatamente
-    if (statusAtual === "aceito") {
-      await fetch("/api/escalada", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pedido_id: id }),
-      }).catch(() => {})
+    const ok = await chamarApiLoja(id, proximo)
+    if (ok) {
+      enviarPush(id, proximo as StatusPedido)
+      await load()
     }
-
-    await load()
     setAtualizando(null)
   }
 
   async function cancelar(id: string) {
     if (!confirm("Cancelar este pedido?") || !loja_id) return
     setAtualizando(id)
-    await fetch("/api/loja/status-pedido", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pedido_id: id, status: "cancelado", loja_id }),
-    })
-    enviarPush(id, "cancelado")
-    await load()
+    const ok = await chamarApiLoja(id, "cancelado")
+    if (ok) {
+      enviarPush(id, "cancelado")
+      await load()
+    }
     setAtualizando(null)
   }
 
@@ -455,15 +546,35 @@ export default function LojaDashboard() {
 
   useEffect(() => {
     if (pendentes.length === 0) return
-    const id = setInterval(() => beep(), 30_000)
+    const id = setInterval(() => tocaSomPedido(), 30_000)
     return () => clearInterval(id)
   }, [pendentes.length])
+
+  // Auto-retry: pedido em aguardando_aceite há >90s → re-escalada automaticamente
+  useEffect(() => {
+    const aguardando = emAndamento.filter(p => p.status === "aguardando_aceite")
+    if (aguardando.length === 0) return
+    const timers = aguardando.map(p => {
+      const criadoEm = new Date(p.criado_em).getTime()
+      const decorrido = Date.now() - criadoEm
+      const restante  = Math.max(0, 90_000 - decorrido)
+      return setTimeout(() => {
+        fetch("/api/escalada", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ pedido_id: p.id, motoboy_recusou_id: p.motoboy_id ?? undefined }),
+        }).then(() => load())
+      }, restante)
+    })
+    return () => timers.forEach(clearTimeout)
+  }, [emAndamento.filter(p => p.status === "aguardando_aceite").map(p => p.id).join(",")])
 
   // Carrega reembolsos pendentes para esta loja
   useEffect(() => {
     if (!loja_id) return
     async function loadReembolsos() {
-      const res = await fetch("/api/reembolso/listar")
+      const res = await fetch("/api/reembolso/listar", { credentials: "include" })
       if (!res.ok) return
       const j = await res.json()
       setReembolsosPendentes((j.reembolsos ?? []).filter((r: any) => r.status === "solicitado"))
@@ -477,6 +588,7 @@ export default function LojaDashboard() {
     setProcessandoReemb(reembolsoId)
     const res = await fetch("/api/reembolso/processar", {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ reembolso_id: reembolsoId, acao, valor_aprovado: valorAprovado }),
     })
@@ -526,23 +638,42 @@ export default function LojaDashboard() {
     )
   }
 
+  function toggleLargura() {
+    const nova = larguraPapel === "80mm" ? "58mm" : "80mm"
+    setLarguraPapel(nova)
+    localStorage.setItem("print_largura", nova)
+  }
+
   function BotaoImprimir({ pedido }: { pedido: Pedido }) {
     return (
-      <button
-        onClick={() => imprimirPedido(pedido)}
-        title="Imprimir comanda"
-        style={{
-          padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e7eb",
-          background: "#fff", cursor: "pointer", display: "flex", alignItems: "center", gap: 5,
-          color: "#6B7280", fontSize: 12, fontWeight: 600,
-        }}
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-          <rect x="6" y="14" width="12" height="8"/>
-        </svg>
-        Imprimir
-      </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <button
+          onClick={() => imprimirPedido(pedido, larguraPapel)}
+          title={`Imprimir comanda (${larguraPapel})`}
+          style={{
+            padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e7eb",
+            background: "#fff", cursor: "pointer", display: "flex", alignItems: "center", gap: 5,
+            color: "#6B7280", fontSize: 12, fontWeight: 600,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+            <rect x="6" y="14" width="12" height="8"/>
+          </svg>
+          Imprimir
+        </button>
+        <button
+          onClick={toggleLargura}
+          title="Alternar tamanho do papel"
+          style={{
+            padding: "6px 8px", borderRadius: 8, border: "1px solid #e5e7eb",
+            background: "#f9fafb", cursor: "pointer", fontSize: 10, fontWeight: 700,
+            color: "#6B7280", lineHeight: 1,
+          }}
+        >
+          {larguraPapel}
+        </button>
+      </div>
     )
   }
 
@@ -706,6 +837,57 @@ export default function LojaDashboard() {
         </div>
       )}
 
+      {/* Modal de configuração de impressão */}
+      {modalImpressao && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+          onClick={() => setModalImpressao(false)}>
+          <div style={{ background: "white", borderRadius: "20px 20px 0 0", padding: "24px 20px", width: "100%", maxWidth: 600, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 24px)" }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ width: 40, height: 4, background: "#E5E7EB", borderRadius: 4, margin: "0 auto 20px" }} />
+            <h3 style={{ fontWeight: 800, fontSize: 16, color: "#111827", marginBottom: 4 }}>Configurações de Impressão</h3>
+            <p style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 20 }}>Selecione o formato do papel da sua impressora térmica</p>
+
+            <p style={{ fontWeight: 700, fontSize: 13, color: "#374151", marginBottom: 12 }}>Largura do papel</p>
+            <div style={{ display: "flex", gap: 12, marginBottom: 24 }}>
+              {(["80mm", "58mm"] as const).map(op => (
+                <button key={op} onClick={() => { setLarguraPapel(op); localStorage.setItem("print_largura", op) }}
+                  style={{
+                    flex: 1, padding: "16px 12px", borderRadius: 14,
+                    border: `2px solid ${larguraPapel === op ? "#DC2626" : "#E5E7EB"}`,
+                    background: larguraPapel === op ? "rgba(220,38,38,0.05)" : "#F9FAFB",
+                    cursor: "pointer", textAlign: "center",
+                  }}>
+                  <p style={{ fontWeight: 800, fontSize: 18, color: larguraPapel === op ? "#DC2626" : "#111827" }}>{op}</p>
+                  <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>
+                    {op === "80mm" ? "Mais comum (padrão)" : "Impressoras compactas"}
+                  </p>
+                </button>
+              ))}
+            </div>
+
+            <div style={{ background: "#F9FAFB", borderRadius: 12, padding: "14px 16px", marginBottom: 20 }}>
+              <p style={{ fontWeight: 700, fontSize: 12, color: "#374151", marginBottom: 6 }}>💡 Como imprimir direto sem diálogo</p>
+              <p style={{ fontSize: 11, color: "#6B7280", lineHeight: 1.5 }}>
+                No Chrome/Edge: abra uma comanda, clique em Mais ▸ Imprimir ▸ selecione sua impressora ▸ marque <strong>"Sempre usar essa impressora"</strong> para imprimir direto.
+              </p>
+            </div>
+
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => {
+                const pedidoTeste: any = { codigo: "TESTE", criado_em: new Date().toISOString(), itens: [{ nome: "Item de teste", quantidade: 1, preco: 10, observacao: "" }], subtotal: 10, taxa_entrega: 6, total: 16, forma_pagamento: "pix", nome_cliente: "Cliente Teste", telefone_cliente: "", endereco_entrega: "Rua Exemplo, 123" }
+                imprimirPedido(pedidoTeste, larguraPapel)
+              }} style={{ flex: 1, padding: "14px", borderRadius: 12, border: "1.5px solid #E5E7EB", background: "white", fontWeight: 700, fontSize: 13, color: "#374151", cursor: "pointer" }}>
+                Imprimir teste
+              </button>
+              <button onClick={() => setModalImpressao(false)}
+                style={{ flex: 1, padding: "14px", borderRadius: 12, border: "none", background: "#DC2626", fontWeight: 700, fontSize: 13, color: "white", cursor: "pointer" }}>
+                Salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: sucessoManual ? 8 : 20 }}>
         <div>
@@ -713,6 +895,15 @@ export default function LojaDashboard() {
           <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>Atualiza a cada 15 segundos</p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => setModalImpressao(true)}
+            title={`Impressora: ${larguraPapel}`}
+            style={{ padding: "8px 12px", borderRadius: 10, border: "1.5px solid #E5E7EB", background: "white", cursor: "pointer", display: "flex", alignItems: "center", gap: 5, color: "#6B7280", fontSize: 12, fontWeight: 600 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+              <rect x="6" y="14" width="12" height="8"/>
+            </svg>
+            {larguraPapel}
+          </button>
           <button onClick={() => { setModalManual(true); setErroManual("") }}
             style={{ padding: "8px 14px", borderRadius: 10, border: "1.5px solid rgba(249,115,22,0.4)", background: "rgba(249,115,22,0.07)", color: "#ea580c", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
             + Entrega
@@ -852,7 +1043,7 @@ export default function LojaDashboard() {
                   </button>
                 )}
 
-                {(p.status === "pronto" || p.status === "preparando") && !p.motoboy_id && (
+                {(p.status === "pronto" || p.status === "preparando" || p.status === "aceito") && !p.motoboy_id && (
                   <button onClick={() => chamarMotoboy(p.id)} disabled={!!atualizando}
                     className="btn-primary" style={{ flex: 1, justifyContent: "center", fontSize: 13, display: "flex", alignItems: "center", gap: 7 }}>
                     {atualizando === p.id ? "Chamando..." : (
@@ -868,17 +1059,26 @@ export default function LojaDashboard() {
                 )}
 
                 {p.status === "aguardando_aceite" && (
-                  <div style={{ flex: 1, padding: "12px 16px", borderRadius: 12, background: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.25)", display: "flex", alignItems: "center", gap: 12 }}>
-                    <div style={{ position: "relative", width: 36, height: 36, flexShrink: 0 }}>
-                      <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "rgba(234,179,8,0.25)", animation: "pulse 1.2s ease-out infinite" }} />
-                      <div style={{ position: "absolute", inset: 4, borderRadius: "50%", background: "rgba(234,179,8,0.4)", animation: "pulse 1.2s ease-out infinite", animationDelay: "0.3s" }} />
-                      <div style={{ position: "absolute", inset: 8, borderRadius: "50%", background: "#eab308" }} />
-                      <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🛵</span>
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ padding: "12px 16px", borderRadius: 12, background: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.25)", display: "flex", alignItems: "center", gap: 12 }}>
+                      <div style={{ position: "relative", width: 36, height: 36, flexShrink: 0 }}>
+                        <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "rgba(234,179,8,0.25)", animation: "pulse 1.2s ease-out infinite" }} />
+                        <div style={{ position: "absolute", inset: 4, borderRadius: "50%", background: "rgba(234,179,8,0.4)", animation: "pulse 1.2s ease-out infinite", animationDelay: "0.3s" }} />
+                        <div style={{ position: "absolute", inset: 8, borderRadius: "50%", background: "#eab308" }} />
+                        <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🛵</span>
+                      </div>
+                      <div>
+                        <p style={{ color: "#ca8a04", fontSize: 13, fontWeight: 800 }}>Buscando motoboy...</p>
+                        <p style={{ color: "#a16207", fontSize: 11, marginTop: 2 }}>Aguardando um entregador aceitar</p>
+                      </div>
                     </div>
-                    <div>
-                      <p style={{ color: "#ca8a04", fontSize: 13, fontWeight: 800 }}>Buscando motoboy...</p>
-                      <p style={{ color: "#a16207", fontSize: 11, marginTop: 2 }}>Aguardando um entregador aceitar</p>
-                    </div>
+                    <button onClick={() => chamarMotoboy(p.id)} disabled={!!atualizando} style={{
+                      padding: "9px 12px", borderRadius: 10, border: "1px solid rgba(234,179,8,0.4)",
+                      background: "transparent", color: "#ca8a04", fontWeight: 700, fontSize: 12,
+                      cursor: atualizando ? "not-allowed" : "pointer",
+                    }}>
+                      {atualizando === p.id ? "Chamando..." : "🔄 Chamar novamente"}
+                    </button>
                   </div>
                 )}
 

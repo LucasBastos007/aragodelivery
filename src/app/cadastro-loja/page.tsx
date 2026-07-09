@@ -224,7 +224,7 @@ export default function CadastroLoja() {
   function validateStep3(): boolean {
     const e: Record<string, string> = {}
     if (!responsible.nome.trim()) e.nomeResp = "Informe o nome do responsável"
-    if (!validateCPF(responsible.cpf)) e.cpfResp = "CPF inválido"
+    if (tipoCadastro !== "cpf" && !validateCPF(responsible.cpf)) e.cpfResp = "CPF inválido"
     if (!validateEmail(responsible.email)) e.emailResp = "E-mail inválido"
     if (responsible.celular.replace(/\D/g, "").length < 10) e.celularResp = "Celular inválido"
     if (responsible.senha.length < 8) e.senhaResp = "Mínimo 8 caracteres"
@@ -252,7 +252,11 @@ export default function CadastroLoja() {
       1: validateStep1, 2: validateStep2, 3: validateStep3,
       4: validateStep4, 5: validateStep5,
     }
-    if (validators[step]()) setStep(s => s + 1)
+    if (!validators[step]()) return
+    if (step === 1 && tipoCadastro === "cpf") {
+      setResponsible(r => ({ ...r, cpf: business.cnpj }))
+    }
+    setStep(s => s + 1)
   }
 
   function back() {
@@ -298,6 +302,10 @@ export default function CadastroLoja() {
           email: responsible.email.trim(),
           senha: responsible.senha,
           pix_key: pixKeyFinal,
+          banco:            bank.banco     || null,
+          banco_agencia:    bank.agencia   || null,
+          banco_conta:      bank.conta     || null,
+          banco_tipo_conta: bank.tipoConta || "Corrente",
           valor_minimo: valorMinimoNum,
           aceita_retirada: config.aceitaRetirada,
         }),
@@ -1091,20 +1099,22 @@ export default function CadastroLoja() {
                   valid={!errors.nomeResp && responsible.nome.trim().length > 3}
                   required
                 />
-                <FormInput
-                  label="CPF do responsável"
-                  placeholder="000.000.000-00"
-                  value={responsible.cpf}
-                  onChange={e => {
-                    const v = maskCPF(e.target.value)
-                    setResponsible(r => ({ ...r, cpf: v }))
-                    clearErr("cpfResp")
-                  }}
-                  error={errors.cpfResp}
-                  valid={!errors.cpfResp && validateCPF(responsible.cpf)}
-                  maxLength={14}
-                  required
-                />
+                {tipoCadastro !== "cpf" && (
+                  <FormInput
+                    label="CPF do responsável"
+                    placeholder="000.000.000-00"
+                    value={responsible.cpf}
+                    onChange={e => {
+                      const v = maskCPF(e.target.value)
+                      setResponsible(r => ({ ...r, cpf: v }))
+                      clearErr("cpfResp")
+                    }}
+                    error={errors.cpfResp}
+                    valid={!errors.cpfResp && validateCPF(responsible.cpf)}
+                    maxLength={14}
+                    required
+                  />
+                )}
                 <div>
                   <label htmlFor="cargo-sel" className="label">Cargo *</label>
                   <select

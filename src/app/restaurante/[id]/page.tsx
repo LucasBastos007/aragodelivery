@@ -6,7 +6,7 @@ import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { useCart } from "@/lib/cart"
 import { useClienteAuth } from "@/lib/auth-cliente"
-import type { Loja, Produto, CategoriaProduto } from "@/types"
+import type { Loja, Produto, CategoriaProduto, AdicionalProduto } from "@/types"
 
 const CAT_ICONS: Record<string, string> = {
   Restaurante: "🍽️", Mercadinho: "🛒", "Farmácia": "💊", Outros: "📦",
@@ -14,37 +14,39 @@ const CAT_ICONS: Record<string, string> = {
 
 // ── Modal de produto ───────────────────────────────────────────────────────
 
-function ProdutoModal({ prod, loja, qtdInCart, onClose, onConfirm }: {
+function ProdutoModal({ prod, loja, onClose, onAdd }: {
   prod: Produto
   loja: Loja
-  qtdInCart: number
   onClose: () => void
-  onConfirm: (delta: number) => void
+  onAdd: (qty: number, adicionais: AdicionalProduto[], obs: string) => void
 }) {
-  const [qty, setQty] = useState(Math.max(1, qtdInCart))
+  const [qty, setQty] = useState(1)
+  const [adicionaisSel, setAdicionaisSel] = useState<AdicionalProduto[]>([])
+  const [obs, setObs] = useState("")
 
-  // Fecha no Escape
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose() }
     window.addEventListener("keydown", handler)
     return () => window.removeEventListener("keydown", handler)
   }, [onClose])
 
-  // Bloqueia scroll do body
   useEffect(() => {
     document.body.style.overflow = "hidden"
     return () => { document.body.style.overflow = "" }
   }, [])
 
-  const isAdding   = qtdInCart === 0
-  const totalItem  = prod.preco * qty
-  const btnLabel   = isAdding
-    ? `Adicionar ${qty > 1 ? `(${qty}) ` : ""}· R$ ${totalItem.toFixed(2)}`
-    : `Atualizar pedido · R$ ${totalItem.toFixed(2)}`
+  function toggleAdicional(a: AdicionalProduto) {
+    setAdicionaisSel(prev =>
+      prev.find(x => x.id === a.id) ? prev.filter(x => x.id !== a.id) : [...prev, a]
+    )
+  }
+
+  const totalAdicionais = adicionaisSel.reduce((s, a) => s + a.preco, 0)
+  const precoUnitario   = prod.preco + totalAdicionais
+  const totalItem       = precoUnitario * qty
 
   function handleConfirm() {
-    const delta = qty - qtdInCart
-    onConfirm(delta)
+    onAdd(qty, adicionaisSel, obs)
     onClose()
   }
 
@@ -55,7 +57,6 @@ function ProdutoModal({ prod, loja, qtdInCart, onClose, onConfirm }: {
         position: "fixed", inset: 0, zIndex: 999,
         background: "rgba(0,0,0,0.82)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)",
         display: "flex", alignItems: "flex-end", justifyContent: "center",
-        padding: "0 0 0",
       }}>
       <div
         onClick={e => e.stopPropagation()}
@@ -64,15 +65,17 @@ function ProdutoModal({ prod, loja, qtdInCart, onClose, onConfirm }: {
           maxWidth: "min(520px, 100vw)",
           border: "1px solid #e5e7eb", overflow: "hidden",
           animation: "slideUp 0.22s ease-out",
+          maxHeight: "90vh", overflowY: "auto",
+          WebkitOverflowScrolling: "touch",
         }}>
         {/* Foto */}
         {prod.foto_url ? (
-          <div style={{ position: "relative", height: 240 }}>
+          <div style={{ position: "relative", height: 200, flexShrink: 0 }}>
             <img src={prod.foto_url} alt={prod.nome} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
             <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(20,20,20,0.9) 100%)" }} />
           </div>
         ) : (
-          <div style={{ height: 120, background: "linear-gradient(135deg, rgba(249,115,22,0.12), rgba(249,115,22,0.04))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 56 }}>
+          <div style={{ height: 100, background: "linear-gradient(135deg, rgba(249,115,22,0.12), rgba(249,115,22,0.04))", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 48, flexShrink: 0 }}>
             🍽️
           </div>
         )}
@@ -83,7 +86,7 @@ function ProdutoModal({ prod, loja, qtdInCart, onClose, onConfirm }: {
           style={{
             position: "absolute", top: 16, right: 16, width: 36, height: 36, borderRadius: "50%",
             background: "rgba(0,0,0,0.6)", border: "1px solid #E5E7EB",
-            color: "#111827", fontSize: 18, cursor: "pointer", display: "flex",
+            color: "white", fontSize: 18, cursor: "pointer", display: "flex",
             alignItems: "center", justifyContent: "center", zIndex: 10,
           }}>
           ✕
@@ -93,51 +96,107 @@ function ProdutoModal({ prod, loja, qtdInCart, onClose, onConfirm }: {
           {/* Info */}
           <p style={{ color: "#111827", fontWeight: 900, fontSize: 20, marginBottom: 6, lineHeight: 1.2 }}>{prod.nome}</p>
           {prod.descricao && (
-            <p style={{ color: "#6B7280", fontSize: 14, lineHeight: 1.55, marginBottom: 14 }}>
+            <p style={{ color: "#6B7280", fontSize: 14, lineHeight: 1.55, marginBottom: 10 }}>
               {prod.descricao}
             </p>
           )}
-          <p style={{ color: "#DC2626", fontWeight: 800, fontSize: 20, marginBottom: 24 }}>
+          <p style={{ color: "#DC2626", fontWeight: 800, fontSize: 18, marginBottom: 20 }}>
             R$ {prod.preco.toFixed(2)}
           </p>
+
+          {/* Adicionais */}
+          {prod.adicionais && prod.adicionais.length > 0 && loja.aberto && (
+            <div style={{ marginBottom: 20 }}>
+              <p style={{ color: "#111827", fontWeight: 700, fontSize: 14, marginBottom: 10 }}>Adicionais</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {prod.adicionais.map(a => {
+                  const sel = !!adicionaisSel.find(x => x.id === a.id)
+                  return (
+                    <label
+                      key={a.id}
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        padding: "10px 14px", borderRadius: 10, cursor: "pointer",
+                        border: `1.5px solid ${sel ? "#DC2626" : "#E5E7EB"}`,
+                        background: sel ? "rgba(220,38,38,0.05)" : "#FAFAFA",
+                        transition: "all 0.15s",
+                      }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{
+                          width: 18, height: 18, borderRadius: 4, border: `2px solid ${sel ? "#DC2626" : "#D1D5DB"}`,
+                          background: sel ? "#DC2626" : "transparent",
+                          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                        }}>
+                          {sel && <span style={{ color: "white", fontSize: 11, lineHeight: 1 }}>✓</span>}
+                        </div>
+                        <span style={{ color: "#111827", fontSize: 14, fontWeight: 500 }}>{a.nome}</span>
+                      </div>
+                      <span style={{ color: "#DC2626", fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
+                        + R$ {a.preco.toFixed(2)}
+                      </span>
+                      <input type="checkbox" checked={sel} onChange={() => toggleAdicional(a)} style={{ display: "none" }} />
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Observação */}
+          {loja.aberto && (
+            <div style={{ marginBottom: 20 }}>
+              <p style={{ color: "#111827", fontWeight: 700, fontSize: 14, marginBottom: 8 }}>Observação (opcional)</p>
+              <textarea
+                value={obs}
+                onChange={e => setObs(e.target.value.slice(0, 200))}
+                placeholder="Ex: sem cebola, bem passado, molho à parte..."
+                rows={2}
+                style={{
+                  width: "100%", borderRadius: 10, border: "1.5px solid #E5E7EB",
+                  padding: "10px 12px", fontSize: 16, color: "#374151",
+                  resize: "none", outline: "none", boxSizing: "border-box",
+                  fontFamily: "inherit", lineHeight: 1.5,
+                }}
+                onFocus={e => { e.currentTarget.style.borderColor = "#DC2626" }}
+                onBlur={e => { e.currentTarget.style.borderColor = "#E5E7EB" }}
+              />
+              <p style={{ color: "#D1D5DB", fontSize: 11, textAlign: "right", marginTop: 2 }}>{obs.length}/200</p>
+            </div>
+          )}
 
           {/* Qty + button */}
           {loja.aberto ? (
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              {/* Counter */}
-              <div style={{ display: "flex", alignItems: "center", gap: 12, background: "#F9FAFB", borderRadius: 12, padding: "8px 14px", border: "1px solid #E5E7EB" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, background: "#F9FAFB", borderRadius: 12, padding: "8px 14px", border: "1px solid #E5E7EB", flexShrink: 0 }}>
                 <button
-                  onClick={() => setQty(q => Math.max(qtdInCart > 0 ? 0 : 1, q - 1))}
+                  onClick={() => setQty(q => Math.max(1, q - 1))}
                   style={{
-                    width: 30, height: 30, borderRadius: 8, border: "none",
-                    background: qty <= (qtdInCart > 0 ? 0 : 1) ? "#F3F4F6" : "rgba(220,38,38,0.15)",
-                    color: qty <= (qtdInCart > 0 ? 0 : 1) ? "#D1D5DB" : "#DC2626",
-                    fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                    width: 44, height: 44, borderRadius: 10, border: "none",
+                    background: qty <= 1 ? "#F3F4F6" : "rgba(220,38,38,0.15)",
+                    color: qty <= 1 ? "#D1D5DB" : "#DC2626",
+                    fontSize: 22, cursor: qty <= 1 ? "default" : "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
                   }}>
                   −
                 </button>
-                <span style={{ color: "#111827", fontWeight: 800, fontSize: 18, minWidth: 24, textAlign: "center" }}>{qty}</span>
+                <span style={{ color: "#111827", fontWeight: 800, fontSize: 18, minWidth: 28, textAlign: "center" }}>{qty}</span>
                 <button
                   onClick={() => setQty(q => q + 1)}
                   style={{
-                    width: 30, height: 30, borderRadius: 8, border: "none",
+                    width: 44, height: 44, borderRadius: 10, border: "none",
                     background: "rgba(220,38,38,0.15)", color: "#DC2626",
-                    fontSize: 20, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 22, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                   }}>
                   +
                 </button>
               </div>
-
-              {/* Confirm */}
               <button
                 onClick={handleConfirm}
-                disabled={qty === qtdInCart}
                 style={{
                   flex: 1, padding: "14px", borderRadius: 12, border: "none",
-                  background: qty === qtdInCart ? "rgba(220,38,38,0.3)" : "#DC2626",
-                  color: "#111827", fontWeight: 800, fontSize: 14, cursor: qty === qtdInCart ? "not-allowed" : "pointer",
+                  background: "#DC2626", color: "white", fontWeight: 800, fontSize: 14, cursor: "pointer",
                 }}>
-                {qty === 0 && qtdInCart > 0 ? "🗑 Remover do carrinho" : btnLabel}
+                Adicionar · R$ {totalItem.toFixed(2)}
               </button>
             </div>
           ) : (
@@ -178,14 +237,15 @@ export default function RestaurantePage() {
       ])
       setLoja(lojaData as Loja)
       setCategorias((catData as CategoriaProduto[]) ?? [])
-      setProdutos((prodData as Produto[]) ?? [])
+      const hoje = new Date().getDay()
+      const todos = (prodData as Produto[]) ?? []
+      setProdutos(todos.filter(p => !p.dias_semana || p.dias_semana.length === 0 || p.dias_semana.includes(hoje)))
       if (catData && catData.length > 0) setCatAtiva((catData as CategoriaProduto[])[0].id)
       setLoading(false)
     }
     load()
   }, [id])
 
-  // Atualiza aba ativa conforme scroll
   useEffect(() => {
     if (categorias.length === 0) return
     const HEADER_H = 94
@@ -203,7 +263,6 @@ export default function RestaurantePage() {
     return () => window.removeEventListener("scroll", onScroll)
   }, [categorias])
 
-  // Centra a aba ativa na barra horizontal
   useEffect(() => {
     if (!catAtiva || !tabsRef.current) return
     const el = tabsRef.current.querySelector(`[data-cat-tab="${catAtiva}"]`) as HTMLElement | null
@@ -216,21 +275,39 @@ export default function RestaurantePage() {
   }
 
   function prodQtd(prodId: string) {
-    return items.find(i => i.id === prodId)?.quantidade ?? 0
+    return items.filter(i => (i.produto_id ?? i.id) === prodId).reduce((s, i) => s + i.quantidade, 0)
   }
 
-  function handleModalConfirm(prod: Produto, delta: number) {
+  function handleAddToCart(prod: Produto, qty: number, adicionais: AdicionalProduto[], obs: string) {
     if (!loja) return
-    if (delta > 0) {
-      for (let i = 0; i < delta; i++) add({ id: prod.id, nome: prod.nome, preco: prod.preco, loja_id: loja.id, loja_nome: loja.nome })
-    } else if (delta < 0) {
-      for (let i = 0; i < Math.abs(delta); i++) remove(prod.id)
-    } else {
-      setQty(prod.id, 0)
+    const totalAdicionais = adicionais.reduce((s, a) => s + a.preco, 0)
+    const cartKey = adicionais.length > 0 || obs.trim()
+      ? `${prod.id}_${adicionais.map(a => a.id).sort().join("+")}${obs.trim() ? "_" + obs.trim().slice(0, 20) : ""}`
+      : prod.id
+    for (let i = 0; i < qty; i++) {
+      add({
+        id: cartKey,
+        produto_id: prod.id,
+        nome: prod.nome,
+        preco: prod.preco + totalAdicionais,
+        loja_id: loja.id,
+        loja_nome: loja.nome,
+        observacao: obs.trim(),
+        adicionais,
+      })
     }
   }
 
-  // Destaques: prefere produtos com foto, máx 6
+  function handleSimpleAdd(prod: Produto) {
+    if (!loja) return
+    add({ id: prod.id, produto_id: prod.id, nome: prod.nome, preco: prod.preco, loja_id: loja.id, loja_nome: loja.nome })
+  }
+
+  function handleRemoveLast(prodId: string) {
+    const last = [...items].reverse().find(i => (i.produto_id ?? i.id) === prodId)
+    if (last) remove(last.id)
+  }
+
   const destaques = useMemo(() => {
     if (produtos.length < 4) return []
     const comFoto = produtos.filter(p => p.foto_url)
@@ -265,9 +342,8 @@ export default function RestaurantePage() {
         <ProdutoModal
           prod={modalProd}
           loja={loja}
-          qtdInCart={prodQtd(modalProd.id)}
           onClose={() => setModalProd(null)}
-          onConfirm={delta => handleModalConfirm(modalProd, delta)}
+          onAdd={(qty, adicionais, obs) => handleAddToCart(modalProd, qty, adicionais, obs)}
         />
       )}
 
@@ -289,7 +365,7 @@ export default function RestaurantePage() {
             </p>
             <Link href={`/cliente/entrar?next=/restaurante/${id}`} style={{
               display: "block", padding: "14px", borderRadius: 12, background: "#DC2626",
-              color: "#111827", fontWeight: 800, fontSize: 15, textDecoration: "none", marginBottom: 10,
+              color: "white", fontWeight: 800, fontSize: 15, textDecoration: "none", marginBottom: 10,
             }}>
               Entrar / Criar conta →
             </Link>
@@ -310,8 +386,7 @@ export default function RestaurantePage() {
           <div style={{ flex: 1 }}>
             <p style={{ color: "#111827", fontWeight: 800, fontSize: 15 }}>{loja.nome}</p>
             <p style={{ color: "#9CA3AF", fontSize: 11 }}>
-              {loja.tempo_min}–{loja.tempo_max} min ·{" "}
-              {loja.taxa_entrega === 0 ? "🎉 Entrega grátis" : `Entrega R$ ${loja.taxa_entrega.toFixed(2)}`}
+              {loja.tempo_min}–{loja.tempo_max} min · A partir de R$ 6,00
             </p>
           </div>
           <span style={{
@@ -323,7 +398,6 @@ export default function RestaurantePage() {
           </span>
         </div>
 
-        {/* Category nav */}
         {categorias.length > 0 && (
           <div
             ref={tabsRef}
@@ -378,7 +452,6 @@ export default function RestaurantePage() {
             </div>
           )}
 
-          {/* Avaliação da loja */}
           {(loja as any).nota_media != null && (
             <div style={{
               padding: "12px 20px", borderTop: "1px solid #F3F4F6",
@@ -412,7 +485,6 @@ export default function RestaurantePage() {
           )}
         </div>
 
-        {/* Fechado warning */}
         {!loja.aberto && (
           <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 12, padding: "12px 16px", marginBottom: 20 }}>
             <p style={{ color: "#EF4444", fontWeight: 600, fontSize: 13 }}>⛔ Esta loja está fechada no momento</p>
@@ -437,7 +509,11 @@ export default function RestaurantePage() {
                   isMaisPedido={idx < 2}
                   qtd={prodQtd(prod.id)}
                   onOpen={() => { if (!user) { setLoginRequired(true); return }; setModalProd(prod) }}
-                  onAdd={() => { if (!user) { setLoginRequired(true); return }; add({ id: prod.id, nome: prod.nome, preco: prod.preco, loja_id: loja.id, loja_nome: loja.nome }) }}
+                  onAdd={() => {
+                    if (!user) { setLoginRequired(true); return }
+                    if (prod.adicionais && prod.adicionais.length > 0) { setModalProd(prod); return }
+                    handleSimpleAdd(prod)
+                  }}
                 />
               ))}
             </div>
@@ -456,8 +532,12 @@ export default function RestaurantePage() {
                   <ProdutoRow
                     key={prod.id} prod={prod} loja={loja} qtd={prodQtd(prod.id)}
                     onOpen={() => { if (!user) { setLoginRequired(true); return }; setModalProd(prod) }}
-                    onAdd={() => { if (!user) { setLoginRequired(true); return }; add({ id: prod.id, nome: prod.nome, preco: prod.preco, loja_id: loja.id, loja_nome: loja.nome }) }}
-                    onRemove={() => remove(prod.id)}
+                    onAdd={() => {
+                      if (!user) { setLoginRequired(true); return }
+                      if (prod.adicionais && prod.adicionais.length > 0) { setModalProd(prod); return }
+                      handleSimpleAdd(prod)
+                    }}
+                    onRemove={() => handleRemoveLast(prod.id)}
                   />
                 ))}
               </div>
@@ -474,8 +554,12 @@ export default function RestaurantePage() {
                 <ProdutoRow
                   key={prod.id} prod={prod} loja={loja} qtd={prodQtd(prod.id)}
                   onOpen={() => { if (!user) { setLoginRequired(true); return }; setModalProd(prod) }}
-                  onAdd={() => { if (!user) { setLoginRequired(true); return }; add({ id: prod.id, nome: prod.nome, preco: prod.preco, loja_id: loja.id, loja_nome: loja.nome }) }}
-                  onRemove={() => remove(prod.id)}
+                  onAdd={() => {
+                    if (!user) { setLoginRequired(true); return }
+                    if (prod.adicionais && prod.adicionais.length > 0) { setModalProd(prod); return }
+                    handleSimpleAdd(prod)
+                  }}
+                  onRemove={() => handleRemoveLast(prod.id)}
                 />
               ))}
             </div>
@@ -500,7 +584,7 @@ export default function RestaurantePage() {
           <div style={{ maxWidth: 720, margin: "0 auto" }}>
             <button onClick={() => router.push("/carrinho")} style={{
               width: "100%", padding: "14px 12px", borderRadius: 14, border: "none", cursor: "pointer",
-              background: "#DC2626", color: "#111827", fontWeight: 800, fontSize: 14,
+              background: "#DC2626", color: "white", fontWeight: 800, fontSize: 14,
               display: "flex", alignItems: "center", justifyContent: "space-between",
               gap: 8,
             }}>
@@ -531,13 +615,11 @@ function DestaqueProdCard({ prod, loja, isMaisPedido, qtd, onOpen, onAdd }: {
         boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
       }}>
 
-      {/* Foto quadrada */}
       <div style={{ aspectRatio: "1 / 1", position: "relative", background: "#F3F4F6", overflow: "hidden" }}>
         {prod.foto_url
           ? <img src={prod.foto_url} alt={prod.nome} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
           : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 34, background: "linear-gradient(135deg,rgba(249,115,22,0.12),rgba(249,115,22,0.04))" }}>🍽️</div>
         }
-        {/* Badge Mais pedido */}
         {isMaisPedido && (
           <div style={{
             position: "absolute", top: 6, left: 6,
@@ -548,7 +630,6 @@ function DestaqueProdCard({ prod, loja, isMaisPedido, qtd, onOpen, onAdd }: {
             + pedido
           </div>
         )}
-        {/* Badge qtd no carrinho */}
         {qtd > 0 && (
           <div style={{
             position: "absolute", top: 6, right: 6,
@@ -563,7 +644,6 @@ function DestaqueProdCard({ prod, loja, isMaisPedido, qtd, onOpen, onAdd }: {
         )}
       </div>
 
-      {/* Texto */}
       <div style={{ padding: "8px 9px 10px" }}>
         <p style={{
           color: "#111827", fontWeight: 600, fontSize: 12, lineHeight: 1.35, marginBottom: 5,
@@ -606,7 +686,6 @@ function ProdutoRow({ prod, loja, qtd, onOpen, onAdd, onRemove }: {
       onMouseEnter={e => { if (loja.aberto) e.currentTarget.style.borderColor = "rgba(249,115,22,0.3)" }}
       onMouseLeave={e => { e.currentTarget.style.borderColor = "#E5E7EB" }}>
 
-      {/* Foto */}
       {prod.foto_url && (
         <div style={{ width: 76, height: 76, borderRadius: 10, overflow: "hidden", flexShrink: 0 }}>
           <img src={prod.foto_url} alt={prod.nome} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -626,7 +705,6 @@ function ProdutoRow({ prod, loja, qtd, onOpen, onAdd, onRemove }: {
         <p style={{ color: "#DC2626", fontWeight: 700, fontSize: 14 }}>R$ {prod.preco.toFixed(2)}</p>
       </div>
 
-      {/* Qty controls (stop propagation to not open modal) */}
       {loja.aberto ? (
         qtd === 0 ? (
           <button
@@ -648,9 +726,9 @@ function ProdutoRow({ prod, loja, qtd, onOpen, onAdd, onRemove }: {
               display: "flex", alignItems: "center", justifyContent: "center",
             }}>−</button>
             <span style={{ color: "#111827", fontWeight: 700, minWidth: 16, textAlign: "center" }}>{qtd}</span>
-            <button onClick={onAdd} style={{
+            <button onClick={e => { e.stopPropagation(); onAdd() }} style={{
               width: 30, height: 30, borderRadius: 8, border: "none",
-              background: "#DC2626", color: "#111827", fontSize: 18, cursor: "pointer",
+              background: "#DC2626", color: "white", fontSize: 18, cursor: "pointer",
               display: "flex", alignItems: "center", justifyContent: "center",
             }}>+</button>
           </div>

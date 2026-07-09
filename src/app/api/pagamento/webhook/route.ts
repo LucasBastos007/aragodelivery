@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => null) as {
+    id?: string
     event?: string
     payment?: { id?: string; externalReference?: string; status?: string }
   } | null
@@ -46,6 +47,18 @@ export async function POST(req: NextRequest) {
   const pedidoId = payment.externalReference!
   const status   = payment.status ?? ""
   const sb       = adminSb()
+
+  // Idempotência: deduplicar eventos repetidos pelo ID do evento Asaas
+  const externalEventId = body.id ?? `${payment.id}_${event}`
+  const { error: dupErr } = await sb.from("webhook_events").insert({
+    provider: "asaas",
+    external_event_id: externalEventId,
+    payload: body as object,
+  })
+  if (dupErr?.code === "23505") {
+    // Evento já processado — retorna 200 sem processar novamente
+    return NextResponse.json({ received: true, duplicate: true })
+  }
 
   if (CONFIRMADOS.has(event) || CONFIRMADOS.has(status)) {
     const { data: updated } = await sb

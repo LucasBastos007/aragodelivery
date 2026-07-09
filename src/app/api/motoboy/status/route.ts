@@ -19,9 +19,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const { disponivel, raio_km } = body
 
-  const updates: Record<string, unknown> = { last_seen: new Date().toISOString() }
+  const updates: Record<string, unknown> = {}
   if (disponivel !== undefined) updates.disponivel = disponivel
   if (raio_km    !== undefined) updates.raio_km    = raio_km
+  if (Object.keys(updates).length === 0) return NextResponse.json({ ok: true })
 
   const { error } = await adminClient()
     .from("motoboys")

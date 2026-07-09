@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import type { Motoboy, StatusMotoboy } from "@/types"
 
@@ -141,6 +142,7 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
 
 // ─── Página ───────────────────────────────────────────────────────────────────
 export default function MotoboyPage() {
+  const router = useRouter()
   const [motoboys,    setMotoboys]    = useState<Motoboy[]>([])
   const [loading,     setLoading]     = useState(true)
   const [filtroStatus, setFiltroStatus] = useState("todos")
@@ -478,6 +480,29 @@ export default function MotoboyPage() {
               )}
             </div>
 
+            {/* Assinatura do contrato */}
+            {selecionado.contrato_assinado && selecionado.contrato_assinatura && (
+              <div style={{ margin: "0", borderTop: "1px solid #F1F5F9" }}>
+                <div style={{ padding: "10px 20px", background: "#F0FDF4", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid #D1FAE5" }}>
+                  <p style={{ fontSize: 10, fontWeight: 800, color: "#059669", textTransform: "uppercase", letterSpacing: 1 }}>✓ Contrato assinado</p>
+                  <a
+                    href={`/api/chego-ctrl/contrato?tipo=motoboy&id=${selecionado.id}`}
+                    target="_blank" rel="noreferrer"
+                    style={{ fontSize: 11, fontWeight: 700, color: "#f97316", textDecoration: "none" }}
+                  >
+                    ⬇ Baixar PDF
+                  </a>
+                </div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={selecionado.contrato_assinatura}
+                  alt="Assinatura"
+                  onClick={() => window.open(`/api/chego-ctrl/contrato?tipo=motoboy&id=${selecionado.id}`, "_blank")}
+                  style={{ width: "100%", display: "block", background: "white", cursor: "zoom-in", maxHeight: 100, objectFit: "contain", borderBottom: "1px solid #F1F5F9" }}
+                />
+              </div>
+            )}
+
             {/* Documentação enviada */}
             {(() => {
               const docs = selecionado.documentos
@@ -562,6 +587,26 @@ export default function MotoboyPage() {
               </div>
             )}
 
+            {/* Botão documentação */}
+            <div style={{ padding: "12px 20px 0" }}>
+              <button
+                onClick={() => router.push(`/chego-ctrl/documentos/motoboy?id=${selecionado.id}`)}
+                style={{
+                  width: "100%", padding: "11px", borderRadius: 10,
+                  border: "1.5px solid #E2E8F0", background: "#F8FAFC",
+                  color: "#374151", fontWeight: 700, fontSize: 13, cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                }}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/>
+                </svg>
+                Ver documentação completa
+              </button>
+            </div>
+
             {/* Ações */}
             <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "16px 20px 20px" }}>
               {selecionado.status === "pendente" && (
@@ -593,9 +638,25 @@ export default function MotoboyPage() {
               )}
 
               {selecionado.status === "aprovado" && (
-                <p style={{ color: "#94a3b8", fontSize: 12, textAlign: "center" }}>
-                  Aguardando assinatura do contrato pelo motoboy
-                </p>
+                <>
+                  <p style={{ color: "#94a3b8", fontSize: 12, textAlign: "center", marginBottom: 4 }}>
+                    Aguardando assinatura do contrato pelo motoboy
+                  </p>
+                  <button
+                    onClick={() => atualizarStatus(selecionado.id, "ativo")}
+                    disabled={salvando}
+                    style={{
+                      width: "100%", padding: "13px", borderRadius: 12, border: "none",
+                      background: "#22c55e", color: "#0F172A", fontWeight: 900, fontSize: 14,
+                      cursor: salvando ? "not-allowed" : "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                    }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    {salvando ? "Ativando..." : "Ativar (contrato físico assinado)"}
+                  </button>
+                </>
               )}
 
               {selecionado.status === "contrato_assinado" && (

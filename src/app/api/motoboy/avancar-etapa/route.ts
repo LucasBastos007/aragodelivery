@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { requireMotoboy, unauthorized } from "@/lib/session"
+import { emitirNfcePedido } from "@/lib/emitir-nfce"
 
 function adminClient() {
   return createClient(
@@ -88,6 +89,11 @@ export async function POST(req: NextRequest) {
         }
       }
     } catch {}
+  }
+
+  // Emissão automática de NFC-e ao entregar (não bloqueia a resposta se falhar)
+  if (nextStatus === "entregue") {
+    emitirNfcePedido(pedido_id, sb).catch(e => console.error("[NFC-e auto]", e))
   }
 
   return NextResponse.json({ ok: true, nextStatus })

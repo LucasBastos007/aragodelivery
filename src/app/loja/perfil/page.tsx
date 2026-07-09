@@ -36,7 +36,8 @@ type Form = {
   cep: string; logradouro: string; numero: string; complemento: string
   bairro: string; cidade: string; estado: string
   telefone: string; taxa_entrega: string; tempo_min: string; tempo_max: string
-  nome_responsavel: string; email: string; logo_url: string; pix_chave: string
+  nome_responsavel: string; email: string; logo_url: string; pix_key: string
+  banco: string; banco_agencia: string; banco_conta: string; banco_tipo_conta: string
 }
 
 async function geocodeAddress(address: string): Promise<[number, number] | null> {
@@ -128,7 +129,8 @@ export default function PerfilPage() {
     cep: "", logradouro: "", numero: "", complemento: "",
     bairro: "", cidade: "Aragoiânia", estado: "GO",
     telefone: "", taxa_entrega: "", tempo_min: "", tempo_max: "",
-    nome_responsavel: "", email: "", logo_url: "", pix_chave: "",
+    nome_responsavel: "", email: "", logo_url: "", pix_key: "",
+    banco: "", banco_agencia: "", banco_conta: "", banco_tipo_conta: "Corrente",
   })
 
   useEffect(() => {
@@ -154,13 +156,17 @@ export default function PerfilPage() {
         cidade: data.cidade ?? "Aragoiânia",
         estado: data.estado ?? "GO",
         telefone: data.telefone ?? "",
-        taxa_entrega: String(data.taxa_entrega ?? "5"),
+        taxa_entrega: String(data.taxa_entrega ?? "6"),
         tempo_min: String(data.tempo_min ?? "30"),
         tempo_max: String(data.tempo_max ?? "60"),
         nome_responsavel: data.nome_responsavel ?? "",
         email: data.email ?? "",
         logo_url: data.logo_url ?? "",
-        pix_chave: data.pix_chave ?? "",
+        pix_key: data.pix_key ?? "",
+        banco: data.banco ?? "",
+        banco_agencia: data.banco_agencia ?? "",
+        banco_conta: data.banco_conta ?? "",
+        banco_tipo_conta: data.banco_tipo_conta ?? "Corrente",
       })
       setBannerPreview(data.logo_url ?? "")
       setLoading(false)
@@ -254,7 +260,11 @@ export default function PerfilPage() {
       tempo_max: parseInt(form.tempo_max) || 60,
       nome_responsavel: form.nome_responsavel.trim(),
       logo_url: logoFinal || null,
-      pix_chave: form.pix_chave.trim() || null,
+      pix_key: form.pix_key.trim() || null,
+      banco: form.banco.trim() || null,
+      banco_agencia: form.banco_agencia.trim() || null,
+      banco_conta: form.banco_conta.trim() || null,
+      banco_tipo_conta: form.banco_tipo_conta || "Corrente",
       horarios,
       ...(coords ? { lat: coords[0], lng: coords[1] } : {}),
     }).eq("id", loja_id)
@@ -487,11 +497,10 @@ export default function PerfilPage() {
       {/* Entrega */}
       <div className="card p-4 mb-4">
         <p className="font-black mb-4" style={{ color: "#111827", fontSize: 14 }}>Entrega</p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: 12 }}>
-          <div>
-            <label className="label">Taxa (R$)</label>
-            <input className="input" type="number" step="0.50" min="0" value={form.taxa_entrega} onChange={e => set("taxa_entrega", e.target.value)} />
-          </div>
+        <p style={{ fontSize: 12, color: "#6B7280", marginBottom: 12 }}>
+          Taxa definida pela plataforma: <strong>R$ 6,00</strong> até 6 km · +R$ 1,00/km adicional
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <div>
             <label className="label">Mín. (min)</label>
             <input className="input" type="number" min="5" value={form.tempo_min} onChange={e => set("tempo_min", e.target.value)} />
@@ -522,11 +531,39 @@ export default function PerfilPage() {
       {/* Financeiro */}
       <div className="card p-4 mb-6">
         <p className="font-black mb-1" style={{ color: "#111827", fontSize: 14 }}>Financeiro</p>
-        <p className="text-xs mb-4" style={{ color: "#9CA3AF" }}>Chave PIX usada para receber saques da plataforma.</p>
-        <div>
-          <label className="label">Chave PIX para saque</label>
-          <input className="input" value={form.pix_chave} onChange={e => set("pix_chave", e.target.value)} placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória" />
-          {!form.pix_chave && <p className="text-xs mt-2 font-semibold" style={{ color: "#f59e0b" }}>Atenção: sem chave PIX você não poderá solicitar saques.</p>}
+        <p className="text-xs mb-4" style={{ color: "#9CA3AF" }}>Dados bancários e chave PIX para receber saques da plataforma.</p>
+        <div className="flex flex-col gap-3">
+          <div>
+            <label className="label">Chave PIX para saque</label>
+            <input className="input" value={form.pix_key} onChange={e => set("pix_key", e.target.value)} placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória" />
+            {!form.pix_key && <p className="text-xs mt-2 font-semibold" style={{ color: "#f59e0b" }}>Atenção: sem chave PIX você não poderá solicitar saques.</p>}
+          </div>
+          <div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 12 }}>
+            <p className="text-xs font-bold mb-3" style={{ color: "#6B7280", textTransform: "uppercase", letterSpacing: 1 }}>Dados bancários</p>
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="label">Banco</label>
+                <input className="input" value={form.banco} onChange={e => set("banco", e.target.value)} placeholder="Ex: Bradesco, Itaú, Nubank..." />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div>
+                  <label className="label">Agência</label>
+                  <input className="input" value={form.banco_agencia} onChange={e => set("banco_agencia", e.target.value)} placeholder="Ex: 1234" />
+                </div>
+                <div>
+                  <label className="label">Conta</label>
+                  <input className="input" value={form.banco_conta} onChange={e => set("banco_conta", e.target.value)} placeholder="Ex: 56789-0" />
+                </div>
+              </div>
+              <div>
+                <label className="label">Tipo de conta</label>
+                <select className="input" value={form.banco_tipo_conta} onChange={e => set("banco_tipo_conta", e.target.value)}>
+                  <option value="Corrente">Corrente</option>
+                  <option value="Poupança">Poupança</option>
+                </select>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

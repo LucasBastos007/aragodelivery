@@ -9,6 +9,21 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import crypto from "crypto"
 
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function calcularTaxaEntrega(latLoja: number | null, lngLoja: number | null, latCliente: number | null, lngCliente: number | null, base = 6.00): number {
+  if (!latLoja || !lngLoja || !latCliente || !lngCliente) return base
+  const dist = haversineKm(latLoja, lngLoja, latCliente, lngCliente)
+  if (dist <= 6) return base
+  return Math.round((base + (dist - 6) * 1.00) * 100) / 100
+}
+
 function adminSb() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!key) throw new Error("SUPABASE_SERVICE_ROLE_KEY não configurada")
@@ -68,7 +83,7 @@ export async function POST(req: NextRequest) {
   // 1. Busca a loja para obter taxa de entrega real
   const { data: loja, error: lojaErr } = await sb
     .from("lojas")
-    .select("id, taxa_entrega, status, aberto, aceita_retirada")
+    .select("id, lat, lng, status, aberto, aceita_retirada, taxa_entrega")
     .eq("id", loja_id)
     .single()
 
@@ -105,8 +120,8 @@ export async function POST(req: NextRequest) {
     return sum + Number(produto.preco) * Number(item.quantidade)
   }, 0)
 
-  // 4. Taxa real da loja (retirada = grátis)
-  const taxa_entrega = tipo_entrega === "retirada" ? 0 : Number(loja.taxa_entrega)
+  // 4. Taxa dinâmica por distância (retirada = grátis)
+  const taxa_entrega = tipo_entrega === "retirada" ? 0 : calcularTaxaEntrega(loja.lat, loja.lng, lat_entrega, lng_entrega, (loja as any).taxa_entrega ?? 6.00)
 
   // 5. Valida e aplica cupom no servidor
   let desconto = 0
@@ -179,6 +194,7 @@ export async function POST(req: NextRequest) {
         preco:      Number(produto.preco),
         quantidade: Number(item.quantidade),
         observacao: item.observacao ?? "",
+        adicionais: item.adicionais ?? [],
       }
     })
   )
