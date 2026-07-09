@@ -197,6 +197,7 @@ function MapaMotoboy({
       const map = mapInstanceRef.current
       if (!map) return
       if (navMode) {
+        map.setRenderingType(google.maps.RenderingType.VECTOR)
         map.setZoom(17)
         map.setTilt(45)
         map.setHeading(headingRef.current)
@@ -326,9 +327,9 @@ function MapaMotoboy({
       center={{ lat: myLat, lng: myLng }}
       zoom={16}
       options={{
-        // mapId força mapa vetorial — único modo que suporta tilt/heading
-        // em qualquer localização (satellite sem mapId só tem tilt em cidades com imagery 45°)
-        mapId: "DEMO_MAP_ID",
+        // VECTOR renderingType: única forma de habilitar tilt/heading em qualquer localização.
+        // styles não funcionam com vector maps (requer mapId + Cloud Console).
+        renderingType: google.maps.RenderingType.VECTOR,
         mapTypeId: "roadmap",
         disableDefaultUI: true,
         zoomControl: false,
@@ -339,11 +340,10 @@ function MapaMotoboy({
         clickableIcons: false,
         tilt: navMode ? 45 : 0,
         heading: navMode ? headingRef.current : 0,
-        // styles incompatível com mapId — dark theme via DARK_MAP_STYLE só funciona sem mapId
       }}
       onLoad={m => {
         mapInstanceRef.current = m
-        if (navMode) { m.setZoom(17); m.setTilt(45); m.setHeading(headingRef.current) }
+        if (navMode) { m.setRenderingType(google.maps.RenderingType.VECTOR); m.setZoom(17); m.setTilt(45); m.setHeading(headingRef.current) }
       }}
       onDragStart={() => { followRef.current = false; setFollowing(false) }}
     >
