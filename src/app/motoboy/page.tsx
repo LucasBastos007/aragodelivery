@@ -109,6 +109,7 @@ function MapaMotoboy({
   lojaLat, lojaLng,
   raioDisplay, raioOpen,
   extrasLoja, extrasDestino,
+  fitBoundsTrigger,
 }: {
   myLat: number; myLng: number
   destinoLat?: number | null; destinoLng?: number | null
@@ -116,6 +117,7 @@ function MapaMotoboy({
   raioDisplay: number; raioOpen: boolean
   extrasLoja?: PinExtra[]
   extrasDestino?: PinExtra[]
+  fitBoundsTrigger?: number
 }) {
   const { isLoaded, loadError } = useJsApiLoader({
     id: "google-map-motoboy",
@@ -189,6 +191,32 @@ function MapaMotoboy({
       map.setHeading(0)
     }
   }, [navMode])
+
+  // Mostra rota completa ao clicar "Chegô — Ver no mapa"
+  useEffect(() => {
+    if (!fitBoundsTrigger || !mapInstanceRef.current) return
+    const map = mapInstanceRef.current
+    map.setTilt(0)
+    map.setHeading(0)
+    const b = new google.maps.LatLngBounds()
+    b.extend({ lat: myLatRef.current, lng: myLngRef.current })
+    if (destinoLat && destinoLng) b.extend({ lat: destinoLat, lng: destinoLng })
+    if (lojaLat && lojaLng) b.extend({ lat: lojaLat, lng: lojaLng })
+    map.fitBounds(b, { top: 80, right: 32, bottom: 300, left: 32 })
+    followRef.current = false
+    setFollowing(false)
+    // Volta para o modo seguimento após 6s
+    const t = setTimeout(() => {
+      if (navMode) {
+        map.setZoom(17)
+        map.setTilt(45)
+        map.setHeading(headingRef.current)
+      }
+      followRef.current = true
+      setFollowing(true)
+    }, 6000)
+    return () => clearTimeout(t)
+  }, [fitBoundsTrigger])
 
   // Recalcula rota APENAS quando o destino ou loja mudam — não a cada update de GPS
   useEffect(() => {
@@ -460,10 +488,11 @@ export default function MotoboyPage() {
   const lastPosRef    = useRef<{lat:number;lng:number}|null>(null)
   const wakeLockRef   = useRef<any>(null)
 
-  const [destinoLat, setDestinoLat] = useState<number | null>(null)
-  const [destinoLng, setDestinoLng] = useState<number | null>(null)
-  const [lojaLat,    setLojaLat]    = useState<number | null>(null)
-  const [lojaLng,    setLojaLng]    = useState<number | null>(null)
+  const [destinoLat,       setDestinoLat]       = useState<number | null>(null)
+  const [destinoLng,       setDestinoLng]       = useState<number | null>(null)
+  const [lojaLat,          setLojaLat]          = useState<number | null>(null)
+  const [lojaLng,          setLojaLng]          = useState<number | null>(null)
+  const [fitBoundsTrigger, setFitBoundsTrigger] = useState(0)
 
   // Bottom sheet
   const SHEET_PEEK = 220
@@ -1145,6 +1174,7 @@ export default function MotoboyPage() {
         raioDisplay={raioDisplay} raioOpen={raioOpen}
         extrasLoja={extrasLojaMap}
         extrasDestino={extrasDestinoMap}
+        fitBoundsTrigger={fitBoundsTrigger}
       />
 
       {/* ── Toast de erro ── */}
@@ -1557,7 +1587,7 @@ export default function MotoboyPage() {
           destinoLat={destinoLat ?? undefined}
           destinoLng={destinoLng ?? undefined}
           onSOSOpen={() => setSosModal(true)}
-          onSetDestino={(lat, lng) => { setDestinoLat(lat); setDestinoLng(lng) }}
+          onSetDestino={(lat, lng) => { setDestinoLat(lat); setDestinoLng(lng); setFitBoundsTrigger(n => n + 1) }}
         />
       )}
 
