@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
 import type { Pedido } from "@/types"
-import { GoogleMap, useJsApiLoader, OverlayView, DirectionsRenderer, Circle, Polyline } from "@react-google-maps/api"
+import { useJsApiLoader } from "@react-google-maps/api"
 
 const GMAPS_LIBS: ("geometry" | "places")[] = []
 
@@ -97,8 +97,46 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 
 const CIRCUM = 2 * Math.PI * 40 // circunferência do timer circular ≈ 251.3
 
-// ─── Mapa fullscreen com rota (Google Maps) ───────────────────────────────────
+// ─── Mapa fullscreen com rota (Google Maps — API imperativa) ──────────────────
+// Usamos new google.maps.Map() diretamente para garantir renderingType: VECTOR
+// no construtor. @react-google-maps/api não passa renderingType de forma confiável.
 type PinExtra = { lat: number; lng: number; type: "loja" | "destino"; label?: string }
+
+// Lazy singleton: estende google.maps.OverlayView só depois que a API carrega
+let _HtmlOverlayClass: any = null
+function getHtmlOverlayClass() {
+  if (_HtmlOverlayClass) return _HtmlOverlayClass
+  class HtmlOverlay extends google.maps.OverlayView {
+    div: HTMLDivElement
+    pos: google.maps.LatLng
+    constructor(lat: number, lng: number, html: string) {
+      super()
+      this.pos = new google.maps.LatLng(lat, lng)
+      this.div = document.createElement("div")
+      this.div.style.position = "absolute"
+      this.div.innerHTML = html
+    }
+    onAdd() { this.getPanes()!.overlayMouseTarget.appendChild(this.div) }
+    draw() {
+      const p = this.getProjection()?.fromLatLngToDivPixel(this.pos)
+      if (!p) return
+      this.div.style.left = `${p.x}px`
+      this.div.style.top  = `${p.y}px`
+    }
+    onRemove() { this.div.parentNode?.removeChild(this.div) }
+    move(lat: number, lng: number) { this.pos = new google.maps.LatLng(lat, lng); this.draw() }
+    setHtml(html: string) { this.div.innerHTML = html }
+  }
+  _HtmlOverlayClass = HtmlOverlay
+  return HtmlOverlay
+}
+
+const MARKER_MOTOBOY_NAV = `<div style="transform:translate(-50%,-50%)"><svg width="44" height="44" viewBox="0 0 44 44" style="filter:drop-shadow(0 3px 8px rgba(0,0,0,0.55))"><circle cx="22" cy="22" r="20" fill="rgba(15,20,40,0.75)" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/><polygon points="22,7 31,34 22,28 13,34" fill="#22d3ee" stroke="white" stroke-width="2" stroke-linejoin="round"/></svg></div>`
+const MARKER_MOTOBOY_GPS = `<div style="transform:translate(-50%,-50%);position:relative;width:24px;height:24px"><style>@keyframes gpsPulse{0%{transform:translate(-50%,-50%) scale(1);opacity:.6}100%{transform:translate(-50%,-50%) scale(2.8);opacity:0}}</style><div style="position:absolute;top:50%;left:50%;width:24px;height:24px;border-radius:50%;background:rgba(66,133,244,0.3);animation:gpsPulse 2s ease-out infinite;pointer-events:none"></div><div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:20px;height:20px;border-radius:50%;background:#4285F4;border:3px solid white;box-shadow:0 2px 8px rgba(66,133,244,0.7)"></div></div>`
+const MARKER_LOJA   = `<div style="transform:translate(-50%,-50%);width:38px;height:38px;border-radius:50%;background:#f97316;border:3px solid white;box-shadow:0 2px 10px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>`
+const MARKER_DESTINO = `<div style="transform:translate(-50%,-50%);width:38px;height:38px;border-radius:50%;background:#22c55e;border:3px solid white;box-shadow:0 2px 10px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></div>`
+const MARKER_EXTRA_LOJA   = `<div style="transform:translate(-50%,-50%);width:34px;height:34px;border-radius:50%;background:#fb923c;border:2px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center"><span style="color:white;font-weight:900;font-size:11px">2</span></div>`
+const MARKER_EXTRA_DESTINO= `<div style="transform:translate(-50%,-50%);width:34px;height:34px;border-radius:50%;background:#4ade80;border:2px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center"><span style="color:white;font-weight:900;font-size:11px">2</span></div>`
 
 function MapaMotoboy({
   myLat, myLng,
@@ -122,37 +160,35 @@ function MapaMotoboy({
     libraries: GMAPS_LIBS,
   })
 
-  const mapInstanceRef = useRef<google.maps.Map | null>(null)
-  const followRef      = useRef(true)
+  const containerRef    = useRef<HTMLDivElement>(null)
+  const mapInstanceRef  = useRef<google.maps.Map | null>(null)
+  const dirRendererRef  = useRef<google.maps.DirectionsRenderer | null>(null)
+  const circleRef       = useRef<google.maps.Circle | null>(null)
+  const polylineRef     = useRef<google.maps.Polyline | null>(null)
+  const motoboyOvRef    = useRef<any>(null)
+  const lojaOvRef       = useRef<any>(null)
+  const destinoOvRef    = useRef<any>(null)
+  const extrasOvRef     = useRef<any[]>([])
+
+  const followRef    = useRef(true)
+  const headingRef   = useRef(0)
+  const prevNavPos   = useRef<{ lat: number; lng: number } | null>(null)
+  const myLatRef     = useRef(myLat)
+  const myLngRef     = useRef(myLng)
+  const gpsRealRef   = useRef(false)
+  const destinoLatRef = useRef(destinoLat)
+  const destinoLngRef = useRef(destinoLng)
+  const lojaLatRef    = useRef(lojaLat)
+  const lojaLngRef    = useRef(lojaLng)
+
   const [following, setFollowing] = useState(true)
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null)
 
-  // Refs para posição atual — evitam que o efeito de rota re-execute a cada update de GPS
-  const myLatRef      = useRef(myLat)
-  const myLngRef      = useRef(myLng)
-  const gpsRealRef    = useRef(false)  // true quando GPS já tem posição real (não padrão)
+  const navMode = !!(destinoLat && destinoLng)
+
   useEffect(() => { myLatRef.current = myLat; myLngRef.current = myLng }, [myLat, myLng])
-
-  // Quando GPS sai do ponto padrão, recalcula rota com posição real
-  useEffect(() => {
-    if (gpsRealRef.current) return
-    if (Math.abs(myLat - DEFAULT_LAT) < 0.001 && Math.abs(myLng - DEFAULT_LNG) < 0.001) return
-    gpsRealRef.current = true
-    const dLat = destinoLatRef.current; const dLng = destinoLngRef.current
-    if (!isLoaded || !dLat || !dLng || !mapInstanceRef.current) return
-    setDirections(null)
-    const svc = new google.maps.DirectionsService()
-    svc.route({
-      origin:      { lat: myLat, lng: myLng },
-      destination: { lat: dLat,  lng: dLng  },
-      travelMode:  google.maps.TravelMode.DRIVING,
-    }, (result, status) => { if (status === "OK" && result) setDirections(result) })
-  }, [myLat, myLng, isLoaded])
-
-  // Navegação estilo Waze: heading e posição prévia
-  const headingRef  = useRef(0)
-  const prevNavPos  = useRef<{ lat: number; lng: number } | null>(null)
-  const navMode     = !!(destinoLat && destinoLng)
+  useEffect(() => { destinoLatRef.current = destinoLat; destinoLngRef.current = destinoLng }, [destinoLat, destinoLng])
+  useEffect(() => { lojaLatRef.current = lojaLat; lojaLngRef.current = lojaLng }, [lojaLat, lojaLng])
 
   function calcBearing(lat1: number, lng1: number, lat2: number, lng2: number): number {
     const dLng = (lng2 - lng1) * Math.PI / 180
@@ -162,28 +198,146 @@ function MapaMotoboy({
     return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360
   }
 
-  // Segue o motoboy — em navMode usa heading-up + perspectiva 3D
+  // ── Cria o mapa imperativamente — garante renderingType VECTOR no construtor ──
+  useEffect(() => {
+    if (!isLoaded || !containerRef.current || mapInstanceRef.current) return
+    const Ov = getHtmlOverlayClass()
+
+    const map = new google.maps.Map(containerRef.current, {
+      renderingType: google.maps.RenderingType.VECTOR,
+      center: { lat: myLat, lng: myLng },
+      zoom: 16,
+      mapTypeId: "roadmap",
+      disableDefaultUI: true,
+      gestureHandling: "greedy",
+      clickableIcons: false,
+    })
+    mapInstanceRef.current = map
+    map.addListener("dragstart", () => { followRef.current = false; setFollowing(false) })
+
+    dirRendererRef.current = new google.maps.DirectionsRenderer({
+      map, suppressMarkers: true, preserveViewport: true,
+      polylineOptions: { strokeColor: "#22d3ee", strokeWeight: 7, strokeOpacity: 0.9 },
+    })
+
+    circleRef.current = new google.maps.Circle({
+      map, center: { lat: myLat, lng: myLng }, radius: raioDisplay * 1000,
+      strokeColor: "#f97316", strokeOpacity: 0.2, strokeWeight: 1.5,
+      fillColor: "#f97316", fillOpacity: 0.04,
+    })
+
+    polylineRef.current = new google.maps.Polyline({
+      strokeColor: "#22d3ee", strokeWeight: 5, strokeOpacity: 0.6,
+    })
+
+    motoboyOvRef.current = new Ov(myLat, myLng, MARKER_MOTOBOY_GPS)
+    motoboyOvRef.current.setMap(map)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded])
+
+  // ── Atualiza posição e ícone do motoboy ───────────────────────────────────────
+  useEffect(() => {
+    motoboyOvRef.current?.move(myLat, myLng)
+    motoboyOvRef.current?.setHtml(navMode ? MARKER_MOTOBOY_NAV : MARKER_MOTOBOY_GPS)
+    circleRef.current?.setCenter({ lat: myLat, lng: myLng })
+  }, [myLat, myLng, navMode])
+
+  // ── Atualiza pin da loja ──────────────────────────────────────────────────────
+  useEffect(() => {
+    const map = mapInstanceRef.current; if (!map) return
+    lojaOvRef.current?.setMap(null)
+    if (lojaLat && lojaLng) {
+      const Ov = getHtmlOverlayClass()
+      lojaOvRef.current = new Ov(lojaLat, lojaLng, MARKER_LOJA)
+      lojaOvRef.current.setMap(map)
+    }
+  }, [lojaLat, lojaLng])
+
+  // ── Atualiza pin do destino ───────────────────────────────────────────────────
+  useEffect(() => {
+    const map = mapInstanceRef.current; if (!map) return
+    destinoOvRef.current?.setMap(null)
+    if (destinoLat && destinoLng) {
+      const Ov = getHtmlOverlayClass()
+      destinoOvRef.current = new Ov(destinoLat, destinoLng, MARKER_DESTINO)
+      destinoOvRef.current.setMap(map)
+    }
+  }, [destinoLat, destinoLng])
+
+  // ── Atualiza pins extras ──────────────────────────────────────────────────────
+  useEffect(() => {
+    const map = mapInstanceRef.current; if (!map) return
+    extrasOvRef.current.forEach(o => o?.setMap(null))
+    extrasOvRef.current = []
+    const Ov = getHtmlOverlayClass()
+    extrasLoja?.forEach(p => { if (p.lat && p.lng) { const o = new Ov(p.lat, p.lng, MARKER_EXTRA_LOJA); o.setMap(map); extrasOvRef.current.push(o) } })
+    extrasDestino?.forEach(p => { if (p.lat && p.lng) { const o = new Ov(p.lat, p.lng, MARKER_EXTRA_DESTINO); o.setMap(map); extrasOvRef.current.push(o) } })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [extrasLoja, extrasDestino])
+
+  // ── Sincroniza directions com DirectionsRenderer e Polyline fallback ──────────
+  useEffect(() => {
+    if (dirRendererRef.current) {
+      dirRendererRef.current.setDirections(directions as any)
+      dirRendererRef.current.setOptions({
+        polylineOptions: {
+          strokeColor: navMode ? "#22d3ee" : "#f97316",
+          strokeWeight: navMode ? 7 : 5,
+          strokeOpacity: 0.9,
+        },
+      })
+    }
+    const pl = polylineRef.current
+    if (!pl) return
+    if (!directions && destinoLat && destinoLng) {
+      pl.setPath([{ lat: myLat, lng: myLng }, { lat: destinoLat, lng: destinoLng }])
+      pl.setOptions({ strokeColor: navMode ? "#22d3ee" : "#f97316", strokeWeight: navMode ? 5 : 4 })
+      pl.setMap(mapInstanceRef.current)
+    } else {
+      pl.setMap(null)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directions, destinoLat, destinoLng, navMode])
+
+  // ── Atualiza círculo de raio ──────────────────────────────────────────────────
+  useEffect(() => {
+    circleRef.current?.setOptions({
+      radius: raioDisplay * 1000,
+      strokeOpacity: raioOpen ? 0.7 : 0.2,
+      strokeWeight: raioOpen ? 2 : 1.5,
+      fillOpacity: raioOpen ? 0.1 : 0.04,
+    })
+  }, [raioDisplay, raioOpen])
+
+  // ── GPS real: recalcula rota quando sai do ponto padrão ───────────────────────
+  useEffect(() => {
+    if (gpsRealRef.current) return
+    if (Math.abs(myLat - DEFAULT_LAT) < 0.001 && Math.abs(myLng - DEFAULT_LNG) < 0.001) return
+    gpsRealRef.current = true
+    const dLat = destinoLatRef.current; const dLng = destinoLngRef.current
+    if (!isLoaded || !dLat || !dLng || !mapInstanceRef.current) return
+    setDirections(null)
+    new google.maps.DirectionsService().route(
+      { origin: { lat: myLat, lng: myLng }, destination: { lat: dLat, lng: dLng }, travelMode: google.maps.TravelMode.DRIVING },
+      (r, s) => { if (s === "OK" && r) setDirections(r) }
+    )
+  }, [myLat, myLng, isLoaded])
+
+  // ── Segue o motoboy com heading-up + tilt ────────────────────────────────────
   useEffect(() => {
     const map = mapInstanceRef.current
     if (!map || !followRef.current) return
+    if (!navMode) { map.panTo({ lat: myLat, lng: myLng }); return }
 
-    if (!navMode) {
-      map.panTo({ lat: myLat, lng: myLng })
-      return
-    }
-
-    // Calcula heading a partir do deslocamento (só atualiza se moveu > 5m)
     const prev = prevNavPos.current
     if (prev) {
       const dLat = (myLat - prev.lat) * 111000
       const dLng = (myLng - prev.lng) * 111000
-      if (dLat * dLat + dLng * dLng > 25) {
+      if (dLat * dLat + dLng * dLng > 25)
         headingRef.current = calcBearing(prev.lat, prev.lng, myLat, myLng)
-      }
     }
     prevNavPos.current = { lat: myLat, lng: myLng }
 
-    // Desloca o centro ~250m à frente para o motoboy aparecer no terço inferior
     const hr = headingRef.current * Math.PI / 180
     const AHEAD = 0.0022
     map.setCenter({ lat: myLat + AHEAD * Math.cos(hr), lng: myLng + AHEAD * Math.sin(hr) })
@@ -191,38 +345,23 @@ function MapaMotoboy({
     map.setTilt(45)
   }, [myLat, myLng, navMode])
 
-  // Configura zoom e perspectiva ao entrar/sair do modo navegação
+  // ── Entra/sai do navMode ──────────────────────────────────────────────────────
   useEffect(() => {
     const apply = () => {
-      const map = mapInstanceRef.current
-      if (!map) return
+      const map = mapInstanceRef.current; if (!map) return
       if (navMode) {
-        map.setRenderingType(google.maps.RenderingType.VECTOR)
-        map.setZoom(17)
-        map.setTilt(45)
-        map.setHeading(headingRef.current)
-        followRef.current = true
-        setFollowing(true)
+        map.setZoom(17); map.setTilt(45); map.setHeading(headingRef.current)
+        followRef.current = true; setFollowing(true)
       } else {
-        map.setTilt(0)
-        map.setHeading(0)
+        map.setTilt(0); map.setHeading(0)
       }
     }
     apply()
-    // Retry após mapa carregar (mapInstanceRef pode ser null no primeiro render)
     const t = setTimeout(apply, 800)
     return () => clearTimeout(t)
   }, [navMode])
 
-  // Refs para destino e loja — permite acessar valores atuais no closure do fitBoundsTrigger
-  const destinoLatRef = useRef(destinoLat)
-  const destinoLngRef = useRef(destinoLng)
-  const lojaLatRef    = useRef(lojaLat)
-  const lojaLngRef    = useRef(lojaLng)
-  useEffect(() => { destinoLatRef.current = destinoLat; destinoLngRef.current = destinoLng }, [destinoLat, destinoLng])
-  useEffect(() => { lojaLatRef.current = lojaLat; lojaLngRef.current = lojaLng }, [lojaLat, lojaLng])
-
-  // Mostra rota completa ao clicar "Chegô — Ver no mapa"
+  // ── Chegô — Ver no mapa (fitBoundsTrigger) ────────────────────────────────────
   useEffect(() => {
     if (!fitBoundsTrigger || !mapInstanceRef.current) return
     const map = mapInstanceRef.current
@@ -230,55 +369,36 @@ function MapaMotoboy({
     const lLat = lojaLatRef.current;   const lLng = lojaLngRef.current
     const oLat = myLatRef.current;     const oLng = myLngRef.current
 
-    // Limpa rota anterior e recalcula com posição GPS atual
     if (dLat && dLng) {
-      setDirections(null)  // mostra Polyline fallback enquanto recalcula
-      const svc = new google.maps.DirectionsService()
-      svc.route({
-        origin:      { lat: oLat, lng: oLng },
-        destination: { lat: dLat, lng: dLng },
-        travelMode:  google.maps.TravelMode.DRIVING,
-      }, (result, status) => {
-        if (status === "OK" && result) setDirections(result)
-      })
+      setDirections(null)
+      new google.maps.DirectionsService().route(
+        { origin: { lat: oLat, lng: oLng }, destination: { lat: dLat, lng: dLng }, travelMode: google.maps.TravelMode.DRIVING },
+        (r, s) => { if (s === "OK" && r) setDirections(r) }
+      )
     }
 
-    map.setTilt(0)
-    map.setHeading(0)
+    map.setTilt(0); map.setHeading(0)
     const b = new google.maps.LatLngBounds()
     b.extend({ lat: oLat, lng: oLng })
     if (dLat && dLng) b.extend({ lat: dLat, lng: dLng })
     if (lLat && lLng) b.extend({ lat: lLat, lng: lLng })
     map.fitBounds(b, { top: 80, right: 32, bottom: 300, left: 32 })
-    followRef.current = false
-    setFollowing(false)
+    followRef.current = false; setFollowing(false)
     const isNav = !!(dLat && dLng)
     const t = setTimeout(() => {
-      if (isNav) {
-        map.setZoom(17)
-        map.setTilt(45)
-        map.setHeading(headingRef.current)
-      }
-      followRef.current = true
-      setFollowing(true)
+      if (isNav) { map.setZoom(17); map.setTilt(45); map.setHeading(headingRef.current) }
+      followRef.current = true; setFollowing(true)
     }, 6000)
     return () => clearTimeout(t)
   }, [fitBoundsTrigger])
 
-  // Recalcula rota quando destino/loja mudam
+  // ── Recalcula rota quando destino/loja mudam ──────────────────────────────────
   useEffect(() => {
-    if (!isLoaded || !destinoLat || !destinoLng) {
-      setDirections(null)
-      return
-    }
+    if (!isLoaded || !destinoLat || !destinoLng) { setDirections(null); return }
+    const lat = myLatRef.current; const lng = myLngRef.current
 
-    const lat = myLatRef.current
-    const lng = myLngRef.current
-
-    // Em modo navegação mantém o seguimento — sem fitBounds que quebraria a perspectiva
     if (!navMode && mapInstanceRef.current) {
-      followRef.current = false
-      setFollowing(false)
+      followRef.current = false; setFollowing(false)
       const b = new google.maps.LatLngBounds()
       b.extend({ lat, lng })
       b.extend({ lat: destinoLat, lng: destinoLng })
@@ -287,21 +407,16 @@ function MapaMotoboy({
     }
 
     setDirections(null)
-    const svc = new google.maps.DirectionsService()
-    svc.route({
-      origin:      { lat, lng },
-      destination: { lat: destinoLat, lng: destinoLng },
-      travelMode:  google.maps.TravelMode.DRIVING,
-    }, (result, status) => {
-      if (status === "OK" && result) {
-        setDirections(result)
-        if (!navMode && mapInstanceRef.current && result.routes[0]?.bounds) {
-          mapInstanceRef.current.fitBounds(result.routes[0].bounds, {
-            top: 60, right: 24, bottom: 320, left: 24,
-          })
+    new google.maps.DirectionsService().route(
+      { origin: { lat, lng }, destination: { lat: destinoLat, lng: destinoLng }, travelMode: google.maps.TravelMode.DRIVING },
+      (r, s) => {
+        if (s === "OK" && r) {
+          setDirections(r)
+          if (!navMode && mapInstanceRef.current && r.routes[0]?.bounds)
+            mapInstanceRef.current.fitBounds(r.routes[0].bounds, { top: 60, right: 24, bottom: 320, left: 24 })
         }
       }
-    })
+    )
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded, destinoLat, destinoLng, lojaLat, lojaLng])
 
@@ -314,197 +429,46 @@ function MapaMotoboy({
     </div>
   )
 
-  if (!isLoaded) return (
-    <div style={{ position: "absolute", inset: 0, background: "#1a1a2e", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13 }}>Carregando mapa...</p>
-    </div>
-  )
-
   return (
     <>
-    <GoogleMap
-      mapContainerStyle={{ position: "absolute", inset: 0 } as React.CSSProperties}
-      center={{ lat: myLat, lng: myLng }}
-      zoom={16}
-      options={{
-        // VECTOR renderingType: única forma de habilitar tilt/heading em qualquer localização.
-        // styles não funcionam com vector maps (requer mapId + Cloud Console).
-        renderingType: google.maps.RenderingType.VECTOR,
-        mapTypeId: "roadmap",
-        disableDefaultUI: true,
-        zoomControl: false,
-        gestureHandling: "greedy",
-        mapTypeControl: false,
-        fullscreenControl: false,
-        streetViewControl: false,
-        clickableIcons: false,
-        tilt: navMode ? 45 : 0,
-        heading: navMode ? headingRef.current : 0,
-      }}
-      onLoad={m => {
-        mapInstanceRef.current = m
-        if (navMode) { m.setRenderingType(google.maps.RenderingType.VECTOR); m.setZoom(17); m.setTilt(45); m.setHeading(headingRef.current) }
-      }}
-      onDragStart={() => { followRef.current = false; setFollowing(false) }}
-    >
-      {/* Marcador do motoboy */}
-      <OverlayView position={{ lat: myLat, lng: myLng }} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}>
-        {navMode ? (
-          /* Modo navegação: seta direcional apontando para cima (o mapa já gira com o heading) */
-          <div style={{ transform: "translate(-50%,-50%)" }}>
-            <svg width="44" height="44" viewBox="0 0 44 44" style={{ filter: "drop-shadow(0 3px 8px rgba(0,0,0,0.55))" }}>
-              <circle cx="22" cy="22" r="20" fill="rgba(15,20,40,0.75)" stroke="rgba(255,255,255,0.15)" strokeWidth="1.5"/>
-              <polygon points="22,7 31,34 22,28 13,34" fill="#22d3ee" stroke="white" strokeWidth="2" strokeLinejoin="round"/>
-            </svg>
-          </div>
-        ) : (
-          /* Modo normal: ponto GPS azul pulsante */
-          <div style={{ transform: "translate(-50%,-50%)", position: "relative", width: 24, height: 24 }}>
-            <style>{`@keyframes gpsPulse{0%{transform:translate(-50%,-50%) scale(1);opacity:.6}100%{transform:translate(-50%,-50%) scale(2.8);opacity:0}}`}</style>
-            <div style={{
-              position: "absolute", top: "50%", left: "50%",
-              width: 24, height: 24, borderRadius: "50%",
-              background: "rgba(66,133,244,0.3)",
-              animation: "gpsPulse 2s ease-out infinite",
-              pointerEvents: "none",
-            }} />
-            <div style={{
-              position: "absolute", top: "50%", left: "50%",
-              transform: "translate(-50%,-50%)",
-              width: 20, height: 20, borderRadius: "50%",
-              background: "#4285F4", border: "3px solid white",
-              boxShadow: "0 2px 8px rgba(66,133,244,0.7)",
-            }} />
-          </div>
-        )}
-      </OverlayView>
-
-      {/* Marcador da loja */}
-      {lojaLat && lojaLng && (
-        <OverlayView position={{ lat: lojaLat, lng: lojaLng }} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}>
-          <div style={{ transform: "translate(-50%,-50%)", width: 38, height: 38, borderRadius: "50%", background: "#f97316", border: "3px solid white", boxShadow: "0 2px 10px rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-            </svg>
-          </div>
-        </OverlayView>
+      <div ref={containerRef} style={{ position: "absolute", inset: 0, background: "#1a1a2e" }} />
+      {!isLoaded && (
+        <div style={{ position: "absolute", inset: 0, background: "#1a1a2e", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13 }}>Carregando mapa...</p>
+        </div>
       )}
 
-      {/* Marcador do destino */}
-      {destinoLat && destinoLng && (
-        <OverlayView position={{ lat: destinoLat, lng: destinoLng }} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}>
-          <div style={{ transform: "translate(-50%,-50%)", width: 38, height: 38, borderRadius: "50%", background: "#22c55e", border: "3px solid white", boxShadow: "0 2px 10px rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
-            </svg>
-          </div>
-        </OverlayView>
-      )}
-
-      {/* Pins extras — lojas do 2º pedido */}
-      {extrasLoja?.map((p, i) => p.lat && p.lng && (
-        <OverlayView key={`el-${i}`} position={{ lat: p.lat, lng: p.lng }} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}>
-          <div style={{ transform: "translate(-50%,-50%)", width: 34, height: 34, borderRadius: "50%", background: "#fb923c", border: "2px solid white", boxShadow: "0 2px 8px rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <span style={{ color: "white", fontWeight: 900, fontSize: 11 }}>2</span>
-          </div>
-        </OverlayView>
-      ))}
-
-      {/* Pins extras — destinos do 2º pedido */}
-      {extrasDestino?.map((p, i) => p.lat && p.lng && (
-        <OverlayView key={`ed-${i}`} position={{ lat: p.lat, lng: p.lng }} mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}>
-          <div style={{ transform: "translate(-50%,-50%)", width: 34, height: 34, borderRadius: "50%", background: "#4ade80", border: "2px solid white", boxShadow: "0 2px 8px rgba(0,0,0,0.35)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <span style={{ color: "white", fontWeight: 900, fontSize: 11 }}>2</span>
-          </div>
-        </OverlayView>
-      ))}
-
-      {/* Rota calculada pela Directions API */}
-      {directions && (
-        <DirectionsRenderer
-          directions={directions}
-          options={{
-            suppressMarkers: true,
-            preserveViewport: true,
-            polylineOptions: {
-              strokeColor:   navMode ? "#22d3ee" : "#f97316",
-              strokeWeight:  navMode ? 7 : 5,
-              strokeOpacity: 0.9,
-            },
+      {/* Botão Centralizar — overlay sobre o mapa */}
+      {!following && (
+        <button
+          onClick={() => {
+            const map = mapInstanceRef.current
+            if (map) {
+              map.panTo({ lat: myLat, lng: myLng })
+              map.setZoom(navMode ? 17 : 16)
+              if (navMode) { map.setTilt(45); map.setHeading(headingRef.current) }
+            }
+            followRef.current = true
+            setFollowing(true)
           }}
-        />
+          style={{
+            position: "absolute", bottom: 24, right: 16, zIndex: 40,
+            display: "flex", alignItems: "center", gap: 6,
+            padding: "10px 16px", background: "rgba(26,26,46,0.92)",
+            border: "1.5px solid rgba(249,115,22,0.6)", borderRadius: 24,
+            color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
+            backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/>
+            <line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>
+          </svg>
+          Centralizar
+        </button>
       )}
-
-      {/* Fallback: linha reta quando Directions API não retornou rota */}
-      {!directions && destinoLat && destinoLng && (
-        <Polyline
-          path={[{ lat: myLat, lng: myLng }, { lat: destinoLat, lng: destinoLng }]}
-          options={{
-            strokeColor:   navMode ? "#22d3ee" : "#f97316",
-            strokeWeight:  navMode ? 5 : 4,
-            strokeOpacity: 0.6,
-            strokeDasharray: "8 6",
-          } as any}
-        />
-      )}
-
-      {/* Círculo de raio — sempre visível */}
-      <Circle
-        center={{ lat: myLat, lng: myLng }}
-        radius={raioDisplay * 1000}
-        options={{
-          strokeColor: "#f97316",
-          strokeOpacity: raioOpen ? 0.7 : 0.2,
-          strokeWeight: raioOpen ? 2 : 1.5,
-          fillColor: "#f97316",
-          fillOpacity: raioOpen ? 0.1 : 0.04,
-        }}
-      />
-
-    </GoogleMap>
-
-    {/* Botão Centralizar — overlay sobre o mapa */}
-    {!following && (
-      <button
-        onClick={() => {
-          const map = mapInstanceRef.current
-          if (map) {
-            map.panTo({ lat: myLat, lng: myLng })
-            map.setZoom(navMode ? 17 : 16)
-            if (navMode) { map.setTilt(45); map.setHeading(headingRef.current) }
-          }
-          followRef.current = true
-          setFollowing(true)
-        }}
-        style={{
-          position: "absolute",
-          bottom: 24,
-          right: 16,
-          zIndex: 40,
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          padding: "10px 16px",
-          background: "rgba(26,26,46,0.92)",
-          border: "1.5px solid rgba(249,115,22,0.6)",
-          borderRadius: 24,
-          color: "white",
-          fontSize: 13,
-          fontWeight: 700,
-          cursor: "pointer",
-          boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
-          backdropFilter: "blur(8px)",
-          WebkitBackdropFilter: "blur(8px)",
-        }}
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/>
-          <line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>
-        </svg>
-        Centralizar
-      </button>
-    )}
-  </>
+    </>
   )
 }
 
