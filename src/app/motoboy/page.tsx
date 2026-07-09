@@ -192,6 +192,14 @@ function MapaMotoboy({
     }
   }, [navMode])
 
+  // Refs para destino e loja — permite acessar valores atuais no closure do fitBoundsTrigger
+  const destinoLatRef = useRef(destinoLat)
+  const destinoLngRef = useRef(destinoLng)
+  const lojaLatRef    = useRef(lojaLat)
+  const lojaLngRef    = useRef(lojaLng)
+  useEffect(() => { destinoLatRef.current = destinoLat; destinoLngRef.current = destinoLng }, [destinoLat, destinoLng])
+  useEffect(() => { lojaLatRef.current = lojaLat; lojaLngRef.current = lojaLng }, [lojaLat, lojaLng])
+
   // Mostra rota completa ao clicar "Chegô — Ver no mapa"
   useEffect(() => {
     if (!fitBoundsTrigger || !mapInstanceRef.current) return
@@ -200,14 +208,16 @@ function MapaMotoboy({
     map.setHeading(0)
     const b = new google.maps.LatLngBounds()
     b.extend({ lat: myLatRef.current, lng: myLngRef.current })
-    if (destinoLat && destinoLng) b.extend({ lat: destinoLat, lng: destinoLng })
-    if (lojaLat && lojaLng) b.extend({ lat: lojaLat, lng: lojaLng })
+    const dLat = destinoLatRef.current; const dLng = destinoLngRef.current
+    if (dLat && dLng) b.extend({ lat: dLat, lng: dLng })
+    const lLat = lojaLatRef.current;   const lLng = lojaLngRef.current
+    if (lLat && lLng) b.extend({ lat: lLat, lng: lLng })
     map.fitBounds(b, { top: 80, right: 32, bottom: 300, left: 32 })
     followRef.current = false
     setFollowing(false)
-    // Volta para o modo seguimento após 6s
+    const isNav = !!(destinoLatRef.current && destinoLngRef.current)
     const t = setTimeout(() => {
-      if (navMode) {
+      if (isNav) {
         map.setZoom(17)
         map.setTilt(45)
         map.setHeading(headingRef.current)
@@ -1587,7 +1597,8 @@ export default function MotoboyPage() {
           destinoLat={destinoLat ?? undefined}
           destinoLng={destinoLng ?? undefined}
           onSOSOpen={() => setSosModal(true)}
-          onSetDestino={(lat, lng) => { setDestinoLat(lat); setDestinoLng(lng); setFitBoundsTrigger(n => n + 1) }}
+          onSetDestino={(lat, lng) => { setDestinoLat(lat); setDestinoLng(lng) }}
+          onShowRoute={() => setFitBoundsTrigger(n => n + 1)}
         />
       )}
 
@@ -2041,7 +2052,7 @@ function SOSModal({
 function CorridaAtivaPanel({
   pedido, corridaConcluida, avancando, onAvancar, onConcluir,
   motoboyId, myLat, myLng, lojaLat, lojaLng, destinoLat, destinoLng,
-  onSOSOpen, onSetDestino,
+  onSOSOpen, onSetDestino, onShowRoute,
 }: {
   pedido: any | null
   corridaConcluida: any | null
@@ -2057,6 +2068,7 @@ function CorridaAtivaPanel({
   destinoLng?: number
   onSOSOpen: () => void
   onSetDestino?: (lat: number, lng: number) => void
+  onShowRoute?: () => void
 }) {
   const [navDestino,      setNavDestino]      = useState<{ texto: string; lat?: number; lng?: number } | null>(null)
   const [codigoInput,     setCodigoInput]     = useState("")
@@ -2123,6 +2135,7 @@ function CorridaAtivaPanel({
           onClose={() => setNavDestino(null)}
           onNavApp={(lat, lng) => {
             if (lat && lng && onSetDestino) onSetDestino(lat, lng)
+            onShowRoute?.()
             setNavDestino(null)
           }}
         />
