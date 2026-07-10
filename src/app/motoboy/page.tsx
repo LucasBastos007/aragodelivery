@@ -145,8 +145,15 @@ function getHtmlOverlayClass() {
   return HtmlOverlay
 }
 
-const MARKER_MOTOBOY_NAV = `<div style="transform:translate(-50%,-50%)"><svg width="44" height="44" viewBox="0 0 44 44" style="filter:drop-shadow(0 3px 8px rgba(0,0,0,0.55))"><circle cx="22" cy="22" r="20" fill="rgba(15,20,40,0.75)" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/><polygon points="22,7 31,34 22,28 13,34" fill="#22d3ee" stroke="white" stroke-width="2" stroke-linejoin="round"/></svg></div>`
-const MARKER_MOTOBOY_GPS = `<div style="transform:translate(-50%,-50%);position:relative;width:24px;height:24px"><style>@keyframes gpsPulse{0%{transform:translate(-50%,-50%) scale(1);opacity:.6}100%{transform:translate(-50%,-50%) scale(2.8);opacity:0}}</style><div style="position:absolute;top:50%;left:50%;width:24px;height:24px;border-radius:50%;background:rgba(66,133,244,0.3);animation:gpsPulse 2s ease-out infinite;pointer-events:none"></div><div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:20px;height:20px;border-radius:50%;background:#4285F4;border:3px solid white;box-shadow:0 2px 8px rgba(66,133,244,0.7)"></div></div>`
+// Puck de navegação: cone aponta para frente (mapa já rotaciona heading-up, cone fica fixo para cima)
+function markerMotoboyNav() {
+  return `<div style="transform:translate(-50%,-50%);filter:drop-shadow(0 4px 14px rgba(0,0,0,0.55))"><svg width="50" height="64" viewBox="0 0 50 64"><path d="M25,1 L14,30 L25,23 L36,30 Z" fill="rgba(34,211,238,0.82)" stroke="rgba(255,255,255,0.5)" stroke-width="1" stroke-linejoin="round"/><circle cx="25" cy="44" r="19" fill="rgba(34,211,238,0.14)" stroke="rgba(34,211,238,0.32)" stroke-width="1.5"/><circle cx="25" cy="44" r="13" fill="#1e40af" stroke="white" stroke-width="2.5"/><circle cx="25" cy="44" r="5" fill="white" opacity="0.9"/></svg></div>`
+}
+
+// Bússola: agulha norte (ciano) + sul (cinza), rotaciona pelo heading do dispositivo/GPS
+function markerMotoboyGps(heading: number) {
+  return `<div style="transform:translate(-50%,-50%);position:relative;width:32px;height:32px"><style>@keyframes gpsPulse{0%{transform:translate(-50%,-50%) scale(1);opacity:.5}100%{transform:translate(-50%,-50%) scale(3.2);opacity:0}}</style><div style="position:absolute;top:50%;left:50%;width:32px;height:32px;border-radius:50%;background:rgba(66,133,244,0.2);animation:gpsPulse 2s ease-out infinite;pointer-events:none"></div><svg width="32" height="32" viewBox="0 0 32 32" style="position:absolute;top:0;left:0;transform-origin:16px 16px;transform:rotate(${heading}deg)"><polygon points="16,3 13,16 16,14 19,16" fill="#22d3ee" stroke="rgba(255,255,255,0.7)" stroke-width="0.8" stroke-linejoin="round"/><polygon points="16,29 13,16 16,18 19,16" fill="rgba(180,180,195,0.75)" stroke="rgba(255,255,255,0.3)" stroke-width="0.5" stroke-linejoin="round"/></svg><div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:17px;height:17px;border-radius:50%;background:#4285F4;border:2.5px solid white;box-shadow:0 2px 8px rgba(66,133,244,0.7)"></div></div>`
+}
 const MARKER_LOJA   = `<div style="transform:translate(-50%,-50%);width:38px;height:38px;border-radius:50%;background:#f97316;border:3px solid white;box-shadow:0 2px 10px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>`
 const MARKER_DESTINO = `<div style="transform:translate(-50%,-50%);width:38px;height:38px;border-radius:50%;background:#22c55e;border:3px solid white;box-shadow:0 2px 10px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></div>`
 const MARKER_EXTRA_LOJA   = `<div style="transform:translate(-50%,-50%);width:34px;height:34px;border-radius:50%;background:#fb923c;border:2px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center"><span style="color:white;font-weight:900;font-size:11px">2</span></div>`
@@ -187,6 +194,8 @@ function MapaMotoboy({
 
   const followRef    = useRef(true)
   const headingRef   = useRef(0)
+  const compassRef   = useRef(0)          // heading real do dispositivo (bússola)
+  const navModeRef   = useRef(false)      // ref de navMode para uso nos listeners
   const prevNavPos   = useRef<{ lat: number; lng: number } | null>(null)
   const myLatRef     = useRef(myLat)
   const myLngRef     = useRef(myLng)
@@ -204,6 +213,36 @@ function MapaMotoboy({
   useEffect(() => { myLatRef.current = myLat; myLngRef.current = myLng }, [myLat, myLng])
   useEffect(() => { destinoLatRef.current = destinoLat; destinoLngRef.current = destinoLng }, [destinoLat, destinoLng])
   useEffect(() => { lojaLatRef.current = lojaLat; lojaLngRef.current = lojaLng }, [lojaLat, lojaLng])
+  useEffect(() => { navModeRef.current = navMode }, [navMode])
+
+  // ── Bússola do dispositivo (DeviceOrientationEvent) ───────────────────────────
+  useEffect(() => {
+    let rafId: number | null = null
+    function onOrientation(e: DeviceOrientationEvent) {
+      // iOS: webkitCompassHeading (0=norte, clockwise, absoluto)
+      // Android: alpha cresce anti-horário → inverte para clockwise
+      const wkh = (e as any).webkitCompassHeading as number | undefined
+      const h   = wkh != null ? wkh : e.alpha != null ? (360 - e.alpha + 360) % 360 : null
+      if (h == null) return
+      compassRef.current = h
+      headingRef.current = h
+      // Atualiza o marcador do motoboy somente quando não há rota ativa (mapa north-up)
+      if (!navModeRef.current && !rafId) {
+        rafId = requestAnimationFrame(() => {
+          motoboyOvRef.current?.setHtml(markerMotoboyGps(compassRef.current))
+          rafId = null
+        })
+      }
+    }
+    // deviceorientationabsolute é mais preciso no Android; deviceorientation como fallback
+    window.addEventListener("deviceorientationabsolute", onOrientation as EventListener, true)
+    window.addEventListener("deviceorientation",         onOrientation as EventListener, true)
+    return () => {
+      window.removeEventListener("deviceorientationabsolute", onOrientation as EventListener, true)
+      window.removeEventListener("deviceorientation",         onOrientation as EventListener, true)
+      if (rafId) cancelAnimationFrame(rafId)
+    }
+  }, [])
 
   function calcBearing(lat1: number, lng1: number, lat2: number, lng2: number): number {
     const dLng = (lng2 - lng1) * Math.PI / 180
@@ -247,7 +286,7 @@ function MapaMotoboy({
       fillColor: "#f97316", fillOpacity: 0.04,
     })
 
-    motoboyOvRef.current = new Ov(myLat, myLng, MARKER_MOTOBOY_GPS)
+    motoboyOvRef.current = new Ov(myLat, myLng, markerMotoboyGps(0))
     motoboyOvRef.current.setMap(map)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded])
@@ -255,7 +294,9 @@ function MapaMotoboy({
   // ── Atualiza posição e ícone do motoboy ───────────────────────────────────────
   useEffect(() => {
     motoboyOvRef.current?.move(myLat, myLng)
-    motoboyOvRef.current?.setHtml(navMode ? MARKER_MOTOBOY_NAV : MARKER_MOTOBOY_GPS)
+    // navMode: puck com cone (mapa rotaciona, cone aponta para frente automaticamente)
+    // GPS: bússola com agulha rotacionando pelo heading atual
+    motoboyOvRef.current?.setHtml(navMode ? markerMotoboyNav() : markerMotoboyGps(compassRef.current))
     circleRef.current?.setCenter({ lat: myLat, lng: myLng })
   }, [myLat, myLng, navMode])
 
@@ -423,6 +464,8 @@ function MapaMotoboy({
     }
     apply()
     const t = setTimeout(apply, 800)
+    // Ao sair do navMode, restaura bússola com heading atual
+    if (!navMode) motoboyOvRef.current?.setHtml(markerMotoboyGps(compassRef.current))
     return () => clearTimeout(t)
   }, [navMode])
 
