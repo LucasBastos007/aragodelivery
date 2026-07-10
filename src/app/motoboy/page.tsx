@@ -410,7 +410,6 @@ function MapaMotoboy({
     gpsRealRef.current = true
     const dLat = destinoLatRef.current; const dLng = destinoLngRef.current
     if (!isLoaded || !dLat || !dLng || !mapInstanceRef.current) return
-    clearRoute()
     fetchRoute(myLat, myLng, dLat, dLng)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myLat, myLng, isLoaded])
@@ -477,10 +476,7 @@ function MapaMotoboy({
     const lLat = lojaLatRef.current;   const lLng = lojaLngRef.current
     const oLat = myLatRef.current;     const oLng = myLngRef.current
 
-    if (dLat && dLng) {
-      clearRoute()
-      fetchRoute(oLat, oLng, dLat, dLng)
-    }
+    if (dLat && dLng) fetchRoute(oLat, oLng, dLat, dLng)
 
     map.setTilt(0); map.setHeading(0)
     const b = new google.maps.LatLngBounds()
@@ -498,27 +494,14 @@ function MapaMotoboy({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitBoundsTrigger])
 
-  // ── Recalcula rota quando destino/loja mudam ──────────────────────────────────
+  // ── Recalcula rota quando destino muda ───────────────────────────────────────
   useEffect(() => {
     if (!isLoaded || !destinoLat || !destinoLng) { clearRoute(); return }
     const lat = myLatRef.current; const lng = myLngRef.current
-
-    if (!navMode && mapInstanceRef.current) {
-      followRef.current = false; setFollowing(false)
-      const b = new google.maps.LatLngBounds()
-      b.extend({ lat, lng })
-      b.extend({ lat: destinoLat, lng: destinoLng })
-      if (lojaLat && lojaLng) b.extend({ lat: lojaLat, lng: lojaLng })
-      mapInstanceRef.current.fitBounds(b, { top: 60, right: 24, bottom: 320, left: 24 })
-    }
-
-    clearRoute()
-    fetchRoute(lat, lng, destinoLat, destinoLng).then(bounds => {
-      if (!navMode && bounds && mapInstanceRef.current)
-        mapInstanceRef.current.fitBounds(bounds, { top: 60, right: 24, bottom: 320, left: 24 })
-    })
+    // Não chama clearRoute() antes — mantém rota anterior visível até nova chegar
+    fetchRoute(lat, lng, destinoLat, destinoLng)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoaded, destinoLat, destinoLng, lojaLat, lojaLng])
+  }, [isLoaded, destinoLat, destinoLng])
 
   if (loadError) return (
     <div style={{ position: "absolute", inset: 0, background: "#1a1a2e", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}>
