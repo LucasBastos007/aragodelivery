@@ -292,26 +292,27 @@ function MapaMotoboy({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extrasLoja, extrasDestino])
 
-  // ── fetchRoute: OSRM (gratuito, sem chave, sem restrição de referenciador) ────
+  // ── fetchRoute: proxy /api/directions → OSRM server-side ─────────────────────
   async function fetchRoute(oLat: number, oLng: number, dLat: number, dLng: number) {
     routeAbortRef.current?.abort()
     const ctrl = new AbortController()
     routeAbortRef.current = ctrl
 
     try {
-      // OSRM usa ordem lng,lat (inverso do Google)
       const res = await fetch(
-        `https://router.project-osrm.org/route/v1/driving/${oLng},${oLat};${dLng},${dLat}?overview=full&geometries=polyline`,
-        { signal: ctrl.signal, headers: { "Accept": "application/json" } }
+        `/api/directions?origin=${oLat},${oLng}&destination=${dLat},${dLng}`,
+        { signal: ctrl.signal, credentials: "include" }
       )
-      if (!res.ok) throw new Error("osrm-error")
+      if (!res.ok) throw new Error(`directions-${res.status}`)
       const data = await res.json()
-      if (data.code !== "Ok" || !data.routes?.[0]?.geometry) throw new Error("no-route")
+      if (!data.points) throw new Error("no-points")
 
-      const path = decodePolyline(data.routes[0].geometry)
-      const map  = mapInstanceRef.current
-      const rp   = routePolyRef.current
-      if (!rp || !map) return null
+      const path = decodePolyline(data.points as string)
+      if (path.length < 2) throw new Error("path-too-short")
+
+      const map = mapInstanceRef.current
+      const rp  = routePolyRef.current
+      if (!rp || !map) throw new Error("map-not-ready")
 
       rp.setPath(path)
       rp.setOptions({ strokeColor: "#22d3ee", strokeWeight: 8, strokeOpacity: 0.9 })
@@ -319,12 +320,12 @@ function MapaMotoboy({
       fallbackPolyRef.current?.setMap(null)
       setHasRoute(true)
 
-      // Calcula bounds a partir da polyline decodificada
       const b = new google.maps.LatLngBounds()
       path.forEach(p => b.extend(p))
       return b
     } catch (e: any) {
       if (e?.name === "AbortError") return null
+      console.warn("[fetchRoute] falhou:", e?.message)
       clearRoute()
     }
     return null
