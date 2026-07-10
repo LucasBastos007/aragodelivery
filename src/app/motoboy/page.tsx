@@ -292,48 +292,39 @@ function MapaMotoboy({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extrasLoja, extrasDestino])
 
-  // ── fetchRoute: chama proxy server-side, decodifica polyline, desenha no mapa ──
+  // ── fetchRoute: OSRM (gratuito, sem chave, sem restrição de referenciador) ────
   async function fetchRoute(oLat: number, oLng: number, dLat: number, dLng: number) {
-    // Cancela fetch anterior
     routeAbortRef.current?.abort()
     const ctrl = new AbortController()
     routeAbortRef.current = ctrl
 
     try {
+      // OSRM usa ordem lng,lat (inverso do Google)
       const res = await fetch(
-        `/api/directions?origin=${oLat},${oLng}&destination=${dLat},${dLng}`,
-        { signal: ctrl.signal }
+        `https://router.project-osrm.org/route/v1/driving/${oLng},${oLat};${dLng},${dLat}?overview=full&geometries=polyline`,
+        { signal: ctrl.signal, headers: { "Accept": "application/json" } }
       )
-      if (!res.ok) throw new Error("upstream")
+      if (!res.ok) throw new Error("osrm-error")
       const data = await res.json()
-      if (!data.points) throw new Error("no points")
+      if (data.code !== "Ok" || !data.routes?.[0]?.geometry) throw new Error("no-route")
 
-      const path = decodePolyline(data.points)
+      const path = decodePolyline(data.routes[0].geometry)
       const map  = mapInstanceRef.current
       const rp   = routePolyRef.current
-      if (!rp || !map) return
+      if (!rp || !map) return null
 
       rp.setPath(path)
-      rp.setOptions({
-        strokeColor: "#22d3ee",
-        strokeWeight: 8,
-        strokeOpacity: 0.9,
-      })
+      rp.setOptions({ strokeColor: "#22d3ee", strokeWeight: 8, strokeOpacity: 0.9 })
       rp.setMap(map)
       fallbackPolyRef.current?.setMap(null)
       setHasRoute(true)
 
-      // fitBounds com bounds retornados pela API
-      if (data.bounds && map) {
-        const b = new google.maps.LatLngBounds(
-          { lat: data.bounds.southwest.lat, lng: data.bounds.southwest.lng },
-          { lat: data.bounds.northeast.lat, lng: data.bounds.northeast.lng }
-        )
-        return b
-      }
+      // Calcula bounds a partir da polyline decodificada
+      const b = new google.maps.LatLngBounds()
+      path.forEach(p => b.extend(p))
+      return b
     } catch (e: any) {
-      if (e?.name === "AbortError") return
-      // Fallback: mostra linha reta
+      if (e?.name === "AbortError") return null
       clearRoute()
     }
     return null
@@ -404,15 +395,29 @@ function MapaMotoboy({
     map.setTilt(45)
   }, [myLat, myLng, navMode])
 
-  // ── Entra/sai do navMode ──────────────────────────────────────────────────────
+  // ── Entra/sai do navMode — muda zoom, heading e estilo do mapa ─────────────────
   useEffect(() => {
+    const NAV_STYLES: google.maps.MapTypeStyle[] = [
+      { elementType: "geometry",           stylers: [{ color: "#1e2a45" }] },
+      { elementType: "labels.text.fill",   stylers: [{ color: "#8ec3b9" }] },
+      { elementType: "labels.text.stroke", stylers: [{ color: "#1a3646" }] },
+      { featureType: "road",               elementType: "geometry",        stylers: [{ color: "#38518a" }] },
+      { featureType: "road",               elementType: "geometry.stroke", stylers: [{ color: "#1d2c4d" }] },
+      { featureType: "road.highway",       elementType: "geometry",        stylers: [{ color: "#2c6675" }] },
+      { featureType: "road.highway",       elementType: "geometry.stroke", stylers: [{ color: "#255763" }] },
+      { featureType: "water",              elementType: "geometry",        stylers: [{ color: "#0e1626" }] },
+      { featureType: "poi",                elementType: "geometry",        stylers: [{ color: "#283d6a" }] },
+      { featureType: "poi.park",           elementType: "geometry",        stylers: [{ color: "#263c3f" }] },
+    ]
     const apply = () => {
       const map = mapInstanceRef.current; if (!map) return
       if (navMode) {
         map.setZoom(17); map.setTilt(45); map.setHeading(headingRef.current)
+        map.set("styles", NAV_STYLES)
         followRef.current = true; setFollowing(true)
       } else {
         map.setTilt(0); map.setHeading(0)
+        map.set("styles", [])
       }
     }
     apply()
