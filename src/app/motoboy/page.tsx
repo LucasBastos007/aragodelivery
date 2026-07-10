@@ -98,9 +98,23 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 const CIRCUM = 2 * Math.PI * 40 // circunferência do timer circular ≈ 251.3
 
 // ─── Mapa fullscreen com rota (Google Maps — API imperativa) ──────────────────
-// Usamos new google.maps.Map() diretamente para garantir renderingType: VECTOR
-// no construtor. @react-google-maps/api não passa renderingType de forma confiável.
 type PinExtra = { lat: number; lng: number; type: "loja" | "destino"; label?: string }
+
+// Decodifica polyline encoding do Google (algoritmo padrão)
+function decodePolyline(enc: string): { lat: number; lng: number }[] {
+  const pts: { lat: number; lng: number }[] = []
+  let i = 0, lat = 0, lng = 0
+  while (i < enc.length) {
+    let b, s = 0, r = 0
+    do { b = enc.charCodeAt(i++) - 63; r |= (b & 31) << s; s += 5 } while (b >= 32)
+    lat += r & 1 ? ~(r >> 1) : (r >> 1)
+    s = 0; r = 0
+    do { b = enc.charCodeAt(i++) - 63; r |= (b & 31) << s; s += 5 } while (b >= 32)
+    lng += r & 1 ? ~(r >> 1) : (r >> 1)
+    pts.push({ lat: lat / 1e5, lng: lng / 1e5 })
+  }
+  return pts
+}
 
 // Lazy singleton: estende google.maps.OverlayView só depois que a API carrega
 let _HtmlOverlayClass: any = null
@@ -160,15 +174,16 @@ function MapaMotoboy({
     libraries: GMAPS_LIBS,
   })
 
-  const containerRef    = useRef<HTMLDivElement>(null)
-  const mapInstanceRef  = useRef<google.maps.Map | null>(null)
-  const dirRendererRef  = useRef<google.maps.DirectionsRenderer | null>(null)
-  const circleRef       = useRef<google.maps.Circle | null>(null)
-  const polylineRef     = useRef<google.maps.Polyline | null>(null)
-  const motoboyOvRef    = useRef<any>(null)
-  const lojaOvRef       = useRef<any>(null)
-  const destinoOvRef    = useRef<any>(null)
-  const extrasOvRef     = useRef<any[]>([])
+  const containerRef      = useRef<HTMLDivElement>(null)
+  const mapInstanceRef    = useRef<google.maps.Map | null>(null)
+  const routePolyRef      = useRef<google.maps.Polyline | null>(null)   // rota seguindo ruas
+  const fallbackPolyRef   = useRef<google.maps.Polyline | null>(null)   // linha reta de fallback
+  const circleRef         = useRef<google.maps.Circle | null>(null)
+  const motoboyOvRef      = useRef<any>(null)
+  const lojaOvRef         = useRef<any>(null)
+  const destinoOvRef      = useRef<any>(null)
+  const extrasOvRef       = useRef<any[]>([])
+  const routeAbortRef     = useRef<AbortController | null>(null)
 
   const followRef    = useRef(true)
   const headingRef   = useRef(0)
@@ -182,7 +197,7 @@ function MapaMotoboy({
   const lojaLngRef    = useRef(lojaLng)
 
   const [following, setFollowing] = useState(true)
-  const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null)
+  const [hasRoute,  setHasRoute]  = useState(false)   // true quando rota por ruas está ativa
 
   const navMode = !!(destinoLat && destinoLng)
 
@@ -214,19 +229,22 @@ function MapaMotoboy({
     mapInstanceRef.current = map
     map.addListener("dragstart", () => { followRef.current = false; setFollowing(false) })
 
-    dirRendererRef.current = new google.maps.DirectionsRenderer({
-      map, suppressMarkers: true, preserveViewport: true,
-      polylineOptions: { strokeColor: "#22d3ee", strokeWeight: 7, strokeOpacity: 0.9 },
+    // Polyline para rota calculada (seguindo ruas) — path definido via fetchRoute
+    routePolyRef.current = new google.maps.Polyline({
+      strokeColor: "#22d3ee", strokeWeight: 8, strokeOpacity: 0.9,
+      zIndex: 5,
+    })
+
+    // Polyline de fallback (linha reta) — só aparece quando fetchRoute falha
+    fallbackPolyRef.current = new google.maps.Polyline({
+      strokeColor: "#22d3ee", strokeWeight: 5, strokeOpacity: 0.6,
+      zIndex: 4,
     })
 
     circleRef.current = new google.maps.Circle({
       map, center: { lat: myLat, lng: myLng }, radius: raioDisplay * 1000,
       strokeColor: "#f97316", strokeOpacity: 0.2, strokeWeight: 1.5,
       fillColor: "#f97316", fillOpacity: 0.04,
-    })
-
-    polylineRef.current = new google.maps.Polyline({
-      strokeColor: "#22d3ee", strokeWeight: 5, strokeOpacity: 0.6,
     })
 
     motoboyOvRef.current = new Ov(myLat, myLng, MARKER_MOTOBOY_GPS)
@@ -274,29 +292,73 @@ function MapaMotoboy({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [extrasLoja, extrasDestino])
 
-  // ── Sincroniza directions com DirectionsRenderer e Polyline fallback ──────────
-  useEffect(() => {
-    if (dirRendererRef.current) {
-      if (directions) dirRendererRef.current.setDirections(directions)
-      dirRendererRef.current.setOptions({
-        polylineOptions: {
-          strokeColor: navMode ? "#22d3ee" : "#f97316",
-          strokeWeight: navMode ? 7 : 5,
-          strokeOpacity: 0.9,
-        },
+  // ── fetchRoute: chama proxy server-side, decodifica polyline, desenha no mapa ──
+  async function fetchRoute(oLat: number, oLng: number, dLat: number, dLng: number) {
+    // Cancela fetch anterior
+    routeAbortRef.current?.abort()
+    const ctrl = new AbortController()
+    routeAbortRef.current = ctrl
+
+    try {
+      const res = await fetch(
+        `/api/directions?origin=${oLat},${oLng}&destination=${dLat},${dLng}`,
+        { signal: ctrl.signal }
+      )
+      if (!res.ok) throw new Error("upstream")
+      const data = await res.json()
+      if (!data.points) throw new Error("no points")
+
+      const path = decodePolyline(data.points)
+      const map  = mapInstanceRef.current
+      const rp   = routePolyRef.current
+      if (!rp || !map) return
+
+      rp.setPath(path)
+      rp.setOptions({
+        strokeColor: "#22d3ee",
+        strokeWeight: 8,
+        strokeOpacity: 0.9,
       })
+      rp.setMap(map)
+      fallbackPolyRef.current?.setMap(null)
+      setHasRoute(true)
+
+      // fitBounds com bounds retornados pela API
+      if (data.bounds && map) {
+        const b = new google.maps.LatLngBounds(
+          { lat: data.bounds.southwest.lat, lng: data.bounds.southwest.lng },
+          { lat: data.bounds.northeast.lat, lng: data.bounds.northeast.lng }
+        )
+        return b
+      }
+    } catch (e: any) {
+      if (e?.name === "AbortError") return
+      // Fallback: mostra linha reta
+      clearRoute()
     }
-    const pl = polylineRef.current
+    return null
+  }
+
+  function clearRoute() {
+    routePolyRef.current?.setMap(null)
+    setHasRoute(false)
+  }
+
+  // ── Fallback (linha reta) quando não há rota calculada ────────────────────────
+  useEffect(() => {
+    const color = navMode ? "#22d3ee" : "#f97316"
+    routePolyRef.current?.setOptions({ strokeColor: color })
+    fallbackPolyRef.current?.setOptions({ strokeColor: color, strokeWeight: navMode ? 5 : 4 })
+    const pl = fallbackPolyRef.current
     if (!pl) return
-    if (!directions && destinoLat && destinoLng) {
+    if (!hasRoute && destinoLat && destinoLng) {
       pl.setPath([{ lat: myLat, lng: myLng }, { lat: destinoLat, lng: destinoLng }])
-      pl.setOptions({ strokeColor: navMode ? "#22d3ee" : "#f97316", strokeWeight: navMode ? 5 : 4 })
       pl.setMap(mapInstanceRef.current)
     } else {
       pl.setMap(null)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [directions, destinoLat, destinoLng, navMode])
+  }, [hasRoute, destinoLat, destinoLng, navMode, myLat, myLng])
 
   // ── Atualiza círculo de raio ──────────────────────────────────────────────────
   useEffect(() => {
@@ -315,11 +377,9 @@ function MapaMotoboy({
     gpsRealRef.current = true
     const dLat = destinoLatRef.current; const dLng = destinoLngRef.current
     if (!isLoaded || !dLat || !dLng || !mapInstanceRef.current) return
-    setDirections(null)
-    new google.maps.DirectionsService().route(
-      { origin: { lat: myLat, lng: myLng }, destination: { lat: dLat, lng: dLng }, travelMode: google.maps.TravelMode.DRIVING },
-      (r, s) => { if (s === "OK" && r) setDirections(r) }
-    )
+    clearRoute()
+    fetchRoute(myLat, myLng, dLat, dLng)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myLat, myLng, isLoaded])
 
   // ── Segue o motoboy com heading-up + tilt ────────────────────────────────────
@@ -369,11 +429,8 @@ function MapaMotoboy({
     const oLat = myLatRef.current;     const oLng = myLngRef.current
 
     if (dLat && dLng) {
-      setDirections(null)
-      new google.maps.DirectionsService().route(
-        { origin: { lat: oLat, lng: oLng }, destination: { lat: dLat, lng: dLng }, travelMode: google.maps.TravelMode.DRIVING },
-        (r, s) => { if (s === "OK" && r) setDirections(r) }
-      )
+      clearRoute()
+      fetchRoute(oLat, oLng, dLat, dLng)
     }
 
     map.setTilt(0); map.setHeading(0)
@@ -389,11 +446,12 @@ function MapaMotoboy({
       followRef.current = true; setFollowing(true)
     }, 6000)
     return () => clearTimeout(t)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitBoundsTrigger])
 
   // ── Recalcula rota quando destino/loja mudam ──────────────────────────────────
   useEffect(() => {
-    if (!isLoaded || !destinoLat || !destinoLng) { setDirections(null); return }
+    if (!isLoaded || !destinoLat || !destinoLng) { clearRoute(); return }
     const lat = myLatRef.current; const lng = myLngRef.current
 
     if (!navMode && mapInstanceRef.current) {
@@ -405,17 +463,11 @@ function MapaMotoboy({
       mapInstanceRef.current.fitBounds(b, { top: 60, right: 24, bottom: 320, left: 24 })
     }
 
-    setDirections(null)
-    new google.maps.DirectionsService().route(
-      { origin: { lat, lng }, destination: { lat: destinoLat, lng: destinoLng }, travelMode: google.maps.TravelMode.DRIVING },
-      (r, s) => {
-        if (s === "OK" && r) {
-          setDirections(r)
-          if (!navMode && mapInstanceRef.current && r.routes[0]?.bounds)
-            mapInstanceRef.current.fitBounds(r.routes[0].bounds, { top: 60, right: 24, bottom: 320, left: 24 })
-        }
-      }
-    )
+    clearRoute()
+    fetchRoute(lat, lng, destinoLat, destinoLng).then(bounds => {
+      if (!navMode && bounds && mapInstanceRef.current)
+        mapInstanceRef.current.fitBounds(bounds, { top: 60, right: 24, bottom: 320, left: 24 })
+    })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded, destinoLat, destinoLng, lojaLat, lojaLng])
 
