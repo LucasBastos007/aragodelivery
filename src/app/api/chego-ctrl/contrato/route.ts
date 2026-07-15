@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { requireAdmin } from "@/lib/session"
 
 const admin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const PLANO_LABEL: Record<string, string> = { select: "Select", prime: "Prime", black: "Black", gold: "Gold" }
+const PLANO_LABEL: Record<string, string> = { select: "Select", prime: "Prime", black: "Black", gold: "10% por Pedido" }
 const PLANO_VALOR: Record<string, string> = {
   select: "R$ 149,00/mês",
   prime:  "R$ 497,00/mês",
@@ -43,9 +44,10 @@ function contratoLojaHtml(l: Record<string, any>): string {
         <tr><td colspan="2" style="padding-top:8px;font-weight:700;color:#111;">Plano e Condições Comerciais</td></tr>
         <tr><td>Plano</td><td>${planoLabel}</td></tr>
         <tr><td>Mensalidade</td><td>${planoValor}</td></tr>
-        <tr><td>Vencimento</td><td>Dia 5 de cada mês</td></tr>
+        <tr><td>Vencimento</td><td>Dia 10 de cada mês</td></tr>
         <tr><td>Taxa de Intermediação</td><td>${plano === "gold" ? "10% por pedido" : `${comissao}%`}</td></tr>
-        <tr><td>Prazo de Repasse</td><td>3 dias úteis</td></tr>
+        <tr><td>Repasse semanal</td><td>Toda sexta-feira</td></tr>
+        <tr><td>Saques extras</td><td>Toda terça-feira · Taxa R$ 5,00</td></tr>
         <tr><td colspan="2" style="padding-top:8px;font-weight:700;color:#111;">Identificação do Contrato</td></tr>
         <tr><td>Contrato ID</td><td>${(l.id ?? "—").toString().slice(0, 8).toUpperCase()}</td></tr>
         <tr><td>Data</td><td>${fmt(l.contrato_assinado_em) !== "—" ? fmt(l.contrato_assinado_em) : new Date().toLocaleDateString("pt-BR")}</td></tr>
@@ -53,8 +55,8 @@ function contratoLojaHtml(l: Record<string, any>): string {
     </div>
 
     <div class="titulo-contrato">
-      <p>CONTRATO DE PARCERIA COMERCIAL</p>
-      <p class="subtitulo">PLATAFORMA CHEGÔ DELIVERY E LOJISTA PARCEIRO</p>
+      <p>CONTRATO DE CREDENCIAMENTO DE ESTABELECIMENTO PARCEIRO</p>
+      <p class="subtitulo">PLATAFORMA CHEGÔ DELIVERY E ESTABELECIMENTO PARCEIRO (LOJISTA)</p>
     </div>
 
     <p>Pelo presente instrumento particular, de um lado:</p>
@@ -84,10 +86,10 @@ function contratoLojaHtml(l: Record<string, any>): string {
     <p>5.1. A PLATAFORMA se obriga a: (a) disponibilizar ao LOJISTA acesso ao painel de gestão e vitrine no aplicativo; (b) promover o LOJISTA em seus canais próprios; (c) fornecer suporte técnico; (d) repassar valores devidos conforme Cláusula 6ª; (e) manter sigilo sobre informações comerciais do LOJISTA.</p>
 
     <p class="clausula">CLÁUSULA 6ª — PLANO COMERCIAL E CONDIÇÕES DE PAGAMENTO</p>
-    <p>6.1. O LOJISTA contrata o plano <strong>${planoLabel}</strong> com mensalidade de <strong>${planoValor}</strong>, com vencimento no dia 10 de cada mês, mediante boleto bancário gerado pelo sistema Asaas.</p>
-    <p>6.2. ${plano === "gold" ? "O plano Gold não possui mensalidade fixa; em contrapartida, a PLATAFORMA retém 10% (dez por cento) sobre cada pedido processado, a título de taxa de intermediação." : "O plano contratado não prevê taxa de intermediação sobre pedidos individuais."}</p>
-    <p>6.3. O repasse dos valores líquidos ao LOJISTA ocorrerá em até 3 (três) dias úteis após o processamento dos pagamentos.</p>
-    <p>6.4. Em caso de inadimplência, incidirão multa de 2% e juros de 1% ao mês. O não pagamento por 30 dias poderá resultar em suspensão imediata do acesso.</p>
+    <p>6.1. O LOJISTA contrata o plano <strong>${planoLabel}</strong> com mensalidade de <strong>${planoValor}</strong>, com vencimento no dia 10 de cada mês, mediante boleto bancário ou pix gerado pelo sistema.</p>
+    <p>6.2. ${plano === "gold" ? "O plano 10% por Pedido não possui mensalidade fixa; em contrapartida, a PLATAFORMA retém 10% (dez por cento) sobre cada pedido processado, a título de taxa de intermediação." : "O plano contratado não prevê taxa de intermediação sobre pedidos individuais."}</p>
+    <p>6.3. O repasse dos valores líquidos ao LOJISTA ocorrerá toda sexta-feira, de forma semanal. O LOJISTA poderá solicitar saques extras às terças-feiras, com incidência de taxa administrativa de R$ 5,00 (cinco reais) por saque adicional.</p>
+    <p>6.4. Em caso de inadimplência, incidirão multa de 2% (dois por cento) e juros de 1% (um por cento) ao mês, calculados sobre o valor em atraso. O bloqueio do acesso ao painel ocorrerá a partir do 4º (quarto) dia de atraso no pagamento da mensalidade.</p>
 
     <p class="clausula">CLÁUSULA 7ª — PROCESSAMENTO DE PEDIDOS E PRAZO DE PREPARO</p>
     <p>7.1. O LOJISTA compromete-se a confirmar ou recusar pedidos em até 5 (cinco) minutos e a concluir o preparo em até 30 (trinta) minutos da confirmação, salvo comunicação prévia ao cliente.</p>
@@ -117,7 +119,7 @@ function contratoLojaHtml(l: Record<string, any>): string {
     <p>14.1. A PLATAFORMA envidará esforços para manter o sistema disponível 24/7, mas não garante disponibilidade ininterrupta, não respondendo por danos decorrentes de instabilidades técnicas ou manutenções programadas devidamente comunicadas.</p>
 
     <p class="clausula">CLÁUSULA 15ª — RESCISÃO POR JUSTA CAUSA</p>
-    <p>15.1. A PLATAFORMA poderá rescindir imediatamente, sem ônus, em caso de: (a) descumprimento grave de qualquer cláusula; (b) inadimplência superior a 30 dias; (c) prática de ato ilícito; (d) reincidência em reclamações superior ao limite da Cláusula 4.3.</p>
+    <p>15.1. A PLATAFORMA poderá rescindir imediatamente, sem ônus, em caso de: (a) descumprimento grave de qualquer cláusula; (b) inadimplência a partir do 4º (quarto) dia de atraso; (c) prática de ato ilícito; (d) reincidência em reclamações superior ao limite da Cláusula 4.3.</p>
     <p>15.2. O LOJISTA poderá rescindir por justa causa em caso de descumprimento grave pela PLATAFORMA, mediante notificação escrita prévia de 15 dias para regularização.</p>
 
     <p class="clausula">CLÁUSULA 16ª — RESCISÃO IMOTIVADA</p>
@@ -136,7 +138,7 @@ function contratoLojaHtml(l: Record<string, any>): string {
     <p>18.6. <strong>Assinatura eletrônica com validade jurídica:</strong> este contrato é firmado eletronicamente nos termos do art. 10, §2º, da Medida Provisória nº 2.200-2/2001. Para fins probatórios, ficam registrados: o endereço IP de origem, a data/hora da assinatura e o identificador único do contrato. A assinatura pelo portal Gov.br (ICP-Brasil) confere validade jurídica equivalente à assinatura manuscrita.</p>
 
     <p class="clausula">CLÁUSULA 19ª — FORO E JURISDIÇÃO</p>
-    <p>19.1. As PARTES elegem o foro da Comarca de Aragoiânia, Estado de Goiás, para dirimir quaisquer controvérsias oriundas deste contrato, com renúncia expressa a qualquer outro foro.</p>
+    <p>19.1. As PARTES elegem o foro da Comarca de Guapó, Estado de Goiás, para dirimir quaisquer controvérsias oriundas deste contrato, com renúncia expressa a qualquer outro foro.</p>
 
     <p class="local-data">Aragoiânia/GO, ${fmt(l.contrato_assinado_em) !== "—" ? fmt(l.contrato_assinado_em) : new Date().toLocaleDateString("pt-BR")}</p>
   `
@@ -302,6 +304,8 @@ function secaoAssinatura(data: Record<string, any>, tipo: string, preview: boole
 // GET /api/chego-ctrl/contrato?tipo=loja|motoboy&id=xxx[&modo=preview]
 // ─────────────────────────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
+  if (!requireAdmin(req)) return new NextResponse("Não autorizado", { status: 401 })
+
   const tipo    = req.nextUrl.searchParams.get("tipo")   // "loja" | "motoboy"
   const id      = req.nextUrl.searchParams.get("id")
   const preview = req.nextUrl.searchParams.get("modo") === "preview"
