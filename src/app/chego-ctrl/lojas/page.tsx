@@ -115,6 +115,8 @@ export default function LojasPage() {
   const [excluindo,         setExcluindo]           = useState(false)
   const [enviandoEmail,     setEnviandoEmail]       = useState(false)
   const [emailEnviado,      setEmailEnviado]        = useState(false)
+  const [taxaAberta,        setTaxaAberta]          = useState(false)
+  const [novaTaxa,          setNovaTaxa]            = useState("")
 
   async function load() {
     const { data } = await supabase.from("lojas").select("*").order("criado_em", { ascending: false })
@@ -318,6 +320,18 @@ export default function LojasPage() {
     setExcluindo(false)
   }
 
+  async function salvarTaxa(loja: Loja) {
+    const valor = parseFloat(novaTaxa.replace(",", "."))
+    if (isNaN(valor) || valor < 0) { alert("Valor inválido"); return }
+    setSalvando(true)
+    await supabase.from("lojas").update({ taxa_entrega: valor }).eq("id", loja.id)
+    setSelecionada(prev => prev ? { ...prev, taxa_entrega: valor } as Loja : null)
+    setLojas(prev => prev.map(l => l.id === loja.id ? { ...l, taxa_entrega: valor } : l))
+    setTaxaAberta(false)
+    setNovaTaxa("")
+    setSalvando(false)
+  }
+
   async function atribuirPlano(loja: Loja) {
     setAtribuindoPlano(true)
     try {
@@ -356,7 +370,12 @@ export default function LojasPage() {
   const pendentes = lojas.filter(l => l.status === "pendente").length
 
   return (
-    <div style={{ padding: "32px 36px", minHeight: "100vh" }}>
+    <div style={{ padding: "24px 16px", minHeight: "100vh" }}>
+      <style>{`
+        @media (max-width: 767px) {
+          .loja-card-extra { display: none !important; }
+        }
+      `}</style>
 
       {/* Header */}
       <div style={{ marginBottom: 28, display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
@@ -403,7 +422,7 @@ export default function LojasPage() {
       </div>
 
       {/* Layout lista + painel */}
-      <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
+      <div className="loja-layout" style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
 
         {/* Lista */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
@@ -430,6 +449,7 @@ export default function LojasPage() {
                 display: "flex", alignItems: "center", gap: 14,
                 cursor: "pointer",
                 transition: "all 0.18s",
+                overflow: "hidden",
               }}
                 onMouseEnter={e => {
                   if (active) return
@@ -462,10 +482,23 @@ export default function LojasPage() {
                   </p>
                 </div>
 
-                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                <div className="loja-card-extra" style={{ textAlign: "right", flexShrink: 0 }}>
                   <p style={{ fontSize: 13, fontWeight: 800, color: "#f97316" }}>R$ {l.taxa_entrega?.toFixed(2)}</p>
                   <p style={{ fontSize: 10, color: "#CBD5E1", marginTop: 2, fontWeight: 600 }}>taxa entrega</p>
                 </div>
+
+                <button
+                  className="loja-card-extra"
+                  onClick={e => { e.stopPropagation(); router.push(`/chego-ctrl/lojas/${l.id}/cardapio`) }}
+                  title="Gerenciar cardápio"
+                  style={{
+                    padding: "6px 12px", borderRadius: 8, border: "1.5px solid #E2E8F0",
+                    background: "white", color: "#f97316", fontWeight: 700, fontSize: 12,
+                    cursor: "pointer", flexShrink: 0, whiteSpace: "nowrap",
+                  }}
+                >
+                  🍽 Cardápio
+                </button>
 
                 <div style={{ color: active ? "#f97316" : "#CBD5E1", transition: "all 0.15s" }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -479,7 +512,7 @@ export default function LojasPage() {
 
         {/* Painel lateral */}
         {selecionada && (
-          <div style={{
+          <div className="loja-panel" style={{
             width: 380, flexShrink: 0, alignSelf: "flex-start",
             background: "white", borderRadius: 18,
             border: "1.5px solid #F1F5F9",
@@ -521,37 +554,89 @@ export default function LojasPage() {
               )}
             </div>
 
-            {/* Infos */}
-            <div style={{ padding: "0 20px 16px", display: "flex", flexDirection: "column", gap: 1 }}>
-              {[
-                { label: "Categoria",    value: selecionada.categoria },
-                { label: "Telefone",     value: selecionada.telefone },
-                { label: "Endereço",     value: selecionada.endereco },
-                { label: "Taxa entrega", value: `R$ ${selecionada.taxa_entrega?.toFixed(2)}` },
-                { label: "Tempo",        value: `${selecionada.tempo_min}–${selecionada.tempo_max} min` },
-                { label: "Comissão",     value: `${(selecionada as any).comissao ?? 10}%` },
-                selecionada.nome_responsavel ? { label: "Responsável", value: selecionada.nome_responsavel } : null,
-                selecionada.email         ? { label: "E-mail",       value: selecionada.email }         : null,
-                selecionada.cnpj          ? { label: "CNPJ",         value: selecionada.cnpj }          : null,
-                selecionada.cpf_responsavel ? { label: "CPF",         value: selecionada.cpf_responsavel } : null,
-                selecionada.pix_key       ? { label: "PIX",          value: selecionada.pix_key }       : null,
-                { label: "Cadastro", value: new Date(selecionada.criado_em).toLocaleDateString("pt-BR") },
-                selecionada.contrato_assinado_em
-                  ? { label: "Assinado em", value: new Date(selecionada.contrato_assinado_em).toLocaleDateString("pt-BR") }
-                  : null,
-              ].filter(Boolean).map((row: any, i, arr) => (
-                <div key={row.label} style={{
-                  display: "flex", justifyContent: "space-between", gap: 8,
-                  padding: "8px 0",
-                  borderBottom: i < arr.length - 1 ? "1px solid #F8FAFC" : "none",
-                }}>
-                  <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 600, flexShrink: 0 }}>{row.label}</span>
-                  <span style={{
-                    fontSize: 12, color: "#1E293B", fontWeight: 700,
-                    textAlign: "right", maxWidth: "60%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  }} title={row.value}>{row.value}</span>
+            {/* ── DADOS CADASTRAIS ── */}
+            <div style={{ margin: "0 20px 16px", borderRadius: 12, border: "1px solid #E2E8F0", overflow: "hidden" }}>
+              <div style={{ padding: "10px 14px", background: "#F8FAFC", borderBottom: "1px solid #E2E8F0" }}>
+                <p style={{ fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.8 }}>Dados Cadastrais</p>
+              </div>
+              <div style={{ padding: "4px 14px 8px", display: "flex", flexDirection: "column", gap: 0 }}>
+                {[
+                  { label: "Responsável",   value: (selecionada as any).nome_responsavel },
+                  { label: "CPF",           value: (selecionada as any).cpf_responsavel },
+                  { label: "CNPJ",          value: (selecionada as any).cnpj },
+                  { label: "E-mail",        value: selecionada.email },
+                  { label: "Telefone",      value: selecionada.telefone },
+                  { label: "CEP",           value: (selecionada as any).cep },
+                  { label: "Logradouro",    value: (selecionada as any).logradouro ?? selecionada.endereco },
+                  { label: "Número",        value: (selecionada as any).numero },
+                  { label: "Complemento",   value: (selecionada as any).complemento },
+                  { label: "Bairro",        value: (selecionada as any).bairro },
+                  { label: "Cidade/UF",     value: (selecionada as any).cidade ? `${(selecionada as any).cidade} / ${(selecionada as any).estado ?? ""}` : null },
+                  { label: "PIX",           value: (selecionada as any).pix_key },
+                  { label: "Banco",         value: (selecionada as any).banco },
+                  { label: "Agência",       value: (selecionada as any).banco_agencia },
+                  { label: "Conta",         value: (selecionada as any).banco_conta ? `${(selecionada as any).banco_conta} (${(selecionada as any).banco_tipo_conta ?? "—"})` : null },
+                  { label: "Categoria",     value: selecionada.categoria },
+                  { label: "Taxa entrega",  value: `R$ ${selecionada.taxa_entrega?.toFixed(2)}` },
+                  { label: "Tempo",         value: `${selecionada.tempo_min}–${selecionada.tempo_max} min` },
+                  { label: "Comissão",      value: `${(selecionada as any).comissao ?? 10}%` },
+                  { label: "Cadastro",      value: new Date(selecionada.criado_em).toLocaleDateString("pt-BR") },
+                  (selecionada as any).contrato_assinado_em
+                    ? { label: "Assinado em", value: new Date((selecionada as any).contrato_assinado_em).toLocaleDateString("pt-BR") }
+                    : null,
+                ].filter((r): r is { label: string; value: string } => !!r && !!r.value).map((row, i, arr) => (
+                  <div key={row.label} style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8,
+                    padding: "7px 0",
+                    borderBottom: i < arr.length - 1 ? "1px solid #F8FAFC" : "none",
+                  }}>
+                    <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, flexShrink: 0, paddingTop: 1 }}>{row.label}</span>
+                    <span style={{
+                      fontSize: 12, color: "#1E293B", fontWeight: 700,
+                      textAlign: "right", wordBreak: "break-all",
+                    }}>{row.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ── TAXA DE ENTREGA ── */}
+            <div style={{ margin: "0 20px 16px", borderRadius: 12, border: "1.5px solid #E2E8F0", overflow: "hidden" }}>
+              <div style={{ padding: "10px 14px", background: "#F8FAFC", borderBottom: "1px solid #E2E8F0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <p style={{ fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.8 }}>Taxa de Entrega</p>
+                <button
+                  onClick={() => { setTaxaAberta(o => !o); setNovaTaxa(selecionada.taxa_entrega?.toFixed(2) ?? "0.00") }}
+                  style={{ fontSize: 11, fontWeight: 700, color: "#f97316", background: "none", border: "none", cursor: "pointer", padding: "2px 6px" }}
+                >
+                  {taxaAberta ? "Cancelar" : "Editar"}
+                </button>
+              </div>
+              {!taxaAberta ? (
+                <div style={{ padding: "10px 14px" }}>
+                  <p style={{ fontSize: 15, fontWeight: 800, color: "#0F172A" }}>
+                    R$ {selecionada.taxa_entrega != null ? selecionada.taxa_entrega.toFixed(2) : "—"}
+                  </p>
                 </div>
-              ))}
+              ) : (
+                <div style={{ padding: "12px 14px", display: "flex", gap: 8 }}>
+                  <input
+                    type="number" step="0.01" min="0"
+                    value={novaTaxa}
+                    onChange={e => setNovaTaxa(e.target.value)}
+                    placeholder="Ex: 5.00"
+                    style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "1.5px solid #E2E8F0", fontSize: 13, fontWeight: 700, outline: "none" }}
+                    onFocus={e => (e.target.style.borderColor = "#f97316")}
+                    onBlur={e => (e.target.style.borderColor = "#E2E8F0")}
+                  />
+                  <button
+                    onClick={() => salvarTaxa(selecionada)}
+                    disabled={salvando}
+                    style={{ padding: "8px 16px", borderRadius: 8, background: "linear-gradient(135deg, #f97316, #ea580c)", color: "white", fontSize: 12, fontWeight: 800, border: "none", cursor: salvando ? "default" : "pointer", opacity: salvando ? 0.6 : 1 }}
+                  >
+                    {salvando ? "..." : "Salvar"}
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Contrato assinado */}
@@ -913,6 +998,21 @@ export default function LojasPage() {
               </button>
             </div>
 
+            {/* Botão cardápio */}
+            <div style={{ padding: "0 20px 14px" }}>
+              <button
+                onClick={() => router.push(`/chego-ctrl/lojas/${selecionada.id}/cardapio`)}
+                style={{
+                  width: "100%", padding: "11px", borderRadius: 10,
+                  border: "1.5px solid #FED7AA", background: "#FFF7ED",
+                  color: "#f97316", fontWeight: 700, fontSize: 13, cursor: "pointer",
+                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                }}
+              >
+                🍽 Gerenciar Cardápio
+              </button>
+            </div>
+
             {/* Ações */}
             <div style={{ padding: "16px 20px", borderTop: "1.5px solid #F1F5F9", display: "flex", flexDirection: "column", gap: 8 }}>
               {selecionada.status === "pendente" && (<>
@@ -953,14 +1053,14 @@ export default function LojasPage() {
                   </button>
                 </div>
               )}
-              {selecionada.status === "contrato_assinado" && (
+              {!["ativo", "suspenso"].includes(selecionada.status) && (
                 <button onClick={() => ativarLoja(selecionada)} disabled={salvando} style={{
                   width: "100%", padding: "12px", borderRadius: 10, border: "none",
                   background: "linear-gradient(135deg, #10b981, #059669)",
-                  color: "white", fontWeight: 800, fontSize: 13, cursor: "pointer",
+                  color: "white", fontWeight: 800, fontSize: 13, cursor: salvando ? "not-allowed" : "pointer",
                   boxShadow: "0 4px 16px rgba(16,185,129,0.3)",
                 }}>
-                  {salvando ? "Ativando…" : "✓ Ativar loja"}
+                  {salvando ? "Ativando…" : "✅ Ativar loja (aparece no app)"}
                 </button>
               )}
               {["ativo", "contrato_assinado", "aprovado"].includes(selecionada.status) && (
@@ -1082,7 +1182,13 @@ export default function LojasPage() {
         )}
       </div>
 
-      <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }`}</style>
+      <style>{`
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+        @media (max-width: 767px) {
+          .loja-layout { flex-direction: column !important; }
+          .loja-panel  { width: 100% !important; position: fixed !important; inset: 0 !important; top: 0 !important; z-index: 200 !important; border-radius: 0 !important; overflow-y: auto !important; max-height: 100dvh !important; }
+        }
+      `}</style>
     </div>
   )
 }
