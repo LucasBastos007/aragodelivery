@@ -295,7 +295,7 @@ export default function ContratoMotoboyPage() {
         </div>
 
         {/* Selfie com documento */}
-        <div style={{ marginBottom: 24 }}>
+        <div className="no-print" style={{ marginBottom: 24 }}>
           <p className="text-sm font-bold mb-2" style={{ color: "rgba(255,255,255,0.5)" }}>
             Foto segurando o documento *
           </p>
@@ -356,7 +356,7 @@ export default function ContratoMotoboyPage() {
         </div>
 
         {/* Assinatura */}
-        <div style={{ marginBottom: 24 }}>
+        <div className="no-print" style={{ marginBottom: 24 }}>
           <div className="flex items-center justify-between mb-2">
             <p className="text-sm font-bold" style={{ color: "rgba(255,255,255,0.5)" }}>Assinatura digital</p>
             <button onClick={limpar}
@@ -382,6 +382,26 @@ export default function ContratoMotoboyPage() {
           </p>
         </div>
 
+        {/* Botão de download do contrato */}
+        <button
+          onClick={() => window.print()}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+            width: "100%", padding: "14px 20px", borderRadius: 14, border: "none",
+            background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.7)",
+            fontSize: 14, fontWeight: 700,
+            cursor: "pointer", marginBottom: 16,
+          }}
+          className="no-print"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Baixar Contrato em PDF
+        </button>
+
         {(!selfieContrato || !temAssinatura) && (
           <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 10, background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)" }}>
             <p style={{ color: "rgba(245,158,11,0.8)", fontSize: 12, fontWeight: 600, margin: 0 }}>
@@ -392,6 +412,7 @@ export default function ContratoMotoboyPage() {
           </div>
         )}
         <button
+          className="no-print"
           onClick={assinar}
           disabled={salvando || !temAssinatura || !selfieContrato}
           style={{
@@ -404,10 +425,18 @@ export default function ContratoMotoboyPage() {
           }}>
           {salvando ? "Registrando assinatura..." : "Assinar contrato e iniciar parceria"}
         </button>
-        <p className="text-xs mt-3 text-center" style={{ color: "rgba(255,255,255,0.2)" }}>
+        <p className="text-xs mt-3 text-center no-print" style={{ color: "rgba(255,255,255,0.2)" }}>
           Ao assinar, você declara ter lido e concordado com todos os termos acima.
         </p>
       </div>
+
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          body { background: white !important; color: black !important; }
+          * { box-shadow: none !important; }
+        }
+      `}</style>
     </div>
   )
 }

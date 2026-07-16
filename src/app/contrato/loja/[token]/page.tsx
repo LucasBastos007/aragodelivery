@@ -249,15 +249,15 @@ export default function ContratoLojaPage() {
         </div>
 
         {/* Botão de download */}
-        <a
-          href={`/api/chego-ctrl/contrato?tipo=loja&id=${loja!.id}&modo=preview`}
-          target="_blank"
-          rel="noreferrer"
+        <button
+          onClick={() => window.print()}
+          className="no-print"
           style={{
             display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-            width: "100%", padding: "17px 20px", borderRadius: 16, textDecoration: "none",
+            width: "100%", padding: "17px 20px", borderRadius: 16, border: "none",
             background: "#DC2626", color: "white",
             fontSize: 15, fontWeight: 800,
+            cursor: "pointer",
             boxShadow: "0 4px 16px rgba(220,38,38,0.30)",
           }}
         >
@@ -267,10 +267,18 @@ export default function ContratoLojaPage() {
             <line x1="12" y1="15" x2="12" y2="3" />
           </svg>
           Baixar Contrato em PDF
-        </a>
-        <p style={{ fontSize: 12, color: "#9ca3af", textAlign: "center", marginTop: 10 }}>
-          Imprima, assine e entregue à nossa equipe — presencialmente ou via Gov.br
+        </button>
+        <p className="no-print" style={{ fontSize: 12, color: "#9ca3af", textAlign: "center", marginTop: 10 }}>
+          Clique para salvar como PDF — já vem com seus dados preenchidos
         </p>
+
+        <style>{`
+          @media print {
+            .no-print { display: none !important; }
+            body { background: white !important; }
+            * { box-shadow: none !important; }
+          }
+        `}</style>
 
       </div>
     </div>
