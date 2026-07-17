@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useClienteAuth } from "@/lib/auth-cliente"
 import { supabase } from "@/lib/supabase"
+import InstalarApp from "@/components/InstalarApp"
 
 const inp: React.CSSProperties = {
   width: "100%", padding: "12px 14px", borderRadius: 10, fontSize: 14,
@@ -46,7 +47,7 @@ export default function ClienteEntrarPage() {
       if (senha.length < 6) { setErro("A senha precisa ter pelo menos 6 caracteres."); setLoading(false); return }
       const err = await cadastrar(email.trim(), senha, nome, telefone)
       if (err) setErro(err)
-      else setSucesso("Conta criada! Verifique seu e-mail para confirmar o cadastro.")
+      else setSucesso("Conta criada com sucesso! Entrando...")
     }
     setLoading(false)
   }
@@ -160,6 +161,7 @@ export default function ClienteEntrarPage() {
               </div>
             )}
           </div>
+          <InstalarApp papel="cliente" />
         </div>
 
         {/* Modal reset senha cliente */}
