@@ -99,6 +99,8 @@ export default function EntregaAvulsaPage() {
 
   // Distância/taxa
   const [distInfo, setDistInfo] = useState<{ km: number; taxa: number } | null>(null)
+  const [geocodando, setGeocodando] = useState(false)
+  const [erroGeocode, setErroGeocode] = useState<string | null>(null)
 
   const [form, setForm] = useState({
     cliente_nome:  "",
@@ -143,32 +145,47 @@ export default function EntregaAvulsaPage() {
     return () => document.removeEventListener("mousedown", handleClick)
   }, [])
 
-  // Autocomplete endereço: busca sugestões com debounce 400ms e calcula distância automaticamente
+  // Autocomplete endereço: busca sugestões com debounce 600ms e calcula distância automaticamente
   useEffect(() => {
     const q = endBusca.trim()
-    if (q.length < 3) { setSugestoes([]); setDistInfo(null); return }
-    if (endSelecionado?.lat) return // coordenadas já capturadas da seleção — não rebusca
+    if (q.length < 3) { setSugestoes([]); setDistInfo(null); setErroGeocode(null); return }
+    if (endSelecionado?.lat) return
     if (endTimer.current) clearTimeout(endTimer.current)
     endTimer.current = setTimeout(async () => {
+      setGeocodando(true)
+      setErroGeocode(null)
       try {
         const latL = lojaCoords?.lat
         const lngL = lojaCoords?.lng
-        const latParam = latL && lngL ? `&lat=${latL}&lon=${lngL}` : ""
-        const res = await fetch(`/api/geocode/search?q=${encodeURIComponent(q)}${latParam}`)
+        if (!latL || !lngL) {
+          setErroGeocode("Loja sem coordenadas cadastradas — configure no perfil da loja.")
+          setGeocodando(false)
+          return
+        }
+        const res = await fetch(`/api/geocode/search?q=${encodeURIComponent(q)}&lat=${latL}&lon=${lngL}`)
         const data: SugestaoEndereco[] = await res.json()
         setSugestoes(data)
         setShowSug(data.length > 0)
-        // Calcula distância automaticamente com o primeiro resultado
-        if (data[0] && latL && lngL) {
+        if (!data[0]) {
+          setErroGeocode("Município não encontrado. Tente digitar de outra forma.")
+          setDistInfo(null)
+        } else {
           const latC = parseFloat(data[0].lat)
           const lngC = parseFloat(data[0].lon)
           if (!isNaN(latC) && !isNaN(lngC)) {
             const dist = haversineKm(latL, lngL, latC, lngC)
             const taxaBase = lojaCoords?.taxa_entrega ?? 6.00
             setDistInfo({ km: dist, taxa: calcularFrete(dist, taxaBase) })
+          } else {
+            setErroGeocode(`Coord inválida: lat=${data[0].lat} lon=${data[0].lon}`)
+            setDistInfo(null)
           }
         }
-      } catch {}
+      } catch (err: any) {
+        setErroGeocode("Erro ao buscar: " + (err?.message ?? "desconhecido"))
+      } finally {
+        setGeocodando(false)
+      }
     }, 600)
     return () => { if (endTimer.current) clearTimeout(endTimer.current) }
   }, [endBusca, endSelecionado, lojaCoords])
@@ -199,6 +216,7 @@ export default function EntregaAvulsaPage() {
     setEndSelecionado(null)
     setSugestoes([])
     setDistInfo(null)
+    setErroGeocode(null)
   }
 
   async function geocodificarMunicipio(municipio: string) {
@@ -471,8 +489,18 @@ export default function EntregaAvulsaPage() {
             </div>
           )}
 
+          {/* Buscando... */}
+          {geocodando && (
+            <p style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>Buscando localização…</p>
+          )}
+
+          {/* Erro de geocoding */}
+          {erroGeocode && !geocodando && (
+            <p style={{ fontSize: 11, color: "#dc2626", marginTop: 6 }}>⚠ {erroGeocode}</p>
+          )}
+
           {/* Resultado da distância */}
-          {distInfo && (
+          {distInfo && !geocodando && (
             <div style={{
               display: "flex", alignItems: "center", gap: 8, marginTop: 8,
               background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 8, padding: "8px 12px",
@@ -487,11 +515,6 @@ export default function EntregaAvulsaPage() {
                 </p>
               </div>
             </div>
-          )}
-          {!distInfo && endSelecionado && !lojaCoords?.lat && (
-            <p style={{ fontSize: 11, color: "#f97316", marginTop: 6 }}>
-              ⚠ Loja sem coordenadas — configure a localização no perfil
-            </p>
           )}
         </div>
 
