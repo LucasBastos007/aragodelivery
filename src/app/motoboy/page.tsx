@@ -658,20 +658,28 @@ export default function MotoboyPage() {
   }, [motoboy_id])
 
   // ── Ganhos do dia ──────────────────────────────────────────────────────────
-  // Só recarrega do banco na montagem — avancarEtapa atualiza otimisticamente ao entregar
+  // Soma pedidos regulares + entregas avulsas entregues hoje
   useEffect(() => {
     if (!motoboy_id) return
     const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
-    supabase.from("pedidos")
-      .select("taxa_entrega")
-      .eq("motoboy_id", motoboy_id)
-      .eq("status", "entregue")
-      .gte("criado_em", hoje.toISOString())
-      .then(({ data }) => {
-        const entregas = data ?? []
-        setGanhosDia(entregas.reduce((s: number, p: any) => s + (p.taxa_entrega ?? 0), 0))
-        setCorridasDia(entregas.length)
-      })
+    const desde = hoje.toISOString()
+    Promise.all([
+      supabase.from("pedidos")
+        .select("taxa_entrega")
+        .eq("motoboy_id", motoboy_id)
+        .eq("status", "entregue")
+        .gte("criado_em", desde),
+      supabase.from("entregas_avulsas")
+        .select("taxa_entrega")
+        .eq("motoboy_id", motoboy_id)
+        .eq("status", "entregue")
+        .gte("criado_em", desde),
+    ]).then(([{ data: pedidosData }, { data: avulsasData }]) => {
+      const pedidos = pedidosData ?? []
+      const avulsas = avulsasData ?? []
+      setGanhosDia([...pedidos, ...avulsas].reduce((s: number, p: any) => s + (p.taxa_entrega ?? 0), 0))
+      setCorridasDia(pedidos.length + avulsas.length)
+    })
   }, [motoboy_id])
 
   // ── Injeta CSS de animação pulse (uma vez) ────────────────────────────────
