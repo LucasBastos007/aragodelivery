@@ -24,6 +24,20 @@ function calcularTaxaEntrega(latLoja: number | null, lngLoja: number | null, lat
   return Math.round((base + (dist - 6) * 1.00) * 100) / 100
 }
 
+function normalizar(s: string) {
+  return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim()
+}
+
+function buscarTabelaFrete(tabela: { municipio: string; taxa: number }[], nome: string): number | null {
+  if (!nome) return null
+  const n = normalizar(nome)
+  for (const entry of tabela) {
+    const e = normalizar(entry.municipio)
+    if (n.includes(e) || e.includes(n)) return entry.taxa
+  }
+  return null
+}
+
 function adminSb() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!key) throw new Error("SUPABASE_SERVICE_ROLE_KEY não configurada")
@@ -66,6 +80,8 @@ export async function POST(req: NextRequest) {
     endereco_entrega,
     lat_entrega,
     lng_entrega,
+    cidade_entrega,
+    bairro_entrega,
     observacao,
     cupom_codigo,
     nome_cliente,
@@ -120,8 +136,21 @@ export async function POST(req: NextRequest) {
     return sum + Number(produto.preco) * Number(item.quantidade)
   }, 0)
 
-  // 4. Taxa dinâmica por distância (retirada = grátis)
-  const taxa_entrega = tipo_entrega === "retirada" ? 0 : calcularTaxaEntrega(loja.lat, loja.lng, lat_entrega, lng_entrega, (loja as any).taxa_entrega ?? 6.00)
+  // 4. Taxa de entrega: tabela fixa por município tem prioridade sobre distância
+  let taxa_entrega = 0
+  if (tipo_entrega !== "retirada") {
+    const { data: tabelaFrete } = await sb
+      .from("tabela_frete")
+      .select("municipio, taxa")
+      .eq("loja_id", loja_id)
+
+    const taxaFixa = buscarTabelaFrete(tabelaFrete ?? [], cidade_entrega)
+      ?? buscarTabelaFrete(tabelaFrete ?? [], bairro_entrega)
+
+    taxa_entrega = taxaFixa !== null
+      ? taxaFixa
+      : calcularTaxaEntrega(loja.lat, loja.lng, lat_entrega, lng_entrega, (loja as any).taxa_entrega ?? 6.00)
+  }
 
   // 5. Valida e aplica cupom no servidor
   let desconto = 0
