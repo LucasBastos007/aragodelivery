@@ -904,11 +904,16 @@ export default function MotoboyPage() {
       const id = avulsaOferta.id
       setAvulsaOferta(null)
       dismissedIdsRef.current.add(id)
-      // Devolve para aguardando (sem escalada — avulsa é manual)
-      supabase.from("entregas_avulsas")
-        .update({ motoboy_id: null, status: "aguardando" })
-        .eq("id", id).eq("status", "aguardando_aceite")
-        .then(() => {})
+      fetch("/api/entrega-avulsa/reescalar", {
+        method: "POST", credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ avulsa_id: id }),
+      }).catch(() => {
+        supabase.from("entregas_avulsas")
+          .update({ motoboy_id: null, status: "aguardando" })
+          .eq("id", id).eq("status", "aguardando_aceite")
+          .then(() => {})
+      })
       return
     }
     const iv = setInterval(() => setTimerAvulsa(t => t - 1), 1000)
@@ -1256,9 +1261,15 @@ export default function MotoboyPage() {
     const id = avulsaOferta.id
     setAvulsaOferta(null)
     dismissedIdsRef.current.add(id)
-    await supabase.from("entregas_avulsas")
-      .update({ motoboy_id: null, status: "aguardando" })
-      .eq("id", id).eq("status", "aguardando_aceite")
+    fetch("/api/entrega-avulsa/reescalar", {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ avulsa_id: id }),
+    }).catch(() => {
+      supabase.from("entregas_avulsas")
+        .update({ motoboy_id: null, status: "aguardando" })
+        .eq("id", id).eq("status", "aguardando_aceite")
+    })
   }
 
   // ── Avançar etapa da entrega avulsa ──────────────────────────────────────
