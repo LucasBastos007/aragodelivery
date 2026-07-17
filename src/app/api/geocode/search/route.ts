@@ -32,17 +32,21 @@ export async function GET(req: NextRequest) {
   const lat = req.nextUrl.searchParams.get("lat")
   const lon = req.nextUrl.searchParams.get("lon")
   const bias = lat && lon ? `&lat=${lat}&lon=${lon}` : ""
-  const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q.trim())}&limit=8&lang=pt${bias}`
+  const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q.trim())}&limit=8${bias}`
 
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": "AragoDelivery/1.0" },
-      next: { revalidate: 60 },
+      cache: "no-store",
     })
-    if (!res.ok) return NextResponse.json([])
+    if (!res.ok) {
+      console.error("[geocode] Photon status:", res.status, "url:", url)
+      return NextResponse.json([])
+    }
     const data = await res.json()
 
     const features: PhotonFeature[] = data.features ?? []
+    console.log("[geocode] q=%s features=%d", q, features.length)
 
     // Filtra apenas Brasil, prioriza cidades/municípios
     const brasileiras = features.filter(
