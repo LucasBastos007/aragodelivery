@@ -547,7 +547,7 @@ function MapaMotoboy({
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 export default function MotoboyPage() {
-  const { sessao } = useAuth()
+  const { sessao, logout } = useAuth()
   const motoboy_id = sessao?.role === "motoboy" ? sessao.motoboy_id : null
 
   const [disponivel,     setDisponivel]     = useState(() => {
@@ -965,10 +965,12 @@ export default function MotoboyPage() {
       method: "POST", credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lat, lng }),
+    }).then(res => {
+      if (res.status === 401) { logout().then(() => { window.location.href = "/entrar/motoboy" }) }
     }).catch(() => {})
     // Armazena no SW para envio em background sync
     navigator.serviceWorker?.controller?.postMessage({ type: "store-location", lat, lng })
-  }, [])
+  }, [logout])
 
   const iniciarRastreamento = useCallback(() => {
     if (!motoboy_id || !navigator.geolocation) return

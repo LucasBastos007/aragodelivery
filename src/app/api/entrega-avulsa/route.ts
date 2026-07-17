@@ -37,7 +37,7 @@ function initVapid(): boolean {
 async function escalarMotoboy(avulsa_id: string, codigo: string, taxa_entrega: number, lojaLat: number | null, lojaLng: number | null) {
   const { data: motoboyData } = await admin
     .from("motoboys")
-    .select("id, lat, lng, push_subscription")
+    .select("id, nome, lat, lng, push_subscription")
     .eq("disponivel", true)
     .eq("status", "ativo")
 
@@ -53,10 +53,12 @@ async function escalarMotoboy(avulsa_id: string, codigo: string, taxa_entrega: n
   const ocupados = new Set((comEntrega ?? []).map((p: any) => p.motoboy_id).filter(Boolean))
 
   const candidatos = motoboys
-    .filter(m => m.id && !ocupados.has(m.id) && m.lat && m.lng)
+    .filter(m => m.id && !ocupados.has(m.id))
     .map(m => ({
       ...m,
-      distLoja: lojaLat && lojaLng ? haversineKm(m.lat, m.lng, lojaLat, lojaLng) : 0,
+      distLoja: (lojaLat && lojaLng && m.lat && m.lng)
+        ? haversineKm(m.lat, m.lng, lojaLat, lojaLng)
+        : Infinity,
     }))
     .sort((a, b) => a.distLoja - b.distLoja)
 
@@ -66,7 +68,7 @@ async function escalarMotoboy(avulsa_id: string, codigo: string, taxa_entrega: n
 
   await admin
     .from("entregas_avulsas")
-    .update({ motoboy_id: escolhido.id, status: "aguardando_aceite" })
+    .update({ motoboy_id: escolhido.id, motoboy_nome: escolhido.nome ?? null, status: "aguardando_aceite" })
     .eq("id", avulsa_id)
 
   if (escolhido.push_subscription && initVapid()) {
@@ -99,10 +101,7 @@ async function escalarMotoboy(avulsa_id: string, codigo: string, taxa_entrega: n
 }
 
 export async function POST(req: NextRequest) {
-  const cookieVal = req.cookies.get("arago_sess")?.value
-  console.log("[entrega-avulsa] cookie present:", !!cookieVal, "length:", cookieVal?.length)
   const sess = requireLoja(req)
-  console.log("[entrega-avulsa] sess:", JSON.stringify(sess))
   if (!sess) return unauthorized()
   const loja_id = sess.loja_id
 
