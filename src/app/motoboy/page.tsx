@@ -857,16 +857,19 @@ export default function MotoboyPage() {
   // Mantém ref sincronizado para uso nos callbacks do Realtime
   useEffect(() => { avulsaOfertaRef.current = avulsaOferta }, [avulsaOferta])
 
-  // ── Verifica avulsa pendente ao abrir o app (não depende de disponivel) ────
+  // ── Verifica avulsa pendente ao abrir o app + polling a cada 10s ────────
   useEffect(() => {
     if (!motoboy_id) return
-    supabase.from("entregas_avulsas")
-      .select("*").eq("status", "aguardando").order("criado_em", { ascending: false }).limit(1)
-      .then(({ data }) => {
-        if (data && data.length > 0 && !dismissedIdsRef.current.has(data[0].id)) {
-          setAvulsaOferta(data[0]); setTimerAvulsa(30); playNotificationSound()
-        }
-      })
+    async function checkAvulsa() {
+      const { data } = await supabase.from("entregas_avulsas")
+        .select("*").eq("status", "aguardando").order("criado_em", { ascending: false }).limit(1)
+      if (data && data.length > 0 && !dismissedIdsRef.current.has(data[0].id) && !avulsaOfertaRef.current) {
+        setAvulsaOferta(data[0]); setTimerAvulsa(30); playNotificationSound()
+      }
+    }
+    checkAvulsa()
+    const iv = setInterval(checkAvulsa, 10_000)
+    return () => clearInterval(iv)
   }, [motoboy_id])
 
   // ── Supabase Realtime — broadcast de entrega avulsa ───────────────────────
