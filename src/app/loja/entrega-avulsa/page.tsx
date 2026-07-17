@@ -24,6 +24,13 @@ type ClienteAvulso = {
   valor_total: number
 }
 
+type SugestaoEndereco = {
+  place_id: string | number
+  display_name: string
+  lat: string
+  lon: string
+}
+
 function StatusBadge({ status }: { status: string }) {
   const cfg = STATUS_CFG[status] ?? { label: status, color: "#64748b", bg: "#F1F5F9" }
   return (
@@ -80,15 +87,21 @@ export default function EntregaAvulsaPage() {
   const [showDropdown, setShowDropdown] = useState(false)
   const buscaRef = useRef<HTMLDivElement>(null)
 
-  // Geocoding state
-  const [geocodando, setGeocodando] = useState(false)
-  const [distInfo, setDistInfo]     = useState<{ km: number; taxa: number } | null>(null)
-  const geocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Autocomplete endereço
+  const [endBusca, setEndBusca]           = useState("")
+  const [endCompl, setEndCompl]           = useState("")
+  const [sugestoes, setSugestoes]         = useState<SugestaoEndereco[]>([])
+  const [showSug, setShowSug]             = useState(false)
+  const [endSelecionado, setEndSelecionado] = useState<SugestaoEndereco | null>(null)
+  const endRef = useRef<HTMLDivElement>(null)
+  const endTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Distância/taxa
+  const [distInfo, setDistInfo] = useState<{ km: number; taxa: number } | null>(null)
 
   const [form, setForm] = useState({
     cliente_nome:  "",
     cliente_tel:   "",
-    endereco:      "",
     valor_pedido:  "",
     observacao:    "",
   })
@@ -119,66 +132,84 @@ export default function EntregaAvulsaPage() {
 
   useEffect(() => { carregar(); carregarClientes() }, [loja_id])
 
-  // Fecha dropdown ao clicar fora
+  // Fecha dropdowns ao clicar fora
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (buscaRef.current && !buscaRef.current.contains(e.target as Node)) {
-        setShowDropdown(false)
-      }
+      if (buscaRef.current && !buscaRef.current.contains(e.target as Node)) setShowDropdown(false)
+      if (endRef.current && !endRef.current.contains(e.target as Node)) setShowSug(false)
     }
     document.addEventListener("mousedown", handleClick)
     return () => document.removeEventListener("mousedown", handleClick)
   }, [])
 
-  // Geocodifica endereço de entrega com debounce de 800ms
+  // Autocomplete endereço: busca sugestões com debounce 400ms
   useEffect(() => {
-    const endereco = form.endereco.trim()
-    if (!endereco || endereco.length < 8) {
-      setDistInfo(null)
-      return
-    }
-    if (geocodeTimer.current) clearTimeout(geocodeTimer.current)
-    geocodeTimer.current = setTimeout(async () => {
-      const latL = lojaCoords?.lat
-      const lngL = lojaCoords?.lng
-      if (!latL || !lngL) return
-      setGeocodando(true)
+    const q = endBusca.trim()
+    if (q.length < 3) { setSugestoes([]); return }
+    if (endSelecionado) return // já selecionou — não rebusca
+    if (endTimer.current) clearTimeout(endTimer.current)
+    endTimer.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/geocode/search?q=${encodeURIComponent(endereco)}`)
-        const results = await res.json()
-        if (!results[0]) { setDistInfo(null); setGeocodando(false); return }
-        const latC = parseFloat(results[0].lat)
-        const lngC = parseFloat(results[0].lon)
-        if (isNaN(latC) || isNaN(lngC)) { setDistInfo(null); setGeocodando(false); return }
+        const latParam = lojaCoords?.lat ? `&lat=${lojaCoords.lat}&lon=${lojaCoords.lng}` : ""
+        const res = await fetch(`/api/geocode/search?q=${encodeURIComponent(q)}${latParam}`)
+        const data: SugestaoEndereco[] = await res.json()
+        setSugestoes(data)
+        setShowSug(data.length > 0)
+      } catch {}
+    }, 400)
+    return () => { if (endTimer.current) clearTimeout(endTimer.current) }
+  }, [endBusca, endSelecionado, lojaCoords])
+
+  function selecionarSugestao(s: SugestaoEndereco) {
+    setEndSelecionado(s)
+    setEndBusca(s.display_name)
+    setSugestoes([])
+    setShowSug(false)
+    // Calcula distância imediatamente com as coordenadas da sugestão
+    const latL = lojaCoords?.lat
+    const lngL = lojaCoords?.lng
+    if (latL && lngL) {
+      const latC = parseFloat(s.lat)
+      const lngC = parseFloat(s.lon)
+      if (!isNaN(latC) && !isNaN(lngC)) {
         const dist = haversineKm(latL, lngL, latC, lngC)
         const taxaBase = lojaCoords?.taxa_entrega ?? 6.00
-        const taxa = calcularFrete(dist, taxaBase)
-        setDistInfo({ km: dist, taxa })
-      } catch {
-        setDistInfo(null)
-      } finally {
-        setGeocodando(false)
+        setDistInfo({ km: dist, taxa: calcularFrete(dist, taxaBase) })
       }
-    }, 800)
-    return () => { if (geocodeTimer.current) clearTimeout(geocodeTimer.current) }
-  }, [form.endereco, lojaCoords])
+    }
+  }
+
+  function limparEndereco() {
+    setEndBusca("")
+    setEndCompl("")
+    setEndSelecionado(null)
+    setSugestoes([])
+    setDistInfo(null)
+  }
 
   function selecionarCliente(c: ClienteAvulso) {
     setForm(f => ({
       ...f,
       cliente_nome: c.nome,
       cliente_tel:  c.telefone ?? "",
-      endereco:     c.endereco ?? "",
     }))
+    // Preenche o endereço salvo no campo de busca (sem tentar regeocod.)
+    if (c.endereco) {
+      setEndBusca(c.endereco)
+      setEndSelecionado({ place_id: "saved", display_name: c.endereco, lat: "", lon: "" })
+    }
     setBusca(c.nome)
     setShowDropdown(false)
   }
 
   function limparForm() {
-    setForm({ cliente_nome: "", cliente_tel: "", endereco: "", valor_pedido: "", observacao: "" })
+    setForm({ cliente_nome: "", cliente_tel: "", valor_pedido: "", observacao: "" })
     setBusca("")
-    setDistInfo(null)
+    limparEndereco()
   }
+
+  // Endereço completo para salvar
+  const enderecoFinal = [endBusca.trim(), endCompl.trim()].filter(Boolean).join(" — ")
 
   const clientesFiltrados = busca.trim().length >= 1
     ? clientes.filter(c =>
@@ -190,6 +221,7 @@ export default function EntregaAvulsaPage() {
   async function enviar(e: React.FormEvent) {
     e.preventDefault()
     if (!loja_id) return
+    if (!endBusca.trim()) { alert("Informe o endereço de entrega"); return }
     setEnviando(true)
     try {
       const res = await fetch("/api/entrega-avulsa", {
@@ -200,7 +232,7 @@ export default function EntregaAvulsaPage() {
           loja_id,
           cliente_nome:  form.cliente_nome,
           cliente_tel:   form.cliente_tel,
-          endereco:      form.endereco,
+          endereco:      enderecoFinal,
           valor_pedido:  parseFloat(form.valor_pedido || "0"),
           taxa_entrega:  distInfo?.taxa ?? 0,
           observacao:    form.observacao,
@@ -217,14 +249,14 @@ export default function EntregaAvulsaPage() {
         body: JSON.stringify({
           nome:         form.cliente_nome,
           telefone:     form.cliente_tel,
-          endereco:     form.endereco,
+          endereco:     enderecoFinal,
           valor_pedido: parseFloat(form.valor_pedido || "0"),
         }),
       })
 
       limparForm()
       setSucesso(true)
-      setTimeout(() => setSucesso(false), 4000)
+      setTimeout(() => setSucesso(false), 5000)
       await Promise.all([carregar(), carregarClientes()])
     } catch (err: any) {
       alert("Erro: " + err.message)
@@ -343,19 +375,54 @@ export default function EntregaAvulsaPage() {
         boxShadow: "0 4px 24px rgba(0,0,0,0.06)", padding: "20px 20px", marginBottom: 24,
       }}>
 
-        {/* 1. Endereço primeiro — dispara cálculo da taxa */}
-        <div style={{ marginBottom: 14 }}>
-          <p style={labelStyle}>Endereço de entrega *</p>
-          <input
-            required value={form.endereco}
-            onChange={e => set("endereco", e.target.value)}
-            placeholder="Rua, número, bairro"
-            style={campoStyle}
-          />
-          {geocodando && (
-            <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>📍 Identificando localização…</p>
+        {/* 1. Endereço com autocomplete */}
+        <div ref={endRef} style={{ marginBottom: 14, position: "relative" }}>
+          <p style={labelStyle}>Bairro ou rua *</p>
+          <div style={{ position: "relative" }}>
+            <input
+              value={endBusca}
+              onChange={e => { setEndBusca(e.target.value); setEndSelecionado(null); setDistInfo(null) }}
+              onFocus={() => { if (sugestoes.length > 0) setShowSug(true) }}
+              placeholder="Digite o bairro ou rua para buscar…"
+              style={campoStyle}
+              autoComplete="off"
+            />
+            {endBusca && (
+              <button type="button" onClick={limparEndereco} style={{
+                position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+                background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 18, padding: 4,
+              }}>×</button>
+            )}
+          </div>
+
+          {/* Dropdown de sugestões */}
+          {showSug && sugestoes.length > 0 && (
+            <div style={{
+              position: "absolute", top: "100%", left: 0, right: 0, zIndex: 60, marginTop: 4,
+              background: "white", borderRadius: 12, border: "1.5px solid #E2E8F0",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.12)", overflow: "hidden",
+            }}>
+              {sugestoes.map(s => (
+                <button
+                  key={s.place_id}
+                  type="button"
+                  onClick={() => selecionarSugestao(s)}
+                  style={{
+                    width: "100%", textAlign: "left", padding: "10px 14px",
+                    background: "none", border: "none", borderBottom: "1px solid #F8FAFC",
+                    cursor: "pointer", fontSize: 12, color: "#1E293B", lineHeight: 1.4,
+                  }}
+                  onMouseOver={e => (e.currentTarget.style.background = "#F8FAFC")}
+                  onMouseOut={e => (e.currentTarget.style.background = "none")}
+                >
+                  📍 {s.display_name}
+                </button>
+              ))}
+            </div>
           )}
-          {!geocodando && distInfo && (
+
+          {/* Resultado da distância */}
+          {distInfo && (
             <div style={{
               display: "flex", alignItems: "center", gap: 8, marginTop: 8,
               background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 8, padding: "8px 12px",
@@ -366,16 +433,27 @@ export default function EntregaAvulsaPage() {
                   {distInfo.km.toFixed(1)} km de distância
                 </p>
                 <p style={{ fontSize: 11, color: "#16a34a", margin: 0 }}>
-                  Taxa de entrega calculada: <strong>R$ {distInfo.taxa.toFixed(2).replace(".", ",")}</strong>
+                  Taxa de entrega: <strong>R$ {distInfo.taxa.toFixed(2).replace(".", ",")}</strong>
                 </p>
               </div>
             </div>
           )}
-          {!geocodando && !distInfo && !lojaCoords?.lat && form.endereco.length >= 8 && (
+          {!distInfo && endSelecionado && !lojaCoords?.lat && (
             <p style={{ fontSize: 11, color: "#f97316", marginTop: 6 }}>
-              ⚠ Loja sem coordenadas — configure a localização da loja no perfil
+              ⚠ Loja sem coordenadas — configure a localização no perfil
             </p>
           )}
+        </div>
+
+        {/* Número, complemento e referência */}
+        <div style={{ marginBottom: 14 }}>
+          <p style={labelStyle}>Número, complemento e referência</p>
+          <input
+            value={endCompl}
+            onChange={e => setEndCompl(e.target.value)}
+            placeholder="Ex: nº 116 lote 5, próx. ao mercado…"
+            style={campoStyle}
+          />
         </div>
 
         {/* 2. Nome e telefone */}
@@ -424,14 +502,14 @@ export default function EntregaAvulsaPage() {
           />
         </div>
 
-        <button type="submit" disabled={enviando || geocodando} style={{
+        <button type="submit" disabled={enviando} style={{
           width: "100%", padding: "13px", borderRadius: 12, border: "none",
-          background: (enviando || geocodando) ? "#e5e7eb" : "linear-gradient(135deg, #f97316, #dc2626)",
-          color: (enviando || geocodando) ? "#9ca3af" : "white",
-          fontWeight: 800, fontSize: 14, cursor: (enviando || geocodando) ? "not-allowed" : "pointer",
-          boxShadow: (enviando || geocodando) ? "none" : "0 4px 16px rgba(249,115,22,0.35)",
+          background: enviando ? "#e5e7eb" : "linear-gradient(135deg, #f97316, #dc2626)",
+          color: enviando ? "#9ca3af" : "white",
+          fontWeight: 800, fontSize: 14, cursor: enviando ? "not-allowed" : "pointer",
+          boxShadow: enviando ? "none" : "0 4px 16px rgba(249,115,22,0.35)",
         }}>
-          {geocodando ? "Calculando taxa…" : enviando ? "Solicitando…" : sucesso ? "✓ Motoboy solicitado!" : "🛵 Solicitar motoboy"}
+          {enviando ? "Solicitando…" : sucesso ? "✓ Motoboy solicitado!" : "🛵 Solicitar motoboy"}
         </button>
       </form>
 

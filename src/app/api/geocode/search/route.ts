@@ -29,7 +29,10 @@ export async function GET(req: NextRequest) {
   const q = req.nextUrl.searchParams.get("q")
   if (!q || q.trim().length < 2) return NextResponse.json([])
 
-  const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q.trim())}&limit=8`
+  const lat = req.nextUrl.searchParams.get("lat")
+  const lon = req.nextUrl.searchParams.get("lon")
+  const bias = lat && lon ? `&lat=${lat}&lon=${lon}` : ""
+  const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q.trim())}&limit=8&lang=pt${bias}`
 
   try {
     const res = await fetch(url, {
