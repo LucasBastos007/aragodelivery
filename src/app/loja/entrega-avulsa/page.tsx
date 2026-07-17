@@ -57,6 +57,19 @@ const labelStyle: React.CSSProperties = {
   textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 5,
 }
 
+function normalizar(s: string) {
+  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9\s]/g, "").trim()
+}
+
+function buscarTabelaFrete(tabela: { municipio: string; taxa: number }[], nome: string): number | null {
+  const n = normalizar(nome)
+  for (const entry of tabela) {
+    const e = normalizar(entry.municipio)
+    if (n.includes(e) || e.includes(n)) return entry.taxa
+  }
+  return null
+}
+
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
   const R = 6371
   const dLat = (lat2 - lat1) * Math.PI / 180
@@ -97,6 +110,9 @@ export default function EntregaAvulsaPage() {
   const endRef = useRef<HTMLDivElement>(null)
   const endTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Tabela de preços fixos por município
+  const [tabelaFrete, setTabelaFrete] = useState<{ municipio: string; taxa: number }[]>([])
+
   // Distância/taxa
   const [distInfo, setDistInfo] = useState<{ km: number; taxa: number } | null>(null)
   const [geocodando, setGeocodando] = useState(false)
@@ -133,7 +149,15 @@ export default function EntregaAvulsaPage() {
     } catch {}
   }
 
-  useEffect(() => { carregar(); carregarClientes() }, [loja_id])
+  async function carregarTabelaFrete() {
+    if (!loja_id) return
+    try {
+      const res = await fetch("/api/loja/tabela-frete", { credentials: "include" })
+      if (res.ok) setTabelaFrete(await res.json())
+    } catch {}
+  }
+
+  useEffect(() => { carregar(); carregarClientes(); carregarTabelaFrete() }, [loja_id])
 
   // Fecha dropdowns ao clicar fora
   useEffect(() => {
@@ -167,15 +191,23 @@ export default function EntregaAvulsaPage() {
         setSugestoes(data)
         setShowSug(data.length > 0)
         if (!data[0]) {
-          setErroGeocode("Município não encontrado. Tente digitar de outra forma.")
-          setDistInfo(null)
+          // Sem geocoder → tenta tabela fixa pelo texto digitado
+          const taxaFixa = buscarTabelaFrete(tabelaFrete, q)
+          if (taxaFixa !== null) {
+            setDistInfo({ km: 0, taxa: taxaFixa })
+          } else {
+            setErroGeocode("Município não encontrado. Tente digitar de outra forma.")
+            setDistInfo(null)
+          }
         } else {
           const latC = parseFloat(data[0].lat)
           const lngC = parseFloat(data[0].lon)
           if (!isNaN(latC) && !isNaN(lngC)) {
             const dist = haversineKm(latL, lngL, latC, lngC)
+            // Tabela fixa tem prioridade sobre cálculo por distância
+            const taxaFixa = buscarTabelaFrete(tabelaFrete, q) ?? buscarTabelaFrete(tabelaFrete, data[0].display_name)
             const taxaBase = lojaCoords?.taxa_entrega ?? 6.00
-            setDistInfo({ km: dist, taxa: calcularFrete(dist, taxaBase) })
+            setDistInfo({ km: dist, taxa: taxaFixa ?? calcularFrete(dist, taxaBase) })
           } else {
             setErroGeocode(`Coord inválida: lat=${data[0].lat} lon=${data[0].lon}`)
             setDistInfo(null)
@@ -188,14 +220,13 @@ export default function EntregaAvulsaPage() {
       }
     }, 600)
     return () => { if (endTimer.current) clearTimeout(endTimer.current) }
-  }, [endBusca, endSelecionado, lojaCoords])
+  }, [endBusca, endSelecionado, lojaCoords, tabelaFrete])
 
   function selecionarSugestao(s: SugestaoEndereco) {
     setEndSelecionado(s)
     setEndBusca(s.display_name)
     setSugestoes([])
     setShowSug(false)
-    // Calcula distância imediatamente com as coordenadas da sugestão
     const latL = lojaCoords?.lat
     const lngL = lojaCoords?.lng
     if (latL && lngL) {
@@ -203,8 +234,9 @@ export default function EntregaAvulsaPage() {
       const lngC = parseFloat(s.lon)
       if (!isNaN(latC) && !isNaN(lngC)) {
         const dist = haversineKm(latL, lngL, latC, lngC)
+        const taxaFixa = buscarTabelaFrete(tabelaFrete, s.display_name) ?? buscarTabelaFrete(tabelaFrete, endBusca)
         const taxaBase = lojaCoords?.taxa_entrega ?? 6.00
-        setDistInfo({ km: dist, taxa: calcularFrete(dist, taxaBase) })
+        setDistInfo({ km: dist, taxa: taxaFixa ?? calcularFrete(dist, taxaBase) })
       }
     }
   }
@@ -233,10 +265,15 @@ export default function EntregaAvulsaPage() {
         const lngC = parseFloat(data[0].lon)
         if (!isNaN(latC) && !isNaN(lngC)) {
           const dist = haversineKm(latL, lngL, latC, lngC)
+          const taxaFixa = buscarTabelaFrete(tabelaFrete, municipio) ?? buscarTabelaFrete(tabelaFrete, data[0].display_name)
           const taxaBase = lojaCoords?.taxa_entrega ?? 6.00
-          setDistInfo({ km: dist, taxa: calcularFrete(dist, taxaBase) })
+          setDistInfo({ km: dist, taxa: taxaFixa ?? calcularFrete(dist, taxaBase) })
           setEndSelecionado(data[0])
         }
+      } else {
+        // Geocoder não encontrou, mas pode estar na tabela
+        const taxaFixa = buscarTabelaFrete(tabelaFrete, municipio)
+        if (taxaFixa !== null) setDistInfo({ km: 0, taxa: taxaFixa })
       }
     } catch {}
   }
@@ -499,7 +536,7 @@ export default function EntregaAvulsaPage() {
             <p style={{ fontSize: 11, color: "#dc2626", marginTop: 6 }}>⚠ {erroGeocode}</p>
           )}
 
-          {/* Resultado da distância */}
+          {/* Resultado da distância / taxa fixa */}
           {distInfo && !geocodando && (
             <div style={{
               display: "flex", alignItems: "center", gap: 8, marginTop: 8,
@@ -507,11 +544,14 @@ export default function EntregaAvulsaPage() {
             }}>
               <span style={{ fontSize: 15 }}>📍</span>
               <div>
-                <p style={{ fontSize: 12, fontWeight: 800, color: "#15803d", margin: 0 }}>
-                  {distInfo.km.toFixed(1)} km de distância
-                </p>
+                {distInfo.km > 0 && (
+                  <p style={{ fontSize: 12, fontWeight: 800, color: "#15803d", margin: 0 }}>
+                    {distInfo.km.toFixed(1)} km de distância
+                  </p>
+                )}
                 <p style={{ fontSize: 11, color: "#16a34a", margin: 0 }}>
                   Taxa de entrega: <strong>R$ {distInfo.taxa.toFixed(2).replace(".", ",")}</strong>
+                  {distInfo.km === 0 && <span style={{ opacity: 0.7 }}> · taxa fixa</span>}
                 </p>
               </div>
             </div>
