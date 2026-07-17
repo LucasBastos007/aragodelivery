@@ -12,14 +12,6 @@ function gerarCodigo() {
   return `AV${Math.floor(1000 + Math.random() * 9000)}`
 }
 
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371
-  const dL = (lat2 - lat1) * Math.PI / 180
-  const dG = (lng2 - lng1) * Math.PI / 180
-  const a  = Math.sin(dL/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dG/2)**2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
-
 function initVapid(): boolean {
   try {
     if (process.env.VAPID_EMAIL && process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
@@ -34,69 +26,54 @@ function initVapid(): boolean {
   return false
 }
 
-async function escalarMotoboy(avulsa_id: string, codigo: string, taxa_entrega: number, lojaLat: number | null, lojaLng: number | null) {
-  const { data: motoboyData } = await admin
+async function notificarTodosMotoboys(avulsa_id: string, codigo: string, taxa_entrega: number) {
+  const { data: motoboys } = await admin
     .from("motoboys")
-    .select("id, nome, lat, lng, push_subscription")
+    .select("id, push_subscription")
     .eq("disponivel", true)
     .eq("status", "ativo")
 
-  const motoboys = motoboyData ?? []
-  if (motoboys.length === 0) return
+  if (!motoboys || motoboys.length === 0 || !initVapid()) return
 
-  // Exclui motoboys já com entrega ativa
-  const { data: comEntrega } = await admin
-    .from("pedidos")
-    .select("motoboy_id")
-    .in("status", ["indo_para_loja", "na_loja", "em_rota", "aguardando_aceite", "coletado"])
+  const payload = JSON.stringify({
+    title:      "Nova entrega avulsa!",
+    body:       `${codigo} — R$ ${taxa_entrega.toFixed(2)}`,
+    tag:        `avulsa-${avulsa_id}`,
+    url:        "/motoboy",
+    avulsa_id,
+    requireInteraction: true,
+  })
 
-  const ocupados = new Set((comEntrega ?? []).map((p: any) => p.motoboy_id).filter(Boolean))
+  const expiredByMotoboy: Record<string, string[]> = {}
 
-  const candidatos = motoboys
-    .filter(m => m.id && !ocupados.has(m.id))
-    .map(m => ({
-      ...m,
-      distLoja: (lojaLat && lojaLng && m.lat && m.lng)
-        ? haversineKm(m.lat, m.lng, lojaLat, lojaLng)
-        : Infinity,
-    }))
-    .sort((a, b) => a.distLoja - b.distLoja)
-
-  if (candidatos.length === 0) return
-
-  const escolhido = candidatos[0]
-
-  await admin
-    .from("entregas_avulsas")
-    .update({ motoboy_id: escolhido.id, motoboy_nome: escolhido.nome ?? null, status: "aguardando_aceite" })
-    .eq("id", avulsa_id)
-
-  if (escolhido.push_subscription && initVapid()) {
-    const subs: any[] = Array.isArray(escolhido.push_subscription)
-      ? escolhido.push_subscription
-      : [escolhido.push_subscription]
-    const payload = JSON.stringify({
-      title:      "Nova entrega avulsa!",
-      body:       `${codigo} — R$ ${taxa_entrega.toFixed(2)}`,
-      tag:        `motoboy-${escolhido.id}`,
-      url:        "/motoboy",
-      avulsa_id,
-      motoboy_id: escolhido.id,
-      requireInteraction: true,
-    })
-    const expiredEndpoints: string[] = []
-    await Promise.allSettled(
-      subs.map(async sub => {
-        try { await webpush.sendNotification(sub, payload) }
-        catch (e: any) { if (e.statusCode === 410) expiredEndpoints.push(sub.endpoint) }
+  await Promise.allSettled(
+    motoboys.flatMap((m: any) => {
+      const subs: any[] = Array.isArray(m.push_subscription)
+        ? m.push_subscription
+        : m.push_subscription ? [m.push_subscription] : []
+      return subs.map(async sub => {
+        try {
+          await webpush.sendNotification(sub, payload)
+        } catch (e: any) {
+          if (e.statusCode === 410) {
+            ;(expiredByMotoboy[m.id] ??= []).push(sub.endpoint)
+          }
+        }
       })
-    )
-    if (expiredEndpoints.length > 0) {
-      const filtradas = subs.filter(s => !expiredEndpoints.includes(s?.endpoint))
-      await admin.from("motoboys")
-        .update({ push_subscription: filtradas.length ? filtradas : null })
-        .eq("id", escolhido.id)
-    }
+    })
+  )
+
+  // Limpa subscriptions expiradas
+  for (const [motoboy_id, expiredEndpoints] of Object.entries(expiredByMotoboy)) {
+    const m = motoboys.find((x: any) => x.id === motoboy_id)
+    if (!m) continue
+    const subs: any[] = Array.isArray(m.push_subscription)
+      ? m.push_subscription
+      : m.push_subscription ? [m.push_subscription] : []
+    const filtradas = subs.filter((s: any) => !expiredEndpoints.includes(s?.endpoint))
+    await admin.from("motoboys")
+      .update({ push_subscription: filtradas.length ? filtradas : null })
+      .eq("id", motoboy_id)
   }
 }
 
@@ -127,30 +104,28 @@ export async function POST(req: NextRequest) {
       .from("entregas_avulsas")
       .insert({
         loja_id,
-        loja_nome:     loja.nome    || null,
-        loja_lat:      loja.lat     ?? null,
-        loja_lng:      loja.lng     ?? null,
+        loja_nome:    loja.nome    || null,
+        loja_lat:     loja.lat     ?? null,
+        loja_lng:     loja.lng     ?? null,
         cliente_nome,
-        cliente_tel:   cliente_tel  || "",
+        cliente_tel:  cliente_tel  || "",
         endereco,
-        valor_pedido:  valor_pedido || 0,
-        taxa_entrega:  taxa_entrega || 0,
-        observacao:    observacao   || "",
-        status:        "aguardando",
-        codigo:        gerarCodigo(),
+        valor_pedido: valor_pedido || 0,
+        taxa_entrega: taxa_entrega || 0,
+        observacao:   observacao   || "",
+        status:       "aguardando",
+        codigo:       gerarCodigo(),
       })
       .select()
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    // Notifica motoboy disponível mais próximo (não bloqueia a resposta)
-    escalarMotoboy(
+    // Notifica TODOS os motoboys disponíveis simultaneamente
+    notificarTodosMotoboys(
       entrega.id,
       entrega.codigo,
-      taxa_entrega || 0,
-      loja.lat ?? null,
-      loja.lng ?? null
+      taxa_entrega || 0
     ).catch(() => {})
 
     return NextResponse.json({ ok: true, entrega })

@@ -118,7 +118,7 @@ self.addEventListener("push", (event) => {
   const data = event.data?.json() ?? {}
   const title = data.title ?? "Chegô Delivery"
   const tag = data.tag ?? "chego-update"
-  const isMotoboy = tag.startsWith("motoboy-")
+  const isMotoboy = tag.startsWith("motoboy-") || tag.startsWith("avulsa-")
   const isEntregue = title.includes("entregue") || title.includes("Entregue")
   const isCheguei  = tag.startsWith("cheguei-")
 

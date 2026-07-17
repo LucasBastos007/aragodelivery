@@ -611,6 +611,7 @@ export default function MotoboyPage() {
 
   // ── Oferta de entrega avulsa ───────────────────────────────────────────────
   const [avulsaOferta,     setAvulsaOferta]     = useState<any | null>(null)
+  const avulsaOfertaRef    = useRef<any>(null)
   const [timerAvulsa,      setTimerAvulsa]      = useState(30)
   const [aceitandoAvulsa,  setAceitandoAvulsa]  = useState(false)
   const [emAndamentoAvulsa, setEmAndamentoAvulsa] = useState<any[]>([])
@@ -850,11 +851,14 @@ export default function MotoboyPage() {
     })
   }, [pedidoOferta?.id])
 
+  // Mantém ref sincronizado para uso nos callbacks do Realtime
+  useEffect(() => { avulsaOfertaRef.current = avulsaOferta }, [avulsaOferta])
+
   // ── Verifica avulsa pendente ao abrir o app (não depende de disponivel) ────
   useEffect(() => {
     if (!motoboy_id) return
     supabase.from("entregas_avulsas")
-      .select("*").eq("motoboy_id", motoboy_id).eq("status", "aguardando_aceite").limit(1)
+      .select("*").eq("status", "aguardando").order("criado_em", { ascending: false }).limit(1)
       .then(({ data }) => {
         if (data && data.length > 0 && !dismissedIdsRef.current.has(data[0].id)) {
           setAvulsaOferta(data[0]); setTimerAvulsa(30); playNotificationSound()
@@ -862,31 +866,47 @@ export default function MotoboyPage() {
       })
   }, [motoboy_id])
 
-  // ── Supabase Realtime — escuta oferta de entrega avulsa ───────────────────
+  // ── Supabase Realtime — broadcast de entrega avulsa ───────────────────────
   useEffect(() => {
     if (!motoboy_id || !disponivel) return
 
-    // Carrega avulsas em andamento
+    // Carrega avulsas em andamento deste motoboy
     supabase.from("entregas_avulsas")
       .select("*")
       .eq("motoboy_id", motoboy_id)
       .in("status", ["aceito", "em_rota"])
       .then(({ data }) => { setEmAndamentoAvulsa(data ?? []) })
 
-    const ch = supabase.channel(`avulsa-oferta-${motoboy_id}`)
+    const ch = supabase.channel(`avulsa-all-${motoboy_id}`)
       .on("postgres_changes", {
-        event: "*", schema: "public", table: "entregas_avulsas",
-        filter: `motoboy_id=eq.${motoboy_id}`,
+        event: "INSERT", schema: "public", table: "entregas_avulsas",
       }, payload => {
         const novo = payload.new as any
-        if (novo?.status === "aguardando_aceite" && !dismissedIdsRef.current.has(novo.id)) {
+        if (novo?.status === "aguardando" && !dismissedIdsRef.current.has(novo.id)) {
           playNotificationSound(); setAvulsaOferta(novo); setTimerAvulsa(30)
-        } else if (["aceito", "em_rota"].includes(novo?.status)) {
+        }
+      })
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "entregas_avulsas",
+      }, payload => {
+        const novo = payload.new as any
+        if (novo?.status === "aceito") {
+          if (novo.motoboy_id === motoboy_id) {
+            // Este motoboy aceitou
+            setEmAndamentoAvulsa(prev => [...prev.filter((a: any) => a.id !== novo.id), novo])
+            setAvulsaOferta(prev => prev?.id === novo.id ? null : prev)
+          } else if (avulsaOfertaRef.current?.id === novo.id) {
+            // Outro motoboy aceitou antes
+            setAvulsaOferta(null)
+            setToastMsg("Entrega aceita por outro motoboy.")
+            setTimeout(() => setToastMsg(null), 3000)
+          }
+        } else if (novo?.status === "em_rota" && novo.motoboy_id === motoboy_id) {
           setEmAndamentoAvulsa(prev => {
             const sem = prev.filter((a: any) => a.id !== novo.id)
             return [...sem, novo]
           })
-        } else if (novo?.status === "entregue") {
+        } else if (novo?.status === "entregue" && novo.motoboy_id === motoboy_id) {
           setEmAndamentoAvulsa(prev => prev.filter((a: any) => a.id !== novo.id))
           setGanhosDia(g => g + (novo.taxa_entrega ?? 0))
           setCorridasDia(c => c + 1)
@@ -901,19 +921,9 @@ export default function MotoboyPage() {
   useEffect(() => {
     if (!avulsaOferta) return
     if (timerAvulsa <= 0) {
-      const id = avulsaOferta.id
+      // Broadcast: dismiss local apenas — a avulsa continua aguardando para outros motoboys
+      dismissedIdsRef.current.add(avulsaOferta.id)
       setAvulsaOferta(null)
-      dismissedIdsRef.current.add(id)
-      fetch("/api/entrega-avulsa/reescalar", {
-        method: "POST", credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ avulsa_id: id }),
-      }).catch(() => {
-        supabase.from("entregas_avulsas")
-          .update({ motoboy_id: null, status: "aguardando" })
-          .eq("id", id).eq("status", "aguardando_aceite")
-          .then(() => {})
-      })
       return
     }
     const iv = setInterval(() => setTimerAvulsa(t => t - 1), 1000)
@@ -1256,20 +1266,11 @@ export default function MotoboyPage() {
   }
 
   // ── Recusar entrega avulsa ────────────────────────────────────────────────
-  async function recusarAvulsa() {
+  function recusarAvulsa() {
     if (!avulsaOferta) return
-    const id = avulsaOferta.id
+    // Broadcast: dismiss local apenas — a avulsa continua aguardando para outros
+    dismissedIdsRef.current.add(avulsaOferta.id)
     setAvulsaOferta(null)
-    dismissedIdsRef.current.add(id)
-    fetch("/api/entrega-avulsa/reescalar", {
-      method: "POST", credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ avulsa_id: id }),
-    }).catch(() => {
-      supabase.from("entregas_avulsas")
-        .update({ motoboy_id: null, status: "aguardando" })
-        .eq("id", id).eq("status", "aguardando_aceite")
-    })
   }
 
   // ── Avançar etapa da entrega avulsa ──────────────────────────────────────

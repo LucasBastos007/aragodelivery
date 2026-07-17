@@ -20,16 +20,23 @@ export async function POST(req: NextRequest) {
 
   const sb = adminClient()
 
+  // Busca o nome do motoboy para gravar na avulsa
+  const { data: mb } = await sb
+    .from("motoboys")
+    .select("nome")
+    .eq("id", motoboy_id)
+    .single()
+
+  // Aceite atômico: só atualiza se ainda estiver em 'aguardando'
   const { data, error } = await sb
     .from("entregas_avulsas")
-    .update({ status: "aceito" })
+    .update({ status: "aceito", motoboy_id, motoboy_nome: mb?.nome ?? null })
     .eq("id", avulsa_id)
-    .eq("motoboy_id", motoboy_id)
-    .eq("status", "aguardando_aceite")
+    .eq("status", "aguardando")
     .select("id, status")
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  if (!data || data.length === 0) return NextResponse.json({ error: "Entrega não disponível" }, { status: 409 })
+  if (!data || data.length === 0) return NextResponse.json({ error: "Entrega já foi aceita por outro motoboy" }, { status: 409 })
 
   return NextResponse.json({ ok: true })
 }
