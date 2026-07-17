@@ -86,7 +86,7 @@ function calcularFrete(distKm: number, taxaBase: number): number {
 }
 
 export default function EntregaAvulsaPage() {
-  const { sessao } = useAuth()
+  const { sessao, logout } = useAuth()
   const loja_id = sessao?.role === "lojista" ? (sessao as any).loja_id : null
 
   const [plano, setPlano]         = useState<string | null>(null)
@@ -360,6 +360,11 @@ export default function EntregaAvulsaPage() {
       setTimeout(() => setSucesso(false), 5000)
       await Promise.all([carregar(), carregarClientes()])
     } catch (err: any) {
+      if (err.message === "Não autorizado") {
+        await logout()
+        window.location.href = "/entrar"
+        return
+      }
       alert("Erro: " + err.message)
     } finally {
       setEnviando(false)

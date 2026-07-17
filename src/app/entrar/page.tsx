@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import { useAuth } from "@/lib/auth"
-import InstallBanner from "@/components/InstallBanner"
+import InstalarApp from "@/components/InstalarApp"
 import { EsqueceuSenha } from "@/components/EsqueceuSenha"
 
 export default function EntrarPage() {
@@ -25,6 +25,7 @@ export default function EntrarPage() {
     const res  = await fetch("/api/login-loja", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ email: email.trim().toLowerCase(), senha }),
     })
     const json = await res.json()
@@ -106,7 +107,7 @@ export default function EntrarPage() {
             </p>
           </div>
 
-          <InstallBanner />
+          <InstalarApp papel="lojista" />
         </div>
       </div>
     </div>
