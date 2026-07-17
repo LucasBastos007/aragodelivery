@@ -50,8 +50,18 @@ function ProdutoModal({ prod, loja, onClose, onAdd }: {
   }, [onClose])
 
   useEffect(() => {
+    const scrollY = window.scrollY
     document.body.style.overflow = "hidden"
-    return () => { document.body.style.overflow = "" }
+    document.body.style.position = "fixed"
+    document.body.style.top = `-${scrollY}px`
+    document.body.style.width = "100%"
+    return () => {
+      document.body.style.overflow = ""
+      document.body.style.position = ""
+      document.body.style.top = ""
+      document.body.style.width = ""
+      window.scrollTo(0, scrollY)
+    }
   }, [])
 
   function toggleRadio(g: GrupoAdicional, item: AdicionalProduto) {
@@ -515,7 +525,7 @@ export default function RestaurantePage() {
               style={{
                 width: "100%", padding: "9px 12px 9px 36px",
                 borderRadius: 999, border: "1.5px solid #E5E7EB",
-                background: "#F9FAFB", fontSize: 14, color: "#111827",
+                background: "#F9FAFB", fontSize: 16, color: "#111827",
                 outline: "none", boxSizing: "border-box", fontFamily: "inherit",
               }}
               onFocus={e => { e.currentTarget.style.borderColor = "#DC2626"; e.currentTarget.style.background = "#fff" }}
