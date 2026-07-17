@@ -24,6 +24,27 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ ok: true })
 }
 
+export async function PATCH(req: NextRequest) {
+  const _sess = requireLoja(req)
+  if (!_sess) return unauthorized()
+  const sessLojaId = _sess.loja_id
+
+  const { id, nome, foto_url } = await req.json()
+  if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 })
+
+  const updates: Record<string, unknown> = {}
+  if (nome !== undefined) updates.nome = nome.trim()
+  if (foto_url !== undefined) updates.foto_url = foto_url || null
+
+  const { error } = await adminClient()
+    .from("categorias_produto")
+    .update(updates)
+    .eq("id", id)
+    .eq("loja_id", sessLojaId)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}
+
 export async function DELETE(req: NextRequest) {
   const _sess = requireLoja(req)
   if (!_sess) return unauthorized()

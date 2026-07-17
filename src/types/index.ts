@@ -146,6 +146,7 @@ export interface CategoriaProduto {
   loja_id: string
   nome: string
   ordem: number
+  foto_url?: string | null
 }
 
 export interface ItemPedido {

@@ -666,7 +666,7 @@ export default function RestaurantePage() {
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
                   {categoriasComProdutos.map(cat => {
                     const qtdProdutos = produtos.filter(p => p.categoria_id === cat.id).length
-                    const thumb = produtos.find(p => p.categoria_id === cat.id && p.foto_url)?.foto_url
+                    const thumb = cat.foto_url || produtos.find(p => p.categoria_id === cat.id && p.foto_url)?.foto_url
                     return (
                       <button
                         key={cat.id}

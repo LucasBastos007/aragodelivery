@@ -47,6 +47,7 @@ export default function CardapioPage() {
 
   const [modalProd, setModalProd] = useState(false)
   const [modalCat, setModalCat] = useState(false)
+  const [uploadingCatId, setUploadingCatId] = useState<string | null>(null)
   const [editando, setEditando] = useState<Produto | null>(null)
   const [formProd, setFormProd] = useState<ProdutoForm>(FORM_VAZIO)
   const [fotoFile, setFotoFile] = useState<File | null>(null)
@@ -103,6 +104,22 @@ export default function CardapioPage() {
       body: JSON.stringify({ id, loja_id: lojaId }),
     })
     await carregarTudo()
+  }
+
+  async function uploadFotoCategoria(catId: string, file: File) {
+    setUploadingCatId(catId)
+    const ext = file.name.split(".").pop() ?? "jpg"
+    const path = `categorias/${lojaId}/${catId}.${ext}`
+    const { url, erro } = await uploadFoto(file, path)
+    if (erro || !url) { alert("Erro ao enviar foto: " + (erro ?? "desconhecido")); setUploadingCatId(null); return }
+    await fetch("/api/loja/categorias", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: catId, foto_url: url }),
+      credentials: "include",
+    })
+    await carregarTudo()
+    setUploadingCatId(null)
   }
 
   function uid() {
@@ -287,13 +304,32 @@ export default function CardapioPage() {
           {porCategoria.map(({ cat, items }) => (
             <div key={cat.id}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+                {cat.foto_url
+                  ? <img src={cat.foto_url} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+                  : <div style={{ width: 32, height: 32, borderRadius: 8, background: "#F3F4F6", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>🛍️</div>
+                }
                 <h2 style={{ fontSize: 15, fontWeight: 900, color: "#111827", margin: 0 }}>{cat.nome}</h2>
                 <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: "#F3F4F6", color: "#6B7280" }}>
                   {items.length}
                 </span>
+                <input
+                  type="file" accept="image/*" style={{ display: "none" }}
+                  ref={el => { if (el) el.dataset.catId = cat.id }}
+                  onChange={async e => {
+                    const file = e.target.files?.[0]
+                    if (file) await uploadFotoCategoria(cat.id, file)
+                    e.target.value = ""
+                  }}
+                  id={`cat-foto-${cat.id}`}
+                />
+                <label htmlFor={`cat-foto-${cat.id}`}
+                  style={{ fontSize: 12, color: "#6B7280", cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
+                    background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 8, padding: "4px 10px" }}>
+                  {uploadingCatId === cat.id ? "⏳" : "📷"} {cat.foto_url ? "Trocar foto" : "Adicionar foto"}
+                </label>
                 <button onClick={() => deletarCategoria(cat.id)}
                   style={{ marginLeft: "auto", fontSize: 12, color: "#9CA3AF", background: "none", border: "none", cursor: "pointer" }}>
-                  Deletar categoria
+                  Deletar
                 </button>
               </div>
               {items.length === 0 ? (
