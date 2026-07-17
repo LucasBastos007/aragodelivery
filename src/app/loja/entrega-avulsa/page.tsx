@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useAuth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import type { EntregaAvulsa } from "@/types"
@@ -41,15 +41,34 @@ const labelStyle: React.CSSProperties = {
   textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 5,
 }
 
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function calcularFrete(distKm: number, taxaBase: number): number {
+  if (distKm <= 6) return taxaBase
+  return Math.round((taxaBase + (distKm - 6) * 1.00) * 100) / 100
+}
+
 export default function EntregaAvulsaPage() {
   const { sessao } = useAuth()
   const loja_id = sessao?.role === "lojista" ? (sessao as any).loja_id : null
 
   const [plano, setPlano]         = useState<string | null>(null)
+  const [lojaCoords, setLojaCoords] = useState<{ lat: number | null; lng: number | null; taxa_entrega: number | null } | null>(null)
   const [loading, setLoading]     = useState(true)
   const [enviando, setEnviando]   = useState(false)
   const [entregas, setEntregas]   = useState<EntregaAvulsa[]>([])
   const [sucesso, setSucesso]     = useState(false)
+
+  // Geocoding state
+  const [geocodando, setGeocodando] = useState(false)
+  const [distInfo, setDistInfo]     = useState<{ km: number; taxa: number } | null>(null)
+  const geocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [form, setForm] = useState({
     cliente_nome:  "",
@@ -67,15 +86,65 @@ export default function EntregaAvulsaPage() {
   async function carregar() {
     if (!loja_id) return
     const [{ data: lojaData }, { data: entregasData }] = await Promise.all([
-      supabase.from("lojas").select("plano").eq("id", loja_id).single(),
+      supabase.from("lojas").select("plano, lat, lng, taxa_entrega").eq("id", loja_id).single(),
       supabase.from("entregas_avulsas").select("*").eq("loja_id", loja_id).order("criado_em", { ascending: false }).limit(50),
     ])
     setPlano(lojaData?.plano ?? null)
+    setLojaCoords({ lat: lojaData?.lat ?? null, lng: lojaData?.lng ?? null, taxa_entrega: lojaData?.taxa_entrega ?? null })
     setEntregas(entregasData ?? [])
     setLoading(false)
   }
 
   useEffect(() => { carregar() }, [loja_id])
+
+  // Geocodifica endereço de entrega com debounce de 800ms
+  useEffect(() => {
+    const endereco = form.endereco.trim()
+    if (!endereco || endereco.length < 8) {
+      setDistInfo(null)
+      return
+    }
+    if (geocodeTimer.current) clearTimeout(geocodeTimer.current)
+    geocodeTimer.current = setTimeout(async () => {
+      const latL = lojaCoords?.lat
+      const lngL = lojaCoords?.lng
+      if (!latL || !lngL) {
+        console.log("[AVULSA-DEBUG] loja sem coordenadas — frete manual")
+        return
+      }
+      setGeocodando(true)
+      try {
+        const res = await fetch(`/api/geocode/search?q=${encodeURIComponent(endereco)}`)
+        const results = await res.json()
+        if (!results[0]) {
+          console.log("[AVULSA-DEBUG] geocoding sem resultado para:", endereco)
+          setDistInfo(null)
+          setGeocodando(false)
+          return
+        }
+        const latC = parseFloat(results[0].lat)
+        const lngC = parseFloat(results[0].lon)
+        if (isNaN(latC) || isNaN(lngC)) { setDistInfo(null); setGeocodando(false); return }
+
+        const dist = haversineKm(latL, lngL, latC, lngC)
+        const taxaBase = lojaCoords?.taxa_entrega ?? 6.00
+        const taxa = calcularFrete(dist, taxaBase)
+
+        console.log("[AVULSA-DEBUG]", { latLoja: latL, lngLoja: lngL, latCliente: latC, lngCliente: lngC, distKm: dist.toFixed(2), taxa })
+
+        setDistInfo({ km: dist, taxa })
+        // Preenche automaticamente (lojista ainda pode editar)
+        setForm(f => ({ ...f, taxa_entrega: taxa.toFixed(2) }))
+      } catch (err) {
+        console.log("[AVULSA-DEBUG] erro geocoding:", err)
+        setDistInfo(null)
+      } finally {
+        setGeocodando(false)
+      }
+    }, 800)
+
+    return () => { if (geocodeTimer.current) clearTimeout(geocodeTimer.current) }
+  }, [form.endereco, lojaCoords])
 
   async function enviar(e: React.FormEvent) {
     e.preventDefault()
@@ -98,6 +167,7 @@ export default function EntregaAvulsaPage() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
       setForm({ cliente_nome: "", cliente_tel: "", endereco: "", valor_pedido: "", taxa_entrega: "", observacao: "" })
+      setDistInfo(null)
       setSucesso(true)
       setTimeout(() => setSucesso(false), 4000)
       await carregar()
@@ -186,6 +256,20 @@ export default function EntregaAvulsaPage() {
             placeholder="Rua, número, bairro"
             style={campoStyle}
           />
+          {/* Info de distância calculada */}
+          {geocodando && (
+            <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 5 }}>📍 Calculando distância…</p>
+          )}
+          {!geocodando && distInfo && (
+            <p style={{ fontSize: 11, color: "#059669", fontWeight: 700, marginTop: 5 }}>
+              📍 {distInfo.km.toFixed(1)} km — Taxa calculada: R$ {distInfo.taxa.toFixed(2).replace(".", ",")}
+            </p>
+          )}
+          {!geocodando && !distInfo && !lojaCoords?.lat && form.endereco.length >= 8 && (
+            <p style={{ fontSize: 11, color: "#f97316", marginTop: 5 }}>
+              Loja sem coordenadas cadastradas — informe a taxa manualmente
+            </p>
+          )}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
@@ -205,7 +289,7 @@ export default function EntregaAvulsaPage() {
               type="number" min="0" step="0.01"
               value={form.taxa_entrega}
               onChange={e => set("taxa_entrega", e.target.value)}
-              placeholder="0,00"
+              placeholder={geocodando ? "Calculando…" : "0,00"}
               style={campoStyle}
             />
           </div>
@@ -228,7 +312,6 @@ export default function EntregaAvulsaPage() {
           color: enviando ? "#9ca3af" : "white",
           fontWeight: 800, fontSize: 14, cursor: enviando ? "not-allowed" : "pointer",
           boxShadow: enviando ? "none" : "0 4px 16px rgba(249,115,22,0.35)",
-          transition: "all 0.2s",
         }}>
           {enviando ? "Solicitando…" : sucesso ? "✓ Motoboy solicitado!" : "🛵 Solicitar motoboy"}
         </button>
