@@ -732,7 +732,7 @@ export default function CheckoutPage() {
 
     if (!nome.trim()) { setErro("Informe seu nome"); return }
     const telDigits = telefone.replace(/\D/g, "")
-    if (telDigits.length < 8) { setErro("Informe um telefone válido (com DDD)"); return }
+    if (telDigits.length > 0 && telDigits.length < 10) { setErro("Telefone inválido — informe com DDD (ex: 62 9 9999-9999)"); return }
 
     // CPF: estado local → perfil DB → metadados auth → busca no banco
     let cpfFinal = cpf.replace(/\D/g, "")
