@@ -52,14 +52,8 @@ function urlBase64ToUint8Array(base64String: string) {
 
 async function geocodeAddress(address: string): Promise<[number, number] | null> {
   try {
-    const q    = encodeURIComponent(`${address}, Brasil`)
-    const ctrl = new AbortController()
-    const tid  = setTimeout(() => ctrl.abort(), 6000)
-    const res  = await fetch(
-      `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&accept-language=pt-BR`,
-      { headers: { "User-Agent": "AragoDelivery/1.0" }, signal: ctrl.signal }
-    )
-    clearTimeout(tid)
+    const q   = encodeURIComponent(`${address}, Brasil`)
+    const res = await fetch(`/api/geocode/search?q=${q}`)
     const data = await res.json()
     if (Array.isArray(data) && data[0]?.lat && data[0]?.lon) {
       return [parseFloat(data[0].lat), parseFloat(data[0].lon)]
@@ -70,13 +64,7 @@ async function geocodeAddress(address: string): Promise<[number, number] | null>
 
 async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
   try {
-    const ctrl = new AbortController()
-    const tid  = setTimeout(() => ctrl.abort(), 5000)
-    const res  = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=pt-BR`,
-      { headers: { "User-Agent": "AragoDelivery/1.0" }, signal: ctrl.signal }
-    )
-    clearTimeout(tid)
+    const res = await fetch(`/api/geocode/reverse?lat=${lat}&lon=${lng}`)
     const data = await res.json()
     const a = data?.address ?? {}
     const city  = a.city || a.town || a.village || a.municipality || ""
@@ -620,6 +608,12 @@ export default function MotoboyPage() {
   const [timerOferta,     setTimerOferta]     = useState(30)
   const [distKmOferta,    setDistKmOferta]    = useState<number | null>(null)
   const [aceitandoCorrida, setAceitandoCorrida] = useState(false)
+
+  // ── Oferta de entrega avulsa ───────────────────────────────────────────────
+  const [avulsaOferta,     setAvulsaOferta]     = useState<any | null>(null)
+  const [timerAvulsa,      setTimerAvulsa]      = useState(30)
+  const [aceitandoAvulsa,  setAceitandoAvulsa]  = useState(false)
+  const [emAndamentoAvulsa, setEmAndamentoAvulsa] = useState<any[]>([])
   const [toastMsg,        setToastMsg]        = useState<string | null>(null)
   const [corridaConcluida, setCorridaConcluida] = useState<any | null>(null)
   const [avancandoEtapa,   setAvancandoEtapa]   = useState(false)
@@ -855,6 +849,71 @@ export default function MotoboyPage() {
       if (ll) setDistKmOferta(haversineKm(myLat, myLng, ll[0], ll[1]))
     })
   }, [pedidoOferta?.id])
+
+  // ── Supabase Realtime — escuta oferta de entrega avulsa ───────────────────
+  useEffect(() => {
+    if (!motoboy_id || !disponivel) return
+
+    // Verifica oferta pendente ao entrar
+    supabase.from("entregas_avulsas")
+      .select("*")
+      .eq("motoboy_id", motoboy_id)
+      .eq("status", "aguardando_aceite")
+      .limit(1)
+      .then(({ data }) => {
+        if (data && data.length > 0 && !dismissedIdsRef.current.has(data[0].id)) {
+          setAvulsaOferta(data[0]); setTimerAvulsa(30)
+        }
+      })
+
+    // Carrega avulsas em andamento
+    supabase.from("entregas_avulsas")
+      .select("*")
+      .eq("motoboy_id", motoboy_id)
+      .in("status", ["aceito", "em_rota"])
+      .then(({ data }) => { setEmAndamentoAvulsa(data ?? []) })
+
+    const ch = supabase.channel(`avulsa-oferta-${motoboy_id}`)
+      .on("postgres_changes", {
+        event: "*", schema: "public", table: "entregas_avulsas",
+        filter: `motoboy_id=eq.${motoboy_id}`,
+      }, payload => {
+        const novo = payload.new as any
+        if (novo?.status === "aguardando_aceite" && !dismissedIdsRef.current.has(novo.id)) {
+          playNotificationSound(); setAvulsaOferta(novo); setTimerAvulsa(30)
+        } else if (["aceito", "em_rota"].includes(novo?.status)) {
+          setEmAndamentoAvulsa(prev => {
+            const sem = prev.filter((a: any) => a.id !== novo.id)
+            return [...sem, novo]
+          })
+        } else if (novo?.status === "entregue") {
+          setEmAndamentoAvulsa(prev => prev.filter((a: any) => a.id !== novo.id))
+          setGanhosDia(g => g + (novo.taxa_entrega ?? 0))
+          setCorridasDia(c => c + 1)
+        }
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(ch) }
+  }, [motoboy_id, disponivel])
+
+  // ── Timer regressivo da oferta avulsa ─────────────────────────────────────
+  useEffect(() => {
+    if (!avulsaOferta) return
+    if (timerAvulsa <= 0) {
+      const id = avulsaOferta.id
+      setAvulsaOferta(null)
+      dismissedIdsRef.current.add(id)
+      // Devolve para aguardando (sem escalada — avulsa é manual)
+      supabase.from("entregas_avulsas")
+        .update({ motoboy_id: null, status: "aguardando" })
+        .eq("id", id).eq("status", "aguardando_aceite")
+        .then(() => {})
+      return
+    }
+    const iv = setInterval(() => setTimerAvulsa(t => t - 1), 1000)
+    return () => clearInterval(iv)
+  }, [avulsaOferta, timerAvulsa])
 
   // ── Coordenadas do destino e da loja ──────────────────────────────────────
   useEffect(() => {
@@ -1165,6 +1224,64 @@ export default function MotoboyPage() {
     } catch {}
   }
 
+  // ── Aceitar entrega avulsa ────────────────────────────────────────────────
+  async function aceitarAvulsa() {
+    if (!avulsaOferta || !motoboy_id) return
+    setAceitandoAvulsa(true)
+    const res = await fetch("/api/motoboy/aceitar-avulsa", {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ avulsa_id: avulsaOferta.id, motoboy_id }),
+    })
+    setAceitandoAvulsa(false)
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok || json.error) {
+      setToastMsg(res.status === 409 ? "Entrega já foi atribuída a outro motoboy." : (json.error ?? "Erro ao aceitar entrega."))
+      dismissedIdsRef.current.add(avulsaOferta.id)
+      setAvulsaOferta(null)
+      setTimeout(() => setToastMsg(null), 3500)
+      return
+    }
+    const aceita = { ...avulsaOferta, status: "aceito" }
+    setEmAndamentoAvulsa(prev => [...prev, aceita])
+    setAvulsaOferta(null)
+    setSheetH(SHEET_MID)
+  }
+
+  // ── Recusar entrega avulsa ────────────────────────────────────────────────
+  async function recusarAvulsa() {
+    if (!avulsaOferta) return
+    const id = avulsaOferta.id
+    setAvulsaOferta(null)
+    dismissedIdsRef.current.add(id)
+    await supabase.from("entregas_avulsas")
+      .update({ motoboy_id: null, status: "aguardando" })
+      .eq("id", id).eq("status", "aguardando_aceite")
+  }
+
+  // ── Avançar etapa da entrega avulsa ──────────────────────────────────────
+  async function avancarAvulsa(avulsa: any) {
+    const res = await fetch("/api/motoboy/avancar-avulsa", {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ avulsa_id: avulsa.id, motoboy_id, status_atual: avulsa.status }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok || json.error) {
+      setToastMsg(json.error ?? "Erro ao atualizar. Tente novamente.")
+      setTimeout(() => setToastMsg(null), 3500)
+      return
+    }
+    const next: string = json.nextStatus
+    if (next === "entregue") {
+      setEmAndamentoAvulsa(prev => prev.filter((a: any) => a.id !== avulsa.id))
+      setGanhosDia(g => g + (avulsa.taxa_entrega ?? 0))
+      setCorridasDia(c => c + 1)
+    } else {
+      setEmAndamentoAvulsa(prev => prev.map((a: any) => a.id === avulsa.id ? { ...a, status: next } : a))
+    }
+  }
+
   // ── Priorizar 2ª entrega (troca posição no array emAndamento) ───────────────
   function priorizarSegundaEntrega(segundaId: string) {
     setEmAndamento(prev => {
@@ -1374,6 +1491,17 @@ export default function MotoboyPage() {
           onAceitar={aceitarCorrida}
           onRecusar={recusarCorrida}
           carregando={aceitandoCorrida}
+        />
+      )}
+
+      {/* ── Card de oferta de entrega avulsa ── */}
+      {avulsaOferta && !pedidoOferta && (
+        <CardAvulsa
+          avulsa={avulsaOferta}
+          timer={timerAvulsa}
+          onAceitar={aceitarAvulsa}
+          onRecusar={recusarAvulsa}
+          carregando={aceitandoAvulsa}
         />
       )}
 
@@ -2037,6 +2165,59 @@ export default function MotoboyPage() {
             </div>
           ))}
 
+          {/* Entregas avulsas em andamento */}
+          {disponivel && emAndamentoAvulsa.map(a => (
+            <div key={a.id} style={{
+              background: "#0d1117", borderRadius: 16,
+              border: "1px solid rgba(167,139,250,0.35)", marginBottom: 12, overflow: "hidden",
+            }}>
+              <div style={{ background: "rgba(167,139,250,0.08)", padding: "11px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, padding: "3px 10px", borderRadius: 999, background: "rgba(167,139,250,0.2)", color: "#a78bfa", border: "1px solid rgba(167,139,250,0.3)" }}>
+                    Avulsa
+                  </span>
+                  <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 12 }}>#{a.codigo}</span>
+                </div>
+                <p style={{ color: "white", fontWeight: 900, fontSize: 18 }}>R$ {(a.taxa_entrega ?? 0).toFixed(2)}</p>
+              </div>
+              <div style={{ padding: "12px 16px" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+                  <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>
+                    <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 11 }}>Cliente: </span>
+                    <strong style={{ color: "white" }}>{a.cliente_nome}</strong>
+                  </p>
+                  <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", flexShrink: 0, marginTop: 5 }} />
+                    <p style={{ color: "rgba(255,255,255,0.55)", fontSize: 13, lineHeight: 1.4 }}>
+                      <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 11 }}>Entregar em </span>
+                      {a.endereco}
+                    </p>
+                  </div>
+                  {a.observacao && (
+                    <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, fontStyle: "italic" }}>{a.observacao}</p>
+                  )}
+                </div>
+                {a.status === "aceito" && (
+                  <button onClick={() => avancarAvulsa(a)} style={{
+                    width: "100%", padding: "16px", borderRadius: 14, border: "none",
+                    background: "#f97316", color: "white", fontWeight: 900, fontSize: 16, cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                  }}>
+                    🛵 Saindo para entrega
+                  </button>
+                )}
+                {a.status === "em_rota" && (
+                  <button onClick={() => avancarAvulsa(a)} style={{
+                    width: "100%", padding: "16px", borderRadius: 14, border: "none",
+                    background: "#22c55e", color: "white", fontWeight: 900, fontSize: 16, cursor: "pointer",
+                  }}>
+                    ✓ Confirmar entrega
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+
           {/* Pedidos prontos */}
           {disponivel && prontos.length > 0 && (
             <>
@@ -2559,6 +2740,106 @@ function CorridaAtivaPanel({
         )}
       </div>}
     </div>
+  )
+}
+
+// ─── Card de aceitar entrega avulsa ──────────────────────────────────────────
+function CardAvulsa({
+  avulsa, timer, onAceitar, onRecusar, carregando,
+}: {
+  avulsa: any; timer: number
+  onAceitar: () => void; onRecusar: () => void; carregando: boolean
+}) {
+  const dashOffset = CIRCUM * (1 - timer / 30)
+  const timerColor = timer <= 10 ? "#FF4444" : "#FF8C00"
+
+  return (
+    <>
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.62)", zIndex: 40 }} />
+      <div style={{
+        position: "fixed", left: 0, right: 0, bottom: 60, zIndex: 50,
+        background: "#1C1C1E", borderRadius: "24px 24px 0 0",
+        boxShadow: "0 -8px 48px rgba(0,0,0,0.8)",
+        animation: "slideUpCard 300ms ease-out",
+        overflow: "hidden",
+      }}>
+        <div style={{ padding: "12px 0 0", display: "flex", justifyContent: "center" }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.12)" }} />
+        </div>
+
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "14px 20px 14px" }}>
+          <div>
+            <p style={{ color: "#a78bfa", fontSize: 13, fontWeight: 700, marginBottom: 6, letterSpacing: 0.3 }}>
+              Entrega avulsa!
+            </p>
+            <p style={{ color: "#FF8C00", fontWeight: 900, fontSize: 34, lineHeight: 1, letterSpacing: -0.5 }}>
+              R$ {(avulsa.taxa_entrega ?? 0).toFixed(2).replace(".", ",")}
+            </p>
+            <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, marginTop: 6 }}>
+              {avulsa.codigo} · {avulsa.cliente_nome}
+            </p>
+          </div>
+          <div style={{ position: "relative", width: 68, height: 68, flexShrink: 0 }}>
+            <svg width="68" height="68" viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="40" fill="none" stroke="#2C2C2E" strokeWidth="7" />
+              <circle cx="50" cy="50" r="40" fill="none" stroke={timerColor} strokeWidth="7"
+                strokeDasharray={CIRCUM} strokeDashoffset={dashOffset} strokeLinecap="round"
+                transform="rotate(-90 50 50)"
+                style={{ transition: "stroke-dashoffset 1s linear, stroke 0.3s" }}
+              />
+            </svg>
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <span style={{ color: timerColor, fontWeight: 900, fontSize: 22, animation: timer <= 10 ? "timerPulse 0.7s ease-in-out infinite" : "none" }}>
+                {timer}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0 20px 16px" }} />
+
+        <div style={{ padding: "0 20px 16px", display: "flex", gap: 14, alignItems: "flex-start" }}>
+          <div style={{
+            width: 38, height: 38, borderRadius: "50%", flexShrink: 0,
+            background: "rgba(34,197,94,0.1)", border: "1.5px solid rgba(34,197,94,0.3)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/>
+              <circle cx="12" cy="10" r="3"/>
+            </svg>
+          </div>
+          <div style={{ flex: 1 }}>
+            <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>Entregar em</p>
+            <p style={{ color: "white", fontSize: 15, fontWeight: 700 }}>{avulsa.endereco}</p>
+            {avulsa.observacao && (
+              <p style={{ color: "#888", fontSize: 12, marginTop: 4, fontStyle: "italic" }}>{avulsa.observacao}</p>
+            )}
+          </div>
+        </div>
+
+        <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0 20px 16px" }} />
+
+        <div style={{ display: "flex", gap: 10, padding: "0 20px 20px" }}>
+          <button onClick={onRecusar} disabled={carregando} style={{
+            flex: 1, padding: "16px 0", borderRadius: 14,
+            border: "1.5px solid rgba(255,255,255,0.22)",
+            background: "transparent", color: "white",
+            fontWeight: 800, fontSize: 15, cursor: "pointer",
+          }}>
+            Recusar
+          </button>
+          <button onClick={onAceitar} disabled={carregando} style={{
+            flex: 2, padding: "16px 0", borderRadius: 14,
+            border: "none", background: "#FF8C00", color: "white",
+            fontWeight: 900, fontSize: 15, cursor: "pointer",
+            opacity: carregando ? 0.7 : 1, transition: "opacity 0.2s",
+          }}>
+            {carregando ? "Aceitando..." : "Aceitar entrega"}
+          </button>
+        </div>
+      </div>
+    </>
   )
 }
 
