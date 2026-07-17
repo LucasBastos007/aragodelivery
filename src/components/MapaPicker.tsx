@@ -40,10 +40,25 @@ export default function MapaPicker({ lat, lng, onMove }: Props) {
       const map = L.map(divRef.current, { zoomControl: true })
         .setView([lat, lng], 17)
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      // Tenta tile padrão; se falhar em 4s usa fallback sem subdomínio
+      const tileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution: "© OpenStreetMap",
+        crossOrigin: "",
       }).addTo(map)
+
+      let tilesOk = false
+      tileLayer.on("tileload", () => { tilesOk = true })
+      setTimeout(() => {
+        if (!tilesOk && mapRef.current) {
+          tileLayer.setUrl("https://tile.openstreetmap.org/{z}/{x}/{y}.png")
+        }
+      }, 4000)
+
+      // Força recálculo do tamanho — evita tiles em branco quando o div
+      // ainda estava oculto ou com altura zero no momento da inicialização
+      setTimeout(() => { if (mapRef.current) mapRef.current.invalidateSize() }, 100)
+      setTimeout(() => { if (mapRef.current) mapRef.current.invalidateSize() }, 500)
 
       // Pin laranja customizado
       const icon = L.divIcon({
