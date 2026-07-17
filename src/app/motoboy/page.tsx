@@ -900,7 +900,7 @@ export default function MotoboyPage() {
           if (novo.motoboy_id === motoboy_id) {
             // Este motoboy aceitou
             setEmAndamentoAvulsa(prev => [...prev.filter((a: any) => a.id !== novo.id), novo])
-            setAvulsaOferta(prev => prev?.id === novo.id ? null : prev)
+            if (avulsaOfertaRef.current?.id === novo.id) setAvulsaOferta(null)
           } else if (avulsaOfertaRef.current?.id === novo.id) {
             // Outro motoboy aceitou antes
             setAvulsaOferta(null)
