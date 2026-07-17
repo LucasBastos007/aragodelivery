@@ -234,6 +234,9 @@ export async function POST(req: NextRequest) {
     await sb.from("cupons").update({ usos: ((cupomAtual as any)?.usos ?? 0) + 1 }).eq("id", cupomId)
   }
 
+  // Rastreia pedido realizado
+  void sb.from("acessos_app").insert({ tipo: "pedido" })
+
   return NextResponse.json({
     ok: true,
     pedido_id: pedido.id,

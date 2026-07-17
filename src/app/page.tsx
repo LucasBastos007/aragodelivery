@@ -417,6 +417,7 @@ export default function Home() {
   const [loading,    setLoading]    = useState(true)
   const [filtro,     setFiltro]     = useState<string | null>(null)
   const [busca,      setBusca]      = useState("")
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null)
   const splashDone = typeof window !== "undefined" && !!sessionStorage.getItem("arago_splash_done")
   const [splashVis,  setSplashVis]  = useState(!splashDone)
   const [splashFade, setSplashFade] = useState(false)
@@ -436,12 +437,45 @@ export default function Home() {
   const primeiroNome = perfil?.nome?.split(" ")[0] ?? user?.user_metadata?.name?.split(" ")[0] ?? null
 
   useEffect(() => {
+    // Rastreia acesso ao app — máximo 1 vez a cada 30 min por dispositivo
+    const KEY = "arago_last_acesso"
+    const last = Number(localStorage.getItem(KEY) ?? 0)
+    if (Date.now() - last > 30 * 60 * 1000) {
+      fetch("/api/tracking/evento", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipo: "acesso" }),
+      }).catch(() => {})
+      localStorage.setItem(KEY, String(Date.now()))
+    }
+  }, [])
+
+  useEffect(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("arago_last_address")
       if (saved) setLastAddress(saved)
       const ativo = localStorage.getItem("arago_pedido_ativo")
       if (ativo) {
         try { setPedidoAtivo(JSON.parse(ativo)) } catch {}
+      }
+      // Tenta obter localização do cliente: endereço salvo → GPS → sem coordenadas
+      try {
+        const endSalvo = localStorage.getItem("arago_endereco_salvo")
+        if (endSalvo) {
+          const addr = JSON.parse(endSalvo)
+          if (addr.lat && addr.lng && addr.lat !== 0 && addr.lng !== 0) {
+            setUserCoords({ lat: addr.lat, lng: addr.lng })
+            return
+          }
+        }
+      } catch {}
+      // Se não há endereço salvo, tenta GPS silenciosamente
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          pos => setUserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+          () => { /* sem GPS — não mostra distância */ },
+          { enableHighAccuracy: false, timeout: 6000, maximumAge: 300000 }
+        )
       }
     }
   }, [])
@@ -933,6 +967,26 @@ export default function Home() {
             <p style={{ color: "rgba(255,255,255,0.9)", fontSize: "1.1rem", lineHeight: 1.6, marginBottom: 36, fontWeight: 400 }}>
               Peça da sua loja favorita e receba em casa rapidinho.
             </p>
+            {/* Botão de endereço de entrega */}
+            <button
+              onClick={() => setAddrSheetOpen(true)}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 8,
+                background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.3)",
+                borderRadius: 12, padding: "8px 18px", cursor: "pointer",
+                color: "white", fontWeight: 600, fontSize: 14, marginBottom: 16,
+                backdropFilter: "blur(8px)",
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+              </svg>
+              {lastAddress.length > 40 ? lastAddress.substring(0, 38) + "..." : lastAddress}
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="2.5" strokeLinecap="round">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+
             <div style={{
               maxWidth: 680, width: "90%", margin: "0 auto",
               borderRadius: 16, overflow: "hidden",
@@ -940,7 +994,7 @@ export default function Home() {
               display: "flex",
             }}>
               <div style={{ position: "relative", flex: 1, display: "flex", alignItems: "center", background: "white" }}>
-                <span style={{ padding: "0 16px", fontSize: 18, color: "#FF6B00", flexShrink: 0, lineHeight: 1 }}>📍</span>
+                <span style={{ padding: "0 16px", fontSize: 18, color: "#9CA3AF", flexShrink: 0, lineHeight: 1 }}>🔍</span>
                 <input
                   value={busca}
                   onChange={e => setBusca(e.target.value)}
@@ -1292,7 +1346,7 @@ export default function Home() {
                     </div>
                   )}
                   <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))", gap: isMobile ? 0 : 20 }}>
-                    {abertas.map(loja => <LojaCard key={loja.id} loja={loja} isMobile={isMobile} />)}
+                    {abertas.map(loja => <LojaCard key={loja.id} loja={loja} isMobile={isMobile} userCoords={userCoords} />)}
                   </div>
                 </div>
               )}
@@ -1312,7 +1366,7 @@ export default function Home() {
                     </div>
                   )}
                   <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))", gap: isMobile ? 0 : 20 }}>
-                    {fechadas.map(loja => <LojaCard key={loja.id} loja={loja} isMobile={isMobile} />)}
+                    {fechadas.map(loja => <LojaCard key={loja.id} loja={loja} isMobile={isMobile} userCoords={userCoords} />)}
                   </div>
                 </div>
               )}
@@ -1407,11 +1461,21 @@ export default function Home() {
         </div>
       )}
 
-      {/* Sheet de endereços */}
-      {isMobile && addrSheetOpen && (
+      {/* Sheet de endereços — mobile e desktop */}
+      {addrSheetOpen && (
         <AddressBottomSheet
           currentAddress={lastAddress}
-          onSelect={addr => setLastAddress(addr)}
+          onSelect={addr => {
+            setLastAddress(addr)
+            try {
+              const endSalvo = localStorage.getItem("arago_endereco_salvo")
+              if (endSalvo) {
+                const saved = JSON.parse(endSalvo)
+                if (saved.lat && saved.lng && saved.lat !== 0 && saved.lng !== 0)
+                  setUserCoords({ lat: saved.lat, lng: saved.lng })
+              }
+            } catch {}
+          }}
           onClose={() => setAddrSheetOpen(false)}
         />
       )}
@@ -1423,11 +1487,28 @@ export default function Home() {
 }
 
 /* ── LOJA CARD ────────────────────────────────────────── */
-function LojaCard({ loja, isMobile }: { loja: Loja; isMobile: boolean }) {
+function haversineKmCard(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function LojaCard({ loja, isMobile, userCoords }: { loja: Loja; isMobile: boolean; userCoords?: { lat: number; lng: number } | null }) {
   const c = CAT_COLORS[loja.categoria] ?? CAT_COLORS["Outros"]
   const CAT_ICONS_LOCAL: Record<string, string> = {
     Restaurante: "🍔", Mercadinho: "🛒", "Farmácia": "💊", Outros: "📦",
   }
+
+  const lojaLat = (loja as any).lat as number | null | undefined
+  const lojaLng = (loja as any).lng as number | null | undefined
+  const distKm = (userCoords && lojaLat && lojaLng && lojaLat !== 0 && lojaLng !== 0)
+    ? haversineKmCard(userCoords.lat, userCoords.lng, lojaLat, lojaLng)
+    : null
+  const distLabel = distKm !== null
+    ? distKm < 1 ? `${Math.round(distKm * 1000)} m` : `${distKm.toFixed(1)} km`
+    : null
 
   if (isMobile) {
     return (
@@ -1443,7 +1524,7 @@ function LojaCard({ loja, isMobile }: { loja: Loja; isMobile: boolean }) {
             flexShrink: 0, boxShadow: "0 3px 12px rgba(0,0,0,0.12)",
           }}>
             {loja.logo_url
-              ? <img src={loja.logo_url} alt={loja.nome} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              ? <img src={loja.logo_url} alt={loja.nome} style={{ width: "100%", height: "100%", objectFit: "contain", background: "white" }} />
               : <div style={{ width: "100%", height: "100%", background: loja.aberto ? `linear-gradient(135deg, ${c.accent}, ${c.accent}bb)` : "linear-gradient(135deg,#d1d5db,#9ca3af)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32 }}>
                   {CAT_ICONS_LOCAL[loja.categoria]}
                 </div>}
@@ -1483,6 +1564,13 @@ function LojaCard({ loja, isMobile }: { loja: Loja; isMobile: boolean }) {
               </span>
               <span style={{ color: "#9CA3AF", fontSize: 11 }}>·</span>
               <span style={{ fontSize: 11, color: "#9CA3AF" }}>{loja.tempo_min}–{loja.tempo_max} min</span>
+              {distLabel && (<>
+                <span style={{ color: "#9CA3AF", fontSize: 11 }}>·</span>
+                <span style={{ fontSize: 11, color: "#6B7280", display: "flex", alignItems: "center", gap: 3 }}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                  {distLabel}
+                </span>
+              </>)}
               {loja.taxa_entrega === 0 ? (
                 <span style={{ fontSize: 11, fontWeight: 800, color: "#7C3AED", background: "rgba(124,58,237,0.1)", padding: "2px 7px", borderRadius: 6 }}>Grátis</span>
               ) : (
@@ -1517,7 +1605,7 @@ function LojaCard({ loja, isMobile }: { loja: Loja; isMobile: boolean }) {
         }}>
         {loja.logo_url ? (
           <div style={{ height: 160, position: "relative", overflow: "hidden" }}>
-            <img src={loja.logo_url} alt={loja.nome} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            <img src={loja.logo_url} alt={loja.nome} style={{ width: "100%", height: "100%", objectFit: "contain", background: "white" }} />
             <span style={{ position: "absolute", top: 10, right: 10, fontSize: 12, fontWeight: 700, padding: "4px 12px", borderRadius: 20, background: loja.aberto ? "#22C55E" : "rgba(0,0,0,0.5)", color: "white" }}>
               {loja.aberto ? "● Aberto" : "Fechado"}
             </span>
@@ -1560,11 +1648,18 @@ function LojaCard({ loja, isMobile }: { loja: Loja; isMobile: boolean }) {
               {loja.descricao}
             </p>
           )}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, flexWrap: "wrap" }}>
             <span style={{ color: "#6B7280", display: "flex", alignItems: "center", gap: 4 }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               {loja.tempo_min}–{loja.tempo_max} min
             </span>
+            {distLabel && (<>
+              <span style={{ color: "#e5e7eb" }}>·</span>
+              <span style={{ color: "#6B7280", display: "flex", alignItems: "center", gap: 4 }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                {distLabel}
+              </span>
+            </>)}
             <span style={{ color: "#e5e7eb" }}>·</span>
             <span style={{ color: loja.taxa_entrega === 0 ? "#16a34a" : "#6B7280", fontWeight: loja.taxa_entrega === 0 ? 700 : 400, display: "flex", alignItems: "center", gap: 4 }}>
               {loja.taxa_entrega === 0 ? (

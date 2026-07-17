@@ -84,6 +84,12 @@ export function useClienteAuth() {
     })
     const json = await res.json()
     if (!res.ok) return json.error ?? "Erro ao criar conta."
+    // Registra evento de cadastro
+    fetch("/api/tracking/evento", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tipo: "cadastro" }),
+    }).catch(() => {})
     // Após criar via admin, faz login normal
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password: senha })
     return error?.message ?? null
