@@ -1,0 +1,47 @@
+{
+  "name": "Chegô Lojista",
+  "short_name": "Lojista Chegô",
+  "description": "Acesso lojista",
+  "start_url": "/entrar",
+  "id": "/loja",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#f97316",
+  "categories": ["food", "shopping"],
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo-chego.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Painel da loja",
+      "url": "/loja",
+      "description": "Acessar painel da loja"
+    },
+    {
+      "name": "Login lojista",
+      "url": "/loja/entrar",
+      "description": "Entrar no painel"
+    }
+  ]
+}
