@@ -99,7 +99,10 @@ async function escalarMotoboy(avulsa_id: string, codigo: string, taxa_entrega: n
 }
 
 export async function POST(req: NextRequest) {
+  const cookieVal = req.cookies.get("arago_sess")?.value
+  console.log("[entrega-avulsa] cookie present:", !!cookieVal, "length:", cookieVal?.length)
   const sess = requireLoja(req)
+  console.log("[entrega-avulsa] sess:", JSON.stringify(sess))
   if (!sess) return unauthorized()
   const loja_id = sess.loja_id
 
