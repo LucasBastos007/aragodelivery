@@ -90,6 +90,7 @@ export default function EntregaAvulsaPage() {
   // Autocomplete endereço
   const [endBusca, setEndBusca]           = useState("")
   const [endCompl, setEndCompl]           = useState("")
+  const [endRef2,  setEndRef2]            = useState("")
   const [sugestoes, setSugestoes]         = useState<SugestaoEndereco[]>([])
   const [showSug, setShowSug]             = useState(false)
   const [endSelecionado, setEndSelecionado] = useState<SugestaoEndereco | null>(null)
@@ -182,6 +183,7 @@ export default function EntregaAvulsaPage() {
   function limparEndereco() {
     setEndBusca("")
     setEndCompl("")
+    setEndRef2("")
     setEndSelecionado(null)
     setSugestoes([])
     setDistInfo(null)
@@ -209,7 +211,7 @@ export default function EntregaAvulsaPage() {
   }
 
   // Endereço completo para salvar
-  const enderecoFinal = [endBusca.trim(), endCompl.trim()].filter(Boolean).join(" — ")
+  const enderecoFinal = [endBusca.trim(), endCompl.trim(), endRef2.trim()].filter(Boolean).join(" — ")
 
   const clientesFiltrados = busca.trim().length >= 1
     ? clientes.filter(c =>
@@ -377,13 +379,13 @@ export default function EntregaAvulsaPage() {
 
         {/* 1. Endereço com autocomplete */}
         <div ref={endRef} style={{ marginBottom: 14, position: "relative" }}>
-          <p style={labelStyle}>Bairro ou rua *</p>
+          <p style={labelStyle}>Município *</p>
           <div style={{ position: "relative" }}>
             <input
               value={endBusca}
               onChange={e => { setEndBusca(e.target.value); setEndSelecionado(null); setDistInfo(null) }}
               onFocus={() => { if (sugestoes.length > 0) setShowSug(true) }}
-              placeholder="Digite o bairro ou rua para buscar…"
+              placeholder="Digite o município para buscar…"
               style={campoStyle}
               autoComplete="off"
             />
@@ -445,13 +447,24 @@ export default function EntregaAvulsaPage() {
           )}
         </div>
 
-        {/* Número, complemento e referência */}
+        {/* Endereço (rua e número) */}
         <div style={{ marginBottom: 14 }}>
-          <p style={labelStyle}>Número, complemento e referência</p>
+          <p style={labelStyle}>Endereço</p>
           <input
             value={endCompl}
             onChange={e => setEndCompl(e.target.value)}
-            placeholder="Ex: nº 116 lote 5, próx. ao mercado…"
+            placeholder="Rua, quadra, lote, número…"
+            style={campoStyle}
+          />
+        </div>
+
+        {/* Ponto de referência */}
+        <div style={{ marginBottom: 14 }}>
+          <p style={labelStyle}>Ponto de referência</p>
+          <input
+            value={endRef2}
+            onChange={e => setEndRef2(e.target.value)}
+            placeholder="Ex: próx. ao supermercado, em frente à escola…"
             style={campoStyle}
           />
         </div>
