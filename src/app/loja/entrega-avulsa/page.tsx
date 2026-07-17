@@ -160,7 +160,7 @@ export default function EntregaAvulsaPage() {
           cliente_tel:   form.cliente_tel,
           endereco:      form.endereco,
           valor_pedido:  parseFloat(form.valor_pedido || "0"),
-          taxa_entrega:  parseFloat(form.taxa_entrega || "0"),
+          taxa_entrega:  distInfo?.taxa ?? 0,
           observacao:    form.observacao,
         }),
       })
@@ -227,6 +227,44 @@ export default function EntregaAvulsaPage() {
         background: "white", borderRadius: 16, border: "1.5px solid #F1F5F9",
         boxShadow: "0 4px 24px rgba(0,0,0,0.06)", padding: "20px 20px", marginBottom: 24,
       }}>
+
+        {/* 1. Endereço primeiro — dispara cálculo da taxa */}
+        <div style={{ marginBottom: 14 }}>
+          <p style={labelStyle}>Endereço de entrega *</p>
+          <input
+            required value={form.endereco}
+            onChange={e => set("endereco", e.target.value)}
+            placeholder="Rua, número, bairro"
+            style={campoStyle}
+            autoFocus
+          />
+          {geocodando && (
+            <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>📍 Identificando localização…</p>
+          )}
+          {!geocodando && distInfo && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 8, marginTop: 8,
+              background: "#F0FDF4", border: "1px solid #BBF7D0", borderRadius: 8, padding: "8px 12px",
+            }}>
+              <span style={{ fontSize: 15 }}>📍</span>
+              <div>
+                <p style={{ fontSize: 12, fontWeight: 800, color: "#15803d", margin: 0 }}>
+                  {distInfo.km.toFixed(1)} km de distância
+                </p>
+                <p style={{ fontSize: 11, color: "#16a34a", margin: 0 }}>
+                  Taxa de entrega calculada: <strong>R$ {distInfo.taxa.toFixed(2).replace(".", ",")}</strong>
+                </p>
+              </div>
+            </div>
+          )}
+          {!geocodando && !distInfo && !lojaCoords?.lat && form.endereco.length >= 8 && (
+            <p style={{ fontSize: 11, color: "#f97316", marginTop: 6 }}>
+              ⚠ Loja sem coordenadas — configure a localização da loja no perfil
+            </p>
+          )}
+        </div>
+
+        {/* 2. Nome e telefone */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
           <div>
             <p style={labelStyle}>Nome do cliente *</p>
@@ -248,53 +286,19 @@ export default function EntregaAvulsaPage() {
           </div>
         </div>
 
+        {/* 3. Valor do pedido */}
         <div style={{ marginBottom: 14 }}>
-          <p style={labelStyle}>Endereço de entrega *</p>
+          <p style={labelStyle}>Valor do pedido (R$)</p>
           <input
-            required value={form.endereco}
-            onChange={e => set("endereco", e.target.value)}
-            placeholder="Rua, número, bairro"
+            type="number" min="0" step="0.01"
+            value={form.valor_pedido}
+            onChange={e => set("valor_pedido", e.target.value)}
+            placeholder="0,00"
             style={campoStyle}
           />
-          {/* Info de distância calculada */}
-          {geocodando && (
-            <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 5 }}>📍 Calculando distância…</p>
-          )}
-          {!geocodando && distInfo && (
-            <p style={{ fontSize: 11, color: "#059669", fontWeight: 700, marginTop: 5 }}>
-              📍 {distInfo.km.toFixed(1)} km — Taxa calculada: R$ {distInfo.taxa.toFixed(2).replace(".", ",")}
-            </p>
-          )}
-          {!geocodando && !distInfo && !lojaCoords?.lat && form.endereco.length >= 8 && (
-            <p style={{ fontSize: 11, color: "#f97316", marginTop: 5 }}>
-              Loja sem coordenadas cadastradas — informe a taxa manualmente
-            </p>
-          )}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-          <div>
-            <p style={labelStyle}>Valor do pedido (R$)</p>
-            <input
-              type="number" min="0" step="0.01"
-              value={form.valor_pedido}
-              onChange={e => set("valor_pedido", e.target.value)}
-              placeholder="0,00"
-              style={campoStyle}
-            />
-          </div>
-          <div>
-            <p style={labelStyle}>Taxa de entrega (R$)</p>
-            <input
-              type="number" min="0" step="0.01"
-              value={form.taxa_entrega}
-              onChange={e => set("taxa_entrega", e.target.value)}
-              placeholder={geocodando ? "Calculando…" : "0,00"}
-              style={campoStyle}
-            />
-          </div>
-        </div>
-
+        {/* 4. Observação */}
         <div style={{ marginBottom: 18 }}>
           <p style={labelStyle}>Observação</p>
           <textarea
@@ -306,14 +310,14 @@ export default function EntregaAvulsaPage() {
           />
         </div>
 
-        <button type="submit" disabled={enviando} style={{
+        <button type="submit" disabled={enviando || geocodando} style={{
           width: "100%", padding: "13px", borderRadius: 12, border: "none",
-          background: enviando ? "#e5e7eb" : "linear-gradient(135deg, #f97316, #dc2626)",
-          color: enviando ? "#9ca3af" : "white",
-          fontWeight: 800, fontSize: 14, cursor: enviando ? "not-allowed" : "pointer",
-          boxShadow: enviando ? "none" : "0 4px 16px rgba(249,115,22,0.35)",
+          background: (enviando || geocodando) ? "#e5e7eb" : "linear-gradient(135deg, #f97316, #dc2626)",
+          color: (enviando || geocodando) ? "#9ca3af" : "white",
+          fontWeight: 800, fontSize: 14, cursor: (enviando || geocodando) ? "not-allowed" : "pointer",
+          boxShadow: (enviando || geocodando) ? "none" : "0 4px 16px rgba(249,115,22,0.35)",
         }}>
-          {enviando ? "Solicitando…" : sucesso ? "✓ Motoboy solicitado!" : "🛵 Solicitar motoboy"}
+          {geocodando ? "Calculando taxa…" : enviando ? "Solicitando…" : sucesso ? "✓ Motoboy solicitado!" : "🛵 Solicitar motoboy"}
         </button>
       </form>
 
