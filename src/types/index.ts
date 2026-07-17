@@ -55,6 +55,8 @@ export interface Loja {
   cidade?: string | null
   estado?: string | null
   cep?: string | null
+  // Credenciais e primeiro acesso
+  primeiro_acesso?: boolean | null
   // FASE 3 — certificado digital e CSC
   cert_a1_path?: string | null
   cert_a1_expires_at?: string | null
@@ -115,6 +117,15 @@ export interface AdicionalProduto {
   preco: number
 }
 
+export interface GrupoAdicional {
+  id: string
+  nome: string
+  obrigatorio: boolean
+  minimo: number
+  maximo: number
+  itens: AdicionalProduto[]
+}
+
 export interface Produto {
   id: string
   loja_id: string
@@ -125,7 +136,7 @@ export interface Produto {
   foto_url: string
   disponivel: boolean
   criado_em: string
-  adicionais?: AdicionalProduto[]
+  adicionais?: (AdicionalProduto | GrupoAdicional)[]
   dias_semana?: number[]  // 0=Dom 1=Seg 2=Ter 3=Qua 4=Qui 5=Sex 6=Sáb — vazio = todos os dias
   ncm?: string | null     // Nomenclatura Comum do Mercosul (para NFC-e)
 }
