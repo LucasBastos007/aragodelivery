@@ -6,11 +6,13 @@ import { supabase } from "@/lib/supabase"
 import type { EntregaAvulsa } from "@/types"
 
 const STATUS_CFG: Record<string, { label: string; color: string; bg: string }> = {
-  aguardando: { label: "Aguardando motoboy", color: "#d97706", bg: "#FFFBEB" },
-  aceito:     { label: "Aceito",             color: "#2563eb", bg: "#EFF6FF" },
-  em_rota:    { label: "Em rota",            color: "#7c3aed", bg: "#F5F3FF" },
-  entregue:   { label: "Entregue",           color: "#059669", bg: "#ECFDF5" },
-  cancelado:  { label: "Cancelado",          color: "#dc2626", bg: "#FEF2F2" },
+  aguardando:        { label: "Aguardando motoboy", color: "#d97706", bg: "#FFFBEB" },
+  aceito:            { label: "Indo à loja",         color: "#2563eb", bg: "#EFF6FF" },
+  coletado:          { label: "Pedido coletado",     color: "#7c3aed", bg: "#F5F3FF" },
+  em_rota:           { label: "Em rota",             color: "#7c3aed", bg: "#F5F3FF" },
+  entregue:          { label: "Entregue",            color: "#059669", bg: "#ECFDF5" },
+  cancelado:         { label: "Cancelado",           color: "#dc2626", bg: "#FEF2F2" },
+  aguardando_aceite: { label: "Aguardando aceite",   color: "#d97706", bg: "#FFFBEB" },
 }
 
 const PLANOS_COM_AVULSA = ["select", "prime", "black"]

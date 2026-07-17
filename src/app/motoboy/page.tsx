@@ -880,7 +880,7 @@ export default function MotoboyPage() {
     supabase.from("entregas_avulsas")
       .select("*")
       .eq("motoboy_id", motoboy_id)
-      .in("status", ["aceito", "em_rota"])
+      .in("status", ["aceito", "coletado", "em_rota"])
       .then(({ data }) => { setEmAndamentoAvulsa(data ?? []) })
 
     const ch = supabase.channel(`avulsa-all-${motoboy_id}`)
@@ -907,7 +907,7 @@ export default function MotoboyPage() {
             setToastMsg("Entrega aceita por outro motoboy.")
             setTimeout(() => setToastMsg(null), 3000)
           }
-        } else if (novo?.status === "em_rota" && novo.motoboy_id === motoboy_id) {
+        } else if (["coletado", "em_rota"].includes(novo?.status) && novo.motoboy_id === motoboy_id) {
           setEmAndamentoAvulsa(prev => {
             const sem = prev.filter((a: any) => a.id !== novo.id)
             return [...sem, novo]
@@ -2250,6 +2250,15 @@ export default function MotoboyPage() {
                   </a>
                 </div>
                 {a.status === "aceito" && (
+                  <button onClick={() => avancarAvulsa(a)} style={{
+                    width: "100%", padding: "16px", borderRadius: 14, border: "none",
+                    background: "#f97316", color: "white", fontWeight: 900, fontSize: 16, cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                  }}>
+                    🏪 Cheguei na loja
+                  </button>
+                )}
+                {a.status === "coletado" && (
                   <button onClick={() => avancarAvulsa(a)} style={{
                     width: "100%", padding: "16px", borderRadius: 14, border: "none",
                     background: "#f97316", color: "white", fontWeight: 900, fontSize: 16, cursor: "pointer",

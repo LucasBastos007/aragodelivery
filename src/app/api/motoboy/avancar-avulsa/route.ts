@@ -11,8 +11,9 @@ function adminClient() {
 }
 
 const NEXT_STATUS: Record<string, string> = {
-  aceito:  "em_rota",
-  em_rota: "entregue",
+  aceito:   "coletado",
+  coletado: "em_rota",
+  em_rota:  "entregue",
 }
 
 export async function POST(req: NextRequest) {
