@@ -551,7 +551,7 @@ export default function MotoboyPage() {
   const motoboy_id = sessao?.role === "motoboy" ? sessao.motoboy_id : null
 
   const [disponivel,     setDisponivel]     = useState(() => {
-    if (typeof window !== "undefined") return sessionStorage.getItem("motoboy_online") === "1"
+    if (typeof window !== "undefined") return localStorage.getItem("motoboy_online") === "1"
     return false
   })
   const [dispLoading,    setDispLoading]    = useState(true)
@@ -643,8 +643,11 @@ export default function MotoboyPage() {
     supabase.from("motoboys").select("disponivel, lat, lng, raio_km, foto").eq("id", motoboy_id).single()
       .then(({ data }) => {
         if (data) {
-          setDisponivel(data.disponivel)
-          sessionStorage.setItem("motoboy_online", data.disponivel ? "1" : "0")
+          // Só sincroniza o estado do DB se não houver preferência local salva
+          // (garante que a preferência do usuário não seja sobrescrita ao trocar de aba)
+          const localPref = localStorage.getItem("motoboy_online")
+          if (localPref === null) setDisponivel(data.disponivel)
+          localStorage.setItem("motoboy_online", (localPref !== null ? localPref === "1" : data.disponivel) ? "1" : "0")
           if (data.lat)     setMyLat(data.lat)
           if (data.lng)     setMyLng(data.lng)
           if (data.raio_km) { setRaioKm(data.raio_km); setRaioDisplay(data.raio_km) }
@@ -694,7 +697,7 @@ export default function MotoboyPage() {
     document.head.appendChild(s)
   }, [])
 
-  // ── Marca offline ao fechar o browser ─────────────────────────────────────
+  // ── Limpa GPS ao fechar o browser (não altera disponivel) ────────────────
   useEffect(() => {
     if (!motoboy_id) return
     const handle = () => {
@@ -727,7 +730,7 @@ export default function MotoboyPage() {
       body: JSON.stringify({ motoboy_id, disponivel: novo }),
     })
     setDisponivel(novo)
-    sessionStorage.setItem("motoboy_online", novo ? "1" : "0")
+    localStorage.setItem("motoboy_online", novo ? "1" : "0")
     setTogglingDisp(false)
     if (novo) setSheetH(SHEET_PEEK)
   }

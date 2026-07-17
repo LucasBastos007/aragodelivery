@@ -13,9 +13,10 @@ export async function POST(req: NextRequest) {
     if (!_sess) return new Response("unauthorized", { status: 401 })
     const motoboy_id = _sess.motoboy_id
 
+    // Apenas limpa as coordenadas GPS — disponivel só muda pelo toggle explícito
     await supabase
       .from("motoboys")
-      .update({ disponivel: false })
+      .update({ lat: null, lng: null })
       .eq("id", motoboy_id)
   } catch {}
   return new Response("ok")
