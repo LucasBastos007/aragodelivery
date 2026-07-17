@@ -663,7 +663,7 @@ export default function RestaurantePage() {
             {categoriasComProdutos.length > 0 && (
               <div>
                 <h2 style={{ color: "#111827", fontWeight: 900, fontSize: 17, marginBottom: 14 }}>Categorias</h2>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
                   {categoriasComProdutos.map(cat => {
                     const qtdProdutos = produtos.filter(p => p.categoria_id === cat.id).length
                     const thumb = produtos.find(p => p.categoria_id === cat.id && p.foto_url)?.foto_url
@@ -673,9 +673,9 @@ export default function RestaurantePage() {
                         onClick={() => setCatSelecionada(cat.id)}
                         style={{
                           display: "flex", alignItems: "center", gap: 12,
-                          padding: "14px 14px", borderRadius: 14,
+                          padding: "14px 10px", borderRadius: 14,
                           background: "white", border: "1.5px solid #E5E7EB",
-                          cursor: "pointer", textAlign: "left",
+                          cursor: "pointer", textAlign: "left", width: "100%", minWidth: 0,
                           boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
                           transition: "border-color 0.15s, box-shadow 0.15s",
                         }}
@@ -684,7 +684,7 @@ export default function RestaurantePage() {
                       >
                         {/* Thumbnail */}
                         <div style={{
-                          width: 48, height: 48, borderRadius: 10, flexShrink: 0, overflow: "hidden",
+                          width: 44, height: 44, borderRadius: 10, flexShrink: 0, overflow: "hidden",
                           background: "linear-gradient(135deg, rgba(220,38,38,0.1), rgba(220,38,38,0.04))",
                           display: "flex", alignItems: "center", justifyContent: "center",
                         }}>

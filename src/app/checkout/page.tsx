@@ -87,13 +87,7 @@ interface GeoResult {
 }
 
 async function reverseGeocode(lat: number, lng: number): Promise<GeoResult> {
-  const ctrl = new AbortController()
-  const tid  = setTimeout(() => ctrl.abort(), 5000)
-  const res = await fetch(
-    `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=pt-BR`,
-    { headers: { "User-Agent": "AragoDelivery/1.0" }, signal: ctrl.signal }
-  )
-  clearTimeout(tid)
+  const res = await fetch(`/api/geocode/reverse?lat=${lat}&lon=${lng}`)
   const d = await res.json()
   const a = d.address ?? {}
   return {
@@ -267,6 +261,10 @@ export default function CheckoutPage() {
   const [pixCopiaECola,setPixCopiaECola]= useState("")
   const [pixCopiado,   setPixCopiado]   = useState(false)
 
+  // Proteção contra pedido duplicado
+  const [pedidoAtivoModal, setPedidoAtivoModal] = useState(false)
+  const [pedidoAtivoCodigo, setPedidoAtivoCodigo] = useState("")
+
   // Endereço salvo
   type EnderecoSalvo = { display: string; rua: string; numero: string; bairro: string; cidade: string; complemento: string; lat: number; lng: number }
   const [enderecoSalvo,    setEnderecoSalvo]    = useState<EnderecoSalvo | null>(null)
@@ -299,10 +297,10 @@ export default function CheckoutPage() {
     } catch {}
   }, [])
 
-  // Se não há endereço salvo mas o perfil tem endereço cadastrado, usa-o
+  // Se não há endereço salvo mas o perfil tem endereço cadastrado, geocodifica para obter lat/lng
   useEffect(() => {
     if (!perfil?.endereco_rua || enderecoSalvo) return
-    const addr: EnderecoSalvo = {
+    const addrBase: EnderecoSalvo = {
       display: [perfil.endereco_rua, perfil.endereco_numero, perfil.endereco_bairro, perfil.endereco_cidade].filter(Boolean).join(", "),
       rua:         perfil.endereco_rua        ?? "",
       numero:      perfil.endereco_numero     ?? "",
@@ -311,12 +309,25 @@ export default function CheckoutPage() {
       complemento: perfil.endereco_complemento ?? "",
       lat: 0, lng: 0,
     }
-    setEnderecoSalvo(addr)
-    geoRef.current = {
-      geo: { rua: addr.rua, bairro: addr.bairro, cidade: addr.cidade, lat: 0, lng: 0 },
-      numero: addr.numero,
-      complemento: addr.complemento,
-    }
+    // Seta imediatamente para mostrar o endereço, depois geocodifica para obter coords reais
+    setEnderecoSalvo(addrBase)
+    geoRef.current = { geo: { rua: addrBase.rua, bairro: addrBase.bairro, cidade: addrBase.cidade, lat: 0, lng: 0 }, numero: addrBase.numero, complemento: addrBase.complemento }
+
+    // Geocodifica para obter coordenadas reais e permitir cálculo de frete
+    const query = [perfil.endereco_rua, perfil.endereco_numero, perfil.endereco_bairro, perfil.endereco_cidade].filter(Boolean).join(", ")
+    fetch(`/api/geocode/search?q=${encodeURIComponent(query)}`)
+      .then(r => r.json())
+      .then(results => {
+        if (!results[0]) return
+        const lat = parseFloat(results[0].lat)
+        const lng = parseFloat(results[0].lon)
+        if (isNaN(lat) || isNaN(lng)) return
+        console.log("[FRETE-DEBUG] perfil geocoded:", { lat, lng })
+        const addr: EnderecoSalvo = { ...addrBase, lat, lng }
+        setEnderecoSalvo(addr)
+        geoRef.current = { geo: { rua: addrBase.rua, bairro: addrBase.bairro, cidade: addrBase.cidade, lat, lng }, numero: addrBase.numero, complemento: addrBase.complemento }
+      })
+      .catch(() => {/* geocoding opcional — sem coords usa taxa base */})
   }, [perfil, enderecoSalvo])
 
   // Carrega cartão salvo — se tiver token, habilita pagamento sem re-digitar número
@@ -344,13 +355,36 @@ export default function CheckoutPage() {
   }, [perfil, user])
 
   const loja_id    = items[0]?.loja_id ?? null
-  const [lojaData, setLojaData] = useState<{ lat: number | null; lng: number | null; endereco: string; nome: string; taxa_entrega: number | null } | null>(null)
+  const [lojaData, setLojaData]   = useState<{ lat: number | null; lng: number | null; endereco: string; nome: string; taxa_entrega: number | null } | null>(null)
+  const [lojaCoords, setLojaCoords]   = useState<{ lat: number; lng: number } | null>(null)
+  const [taxaCalculando, setTaxaCalculando] = useState(false)
 
   useEffect(() => {
     if (!loja_id) return
     supabase.from("lojas").select("lat,lng,endereco,nome,taxa_entrega").eq("id", loja_id).single()
       .then(({ data }) => setLojaData(data as any))
   }, [loja_id])
+
+  // Geocodifica endereço da loja se não houver lat/lng no banco
+  useEffect(() => {
+    if (!lojaData) return
+    const lat = typeof lojaData.lat === "number" && lojaData.lat !== 0 ? lojaData.lat : null
+    const lng = typeof lojaData.lng === "number" && lojaData.lng !== 0 ? lojaData.lng : null
+    if (lat && lng) { setLojaCoords({ lat, lng }); return }
+    if (!lojaData.endereco) return
+    setTaxaCalculando(true)
+    fetch(`/api/geocode/search?q=${encodeURIComponent(lojaData.endereco)}`)
+      .then(r => r.json())
+      .then((results: any[]) => {
+        if (results[0]) {
+          const lt = parseFloat(results[0].lat)
+          const lg = parseFloat(results[0].lon)
+          if (!isNaN(lt) && !isNaN(lg)) setLojaCoords({ lat: lt, lng: lg })
+        }
+      })
+      .catch(() => {})
+      .finally(() => setTaxaCalculando(false))
+  }, [lojaData])
 
   function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
     const R = 6371
@@ -363,13 +397,22 @@ export default function CheckoutPage() {
   function calcularTaxa(): number {
     if (tipoEntrega === "retirada") return 0
     const base = lojaData?.taxa_entrega ?? 6.00
-    const latL = lojaData?.lat, lngL = lojaData?.lng
-    const latC = enderecoSalvo?.lat || clienteCoords?.lat
-    const lngC = enderecoSalvo?.lng || clienteCoords?.lng
+    const latL = lojaCoords?.lat ?? null
+    const lngL = lojaCoords?.lng ?? null
+    // Quando editando, clienteCoords (pin atual do mapa) tem prioridade sobre endereço salvo
+    const latC = editandoEndereco
+      ? (clienteCoords?.lat && clienteCoords.lat !== 0 ? clienteCoords.lat : null)
+      : (enderecoSalvo?.lat && enderecoSalvo.lat !== 0) ? enderecoSalvo.lat
+        : (clienteCoords?.lat && clienteCoords.lat !== 0) ? clienteCoords.lat : null
+    const lngC = editandoEndereco
+      ? (clienteCoords?.lng && clienteCoords.lng !== 0 ? clienteCoords.lng : null)
+      : (enderecoSalvo?.lng && enderecoSalvo.lng !== 0) ? enderecoSalvo.lng
+        : (clienteCoords?.lng && clienteCoords.lng !== 0) ? clienteCoords.lng : null
+
     if (!latL || !lngL || !latC || !lngC) return base
     const dist = haversineKm(latL, lngL, latC, lngC)
-    if (dist <= 6) return base
-    return Math.round((base + (dist - 6) * 1.00) * 100) / 100
+    const taxa = dist <= 6 ? base : Math.round((base + (dist - 6) * 1.00) * 100) / 100
+    return taxa
   }
 
   // Polling PIX — verifica a cada 4s se o pagamento foi confirmado
@@ -381,7 +424,8 @@ export default function CheckoutPage() {
         clearInterval(interval)
         setPixModal(false)
         clear()
-        router.push(`/pedido/${pedidoId}`)
+        const stored = JSON.parse(localStorage.getItem("arago_pedido_ativo") ?? "{}")
+        router.push(`/pedido/${stored.codigo || pedidoId}`)
       }
     }, 4000)
     return () => clearInterval(interval)
@@ -641,6 +685,23 @@ export default function CheckoutPage() {
   }
 
   async function confirmar() {
+    // Verifica se já existe um pedido ativo em andamento
+    const storedAtivo = localStorage.getItem("arago_pedido_ativo")
+    if (storedAtivo) {
+      try {
+        const { codigo: codigoAtivo, id: idAtivo } = JSON.parse(storedAtivo)
+        if (idAtivo) {
+          const { data } = await supabase.from("pedidos").select("status").eq("id", idAtivo).maybeSingle()
+          const statusAtivo = ["pendente","aceito","em_preparo","pronto","em_rota"]
+          if (data?.status && statusAtivo.includes(data.status)) {
+            setPedidoAtivoCodigo(codigoAtivo || idAtivo)
+            setPedidoAtivoModal(true)
+            return
+          }
+        }
+      } catch { /* localStorage corrompido — ignora */ }
+    }
+
     if (!nome.trim()) { setErro("Informe seu nome"); return }
     const telDigits = telefone.replace(/\D/g, "")
     if (telDigits.length < 8) { setErro("Informe um telefone válido (com DDD)"); return }
@@ -759,6 +820,20 @@ export default function CheckoutPage() {
 
       setPedidoId(pedido.id)
       localStorage.setItem("arago_pedido_ativo", JSON.stringify({ codigo, id: pedido.id }))
+      // Salva no histórico de pedidos de visitantes
+      try {
+        const rawGuest = localStorage.getItem("arago_pedidos_guest")
+        const pedidosGuest: Array<{ codigo: string; id: string; loja_nome: string; total: number; criado_em: string }> =
+          rawGuest ? JSON.parse(rawGuest) : []
+        pedidosGuest.unshift({
+          codigo,
+          id: pedido.id,
+          loja_nome: items[0]?.loja_nome ?? "",
+          total: totalServidor,
+          criado_em: new Date().toISOString(),
+        })
+        localStorage.setItem("arago_pedidos_guest", JSON.stringify(pedidosGuest.slice(0, 20)))
+      } catch {}
       setPixQrcode(pixRes.qrcode)
       setPixCopiaECola(pixRes.copia_cola)
       setPixModal(true)
@@ -905,6 +980,21 @@ export default function CheckoutPage() {
     setEnviando(false)
     // Salva referência do pedido ativo para o cliente conseguir voltar ao rastreamento
     localStorage.setItem("arago_pedido_ativo", JSON.stringify({ codigo, id: pedido.id }))
+    // Salva no histórico de pedidos de visitantes (sem login) para rastreamento posterior
+    try {
+      const rawGuest = localStorage.getItem("arago_pedidos_guest")
+      const pedidosGuest: Array<{ codigo: string; id: string; loja_nome: string; total: number; criado_em: string }> =
+        rawGuest ? JSON.parse(rawGuest) : []
+      pedidosGuest.unshift({
+        codigo,
+        id: pedido.id,
+        loja_nome: items[0]?.loja_nome ?? "",
+        total: totalFinal,
+        criado_em: new Date().toISOString(),
+      })
+      // Mantém apenas os últimos 20 pedidos
+      localStorage.setItem("arago_pedidos_guest", JSON.stringify(pedidosGuest.slice(0, 20)))
+    } catch {}
   }
 
   return (
@@ -974,9 +1064,12 @@ export default function CheckoutPage() {
               <span>Subtotal</span><span>R$ {subtotal.toFixed(2)}</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#9CA3AF" }}>
-              <span>{tipoEntrega === "retirada" ? "Taxa de entrega" : "Taxa de entrega"}</span>
+              <span>Taxa de entrega</span>
               <span style={{ color: taxa === 0 ? "#22c55e" : undefined }}>
-                {tipoEntrega === "retirada" ? "🏪 Retirada · Grátis" : taxa === 0 ? "Grátis" : `R$ ${taxa.toFixed(2)}`}
+                {tipoEntrega === "retirada" ? "🏪 Retirada · Grátis"
+                  : taxaCalculando ? "Calculando..."
+                  : taxa === 0 ? "Grátis"
+                  : `R$ ${taxa.toFixed(2)}`}
               </span>
             </div>
             {desconto > 0 && (
@@ -1134,12 +1227,43 @@ export default function CheckoutPage() {
                 </div>
               ) : (
                 /* Mapa completo */
-                <EnderecoMapa
-                  onResult={(geo, numero, complemento) => {
-                    geoRef.current = { geo, numero, complemento }
-                    if (geo.lat && geo.lng) setClienteCoords({ lat: geo.lat, lng: geo.lng })
-                  }}
-                />
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <EnderecoMapa
+                    onResult={(geo, numero, complemento) => {
+                      geoRef.current = { geo, numero, complemento }
+                      if (geo.lat && geo.lng) setClienteCoords({ lat: geo.lat, lng: geo.lng })
+                    }}
+                  />
+                  {editandoEndereco && (
+                    <button
+                      onClick={() => {
+                        const g = geoRef.current
+                        if (g) {
+                          const novoEndereco: EnderecoSalvo = {
+                            display: [g.geo.rua, g.numero, g.geo.bairro, g.geo.cidade].filter(Boolean).join(", "),
+                            rua: g.geo.rua,
+                            numero: g.numero,
+                            bairro: g.geo.bairro,
+                            cidade: g.geo.cidade,
+                            complemento: g.complemento,
+                            lat: g.geo.lat,
+                            lng: g.geo.lng,
+                          }
+                          setEnderecoSalvo(novoEndereco)
+                          localStorage.setItem("arago_endereco_salvo", JSON.stringify(novoEndereco))
+                        }
+                        setEditandoEndereco(false)
+                      }}
+                      style={{
+                        width: "100%", padding: "12px", borderRadius: 12, border: "none",
+                        background: "#DC2626", color: "white", fontWeight: 800, fontSize: 14,
+                        cursor: "pointer",
+                      }}
+                    >
+                      ✓ Usar este endereço
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -1345,15 +1469,46 @@ export default function CheckoutPage() {
           <p style={{ color: "#EF4444", fontSize: 13, fontWeight: 600, textAlign: "center", padding: "10px 16px", background: "rgba(239,68,68,0.08)", borderRadius: 10, border: "1px solid rgba(239,68,68,0.15)" }}>{erro}</p>
         )}
 
-        <button onClick={confirmar} disabled={enviando} style={{
+        <button onClick={confirmar} disabled={enviando || taxaCalculando} style={{
           width: "100%", padding: "16px", borderRadius: 14, border: "none",
-          cursor: enviando ? "not-allowed" : "pointer",
-          background: enviando ? "rgba(220,38,38,0.5)" : "#DC2626",
+          cursor: (enviando || taxaCalculando) ? "not-allowed" : "pointer",
+          background: (enviando || taxaCalculando) ? "rgba(220,38,38,0.5)" : "#DC2626",
           color: "white", fontWeight: 800, fontSize: 16,
         }}>
-          {enviando ? "Enviando..." : `✓ Confirmar pedido · R$ ${totalFinal.toFixed(2)}`}
+          {enviando ? "Enviando..."
+            : taxaCalculando ? "Calculando frete..."
+            : `✓ Confirmar pedido · R$ ${totalFinal.toFixed(2)}`}
         </button>
       </div>
+
+      {/* ═══ MODAL PEDIDO ATIVO ══════════════════════════════════════════ */}
+      {pedidoAtivoModal && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <div style={{ background: "#fff", borderRadius: 20, padding: "28px 24px", width: "100%", maxWidth: 360, display: "flex", flexDirection: "column", alignItems: "center", gap: 16, textAlign: "center" }}>
+            <div style={{ fontSize: 40 }}>⚠️</div>
+            <p style={{ fontWeight: 800, fontSize: 17, color: "#111827", lineHeight: 1.3 }}>Você já tem um pedido em andamento</p>
+            <p style={{ fontSize: 13, color: "#6B7280", lineHeight: 1.5 }}>
+              O pedido <strong style={{ color: "#DC2626" }}>#{pedidoAtivoCodigo}</strong> ainda está sendo processado.<br />Tem certeza que quer fazer um novo pedido?
+            </p>
+            <button
+              onClick={() => { setPedidoAtivoModal(false); router.push(`/pedido/${pedidoAtivoCodigo}`) }}
+              style={{ width: "100%", padding: "14px", borderRadius: 12, border: "none", background: "#DC2626", color: "#fff", fontWeight: 800, fontSize: 15, cursor: "pointer" }}
+            >
+              Ver meu pedido ativo
+            </button>
+            <button
+              onClick={() => {
+                localStorage.removeItem("arago_pedido_ativo")
+                setPedidoAtivoModal(false)
+                confirmar()
+              }}
+              style={{ width: "100%", padding: "12px", borderRadius: 12, border: "1.5px solid #E5E7EB", background: "#fff", color: "#374151", fontWeight: 700, fontSize: 14, cursor: "pointer" }}
+            >
+              Continuar mesmo assim
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ═══ MODAL PIX ═══════════════════════════════════════════════════ */}
       {pixModal && (
