@@ -1199,8 +1199,8 @@ export default function CheckoutPage() {
                   />
                 </div>
               </div>
-              {/* CPF: oculta quando já está no perfil OU nos metadados auth */}
-              {!(user && (perfil?.cpf || user?.user_metadata?.cpf)) && (
+              {/* CPF: sempre visível no PIX, oculto nos outros meios quando já salvo */}
+              {(pagamento === "pix" || !(user && (perfil?.cpf || user?.user_metadata?.cpf))) && (
                 <div>
                   <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
                     CPF{pagamento === "pix"
@@ -1211,7 +1211,7 @@ export default function CheckoutPage() {
                   <input
                     value={cpf} onChange={e => setCpf(e.target.value)}
                     placeholder="000.000.000-00" inputMode="numeric" maxLength={14}
-                    style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 16, background: "#F9FAFB", border: `1px solid ${pagamento === "pix" && !cpf ? "#FCA5A5" : "#E5E7EB"}`, color: "#111827", outline: "none", boxSizing: "border-box" }}
+                    style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 16, background: "#F9FAFB", border: `1px solid ${pagamento === "pix" && cpf.replace(/\D/g,"").length !== 11 ? "#FCA5A5" : "#E5E7EB"}`, color: "#111827", outline: "none", boxSizing: "border-box" }}
                   />
                 </div>
               )}
