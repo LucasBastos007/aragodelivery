@@ -31,7 +31,6 @@ export async function POST(req: NextRequest) {
   const sb = adminClient()
 
   const updates: Record<string, any> = { status: nextStatus }
-  if (nextStatus === "entregue") updates.entregue_em = new Date().toISOString()
 
   const { error } = await sb
     .from("entregas_avulsas")
