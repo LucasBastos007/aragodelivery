@@ -179,7 +179,7 @@ export default function PedidosPage() {
         .limit(200),
       supabase
         .from("entregas_avulsas")
-        .select("*, loja:lojas(telefone)")
+        .select("*")
         .order("criado_em", { ascending: false })
         .limit(200),
     ])
@@ -188,14 +188,17 @@ export default function PedidosPage() {
     const avList = avData ?? []
     setAvulsas(avList)
 
-    // Mapeia loja_id → telefone para botão WhatsApp
-    const fones: Record<string, string> = {}
-    for (const a of avList) {
-      if (a.loja_id && (a.loja as any)?.telefone) {
-        fones[a.loja_id] = (a.loja as any).telefone
+    // Busca telefones das lojas separadamente (sem depender de FK no Supabase)
+    const lojaIds = [...new Set(avList.map((a: any) => a.loja_id).filter(Boolean))]
+    if (lojaIds.length > 0) {
+      const { data: lojasData } = await supabase
+        .from("lojas").select("id, telefone").in("id", lojaIds)
+      const fones: Record<string, string> = {}
+      for (const l of lojasData ?? []) {
+        if (l.telefone) fones[l.id] = l.telefone
       }
+      setLojaFone(fones)
     }
-    setLojaFone(fones)
     setLoading(false)
   }
 
