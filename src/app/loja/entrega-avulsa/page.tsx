@@ -143,21 +143,33 @@ export default function EntregaAvulsaPage() {
     return () => document.removeEventListener("mousedown", handleClick)
   }, [])
 
-  // Autocomplete endereço: busca sugestões com debounce 400ms
+  // Autocomplete endereço: busca sugestões com debounce 400ms e calcula distância automaticamente
   useEffect(() => {
     const q = endBusca.trim()
-    if (q.length < 3) { setSugestoes([]); return }
-    if (endSelecionado) return // já selecionou — não rebusca
+    if (q.length < 3) { setSugestoes([]); setDistInfo(null); return }
+    if (endSelecionado?.lat) return // coordenadas já capturadas da seleção — não rebusca
     if (endTimer.current) clearTimeout(endTimer.current)
     endTimer.current = setTimeout(async () => {
       try {
-        const latParam = lojaCoords?.lat ? `&lat=${lojaCoords.lat}&lon=${lojaCoords.lng}` : ""
+        const latL = lojaCoords?.lat
+        const lngL = lojaCoords?.lng
+        const latParam = latL && lngL ? `&lat=${latL}&lon=${lngL}` : ""
         const res = await fetch(`/api/geocode/search?q=${encodeURIComponent(q)}${latParam}`)
         const data: SugestaoEndereco[] = await res.json()
         setSugestoes(data)
         setShowSug(data.length > 0)
+        // Calcula distância automaticamente com o primeiro resultado
+        if (data[0] && latL && lngL) {
+          const latC = parseFloat(data[0].lat)
+          const lngC = parseFloat(data[0].lon)
+          if (!isNaN(latC) && !isNaN(lngC)) {
+            const dist = haversineKm(latL, lngL, latC, lngC)
+            const taxaBase = lojaCoords?.taxa_entrega ?? 6.00
+            setDistInfo({ km: dist, taxa: calcularFrete(dist, taxaBase) })
+          }
+        }
       } catch {}
-    }, 400)
+    }, 600)
     return () => { if (endTimer.current) clearTimeout(endTimer.current) }
   }, [endBusca, endSelecionado, lojaCoords])
 
