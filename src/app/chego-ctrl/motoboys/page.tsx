@@ -154,6 +154,8 @@ export default function MotoboyPage() {
   const [fotoAmpliada,  setFotoAmpliada]  = useState<string | null>(null)
   const [signedUrls,    setSignedUrls]    = useState<Record<string, string>>({})
   const [loadingDocs,   setLoadingDocs]   = useState(false)
+  const [gerandoCred,   setGerandoCred]   = useState(false)
+  const [credencial,    setCredencial]    = useState<{ email: string; senha: string } | null>(null)
 
   // Busca signed URLs sempre que um motoboy é selecionado
   useEffect(() => {
@@ -172,7 +174,7 @@ export default function MotoboyPage() {
     setLoadingDocs(true)
     Promise.all(
       entries.map(async ({ key, value }) => {
-        const res = await fetch("/api/chego-ctrl/doc-url", {
+        const res = await fetch("/api/admin/doc-url", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ value }),
@@ -235,6 +237,20 @@ export default function MotoboyPage() {
     }
   }
 
+  async function gerarCredenciais(m: Motoboy) {
+    setGerandoCred(true)
+    setCredencial(null)
+    const res = await fetch("/api/admin/criar-credenciais-motoboy", {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ motoboy_id: m.id }),
+    })
+    const json = await res.json()
+    setGerandoCred(false)
+    if (json.ok) setCredencial({ email: json.email, senha: json.senhaTemporaria })
+    else alert(json.error ?? "Erro ao gerar credenciais")
+  }
+
   function linkContrato(m: Motoboy) {
     return `${window.location.origin}/contrato/motoboy/${m.contrato_token}`
   }
@@ -250,7 +266,13 @@ export default function MotoboyPage() {
   const onlines    = motoboys.filter(m => m.disponivel && m.status === "ativo")
 
   return (
-    <div style={{ padding: "32px 36px" }}>
+    <div style={{ padding: "24px 16px" }}>
+      <style>{`
+        @media (max-width: 767px) {
+          .mb-layout { flex-direction: column !important; }
+          .mb-panel  { width: 100% !important; position: fixed !important; inset: 0 !important; top: 0 !important; z-index: 200 !important; border-radius: 0 !important; overflow-y: auto !important; max-height: 100dvh !important; }
+        }
+      `}</style>
 
       {/* Lightbox de fotos */}
       {fotoAmpliada && <Lightbox src={fotoAmpliada} onClose={() => setFotoAmpliada(null)} />}
@@ -297,6 +319,51 @@ export default function MotoboyPage() {
             }}>
               Depois
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de credenciais geradas */}
+      {credencial && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 300, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div style={{ background: "white", borderRadius: 20, padding: 24, width: "100%", maxWidth: 380, boxShadow: "0 8px 48px rgba(0,0,0,0.5)" }}>
+            <p style={{ fontWeight: 900, fontSize: 16, color: "#0F172A", marginBottom: 4 }}>Credenciais geradas</p>
+            <p style={{ color: "#94a3b8", fontSize: 13, marginBottom: 20 }}>Envie ao motoboy para primeiro acesso</p>
+            <div style={{ background: "#F8FAFC", borderRadius: 12, padding: "14px 16px", marginBottom: 16, border: "1px solid #E2E8F0" }}>
+              <div style={{ marginBottom: 12 }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>E-mail</p>
+                <p style={{ fontWeight: 700, color: "#0F172A", fontSize: 14 }}>{credencial.email}</p>
+              </div>
+              <div>
+                <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>Senha temporária</p>
+                <p style={{ fontWeight: 900, color: "#f97316", fontSize: 22, letterSpacing: 2, fontFamily: "monospace" }}>{credencial.senha}</p>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => {
+                  const msg = `Olá! Seus dados de acesso ao app Chegô Delivery:\n\nE-mail: ${credencial.email}\nSenha: ${credencial.senha}\n\nAcesse: chegodelivery.com/entrar/motoboy`
+                  navigator.clipboard.writeText(msg)
+                  alert("Copiado!")
+                }}
+                style={{ flex: 1, padding: "11px", borderRadius: 10, border: "1.5px solid #E2E8F0", background: "transparent", color: "#374151", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+              >
+                Copiar
+              </button>
+              {selecionado?.telefone && (
+                <a
+                  href={`https://wa.me/55${selecionado.telefone.replace(/\D/g, "")}?text=${encodeURIComponent(`Olá! Seus dados de acesso ao app Chegô Delivery:\n\nE-mail: ${credencial.email}\nSenha: ${credencial.senha}\n\nAcesse: chegodelivery.com/entrar/motoboy`)}`}
+                  target="_blank" rel="noreferrer"
+                  onClick={() => setCredencial(null)}
+                  style={{ flex: 1, padding: "11px", borderRadius: 10, border: "none", background: "#25D366", color: "white", fontWeight: 700, fontSize: 13, textDecoration: "none", textAlign: "center" as const }}
+                >
+                  WhatsApp
+                </a>
+              )}
+              <button onClick={() => setCredencial(null)} style={{ padding: "11px 14px", borderRadius: 10, border: "1.5px solid #E2E8F0", background: "transparent", color: "#94a3b8", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                Fechar
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -374,7 +441,7 @@ export default function MotoboyPage() {
         ))}
       </div>
 
-      <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
+      <div className="mb-layout" style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
         {/* Lista */}
         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
           {loading ? (
@@ -438,7 +505,7 @@ export default function MotoboyPage() {
 
         {/* Painel de detalhe */}
         {selecionado && (
-          <div style={{
+          <div className="mb-panel" style={{
             width: 380, flexShrink: 0, alignSelf: "flex-start",
             background: "white", border: "1.5px solid #F1F5F9", borderRadius: 18,
             boxShadow: "0 4px 24px rgba(0,0,0,0.08)",
@@ -711,6 +778,25 @@ export default function MotoboyPage() {
                     Reapresentar contrato
                   </button>
                 </>
+              )}
+
+              {/* Gerar credenciais (qualquer status) */}
+              {["ativo", "contrato_assinado", "aprovado"].includes(selecionado.status) && (
+                <button
+                  onClick={() => gerarCredenciais(selecionado)}
+                  disabled={gerandoCred}
+                  style={{
+                    width: "100%", padding: "11px", borderRadius: 10,
+                    border: "1.5px solid rgba(99,102,241,0.35)", background: "rgba(99,102,241,0.07)",
+                    color: "#818cf8", fontWeight: 700, fontSize: 13, cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                  {gerandoCred ? "Gerando..." : "Gerar credenciais de acesso"}
+                </button>
               )}
 
               {/* Contato rápido */}

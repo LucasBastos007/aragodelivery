@@ -102,7 +102,7 @@ export default function DocumentosMotoboyPage() {
       if (rawDocs.length > 0) {
         const results = await Promise.all(
           rawDocs.map(async ({ key, value }) => {
-            const res = await fetch("/api/chego-ctrl/doc-url", {
+            const res = await fetch("/api/admin/doc-url", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ value }),
@@ -145,7 +145,7 @@ export default function DocumentosMotoboyPage() {
   ].filter(Boolean) as DocItem[]
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc", padding: "32px 36px" }}>
+    <div style={{ minHeight: "100vh", background: "#f8fafc", padding: "24px 16px" }}>
       {amplia && <Lightbox src={amplia} onClose={() => setAmplia(null)} />}
 
       {/* Header */}
