@@ -850,21 +850,21 @@ export default function MotoboyPage() {
     })
   }, [pedidoOferta?.id])
 
+  // ── Verifica avulsa pendente ao abrir o app (não depende de disponivel) ────
+  useEffect(() => {
+    if (!motoboy_id) return
+    supabase.from("entregas_avulsas")
+      .select("*").eq("motoboy_id", motoboy_id).eq("status", "aguardando_aceite").limit(1)
+      .then(({ data }) => {
+        if (data && data.length > 0 && !dismissedIdsRef.current.has(data[0].id)) {
+          setAvulsaOferta(data[0]); setTimerAvulsa(30); playNotificationSound()
+        }
+      })
+  }, [motoboy_id])
+
   // ── Supabase Realtime — escuta oferta de entrega avulsa ───────────────────
   useEffect(() => {
     if (!motoboy_id || !disponivel) return
-
-    // Verifica oferta pendente ao entrar
-    supabase.from("entregas_avulsas")
-      .select("*")
-      .eq("motoboy_id", motoboy_id)
-      .eq("status", "aguardando_aceite")
-      .limit(1)
-      .then(({ data }) => {
-        if (data && data.length > 0 && !dismissedIdsRef.current.has(data[0].id)) {
-          setAvulsaOferta(data[0]); setTimerAvulsa(30)
-        }
-      })
 
     // Carrega avulsas em andamento
     supabase.from("entregas_avulsas")
@@ -2183,7 +2183,12 @@ export default function MotoboyPage() {
                 <p style={{ color: "white", fontWeight: 900, fontSize: 18 }}>R$ {(a.taxa_entrega ?? 0).toFixed(2)}</p>
               </div>
               <div style={{ padding: "12px 16px" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+                  {a.loja_nome && (
+                    <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 12, fontWeight: 700 }}>
+                      🏪 {a.loja_nome}
+                    </p>
+                  )}
                   <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>
                     <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 11 }}>Cliente: </span>
                     <strong style={{ color: "white" }}>{a.cliente_nome}</strong>
@@ -2198,6 +2203,33 @@ export default function MotoboyPage() {
                   {a.observacao && (
                     <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, fontStyle: "italic" }}>{a.observacao}</p>
                   )}
+                </div>
+                {/* Waze */}
+                <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                  {a.loja_lat && a.loja_lng && (
+                    <a
+                      href={`https://waze.com/ul?ll=${a.loja_lat},${a.loja_lng}&navigate=yes`}
+                      target="_blank" rel="noreferrer"
+                      style={{
+                        flex: 1, padding: "9px 0", borderRadius: 10, textDecoration: "none",
+                        border: "1px solid rgba(0,170,255,0.3)", background: "rgba(0,170,255,0.07)",
+                        color: "#00aaff", fontWeight: 800, fontSize: 11, textAlign: "center",
+                      }}
+                    >
+                      🗺 Ir à loja
+                    </a>
+                  )}
+                  <a
+                    href={`https://waze.com/ul?q=${encodeURIComponent(a.endereco)}&navigate=yes`}
+                    target="_blank" rel="noreferrer"
+                    style={{
+                      flex: 1, padding: "9px 0", borderRadius: 10, textDecoration: "none",
+                      border: "1px solid rgba(0,170,255,0.3)", background: "rgba(0,170,255,0.07)",
+                      color: "#00aaff", fontWeight: 800, fontSize: 11, textAlign: "center",
+                    }}
+                  >
+                    🗺 Ir ao cliente
+                  </a>
                 </div>
                 {a.status === "aceito" && (
                   <button onClick={() => avancarAvulsa(a)} style={{
@@ -2771,9 +2803,14 @@ function CardAvulsa({
 
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "14px 20px 14px" }}>
           <div>
-            <p style={{ color: "#a78bfa", fontSize: 13, fontWeight: 700, marginBottom: 6, letterSpacing: 0.3 }}>
+            <p style={{ color: "#a78bfa", fontSize: 13, fontWeight: 700, marginBottom: 4, letterSpacing: 0.3 }}>
               Entrega avulsa!
             </p>
+            {avulsa.loja_nome && (
+              <p style={{ color: "rgba(255,255,255,0.55)", fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
+                🏪 {avulsa.loja_nome}
+              </p>
+            )}
             <p style={{ color: "#FF8C00", fontWeight: 900, fontSize: 34, lineHeight: 1, letterSpacing: -0.5 }}>
               R$ {(avulsa.taxa_entrega ?? 0).toFixed(2).replace(".", ",")}
             </p>
@@ -2818,6 +2855,34 @@ function CardAvulsa({
               <p style={{ color: "#888", fontSize: 12, marginTop: 4, fontStyle: "italic" }}>{avulsa.observacao}</p>
             )}
           </div>
+        </div>
+
+        {/* Botões Waze */}
+        <div style={{ display: "flex", gap: 8, padding: "0 20px 16px" }}>
+          {avulsa.loja_lat && avulsa.loja_lng && (
+            <a
+              href={`https://waze.com/ul?ll=${avulsa.loja_lat},${avulsa.loja_lng}&navigate=yes`}
+              target="_blank" rel="noreferrer"
+              style={{
+                flex: 1, padding: "10px 0", borderRadius: 12, textDecoration: "none",
+                border: "1.5px solid rgba(0,170,255,0.3)", background: "rgba(0,170,255,0.08)",
+                color: "#00aaff", fontWeight: 800, fontSize: 12, textAlign: "center",
+              }}
+            >
+              🗺 Waze → Loja
+            </a>
+          )}
+          <a
+            href={`https://waze.com/ul?q=${encodeURIComponent(avulsa.endereco)}&navigate=yes`}
+            target="_blank" rel="noreferrer"
+            style={{
+              flex: 1, padding: "10px 0", borderRadius: 12, textDecoration: "none",
+              border: "1.5px solid rgba(0,170,255,0.3)", background: "rgba(0,170,255,0.08)",
+              color: "#00aaff", fontWeight: 800, fontSize: 12, textAlign: "center",
+            }}
+          >
+            🗺 Waze → Cliente
+          </a>
         </div>
 
         <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0 20px 16px" }} />

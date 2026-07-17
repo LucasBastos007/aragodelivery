@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { data: loja } = await admin
-      .from("lojas").select("plano, status, lat, lng").eq("id", loja_id).single()
+      .from("lojas").select("nome, plano, status, lat, lng").eq("id", loja_id).single()
 
     if (!loja || loja.status !== "ativo") {
       return NextResponse.json({ error: "Loja não está ativa" }, { status: 403 })
@@ -127,6 +127,9 @@ export async function POST(req: NextRequest) {
       .from("entregas_avulsas")
       .insert({
         loja_id,
+        loja_nome:     loja.nome    || null,
+        loja_lat:      loja.lat     ?? null,
+        loja_lng:      loja.lng     ?? null,
         cliente_nome,
         cliente_tel:   cliente_tel  || "",
         endereco,
