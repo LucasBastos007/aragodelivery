@@ -170,12 +170,13 @@ export default function PedidosPage() {
   const [motoboyFone, setMotoboyFone] = useState<Record<string, string>>({})
   const [loading, setLoading]  = useState(true)
   const [filtro, setFiltro]    = useState<Filtro>("todos")
+  const [expandido, setExpandido] = useState<string | null>(null)
 
   async function load() {
     const [{ data: pedData }, { data: avData }] = await Promise.all([
       supabase
         .from("pedidos")
-        .select("*, loja:lojas(nome, telefone), motoboy:motoboys(nome)")
+        .select("*, loja:lojas(nome, telefone), motoboy:motoboys(nome), itens:itens_pedido(*)")
         .order("criado_em", { ascending: false })
         .limit(200),
       supabase
@@ -393,62 +394,136 @@ export default function PedidosPage() {
 
             // Pedido regular
             const p = item.data
+            const aberto = expandido === p.id
+            const itens: any[] = (p as any).itens ?? []
             return (
-              <div key={`pedido-${p.id}`} className="card p-3 sm:p-4 flex items-start gap-3">
-                <div className="flex-shrink-0 text-center" style={{ minWidth: 48 }}>
-                  <p className="text-xs font-black">#{p.codigo}</p>
-                  <p className="text-[10px] mt-0.5" style={{ color: "#94a3b8" }}>
-                    {fmt(p.criado_em)}
-                  </p>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                    <span className={`badge ${STATUS_BADGE[p.status]}`}>{STATUS_LABEL[p.status]}</span>
-                    <span className="text-xs truncate" style={{ color: "#64748b" }}>{(p.loja as any)?.nome ?? "—"}</span>
+              <div key={`pedido-${p.id}`} className="card" style={{ overflow: "hidden" }}>
+                {/* Cabeçalho clicável */}
+                <div
+                  className="p-3 sm:p-4 flex items-start gap-3"
+                  onClick={() => setExpandido(aberto ? null : p.id)}
+                  style={{ cursor: "pointer", userSelect: "none" }}
+                >
+                  <div className="flex-shrink-0 text-center" style={{ minWidth: 48 }}>
+                    <p className="text-xs font-black">#{p.codigo}</p>
+                    <p className="text-[10px] mt-0.5" style={{ color: "#94a3b8" }}>
+                      {fmt(p.criado_em)}
+                    </p>
                   </div>
-                  <p className="text-xs truncate" style={{ color: "#94a3b8" }}>
-                    {(p.motoboy as any)?.nome ?? "Sem motoboy"}
-                  </p>
-                  <p className="text-xs truncate" style={{ color: "#94a3b8" }}>
-                    {p.endereco_entrega}
-                  </p>
-                  {p.status === "entregue" && (p.coletado_em || p.entregue_em) && (
-                    <div style={{
-                      marginTop: 6, padding: "6px 10px", borderRadius: 8,
-                      background: "rgba(34,197,94,0.07)", border: "1px solid rgba(34,197,94,0.15)",
-                      display: "flex", flexWrap: "wrap", gap: "4px 14px",
-                    }}>
-                      {p.coletado_em && (
-                        <span style={{ fontSize: 11, color: "#64748b" }}>
-                          Coletou <strong style={{ color: "#0F172A" }}>{fmt(p.coletado_em)}</strong>
-                        </span>
-                      )}
-                      {p.entregue_em && (
-                        <span style={{ fontSize: 11, color: "#64748b" }}>
-                          Entregou <strong style={{ color: "#0F172A" }}>{fmt(p.entregue_em)}</strong>
-                        </span>
-                      )}
-                      {p.coletado_em && p.entregue_em && (
-                        <span style={{ fontSize: 11, fontWeight: 700, color: "#22c55e" }}>
-                          {diffMin(p.coletado_em, p.entregue_em)} min
-                        </span>
-                      )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                      <span className={`badge ${STATUS_BADGE[p.status]}`}>{STATUS_LABEL[p.status]}</span>
+                      <span className="text-xs truncate" style={{ color: "#64748b" }}>{(p.loja as any)?.nome ?? "—"}</span>
                     </div>
-                  )}
+                    <p className="text-xs truncate" style={{ color: "#94a3b8" }}>
+                      {(p.motoboy as any)?.nome ?? "Sem motoboy"}
+                    </p>
+                    <p className="text-xs truncate" style={{ color: "#94a3b8" }}>
+                      {p.endereco_entrega}
+                    </p>
+                    {p.nome_cliente && (
+                      <p className="text-xs" style={{ color: "#64748b", marginTop: 2 }}>
+                        {p.nome_cliente}{p.telefone_cliente ? ` · ${p.telefone_cliente}` : ""}
+                      </p>
+                    )}
+                    {p.status === "entregue" && (p.coletado_em || p.entregue_em) && (
+                      <div style={{
+                        marginTop: 6, padding: "6px 10px", borderRadius: 8,
+                        background: "rgba(34,197,94,0.07)", border: "1px solid rgba(34,197,94,0.15)",
+                        display: "flex", flexWrap: "wrap", gap: "4px 14px",
+                      }}>
+                        {p.coletado_em && (
+                          <span style={{ fontSize: 11, color: "#64748b" }}>
+                            Coletou <strong style={{ color: "#0F172A" }}>{fmt(p.coletado_em)}</strong>
+                          </span>
+                        )}
+                        {p.entregue_em && (
+                          <span style={{ fontSize: 11, color: "#64748b" }}>
+                            Entregou <strong style={{ color: "#0F172A" }}>{fmt(p.entregue_em)}</strong>
+                          </span>
+                        )}
+                        {p.coletado_em && p.entregue_em && (
+                          <span style={{ fontSize: 11, fontWeight: 700, color: "#22c55e" }}>
+                            {diffMin(p.coletado_em, p.entregue_em)} min
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="font-black text-sm" style={{ color: "#0F172A" }}>
+                      R$ {p.total.toFixed(2)}
+                    </p>
+                    <p className="text-[10px] mt-0.5" style={{ color: "#94a3b8" }}>
+                      {PAGAMENTO_ICON[p.forma_pagamento]}
+                    </p>
+                    {p.status === "aguardando_pagamento" && p.forma_pagamento === "cartao" && (
+                      <ConfirmarCartaoBtn pedidoId={p.id} onConfirmado={() => setPedidos(prev =>
+                        prev.map(x => x.id === p.id ? { ...x, status: "pendente" as StatusPedido } : x)
+                      )} />
+                    )}
+                    {/* Indicador expandir */}
+                    <p style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>
+                      {aberto ? "▲ fechar" : "▼ itens"}
+                    </p>
+                  </div>
                 </div>
-                <div className="text-right flex-shrink-0">
-                  <p className="font-black text-sm" style={{ color: "#0F172A" }}>
-                    R$ {p.total.toFixed(2)}
-                  </p>
-                  <p className="text-[10px] mt-0.5" style={{ color: "#94a3b8" }}>
-                    {PAGAMENTO_ICON[p.forma_pagamento]}
-                  </p>
-                  {p.status === "aguardando_pagamento" && p.forma_pagamento === "cartao" && (
-                    <ConfirmarCartaoBtn pedidoId={p.id} onConfirmado={() => setPedidos(prev =>
-                      prev.map(x => x.id === p.id ? { ...x, status: "pendente" as StatusPedido } : x)
-                    )} />
-                  )}
-                </div>
+
+                {/* Itens expandidos */}
+                {aberto && (
+                  <div style={{
+                    borderTop: "1px solid #f1f5f9",
+                    padding: "12px 16px 14px",
+                    background: "#f8fafc",
+                  }}>
+                    {itens.length === 0 ? (
+                      <p style={{ fontSize: 12, color: "#94a3b8" }}>Nenhum item encontrado.</p>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        {itens.map((it: any, i: number) => (
+                          <div key={it.id ?? i} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ fontSize: 13, fontWeight: 700, color: "#0F172A" }}>
+                                {it.quantidade}x {it.nome}
+                              </p>
+                              {Array.isArray(it.adicionais) && it.adicionais.length > 0 && (
+                                <div style={{ marginTop: 3 }}>
+                                  {it.adicionais.map((ad: any, j: number) => (
+                                    <p key={j} style={{ fontSize: 11, color: "#64748b" }}>
+                                      + {ad.nome ?? ad}
+                                      {ad.preco > 0 ? ` (R$ ${Number(ad.preco).toFixed(2)})` : ""}
+                                    </p>
+                                  ))}
+                                </div>
+                              )}
+                              {it.observacao && (
+                                <p style={{ fontSize: 11, color: "#f97316", marginTop: 2 }}>
+                                  Obs: {it.observacao}
+                                </p>
+                              )}
+                            </div>
+                            <p style={{ fontSize: 13, fontWeight: 700, color: "#0F172A", flexShrink: 0 }}>
+                              R$ {(it.preco * it.quantidade).toFixed(2)}
+                            </p>
+                          </div>
+                        ))}
+                        <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 8, display: "flex", justifyContent: "space-between" }}>
+                          <span style={{ fontSize: 12, color: "#64748b" }}>Subtotal</span>
+                          <span style={{ fontSize: 12, fontWeight: 700 }}>R$ {p.subtotal.toFixed(2)}</span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between" }}>
+                          <span style={{ fontSize: 12, color: "#64748b" }}>Taxa entrega</span>
+                          <span style={{ fontSize: 12, fontWeight: 700 }}>R$ {p.taxa_entrega.toFixed(2)}</span>
+                        </div>
+                        {p.observacao && (
+                          <p style={{ fontSize: 11, color: "#f97316", background: "rgba(249,115,22,0.06)", padding: "6px 10px", borderRadius: 6, border: "1px solid rgba(249,115,22,0.15)" }}>
+                            Obs do cliente: {p.observacao}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )
           })
