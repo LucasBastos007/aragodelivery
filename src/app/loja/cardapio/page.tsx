@@ -23,13 +23,18 @@ type ProdutoForm = {
 const FORM_VAZIO: ProdutoForm = { nome: "", descricao: "", preco: "", categoria_id: "", disponivel: true, foto_url: "", dias_semana: [], ncm: "" }
 
 async function uploadFoto(file: File, path: string): Promise<{ url: string; erro?: string }> {
-  const form = new FormData()
-  form.append("file", file)
-  form.append("path", path)
-  const res = await fetch("/api/upload", { method: "POST", body: form })
-  const data = await res.json()
-  if (!res.ok) return { url: "", erro: data.error ?? "Falha no upload da foto" }
-  return { url: data.url ?? "" }
+  try {
+    const form = new FormData()
+    form.append("file", file)
+    form.append("path", path)
+    const res = await fetch("/api/upload", { method: "POST", body: form, credentials: "include" })
+    let data: any = {}
+    try { data = await res.json() } catch {}
+    if (!res.ok) return { url: "", erro: data.error ?? "Falha no upload da foto" }
+    return { url: data.url ?? "" }
+  } catch (e: any) {
+    return { url: "", erro: e?.message ?? "Erro ao enviar a foto" }
+  }
 }
 
 export default function CardapioPage() {
@@ -134,7 +139,7 @@ export default function CardapioPage() {
   function abrirEditarProduto(p: Produto) {
     setEditando(p)
     setFormProd({
-      nome: p.nome, descricao: p.descricao,
+      nome: p.nome ?? "", descricao: p.descricao ?? "",
       preco: p.preco.toFixed(2),
       categoria_id: p.categoria_id ?? "",
       disponivel: p.disponivel,
@@ -145,7 +150,7 @@ export default function CardapioPage() {
     setFotoFile(null)
     setFotoPreview(p.foto_url ?? "")
     setErroSalvar("")
-    setAdicionais(p.adicionais ?? [])
+    setAdicionais((p.adicionais ?? []).filter((a): a is AdicionalProduto => !("itens" in a)))
     setNovoAdicNome("")
     setNovoAdicPreco("")
     setModalProd(true)
@@ -164,6 +169,7 @@ export default function CardapioPage() {
     setSalvando(true)
     setErroSalvar("")
 
+    try {
     let fotoUrlFinal = formProd.foto_url
     if (fotoFile) {
       const path = `produtos/${lojaId}/${Date.now()}.${fotoFile.name.split(".").pop() ?? "jpg"}`
@@ -206,7 +212,11 @@ export default function CardapioPage() {
 
     fecharModalProd(); setEditando(null); setFormProd(FORM_VAZIO)
     await carregarTudo()
-    setSalvando(false)
+    } catch (e: any) {
+      setErroSalvar(e?.message ?? "Erro inesperado ao salvar")
+    } finally {
+      setSalvando(false)
+    }
   }
 
   async function toggleDisponivel(p: Produto) {
