@@ -4,6 +4,21 @@ import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import type { Pedido, StatusPedido } from "@/types"
 
+function PercursoItem({ cor, label, hora, linha }: { cor: string; label: string; hora: string; linha: boolean }) {
+  return (
+    <div style={{ display: "flex", gap: 10 }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 16 }}>
+        <div style={{ width: 10, height: 10, borderRadius: "50%", background: cor, flexShrink: 0, marginTop: 2 }} />
+        {linha && <div style={{ width: 2, flex: 1, background: "#e2e8f0", margin: "2px 0 2px" }} />}
+      </div>
+      <div style={{ paddingBottom: linha ? 10 : 0, display: "flex", justifyContent: "space-between", flex: 1 }}>
+        <span style={{ fontSize: 12, color: "#64748b" }}>{label}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "#0F172A" }}>{hora}</span>
+      </div>
+    </div>
+  )
+}
+
 function ConfirmarCartaoBtn({ pedidoId, onConfirmado }: { pedidoId: string; onConfirmado: () => void }) {
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState("")
@@ -426,11 +441,12 @@ export default function PedidosPage() {
                         {p.nome_cliente}{p.telefone_cliente ? ` · ${p.telefone_cliente}` : ""}
                       </p>
                     )}
-                    {p.status === "entregue" && (p.coletado_em || p.entregue_em) && (
+                    {(p.coletado_em || p.entregue_em) && (
                       <div style={{
-                        marginTop: 6, padding: "6px 10px", borderRadius: 8,
-                        background: "rgba(34,197,94,0.07)", border: "1px solid rgba(34,197,94,0.15)",
-                        display: "flex", flexWrap: "wrap", gap: "4px 14px",
+                        marginTop: 6, padding: "5px 10px", borderRadius: 8,
+                        background: p.entregue_em ? "rgba(34,197,94,0.07)" : "rgba(249,115,22,0.06)",
+                        border: `1px solid ${p.entregue_em ? "rgba(34,197,94,0.15)" : "rgba(249,115,22,0.15)"}`,
+                        display: "flex", flexWrap: "wrap", gap: "2px 12px",
                       }}>
                         {p.coletado_em && (
                           <span style={{ fontSize: 11, color: "#64748b" }}>
@@ -446,6 +462,9 @@ export default function PedidosPage() {
                           <span style={{ fontSize: 11, fontWeight: 700, color: "#22c55e" }}>
                             {diffMin(p.coletado_em, p.entregue_em)} min
                           </span>
+                        )}
+                        {p.coletado_em && !p.entregue_em && (
+                          <span style={{ fontSize: 11, fontWeight: 700, color: "#f97316" }}>Em rota</span>
                         )}
                       </div>
                     )}
@@ -519,6 +538,33 @@ export default function PedidosPage() {
                           <p style={{ fontSize: 11, color: "#f97316", background: "rgba(249,115,22,0.06)", padding: "6px 10px", borderRadius: 6, border: "1px solid rgba(249,115,22,0.15)" }}>
                             Obs do cliente: {p.observacao}
                           </p>
+                        )}
+
+                        {/* Percurso */}
+                        {(p.coletado_em || p.entregue_em) && (
+                          <div style={{ marginTop: 4 }}>
+                            <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>
+                              Percurso
+                            </p>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                              {/* Pedido criado */}
+                              <PercursoItem cor="#94a3b8" label="Pedido criado" hora={fmt(p.criado_em)} linha />
+                              {/* Coletado na loja */}
+                              {p.coletado_em && (
+                                <PercursoItem cor="#f97316" label="Saiu para entrega" hora={fmt(p.coletado_em)} linha={!!p.entregue_em} />
+                              )}
+                              {/* Entregue */}
+                              {p.entregue_em && (
+                                <PercursoItem cor="#22c55e" label="Entregue ao cliente" hora={fmt(p.entregue_em)} linha={false} />
+                              )}
+                            </div>
+                            {p.coletado_em && p.entregue_em && (
+                              <div style={{ marginTop: 10, padding: "6px 12px", borderRadius: 8, background: "rgba(34,197,94,0.07)", border: "1px solid rgba(34,197,94,0.15)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <span style={{ fontSize: 11, color: "#64748b" }}>Tempo de entrega</span>
+                                <span style={{ fontSize: 13, fontWeight: 900, color: "#22c55e" }}>{diffMin(p.coletado_em, p.entregue_em)} min</span>
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
                     )}
