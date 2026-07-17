@@ -117,6 +117,8 @@ export default function LojasPage() {
   const [emailEnviado,      setEmailEnviado]        = useState(false)
   const [taxaAberta,        setTaxaAberta]          = useState(false)
   const [novaTaxa,          setNovaTaxa]            = useState("")
+  const [criandoCred,       setCriandoCred]         = useState(false)
+  const [credResult,        setCredResult]          = useState<{ senhaTemporaria: string; emailEnviado: boolean; avisoEmail?: string } | null>(null)
 
   async function load() {
     const { data } = await supabase.from("lojas").select("*").order("criado_em", { ascending: false })
@@ -299,6 +301,21 @@ export default function LojasPage() {
     setTimeout(() => setEmailEnviado(false), 4000)
   }
 
+  async function criarCredenciais(loja: Loja) {
+    setCriandoCred(true)
+    setCredResult(null)
+    const res = await fetch("/api/admin/criar-credenciais", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ loja_id: loja.id }),
+    })
+    const json = await res.json()
+    if (!res.ok) { alert("Erro: " + (json.error ?? "Tente novamente")); setCriandoCred(false); return }
+    setCredResult({ senhaTemporaria: json.senhaTemporaria, emailEnviado: json.emailEnviado, avisoEmail: json.avisoEmail })
+    setCriandoCred(false)
+  }
+
   async function excluirLoja(loja: Loja) {
     setExcluindo(true)
     const res = await fetch("/api/chego-ctrl/excluir-loja", {
@@ -438,7 +455,7 @@ export default function LojasPage() {
             const active = selecionada?.id === l.id
             const cfg = STATUS_CFG[l.status] ?? STATUS_CFG.pendente
             return (
-              <div key={l.id} onClick={() => { setSelecionada(active ? null : l); setConfirmExcluir(false) }} style={{
+              <div key={l.id} onClick={() => { setSelecionada(active ? null : l); setConfirmExcluir(false); setCredResult(null) }} style={{
                 background: "white",
                 borderRadius: 14,
                 border: active ? `1.5px solid #f97316` : "1.5px solid #F1F5F9",
@@ -1137,6 +1154,62 @@ export default function LojasPage() {
                   Reativar loja
                 </button>
               )}
+
+              {/* Credenciais de Acesso */}
+              <div style={{ borderTop: "1.5px solid #F1F5F9", paddingTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.5, margin: 0 }}>Acesso do lojista</p>
+                <button
+                  onClick={() => { setCredResult(null); criarCredenciais(selecionada) }}
+                  disabled={criandoCred || !selecionada.email}
+                  title={!selecionada.email ? "Loja sem e-mail cadastrado" : ""}
+                  style={{
+                    width: "100%", padding: "11px", borderRadius: 10,
+                    border: "1.5px solid #C7D2FE", background: "#EEF2FF",
+                    color: criandoCred ? "#a5b4fc" : "#4338ca",
+                    fontWeight: 700, fontSize: 13,
+                    cursor: (criandoCred || !selecionada.email) ? "not-allowed" : "pointer",
+                    opacity: !selecionada.email ? 0.5 : 1,
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                  }}
+                >
+                  {criandoCred ? "Gerando…" : "🔑 Criar credenciais e enviar por email"}
+                </button>
+
+                {credResult && (
+                  <div style={{
+                    borderRadius: 10, overflow: "hidden",
+                    border: `1.5px solid ${credResult.emailEnviado ? "#BBF7D0" : "#FED7AA"}`,
+                  }}>
+                    <div style={{
+                      padding: "10px 14px",
+                      background: credResult.emailEnviado ? "#F0FDF4" : "#FFF7ED",
+                    }}>
+                      <p style={{ fontSize: 12, fontWeight: 800, color: credResult.emailEnviado ? "#15803d" : "#92400e", marginBottom: 6 }}>
+                        {credResult.emailEnviado ? "✓ Credenciais enviadas por email" : "⚠ Email não enviado — copie a senha abaixo"}
+                      </p>
+                      <div style={{ background: "white", border: "1.5px solid #E2E8F0", borderRadius: 8, padding: "8px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                        <div>
+                          <p style={{ fontSize: 10, color: "#9ca3af", fontWeight: 600 }}>Email</p>
+                          <p style={{ fontSize: 12, fontWeight: 700, color: "#111827" }}>{selecionada.email}</p>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <p style={{ fontSize: 10, color: "#9ca3af", fontWeight: 600 }}>Senha temporária</p>
+                          <p style={{ fontSize: 16, fontWeight: 900, color: "#f97316", letterSpacing: 4, fontFamily: "monospace" }}>{credResult.senhaTemporaria}</p>
+                        </div>
+                      </div>
+                      {credResult.avisoEmail && (
+                        <p style={{ fontSize: 11, color: "#92400e", marginTop: 6 }}>{credResult.avisoEmail}</p>
+                      )}
+                      <button
+                        onClick={() => navigator.clipboard.writeText(credResult.senhaTemporaria).catch(() => {})}
+                        style={{ width: "100%", marginTop: 8, padding: "7px", borderRadius: 8, border: "1px solid #CBD5E1", background: "white", color: "#374151", fontWeight: 700, fontSize: 11, cursor: "pointer" }}
+                      >
+                        Copiar senha
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Excluir loja — disponível para qualquer status */}
               {!confirmExcluir ? (

@@ -426,3 +426,57 @@ export async function enviarBoasVindasLoja({
     html,
   })
 }
+
+export async function enviarCredenciaisLojista({
+  nome,
+  email,
+  senhaTemporaria,
+  linkTrocarSenha,
+}: {
+  nome: string
+  email: string
+  senhaTemporaria: string
+  linkTrocarSenha: string
+}) {
+  const resend = getResend()
+  if (!resend) return
+
+  const html = base(`
+    <h1 style="margin:0 0 6px;font-size:22px;font-weight:900;color:#111827;">Seu acesso foi criado, ${nome}!</h1>
+    <p style="margin:0 0 20px;font-size:15px;color:#6b7280;">O administrador do <strong style="color:#f97316;">Chegô Delivery</strong> criou suas credenciais de acesso ao painel da loja.</p>
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#fff7ed;border:1.5px solid #fed7aa;border-radius:12px;margin:0 0 20px;">
+      <tr>
+        <td style="padding:20px 24px;">
+          <p style="margin:0 0 14px;font-size:12px;font-weight:700;color:#ea580c;text-transform:uppercase;letter-spacing:1px;">Seus dados de acesso</p>
+          <table cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="padding:5px 0;font-size:13px;color:#6b7280;width:90px;">E-mail</td>
+              <td style="padding:5px 0;font-size:13px;font-weight:700;color:#111827;">${email}</td>
+            </tr>
+            <tr>
+              <td style="padding:5px 0;font-size:13px;color:#6b7280;">Senha</td>
+              <td style="padding:5px 0;font-size:22px;font-weight:900;color:#f97316;letter-spacing:4px;">${senhaTemporaria}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <div style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:10px;padding:14px 18px;margin:0 0 24px;">
+      <p style="margin:0;font-size:13px;color:#dc2626;font-weight:700;">⚠️ Esta é uma senha temporária.</p>
+      <p style="margin:6px 0 0;font-size:13px;color:#991b1b;">No seu primeiro acesso, clique no botão abaixo para definir uma senha pessoal e segura.</p>
+    </div>
+
+    ${botao("Definir minha senha permanente", linkTrocarSenha)}
+
+    <p style="font-size:12px;color:#9ca3af;text-align:center;margin:16px 0 0;">Se não solicitou este acesso, ignore este e-mail.</p>
+  `)
+
+  await resend.emails.send({
+    from: "Chegô Delivery <noreply@chegodelivery.com>",
+    to: email,
+    subject: "Seu acesso ao Chegô Delivery foi criado",
+    html,
+  })
+}
