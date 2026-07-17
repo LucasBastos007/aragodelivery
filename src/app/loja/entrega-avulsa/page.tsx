@@ -15,6 +15,15 @@ const STATUS_CFG: Record<string, { label: string; color: string; bg: string }> =
 
 const PLANOS_COM_AVULSA = ["select", "prime", "black"]
 
+type ClienteAvulso = {
+  id: string
+  nome: string
+  telefone: string | null
+  endereco: string | null
+  total_pedidos: number
+  valor_total: number
+}
+
 function StatusBadge({ status }: { status: string }) {
   const cfg = STATUS_CFG[status] ?? { label: status, color: "#64748b", bg: "#F1F5F9" }
   return (
@@ -65,6 +74,12 @@ export default function EntregaAvulsaPage() {
   const [entregas, setEntregas]   = useState<EntregaAvulsa[]>([])
   const [sucesso, setSucesso]     = useState(false)
 
+  // Clientes salvos
+  const [clientes, setClientes]     = useState<ClienteAvulso[]>([])
+  const [busca, setBusca]           = useState("")
+  const [showDropdown, setShowDropdown] = useState(false)
+  const buscaRef = useRef<HTMLDivElement>(null)
+
   // Geocoding state
   const [geocodando, setGeocodando] = useState(false)
   const [distInfo, setDistInfo]     = useState<{ km: number; taxa: number } | null>(null)
@@ -75,7 +90,6 @@ export default function EntregaAvulsaPage() {
     cliente_tel:   "",
     endereco:      "",
     valor_pedido:  "",
-    taxa_entrega:  "",
     observacao:    "",
   })
 
@@ -95,7 +109,26 @@ export default function EntregaAvulsaPage() {
     setLoading(false)
   }
 
-  useEffect(() => { carregar() }, [loja_id])
+  async function carregarClientes() {
+    if (!loja_id) return
+    try {
+      const res = await fetch("/api/loja/clientes-avulsos", { credentials: "include" })
+      if (res.ok) setClientes(await res.json())
+    } catch {}
+  }
+
+  useEffect(() => { carregar(); carregarClientes() }, [loja_id])
+
+  // Fecha dropdown ao clicar fora
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (buscaRef.current && !buscaRef.current.contains(e.target as Node)) {
+        setShowDropdown(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [])
 
   // Geocodifica endereço de entrega com debounce de 800ms
   useEffect(() => {
@@ -108,43 +141,51 @@ export default function EntregaAvulsaPage() {
     geocodeTimer.current = setTimeout(async () => {
       const latL = lojaCoords?.lat
       const lngL = lojaCoords?.lng
-      if (!latL || !lngL) {
-        console.log("[AVULSA-DEBUG] loja sem coordenadas — frete manual")
-        return
-      }
+      if (!latL || !lngL) return
       setGeocodando(true)
       try {
         const res = await fetch(`/api/geocode/search?q=${encodeURIComponent(endereco)}`)
         const results = await res.json()
-        if (!results[0]) {
-          console.log("[AVULSA-DEBUG] geocoding sem resultado para:", endereco)
-          setDistInfo(null)
-          setGeocodando(false)
-          return
-        }
+        if (!results[0]) { setDistInfo(null); setGeocodando(false); return }
         const latC = parseFloat(results[0].lat)
         const lngC = parseFloat(results[0].lon)
         if (isNaN(latC) || isNaN(lngC)) { setDistInfo(null); setGeocodando(false); return }
-
         const dist = haversineKm(latL, lngL, latC, lngC)
         const taxaBase = lojaCoords?.taxa_entrega ?? 6.00
         const taxa = calcularFrete(dist, taxaBase)
-
-        console.log("[AVULSA-DEBUG]", { latLoja: latL, lngLoja: lngL, latCliente: latC, lngCliente: lngC, distKm: dist.toFixed(2), taxa })
-
         setDistInfo({ km: dist, taxa })
-        // Preenche automaticamente (lojista ainda pode editar)
-        setForm(f => ({ ...f, taxa_entrega: taxa.toFixed(2) }))
-      } catch (err) {
-        console.log("[AVULSA-DEBUG] erro geocoding:", err)
+      } catch {
         setDistInfo(null)
       } finally {
         setGeocodando(false)
       }
     }, 800)
-
     return () => { if (geocodeTimer.current) clearTimeout(geocodeTimer.current) }
   }, [form.endereco, lojaCoords])
+
+  function selecionarCliente(c: ClienteAvulso) {
+    setForm(f => ({
+      ...f,
+      cliente_nome: c.nome,
+      cliente_tel:  c.telefone ?? "",
+      endereco:     c.endereco ?? "",
+    }))
+    setBusca(c.nome)
+    setShowDropdown(false)
+  }
+
+  function limparForm() {
+    setForm({ cliente_nome: "", cliente_tel: "", endereco: "", valor_pedido: "", observacao: "" })
+    setBusca("")
+    setDistInfo(null)
+  }
+
+  const clientesFiltrados = busca.trim().length >= 1
+    ? clientes.filter(c =>
+        c.nome.toLowerCase().includes(busca.toLowerCase()) ||
+        (c.telefone ?? "").includes(busca)
+      ).slice(0, 6)
+    : clientes.slice(0, 6)
 
   async function enviar(e: React.FormEvent) {
     e.preventDefault()
@@ -154,6 +195,7 @@ export default function EntregaAvulsaPage() {
       const res = await fetch("/api/entrega-avulsa", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           loja_id,
           cliente_nome:  form.cliente_nome,
@@ -166,11 +208,24 @@ export default function EntregaAvulsaPage() {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
-      setForm({ cliente_nome: "", cliente_tel: "", endereco: "", valor_pedido: "", taxa_entrega: "", observacao: "" })
-      setDistInfo(null)
+
+      // Salva/atualiza cliente automaticamente
+      await fetch("/api/loja/clientes-avulsos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          nome:         form.cliente_nome,
+          telefone:     form.cliente_tel,
+          endereco:     form.endereco,
+          valor_pedido: parseFloat(form.valor_pedido || "0"),
+        }),
+      })
+
+      limparForm()
       setSucesso(true)
       setTimeout(() => setSucesso(false), 4000)
-      await carregar()
+      await Promise.all([carregar(), carregarClientes()])
     } catch (err: any) {
       alert("Erro: " + err.message)
     } finally {
@@ -222,6 +277,66 @@ export default function EntregaAvulsaPage() {
         </p>
       </div>
 
+      {/* Busca de cliente salvo */}
+      {clientes.length > 0 && (
+        <div ref={buscaRef} style={{ position: "relative", marginBottom: 16 }}>
+          <p style={labelStyle}>Buscar cliente salvo</p>
+          <div style={{ position: "relative" }}>
+            <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 14, pointerEvents: "none" }}>🔍</span>
+            <input
+              value={busca}
+              onChange={e => { setBusca(e.target.value); setShowDropdown(true) }}
+              onFocus={() => setShowDropdown(true)}
+              placeholder="Nome ou telefone do cliente…"
+              style={{ ...campoStyle, paddingLeft: 34 }}
+            />
+            {busca && (
+              <button
+                type="button"
+                onClick={limparForm}
+                style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 16, padding: 4 }}
+              >×</button>
+            )}
+          </div>
+          {showDropdown && clientesFiltrados.length > 0 && (
+            <div style={{
+              position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50, marginTop: 4,
+              background: "white", borderRadius: 12, border: "1.5px solid #E2E8F0",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.10)", overflow: "hidden",
+            }}>
+              {clientesFiltrados.map(c => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => selecionarCliente(c)}
+                  style={{
+                    width: "100%", textAlign: "left", padding: "10px 14px",
+                    background: "none", border: "none", borderBottom: "1px solid #F1F5F9",
+                    cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center",
+                  }}
+                  onMouseOver={e => (e.currentTarget.style.background = "#F8FAFC")}
+                  onMouseOut={e => (e.currentTarget.style.background = "none")}
+                >
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: "#0F172A", margin: 0 }}>{c.nome}</p>
+                    <p style={{ fontSize: 11, color: "#64748b", margin: 0 }}>
+                      {c.telefone && <span>{c.telefone} · </span>}
+                      {c.endereco && <span style={{ maxWidth: 200, display: "inline-block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", verticalAlign: "bottom" }}>{c.endereco}</span>}
+                    </p>
+                  </div>
+                  <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 8 }}>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: "#f97316", margin: 0 }}>{c.total_pedidos}x</p>
+                    <p style={{ fontSize: 10, color: "#94a3b8", margin: 0 }}>
+                      med. R$ {(c.valor_total / c.total_pedidos).toFixed(0)}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Formulário */}
       <form onSubmit={enviar} style={{
         background: "white", borderRadius: 16, border: "1.5px solid #F1F5F9",
@@ -236,7 +351,6 @@ export default function EntregaAvulsaPage() {
             onChange={e => set("endereco", e.target.value)}
             placeholder="Rua, número, bairro"
             style={campoStyle}
-            autoFocus
           />
           {geocodando && (
             <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>📍 Identificando localização…</p>
@@ -320,6 +434,44 @@ export default function EntregaAvulsaPage() {
           {geocodando ? "Calculando taxa…" : enviando ? "Solicitando…" : sucesso ? "✓ Motoboy solicitado!" : "🛵 Solicitar motoboy"}
         </button>
       </form>
+
+      {/* Clientes recorrentes */}
+      {clientes.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <p style={{ fontSize: 13, fontWeight: 800, color: "#374151", marginBottom: 12 }}>
+            Clientes salvos ({clientes.length})
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {clientes.slice(0, 8).map(c => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => { selecionarCliente(c); window.scrollTo({ top: 0, behavior: "smooth" }) }}
+                style={{
+                  background: "white", borderRadius: 12, border: "1.5px solid #F1F5F9",
+                  boxShadow: "0 2px 8px rgba(0,0,0,0.04)", padding: "12px 16px",
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  cursor: "pointer", textAlign: "left", width: "100%",
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: "#0F172A", margin: 0 }}>{c.nome}</p>
+                  <p style={{ fontSize: 12, color: "#64748b", margin: "2px 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {c.telefone && <>{c.telefone} · </>}
+                    {c.endereco}
+                  </p>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 12 }}>
+                  <p style={{ fontSize: 13, fontWeight: 800, color: "#f97316", margin: 0 }}>{c.total_pedidos}x</p>
+                  <p style={{ fontSize: 11, color: "#94a3b8", margin: 0 }}>
+                    med. R$ {(c.valor_total / c.total_pedidos).toFixed(2).replace(".", ",")}
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Histórico de avulsas */}
       {entregas.length > 0 && (
