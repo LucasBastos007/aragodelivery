@@ -4,8 +4,8 @@ import { useEffect, useRef, useState, useCallback } from "react"
 import { supabase } from "@/lib/supabase"
 import dynamic from "next/dynamic"
 
-const DEFAULT_LAT = -17.0549
-const DEFAULT_LNG = -49.2295
+const DEFAULT_LAT = -16.8972
+const DEFAULT_LNG = -49.4528
 
 type AbaDespacho = "pedidos" | "motoboys" | "sos"
 
@@ -21,17 +21,19 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 const MapaDespacho = dynamic(() => Promise.resolve(MapaDespachoInner), { ssr: false })
 
 function MapaDespachoInner({
-  motoboys, pedidos, alertas,
+  motoboys, pedidos, alertas, entregasAtivas,
   pedidoSelecionado,
 }: {
   motoboys: any[]
   pedidos: any[]
   alertas: any[]
+  entregasAtivas: any[]
   pedidoSelecionado: any | null
 }) {
-  const mapRef     = useRef<any>(null)
-  const divRef     = useRef<HTMLDivElement>(null)
-  const markersRef = useRef<any[]>([])
+  const mapRef      = useRef<any>(null)
+  const divRef      = useRef<HTMLDivElement>(null)
+  const markersRef  = useRef<any[]>([])
+  const centradoRef = useRef(false)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -44,7 +46,7 @@ function MapaDespachoInner({
     }
     import("leaflet").then(L => {
       if (mapRef.current || !divRef.current) return
-      mapRef.current = L.map(divRef.current, { zoomControl: true }).setView([DEFAULT_LAT, DEFAULT_LNG], 14)
+      mapRef.current = L.map(divRef.current, { zoomControl: true }).setView([DEFAULT_LAT, DEFAULT_LNG], 15)
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "© OSM", maxZoom: 19,
       }).addTo(mapRef.current)
@@ -59,31 +61,75 @@ function MapaDespachoInner({
       markersRef.current = []
 
       // Motoboys
+      const mbComLoc = motoboys.filter(mb => mb.lat && mb.lng && mb.disponivel && mb.status === "ativo")
       motoboys.forEach(mb => {
         if (!mb.lat || !mb.lng) return
-        const isSOS     = alertas.some(a => a.motoboy_id === mb.id && a.status === "pendente")
-        const col       = isSOS ? "#ef4444" : mb.disponivel ? "#22c55e" : "#94a3b8"
+        const isSOS = alertas.some(a => a.motoboy_id === mb.id && a.status === "pendente")
+        const entrega = entregasAtivas.find(e => e.motoboy_id === mb.id)
+        const emRotaLoja     = entrega && ["aguardando_aceite", "em_rota_loja"].includes(entrega.status)
+        const emRotaEntrega  = entrega && entrega.status === "em_rota_entrega"
+
+        // Cor: vermelho=SOS, laranja=a caminho da loja, azul=em entrega, verde=livre, cinza=offline
+        const col = isSOS ? "#ef4444"
+          : emRotaEntrega ? "#3b82f6"
+          : emRotaLoja    ? "#f97316"
+          : mb.disponivel ? "#22c55e"
+          : "#94a3b8"
+
+        const statusLabel = isSOS ? "⚠ SOS"
+          : emRotaEntrega ? "Em entrega"
+          : emRotaLoja    ? "Na loja"
+          : mb.disponivel ? "Livre"
+          : "Offline"
+
+        const primeiroNome = mb.nome?.split(" ")[0] ?? mb.nome
+        const nomeLabel = primeiroNome.length > 6 ? primeiroNome.slice(0, 5) + "." : primeiroNome
+
         const icon = L.divIcon({
           className: "",
-          html: `<div style="
-            width:32px;height:32px;border-radius:50%;
-            background:${col};border:3px solid #1a1a1a;
-            display:flex;align-items:center;justify-content:center;
-            box-shadow:0 2px 8px rgba(0,0,0,0.5);
-            ${isSOS ? "animation:sosMarkerPulse 1s ease-in-out infinite;" : ""}
-          ">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M5 17H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v9a2 2 0 0 1-2 2h-3"/>
-              <circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>
-            </svg>
+          html: `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+            <div style="
+              min-width:44px;padding:0 8px;height:32px;border-radius:16px;
+              background:${col};border:3px solid white;
+              display:flex;align-items:center;justify-content:center;
+              box-shadow:0 2px 10px rgba(0,0,0,0.5);
+              ${isSOS ? "animation:sosMarkerPulse 1s ease-in-out infinite;" : ""}
+            ">
+              <span style="color:white;font-size:11px;font-weight:900;white-space:nowrap;letter-spacing:-0.3px;">${nomeLabel}</span>
+            </div>
+            <div style="
+              background:rgba(0,0,0,0.75);color:white;
+              border-radius:5px;padding:1px 5px;
+              font-size:9px;font-weight:700;white-space:nowrap;
+              line-height:1.4;text-align:center;
+            "><span style="color:${col};font-size:9px;">${statusLabel}</span></div>
           </div>`,
-          iconSize: [32, 32], iconAnchor: [16, 16],
+          iconSize: [80, 56], iconAnchor: [40, 16],
         })
+        const popup = `<b>${mb.nome}</b><br>
+          ${statusLabel}
+          ${entrega ? `<br>#${entrega.codigo} · R$ ${(entrega.taxa_entrega ?? 0).toFixed(2)}` : ""}
+          ${isSOS ? "<br><span style='color:#ef4444;font-weight:700'>⚠ SOS ATIVO</span>" : ""}`
         const marker = L.marker([mb.lat, mb.lng], { icon })
           .addTo(mapRef.current)
-          .bindPopup(`<b>${mb.nome}</b><br>${mb.disponivel ? "Online" : "Offline"}${isSOS ? "<br><span style='color:#ef4444;font-weight:700'>⚠ SOS ATIVO</span>" : ""}`)
+          .bindPopup(popup)
         markersRef.current.push(marker)
       })
+
+      // Centraliza apenas na primeira vez que aparecem motoboys locais
+      if (!centradoRef.current) {
+        const mbLocais = mbComLoc.filter((mb: any) =>
+          haversineKm(mb.lat, mb.lng, DEFAULT_LAT, DEFAULT_LNG) <= 100
+        )
+        if (mbLocais.length === 1) {
+          mapRef.current.setView([mbLocais[0].lat, mbLocais[0].lng], 16)
+          centradoRef.current = true
+        } else if (mbLocais.length > 1) {
+          const bounds = L.latLngBounds(mbLocais.map((mb: any) => [mb.lat, mb.lng]))
+          mapRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 16 })
+          centradoRef.current = true
+        }
+      }
 
       // Pedidos prontos
       pedidos.forEach(p => {
@@ -251,16 +297,18 @@ function ModalDespacho({
 
 // ─── Página principal ─────────────────────────────────────────────────────────
 export default function AdminDespachoPage() {
-  const [pedidos,  setPedidos]  = useState<any[]>([])
-  const [motoboys, setMotoboys] = useState<any[]>([])
-  const [alertas,  setAlertas]  = useState<any[]>([])
-  const [loading,  setLoading]  = useState(true)
+  const [pedidos,        setPedidos]        = useState<any[]>([])
+  const [motoboys,       setMotoboys]       = useState<any[]>([])
+  const [alertas,        setAlertas]        = useState<any[]>([])
+  const [entregasAtivas, setEntregasAtivas] = useState<any[]>([])
+  const [loading,        setLoading]        = useState(true)
+  const [countdown,      setCountdown]      = useState(15)
   const [aba,      setAba]      = useState<AbaDespacho>("pedidos")
   const [pedidoSelecionado, setPedidoSelecionado] = useState<any | null>(null)
   const [resolvendoSOS,     setResolvendoSOS]     = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    const [{ data: ped }, { data: moto }, { data: sos }] = await Promise.all([
+    const [{ data: ped }, { data: moto }, { data: sos }, { data: ativas }] = await Promise.all([
       supabase.from("pedidos")
         .select("*, loja:lojas(nome, endereco, lat, lng), itens:itens_pedido(*)")
         .eq("status", "pronto").is("motoboy_id", null)
@@ -272,17 +320,24 @@ export default function AdminDespachoPage() {
         .select("*, motoboy:motoboys(nome, telefone)")
         .eq("status", "pendente")
         .order("criado_em", { ascending: false }),
+      supabase.from("pedidos")
+        .select("id, codigo, motoboy_id, status, taxa_entrega")
+        .in("status", ["aguardando_aceite", "em_rota_loja", "em_rota_entrega"])
+        .not("motoboy_id", "is", null),
     ])
     setPedidos(ped ?? [])
     setMotoboys(moto ?? [])
     setAlertas(sos ?? [])
+    setEntregasAtivas(ativas ?? [])
     setLoading(false)
   }, [])
 
   useEffect(() => {
     load()
-    const iv = setInterval(load, 12_000)
-    return () => clearInterval(iv)
+    setCountdown(15)
+    const iv = setInterval(() => { load(); setCountdown(15) }, 15_000)
+    const cd = setInterval(() => setCountdown(c => c > 0 ? c - 1 : 0), 1_000)
+    return () => { clearInterval(iv); clearInterval(cd) }
   }, [load])
 
   // Realtime — filtra pedidos apenas no status relevante para o despacho
@@ -324,16 +379,17 @@ export default function AdminDespachoPage() {
             {alertas.length > 0 && <span style={{ color: "#ef4444", fontWeight: 700 }}> · {alertas.length} SOS</span>}
           </p>
         </div>
-        <button onClick={() => load()} style={{
-          background: "#F9FAFB", border: "1px solid rgba(255,255,255,0.1)",
-          borderRadius: 10, color: "rgba(255,255,255,0.6)", padding: "8px 12px",
-          fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
+        <button onClick={() => { load(); setCountdown(15) }} style={{
+          background: "#f97316", border: "none",
+          borderRadius: 10, color: "white", padding: "9px 14px",
+          fontSize: 13, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
+          boxShadow: "0 2px 8px rgba(249,115,22,0.35)",
         }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
             <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
           </svg>
-          Atualizar
+          Atualizar · {countdown}s
         </button>
       </div>
 
@@ -356,6 +412,7 @@ export default function AdminDespachoPage() {
             motoboys={motoboys}
             pedidos={pedidos}
             alertas={alertas}
+            entregasAtivas={entregasAtivas}
             pedidoSelecionado={pedidoSelecionado}
           />
         )}
@@ -579,7 +636,7 @@ function MotoboyStat({ mb, online, alertas }: { mb: any; online: boolean; alerta
         animation: isSOS ? "sosPulse 1.5s infinite" : "none",
       }} />
       <div style={{ flex: 1 }}>
-        <p style={{ color: isSOS ? "#ef4444" : "white", fontWeight: 700, fontSize: 13 }}>
+        <p style={{ color: isSOS ? "#ef4444" : "#0F172A", fontWeight: 700, fontSize: 13 }}>
           {mb.nome}
           {isSOS && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 900 }}>SOS</span>}
         </p>

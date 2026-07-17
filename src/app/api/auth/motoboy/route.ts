@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import bcrypt from "bcryptjs"
 import { sessionResponse, unauthorized } from "@/lib/session"
-import { checkRateLimit } from "@/lib/rate-limit"
 
 const sb = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,19 +10,19 @@ const sb = createClient(
 )
 
 export async function POST(req: NextRequest) {
-  const limited = checkRateLimit(req)
-  if (limited) return limited
-
   const { email, senha } = await req.json()
   if (!email || !senha) {
     return NextResponse.json({ error: "Email e senha obrigatórios." }, { status: 400 })
   }
 
-  const { data, error } = await sb
+  const { data: rows, error } = await sb
     .from("motoboys")
     .select("id, nome, status, senha")
     .eq("email", (email as string).trim().toLowerCase())
-    .single()
+    .order("status", { ascending: false }) // "ativo" antes de "pendente"
+    .limit(1)
+
+  const data = rows?.[0] ?? null
 
   // Hash dummy garante timing igual quando e-mail não existe (evita timing oracle)
   const DUMMY_HASH = "$2b$12$invalidhashfortimingequalityxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"

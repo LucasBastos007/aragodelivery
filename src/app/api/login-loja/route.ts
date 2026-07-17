@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
 
     const { data, error } = await client
       .from("lojas")
-      .select("id, nome, status, senha")
+      .select("id, nome, status, senha, primeiro_acesso")
       .eq("email", (email as string).trim().toLowerCase())
       .single()
 
@@ -51,9 +51,11 @@ export async function POST(req: NextRequest) {
     if (data.status === "contrato_assinado") return NextResponse.json({ error: "Contrato assinado! Sua loja será ativada em breve pela equipe Chegô." }, { status: 403 })
     if (data.status === "suspenso")          return NextResponse.json({ error: "Esta conta foi suspensa. Entre em contato com o suporte." }, { status: 403 })
 
+    await client.from("lojas").update({ aberto: true }).eq("id", data.id)
+
     return sessionResponse(
       { role: "loja", loja_id: data.id },
-      { ok: true, loja_id: data.id, loja_nome: data.nome },
+      { ok: true, loja_id: data.id, loja_nome: data.nome, primeiro_acesso: data.primeiro_acesso ?? false },
     )
   } catch (e: any) {
     return NextResponse.json({ error: e.message ?? "Erro interno" }, { status: 500 })

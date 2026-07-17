@@ -388,6 +388,8 @@ export default function RestaurantePage() {
 
   const destaques = useMemo(() => {
     if (produtos.length < 4) return []
+    const marcados = produtos.filter(p => p.ncm === "destaque")
+    if (marcados.length >= 2) return marcados.slice(0, 6)
     const comFoto = produtos.filter(p => p.foto_url)
     const base = comFoto.length >= 3 ? comFoto : produtos
     return base.slice(0, 6)

@@ -77,14 +77,16 @@ export function useClienteAuth() {
   async function cadastrar(
     email: string, senha: string, nome: string, telefone: string
   ): Promise<string | null> {
-    const { data, error } = await supabase.auth.signUp({ email, password: senha })
-    if (error) return error.message
-    if (data.user) {
-      await supabase.from("clientes").upsert({
-        id: data.user.id, nome: nome.trim(), telefone: telefone.trim(),
-      })
-    }
-    return null
+    const res = await fetch("/api/auth/cadastro-cliente", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.trim().toLowerCase(), senha, nome, telefone }),
+    })
+    const json = await res.json()
+    if (!res.ok) return json.error ?? "Erro ao criar conta."
+    // Após criar via admin, faz login normal
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password: senha })
+    return error?.message ?? null
   }
 
   async function salvarPerfil(
