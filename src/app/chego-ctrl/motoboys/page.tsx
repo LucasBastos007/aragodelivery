@@ -780,8 +780,8 @@ export default function MotoboyPage() {
                 </>
               )}
 
-              {/* Gerar credenciais (qualquer status) */}
-              {["ativo", "contrato_assinado", "aprovado"].includes(selecionado.status) && (
+              {/* Gerar credenciais */}
+              {(
                 <button
                   onClick={() => gerarCredenciais(selecionado)}
                   disabled={gerandoCred}
