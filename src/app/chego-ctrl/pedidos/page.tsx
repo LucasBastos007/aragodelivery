@@ -166,7 +166,8 @@ type Filtro = "todos" | "avulsas" | StatusPedido
 export default function PedidosPage() {
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [avulsas, setAvulsas] = useState<any[]>([])
-  const [lojaFone, setLojaFone] = useState<Record<string, string>>({})
+  const [lojaFone,    setLojaFone]    = useState<Record<string, string>>({})
+  const [motoboyFone, setMotoboyFone] = useState<Record<string, string>>({})
   const [loading, setLoading]  = useState(true)
   const [filtro, setFiltro]    = useState<Filtro>("todos")
 
@@ -188,17 +189,23 @@ export default function PedidosPage() {
     const avList = avData ?? []
     setAvulsas(avList)
 
-    // Busca telefones das lojas separadamente (sem depender de FK no Supabase)
-    const lojaIds = [...new Set(avList.map((a: any) => a.loja_id).filter(Boolean))]
-    if (lojaIds.length > 0) {
-      const { data: lojasData } = await supabase
-        .from("lojas").select("id, telefone").in("id", lojaIds)
-      const fones: Record<string, string> = {}
-      for (const l of lojasData ?? []) {
-        if (l.telefone) fones[l.id] = l.telefone
-      }
-      setLojaFone(fones)
-    }
+    // Busca telefones das lojas e motoboys das avulsas
+    const lojaIds    = [...new Set(avList.map((a: any) => a.loja_id).filter(Boolean))]
+    const motoboyIds = [...new Set(avList.map((a: any) => a.motoboy_id).filter(Boolean))]
+
+    const [{ data: lojasData }, { data: motoboysData }] = await Promise.all([
+      lojaIds.length    > 0 ? supabase.from("lojas").select("id, telefone").in("id", lojaIds)       : Promise.resolve({ data: [] }),
+      motoboyIds.length > 0 ? supabase.from("motoboys").select("id, telefone").in("id", motoboyIds) : Promise.resolve({ data: [] }),
+    ])
+
+    const fones: Record<string, string> = {}
+    for (const l of lojasData ?? []) { if (l.telefone) fones[l.id] = l.telefone }
+    setLojaFone(fones)
+
+    const mFones: Record<string, string> = {}
+    for (const m of motoboysData ?? []) { if (m.telefone) mFones[m.id] = m.telefone }
+    setMotoboyFone(mFones)
+
     setLoading(false)
   }
 
@@ -313,24 +320,60 @@ export default function PedidosPage() {
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                    {/* Status */}
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className={`badge ${AVULSA_STATUS_BADGE[a.status] ?? "badge-yellow"}`}>
                         {AVULSA_STATUS_LABEL[a.status] ?? a.status}
                       </span>
-                      <span className="text-xs truncate" style={{ color: "#64748b" }}>
-                        {a.loja_nome ?? "—"}
-                      </span>
                     </div>
-                    <p className="text-xs" style={{ color: "#94a3b8" }}>
-                      {a.motoboy_nome ?? "Sem motoboy"}
-                    </p>
+
+                    {/* Loja */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+                      </svg>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "#334155" }}>{a.loja_nome ?? "—"}</span>
+                      {lojaFone[a.loja_id] && a.status !== "entregue" && a.status !== "cancelado" && (
+                        <BotaoWhatsApp avulsa={a} fone={lojaFone[a.loja_id]} />
+                      )}
+                    </div>
+
+                    {/* Motoboy */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={a.motoboy_nome ? "#8b5cf6" : "#cbd5e1"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/>
+                        <path d="M6 17L9 10l5 0 4 7"/><path d="M9 10l2-3 5 0 2 3"/>
+                      </svg>
+                      <span style={{ fontSize: 12, fontWeight: a.motoboy_nome ? 700 : 400, color: a.motoboy_nome ? "#334155" : "#94a3b8" }}>
+                        {a.motoboy_nome ?? "Aguardando motoboy"}
+                      </span>
+                      {a.motoboy_id && motoboyFone[a.motoboy_id] && (
+                        <a
+                          href={`https://wa.me/55${motoboyFone[a.motoboy_id].replace(/\D/g,"")}?text=${encodeURIComponent(`Olá ${a.motoboy_nome}! Preciso de uma atualização sobre a entrega *${a.codigo}* para *${a.cliente_nome}*.`)}`}
+                          target="_blank" rel="noopener noreferrer"
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: 3,
+                            fontSize: 10, padding: "2px 6px", borderRadius: 5,
+                            border: "1px solid rgba(37,211,102,0.4)",
+                            background: "rgba(37,211,102,0.08)", color: "#16a34a",
+                            fontWeight: 700, textDecoration: "none",
+                          }}
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="#16a34a">
+                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+                            <path d="M11.999 0C5.372 0 0 5.373 0 12c0 2.117.554 4.103 1.523 5.829L.054 23.5l5.832-1.528A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12 0-6.628-5.373-12-12.001-12zm.001 21.818a9.822 9.822 0 01-5.004-1.372l-.36-.213-3.463.908.924-3.375-.234-.374A9.816 9.816 0 012.182 12C2.182 6.57 6.569 2.182 12 2.182S21.818 6.57 21.818 12c0 5.43-4.387 9.818-9.818 9.818z"/>
+                          </svg>
+                          Entregador
+                        </a>
+                      )}
+                    </div>
+
+                    {/* Cliente + endereço */}
                     <p className="text-xs truncate" style={{ color: "#94a3b8" }}>
                       {a.cliente_nome} · {a.endereco}
                     </p>
 
                     <ProgressoAvulsa status={a.status} />
-
-                    <BotaoWhatsApp avulsa={a} fone={lojaFone[a.loja_id]} />
                   </div>
 
                   <div className="text-right flex-shrink-0">
