@@ -189,16 +189,46 @@ export default function EntregaAvulsaPage() {
     setDistInfo(null)
   }
 
+  async function geocodificarMunicipio(municipio: string) {
+    if (!municipio || municipio.length < 3) return
+    const latL = lojaCoords?.lat
+    const lngL = lojaCoords?.lng
+    if (!latL || !lngL) return
+    try {
+      const bias = `&lat=${latL}&lon=${lngL}`
+      const res = await fetch(`/api/geocode/search?q=${encodeURIComponent(municipio)}${bias}`)
+      const data: SugestaoEndereco[] = await res.json()
+      if (data[0]) {
+        const latC = parseFloat(data[0].lat)
+        const lngC = parseFloat(data[0].lon)
+        if (!isNaN(latC) && !isNaN(lngC)) {
+          const dist = haversineKm(latL, lngL, latC, lngC)
+          const taxaBase = lojaCoords?.taxa_entrega ?? 6.00
+          setDistInfo({ km: dist, taxa: calcularFrete(dist, taxaBase) })
+          setEndSelecionado(data[0])
+        }
+      }
+    } catch {}
+  }
+
   function selecionarCliente(c: ClienteAvulso) {
     setForm(f => ({
       ...f,
       cliente_nome: c.nome,
       cliente_tel:  c.telefone ?? "",
     }))
-    // Preenche o endereço salvo no campo de busca (sem tentar regeocod.)
     if (c.endereco) {
-      setEndBusca(c.endereco)
-      setEndSelecionado({ place_id: "saved", display_name: c.endereco, lat: "", lon: "" })
+      // Separa endereço salvo de volta nos 3 campos
+      const parts = c.endereco.split(" — ")
+      const municipio = parts[0]?.trim() ?? ""
+      const end       = parts[1]?.trim() ?? ""
+      const ref       = parts[2]?.trim() ?? ""
+      setEndBusca(municipio)
+      setEndCompl(end)
+      setEndRef2(ref)
+      setEndSelecionado({ place_id: "saved", display_name: municipio, lat: "", lon: "" })
+      setDistInfo(null)
+      geocodificarMunicipio(municipio)
     }
     setBusca(c.nome)
     setShowDropdown(false)
@@ -385,6 +415,12 @@ export default function EntregaAvulsaPage() {
               value={endBusca}
               onChange={e => { setEndBusca(e.target.value); setEndSelecionado(null); setDistInfo(null) }}
               onFocus={() => { if (sugestoes.length > 0) setShowSug(true) }}
+              onBlur={() => {
+                // Fallback: geocodifica se o usuário digitou sem selecionar do dropdown
+                if (!endSelecionado?.lat && endBusca.trim().length >= 3) {
+                  geocodificarMunicipio(endBusca.trim())
+                }
+              }}
               placeholder="Digite o município para buscar…"
               style={campoStyle}
               autoComplete="off"
