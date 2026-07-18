@@ -193,12 +193,18 @@ self.addEventListener("notificationclick", (event) => {
     return
   }
 
-  // Ação "open" ou clique normal → abre o app
+  // Ação "open" ou clique normal → abre o app e avisa para recarregar corrida
   const url = notifData.url ?? "/"
+  const pedidoId = notifData.pedido_id ?? null
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
       for (const c of list) {
-        if (c.url.includes(url) && "focus" in c) return c.focus()
+        if (c.url.includes(url) && "focus" in c) {
+          c.focus()
+          // Avisa a página para buscar nova oferta imediatamente
+          if (pedidoId) c.postMessage({ type: "nova-corrida", pedido_id: pedidoId })
+          return c
+        }
       }
       if (clients.openWindow) return clients.openWindow(url)
     })

@@ -665,6 +665,18 @@ export default function MotoboyPage() {
       })
   }, [motoboy_id])
 
+  // ── Auto-confirmação de teste de notificação ──────────────────────────────
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    if (!params.get("confirmar_teste")) return
+    fetch("/api/motoboy/confirmar-teste", { method: "POST", credentials: "include" }).catch(() => {})
+    // Remove o param da URL sem recarregar
+    const url = new URL(window.location.href)
+    url.searchParams.delete("confirmar_teste")
+    window.history.replaceState({}, "", url.toString())
+  }, [])
+
   // ── Ganhos do dia ──────────────────────────────────────────────────────────
   // Soma pedidos regulares + entregas avulsas entregues hoje
   useEffect(() => {
@@ -712,6 +724,27 @@ export default function MotoboyPage() {
     `
     document.head.appendChild(s)
   }, [])
+
+  // ── Mensagem do SW: "nova-corrida" ao clicar na notificação ─────────────
+  useEffect(() => {
+    if (!motoboy_id) return
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type !== "nova-corrida") return
+      const pedidoId = event.data.pedido_id
+      if (!pedidoId || dismissedIdsRef.current.has(pedidoId)) return
+      supabase.from("pedidos")
+        .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
+        .eq("id", pedidoId)
+        .single()
+        .then(({ data }) => {
+          if (data && !dismissedIdsRef.current.has(data.id)) {
+            setPedidoOferta(data); setTimerOferta(30); setDistKmOferta(null)
+          }
+        })
+    }
+    navigator.serviceWorker?.addEventListener("message", handler)
+    return () => navigator.serviceWorker?.removeEventListener("message", handler)
+  }, [motoboy_id])
 
   // ── Limpa GPS ao fechar o browser (não altera disponivel) ────────────────
   useEffect(() => {
@@ -801,14 +834,14 @@ export default function MotoboyPage() {
     return () => clearInterval(iv)
   }, [motoboy_id])
 
-  // ── Supabase Realtime — escuta oferta de corrida ───────────────────────────
+  // ── Supabase Realtime — escuta oferta de corrida (broadcast) ──────────────
   useEffect(() => {
     if (!motoboy_id || !disponivel) return
 
-    // Verifica oferta pendente já existente ao entrar
+    // Verifica oferta pendente já existente ao entrar (broadcast: motoboy_id null)
     supabase.from("pedidos")
       .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
-      .eq("motoboy_id", motoboy_id)
+      .is("motoboy_id", null)
       .eq("status", "aguardando_aceite")
       .limit(1)
       .then(({ data }) => {
@@ -817,27 +850,47 @@ export default function MotoboyPage() {
         }
       })
 
-    const ch = supabase.channel(`oferta-${motoboy_id}`)
+    const ch = supabase.channel(`oferta-broadcast-${motoboy_id}`)
       .on("postgres_changes", {
         event: "UPDATE", schema: "public", table: "pedidos",
-        filter: `motoboy_id=eq.${motoboy_id}`,
+        filter: `status=eq.aguardando_aceite`,
       }, payload => {
         const novo = payload.new as any
-        if (novo?.status === "aguardando_aceite" && !dismissedIdsRef.current.has(novo.id)) {
-          supabase.from("pedidos")
-            .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
-            .eq("id", novo.id).single()
-            .then(({ data }) => {
-              if (data && !dismissedIdsRef.current.has(data.id)) {
-                playNotificationSound(); setPedidoOferta(data); setTimerOferta(30); setDistKmOferta(null)
-              }
-            })
-        }
+        // Só processa pedidos broadcast (sem motoboy atribuído)
+        if (novo?.motoboy_id !== null) return
+        if (dismissedIdsRef.current.has(novo.id)) return
+        supabase.from("pedidos")
+          .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
+          .eq("id", novo.id).single()
+          .then(({ data }) => {
+            if (data && !dismissedIdsRef.current.has(data.id)) {
+              playNotificationSound(); setPedidoOferta(data); setTimerOferta(30); setDistKmOferta(null)
+            }
+          })
       })
       .subscribe()
 
     return () => { supabase.removeChannel(ch) }
   }, [motoboy_id, disponivel])
+
+  // ── Detecta quando outro motoboy aceita a oferta exibida ──────────────────
+  useEffect(() => {
+    if (!pedidoOferta || !motoboy_id) return
+    const pedidoId = pedidoOferta.id
+    const ch = supabase.channel(`oferta-aceita-${pedidoId}-${motoboy_id}`)
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "pedidos",
+        filter: `id=eq.${pedidoId}`,
+      }, payload => {
+        const novo = payload.new as any
+        if (novo?.status !== "aguardando_aceite") {
+          setPedidoOferta(null)
+          dismissedIdsRef.current.add(pedidoId)
+        }
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [pedidoOferta?.id, motoboy_id])
 
   // ── Timer regressivo da oferta ─────────────────────────────────────────────
   useEffect(() => {
