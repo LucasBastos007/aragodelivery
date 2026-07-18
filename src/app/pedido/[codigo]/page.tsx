@@ -442,7 +442,6 @@ export default function AcompanhamentoPedido() {
     const newStatus = (data as any).status
     if (prevStatusRef.current !== null && prevStatusRef.current !== "entregue" && newStatus === "entregue") {
       try { const a = new Audio("/splash.mp3"); a.volume = 0.85; a.play().catch(() => {}) } catch {}
-      localStorage.removeItem("arago_pedido_ativo")
     }
     if (newStatus === "cancelado") localStorage.removeItem("arago_pedido_ativo")
     prevStatusRef.current = newStatus
