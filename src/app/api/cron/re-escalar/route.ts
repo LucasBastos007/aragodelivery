@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
     .select("id, motoboy_id")
     .eq("status", "aguardando_aceite")
     .lt("atualizado_em", doisMinAtras)
+    .not("endereco_entrega", "ilike", "%Retirada%")
 
   if (!travados || travados.length === 0) {
     return NextResponse.json({ ok: true, re_escalados: 0 })
