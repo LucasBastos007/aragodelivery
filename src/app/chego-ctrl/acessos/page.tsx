@@ -170,13 +170,24 @@ export default function AcessosPage() {
 
   return (
     <div className="p-4 sm:p-8" style={{ maxWidth: 960 }}>
-      <div style={{ marginBottom: 20 }}>
+      <style>{`
+        @media print {
+          .admin-sidebar, .admin-topbar, .admin-bottomnav { display: none !important; }
+          .admin-main { margin: 0 !important; height: auto !important; overflow: visible !important; }
+          .print-hide { display: none !important; }
+          .print-only { display: block !important; }
+          body { background: white !important; }
+          @page { margin: 20mm; size: A4; }
+        }
+      `}</style>
+
+      <div className="print-hide" style={{ marginBottom: 20 }}>
         <h1 style={{ color: "#0F172A", fontSize: 22, fontWeight: 900 }}>Acessos</h1>
         <p style={{ color: "#94a3b8", fontSize: 13, marginTop: 2 }}>Monitoramento de uso do app</p>
       </div>
 
-      {/* Seletor de período */}
-      <div style={{ display: "flex", gap: 6, marginBottom: 24, flexWrap: "wrap" }}>
+      {/* Seletor de período + botão exportar */}
+      <div className="print-hide" style={{ display: "flex", gap: 6, marginBottom: 24, flexWrap: "wrap", alignItems: "center" }}>
         {periodos.map(p => (
           <button key={p} onClick={() => setPeriodo(p)}
             style={{
@@ -189,6 +200,26 @@ export default function AcessosPage() {
             {PERIODO_LABELS[p]}
           </button>
         ))}
+        <div style={{ flex: 1 }} />
+        <button onClick={() => window.print()}
+          style={{
+            display: "flex", alignItems: "center", gap: 6,
+            fontSize: 12, padding: "6px 16px", borderRadius: 20, border: "1px solid #e2e8f0",
+            cursor: "pointer", background: "white", color: "#475569", fontWeight: 600,
+          }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
+          </svg>
+          Exportar PDF
+        </button>
+      </div>
+
+      {/* Cabeçalho visível apenas no PDF */}
+      <div className="print-only" style={{ display: "none", marginBottom: 20, paddingBottom: 14, borderBottom: "2px solid #e2e8f0" }}>
+        <p style={{ fontWeight: 900, fontSize: 20, color: "#0F172A" }}>Chegô — Relatório de Acessos</p>
+        <p style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
+          Período: {PERIODO_LABELS[periodo]} · Gerado em {new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+        </p>
       </div>
 
       {loading ? (
