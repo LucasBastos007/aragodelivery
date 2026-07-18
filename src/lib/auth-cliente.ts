@@ -101,7 +101,8 @@ export function useClienteAuth() {
     endereco?: {
       rua?: string; numero?: string; bairro?: string
       complemento?: string; cep?: string; cidade?: string
-    }
+    },
+    cpf?: string
   ) {
     if (!user) return
     const payload: any = { id: user.id, nome: nome.trim(), telefone: telefone.trim() }
@@ -112,6 +113,13 @@ export function useClienteAuth() {
       if (endereco.complemento !== undefined) payload.endereco_complemento = endereco.complemento
       if (endereco.cep       !== undefined) payload.endereco_cep        = endereco.cep
       if (endereco.cidade    !== undefined) payload.endereco_cidade     = endereco.cidade
+    }
+    if (cpf) {
+      const digits = cpf.replace(/\D/g, "")
+      if (digits.length === 11) {
+        payload.cpf = digits
+        supabase.auth.updateUser({ data: { cpf: digits } }).catch(() => {})
+      }
     }
     await supabase.from("clientes").upsert(payload)
     setPerfil(p => p

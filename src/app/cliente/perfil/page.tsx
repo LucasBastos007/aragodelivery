@@ -30,6 +30,7 @@ export default function ClientePerfilPage() {
 
   const [nome,          setNome]         = useState("")
   const [telefone,      setTelefone]     = useState("")
+  const [cpf,           setCpf]          = useState("")
   const [endRua,        setEndRua]       = useState("")
   const [endNumero,     setEndNumero]    = useState("")
   const [endCompl,      setEndCompl]     = useState("")
@@ -50,6 +51,8 @@ export default function ClientePerfilPage() {
     if (perfil) {
       setNome(perfil.nome ?? "")
       setTelefone(perfil.telefone ?? "")
+      const cpfRaw = perfil.cpf ?? (user?.user_metadata?.cpf ?? "")
+      setCpf(cpfRaw ? cpfRaw.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") : "")
       setEndRua(perfil.endereco_rua ?? "")
       setEndNumero(perfil.endereco_numero ?? "")
       setEndCompl(perfil.endereco_complemento ?? "")
@@ -89,12 +92,20 @@ export default function ClientePerfilPage() {
       })
   }, [user, perfil])
 
+  function formatarCpf(v: string) {
+    const d = v.replace(/\D/g, "").slice(0, 11)
+    if (d.length <= 3) return d
+    if (d.length <= 6) return `${d.slice(0,3)}.${d.slice(3)}`
+    if (d.length <= 9) return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6)}`
+    return `${d.slice(0,3)}.${d.slice(3,6)}.${d.slice(6,9)}-${d.slice(9)}`
+  }
+
   async function handleSalvar() {
     setSalvando(true)
     await salvarPerfil(nome, telefone, {
       rua: endRua, numero: endNumero, complemento: endCompl,
       bairro: endBairro, cep: endCep,
-    })
+    }, cpf)
     if (endRua && endNumero) {
       const addr = [endRua, endNumero, endBairro].filter(Boolean).join(", ")
       if (typeof window !== "undefined") localStorage.setItem("arago_last_address", addr)
@@ -179,6 +190,19 @@ export default function ClientePerfilPage() {
               <span style={{ color: "#9CA3AF", marginLeft: 6, fontWeight: 400 }}>(código de rastreamento)</span>
             </label>
             <input style={inp} value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(64) 9 9999-1234" inputMode="tel" />
+          </div>
+          <div>
+            <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
+              CPF
+              <span style={{ color: "#9CA3AF", marginLeft: 6, fontWeight: 400 }}>(para pagamentos PIX)</span>
+            </label>
+            <input
+              style={inp}
+              value={cpf}
+              onChange={e => setCpf(formatarCpf(e.target.value))}
+              placeholder="000.000.000-00"
+              inputMode="numeric"
+            />
           </div>
           <button onClick={handleSalvar} disabled={salvando} style={{
             padding: "12px", borderRadius: 12, border: "none", width: "100%",

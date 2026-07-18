@@ -463,7 +463,7 @@ export default function PedidosPage() {
                             {diffMin(p.coletado_em, p.entregue_em)} min
                           </span>
                         )}
-                        {p.coletado_em && !p.entregue_em && (
+                        {p.coletado_em && !p.entregue_em && p.status !== "entregue" && (
                           <span style={{ fontSize: 11, fontWeight: 700, color: "#f97316" }}>Em rota</span>
                         )}
                       </div>
