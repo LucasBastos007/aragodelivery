@@ -348,9 +348,16 @@ export default function RestaurantePage() {
       ])
       setLoja(lojaData as Loja)
       setCategorias((catData as CategoriaProduto[]) ?? [])
-      const hoje = new Date().getDay()
-      const todos = (prodData as Produto[]) ?? []
-      setProdutos(todos.filter(p => !p.dias_semana || p.dias_semana.length === 0 || p.dias_semana.includes(hoje)))
+      const agora  = new Date()
+      const hoje   = agora.getDay()
+      const minutos = agora.getHours() * 60 + agora.getMinutes()
+      const todos  = (prodData as Produto[]) ?? []
+      setProdutos(todos.filter(p => {
+        if (p.dias_semana && p.dias_semana.length > 0 && !p.dias_semana.includes(hoje)) return false
+        // Produtos de almoço (ncm="almoco") só aparecem das 11h às 14h
+        if ((p as any).ncm === "almoco" && (minutos < 11 * 60 || minutos >= 14 * 60)) return false
+        return true
+      }))
       setLoading(false)
     }
     load()
