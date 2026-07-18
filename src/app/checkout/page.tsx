@@ -237,7 +237,7 @@ function EnderecoMapa({ onResult }: {
 export default function CheckoutPage() {
   const router = useRouter()
   const { items, total, clear } = useCart()
-  const { perfil, user } = useClienteAuth()
+  const { perfil, user, salvarPerfil } = useClienteAuth()
   const isMobile = useIsMobile()
 
   const [nome, setNome]           = useState("")
@@ -972,6 +972,13 @@ export default function CheckoutPage() {
         cidade: g.cidade, complemento: cmp,
         lat: g.lat, lng: g.lng,
       }))
+      // Persiste no perfil do banco para outros dispositivos
+      if (user && perfil) {
+        salvarPerfil(perfil.nome, perfil.telefone, {
+          rua: g.rua, numero: num, bairro: g.bairro,
+          cidade: g.cidade, complemento: cmp,
+        }).catch(() => {})
+      }
     }
 
     // Salva cartão (sem CVV, com token se disponível) se LGPD consentido
@@ -1283,6 +1290,13 @@ export default function CheckoutPage() {
                           }
                           setEnderecoSalvo(novoEndereco)
                           localStorage.setItem("arago_endereco_salvo", JSON.stringify(novoEndereco))
+                          // Persiste no banco para outros dispositivos
+                          if (user && perfil) {
+                            salvarPerfil(perfil.nome, perfil.telefone, {
+                              rua: g.geo.rua, numero: g.numero, bairro: g.geo.bairro,
+                              cidade: g.geo.cidade, complemento: g.complemento,
+                            }).catch(() => {})
+                          }
                         }
                         setEditandoEndereco(false)
                       }}
