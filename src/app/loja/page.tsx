@@ -518,7 +518,7 @@ export default function LojaDashboard() {
     if (res.status === 401) {
       alert("Sua sessão expirou. Faça login novamente.")
       logout()
-      router.push("/entrar")
+      router.push("/loja/entrar")
       return false
     }
     return true

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { useAuth } from "@/lib/auth"
 import { EsqueceuSenha } from "@/components/EsqueceuSenha"
+import InstalarApp from "@/components/InstalarApp"
 
 export default function LojaEntrarPage() {
   const router = useRouter()
@@ -98,9 +99,11 @@ export default function LojaEntrarPage() {
             </button>
           </div>
 
-          <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid #e5e7eb", textAlign: "center" }}>
+          <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid #e5e7eb", textAlign: "center", display: "flex", flexDirection: "column", gap: 10 }}>
             <EsqueceuSenha tipo="lojista" />
           </div>
+
+          <InstalarApp papel="lojista" />
         </div>
       </div>
     </div>
