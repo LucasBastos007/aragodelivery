@@ -610,12 +610,14 @@ export default function MotoboyPage() {
   const justAcceptedRef  = useRef(false)
   const dismissedIdsRef  = useRef<Set<string>>(new Set())
   const isLoadingPedidosRef = useRef(false)
+  const pedidoOfertaRef  = useRef<any>(null)
 
   // ── Oferta de corrida (Tópico 02) ─────────────────────────────────────────
   const [pedidoOferta,    setPedidoOferta]    = useState<any | null>(null)
   const [timerOferta,     setTimerOferta]     = useState(30)
   const [distKmOferta,    setDistKmOferta]    = useState<number | null>(null)
   const [aceitandoCorrida, setAceitandoCorrida] = useState(false)
+  useEffect(() => { pedidoOfertaRef.current = pedidoOferta }, [pedidoOferta])
 
   // ── Oferta de entrega avulsa ───────────────────────────────────────────────
   const [avulsaOferta,     setAvulsaOferta]     = useState<any | null>(null)
@@ -791,6 +793,7 @@ export default function MotoboyPage() {
     const [
       { data: prontosData },
       { data: andamentoData, error: andamentoError },
+      { data: ofertaData },
     ] = await Promise.all([
       supabase.from("pedidos")
         .select("*, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng)")
@@ -801,6 +804,11 @@ export default function MotoboyPage() {
         .in("status", ["indo_para_loja", "na_loja", "em_rota", "coletado"])
         .eq("motoboy_id", motoboy_id)
         .order("criado_em", { ascending: true }),
+      // Polling de fallback: busca oferta de corrida mesmo sem realtime ativo
+      supabase.from("pedidos")
+        .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
+        .eq("status", "aguardando_aceite").is("motoboy_id", null)
+        .limit(1),
     ])
 
     const novosProntos = (prontosData as Pedido[]) ?? []
@@ -817,6 +825,13 @@ export default function MotoboyPage() {
       const dados = (andamentoData as Pedido[]) ?? []
       if (dados.length > 0 || !justAcceptedRef.current) {
         setEmAndamento(dados)
+      }
+    }
+    // Polling fallback: exibe oferta se realtime perdeu o evento
+    if (!pedidoOfertaRef.current && ofertaData && ofertaData.length > 0) {
+      const oferta = ofertaData[0]
+      if (!dismissedIdsRef.current.has(oferta.id)) {
+        setPedidoOferta(oferta); setTimerOferta(30); setDistKmOferta(null)
       }
     }
     setPedidosLoading(false)
