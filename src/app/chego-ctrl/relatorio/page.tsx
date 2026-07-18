@@ -32,6 +32,18 @@ function fmtR(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
 }
 
+function fmtPix(raw: string | null | undefined): string {
+  if (!raw) return "—"
+  try {
+    const obj = JSON.parse(raw)
+    const chave = obj.pix ?? obj.chave ?? obj.key ?? ""
+    const banco = obj.banco ?? obj.bank ?? ""
+    return [chave, banco].filter(Boolean).join(" · ")
+  } catch {
+    return raw
+  }
+}
+
 function fmtData(iso: string) {
   return new Date(iso).toLocaleDateString("pt-BR")
 }
@@ -72,7 +84,7 @@ export default function RelatorioPage() {
         .lte("criado_em", fim)
         .order("criado_em", { ascending: false }),
       supabase.from("lojas").select("*").eq("status", "ativo"),
-      supabase.from("motoboys").select("id,nome,telefone,pix_key").eq("status", "ativo"),
+      supabase.from("motoboys").select("id,nome,telefone,pix_key"),
     ])
     setPedidos((peds as Pedido[]) ?? [])
     setLojas((ls as Loja[]) ?? [])
@@ -106,10 +118,13 @@ export default function RelatorioPage() {
     repasse:  stats.reduce((s, x) => s + x.valor_a_repassar, 0),
   }
 
-  // Agrupamento por motoboy
-  const motoboyStats: MotoboyStats[] = motoboys
-    .map(mb => {
-      const entregas = pedidos.filter(p => p.motoboy_id === mb.id)
+  // Agrupamento por motoboy — inclui motoboys não cadastrados como "ativo"
+  const mbMap = new Map(motoboys.map(m => [m.id, m]))
+  const mbIds = [...new Set(pedidos.map(p => p.motoboy_id).filter(Boolean))]
+  const motoboyStats: MotoboyStats[] = mbIds
+    .map(mbId => {
+      const entregas = pedidos.filter(p => p.motoboy_id === mbId)
+      const mb = mbMap.get(mbId!) ?? ({ id: mbId, nome: `ID …${mbId!.slice(-6)}`, telefone: null, pix_key: null } as any)
       return {
         motoboy: mb,
         entregas: entregas.length,
@@ -355,8 +370,8 @@ export default function RelatorioPage() {
                 </div>
                 <p style={{ fontSize: 13, fontWeight: 700, color: "#374151", textAlign: "right" }}>{s.entregas}</p>
                 <p style={{ fontSize: 14, fontWeight: 900, color: "#8b5cf6", textAlign: "right" }}>{fmtR(s.total_ganho)}</p>
-                <p style={{ fontSize: 11, color: "#64748b", textAlign: "right", fontFamily: "monospace", wordBreak: "break-all" }}>
-                  {(s.motoboy as any).pix_key ?? "—"}
+                <p style={{ fontSize: 11, color: "#64748b", textAlign: "right", wordBreak: "break-all" }}>
+                  {fmtPix((s.motoboy as any).pix_key)}
                 </p>
               </div>
             ))}
