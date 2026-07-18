@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react"
 import { supabase } from "@/lib/supabase"
-import type { Pedido, Loja } from "@/types"
+import type { Pedido, Loja, Motoboy } from "@/types"
 
 // Taxa Chegô por entrega
 const TAXA_CHEGO_POR_ENTREGA = 1.00
@@ -22,6 +22,12 @@ type LojaStat = {
   valor_a_repassar: number
 }
 
+type MotoboyStats = {
+  motoboy: Motoboy
+  entregas: number
+  total_ganho: number
+}
+
 function fmtR(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
 }
@@ -31,12 +37,13 @@ function fmtData(iso: string) {
 }
 
 export default function RelatorioPage() {
-  const [pedidos, setPedidos]   = useState<Pedido[]>([])
-  const [lojas,   setLojas]     = useState<Loja[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [periodo, setPeriodo]   = useState<"semana" | "quinzena" | "mes" | "custom">("semana")
-  const [dataIni, setDataIni]   = useState("")
-  const [dataFim, setDataFim]   = useState("")
+  const [pedidos,  setPedidos]   = useState<Pedido[]>([])
+  const [lojas,    setLojas]     = useState<Loja[]>([])
+  const [motoboys, setMotoboys]  = useState<Motoboy[]>([])
+  const [loading,  setLoading]   = useState(true)
+  const [periodo,  setPeriodo]   = useState<"semana" | "quinzena" | "mes" | "custom">("semana")
+  const [dataIni,  setDataIni]   = useState("")
+  const [dataFim,  setDataFim]   = useState("")
   const [expandida, setExpandida] = useState<string | null>(null)
 
   // calcula range baseado no período
@@ -57,7 +64,7 @@ export default function RelatorioPage() {
       ? { ini: dataIni ? new Date(dataIni).toISOString() : new Date(0).toISOString(), fim: dataFim ? new Date(dataFim + "T23:59:59").toISOString() : new Date().toISOString() }
       : calcRange(periodo)
 
-    const [{ data: peds }, { data: ls }] = await Promise.all([
+    const [{ data: peds }, { data: ls }, { data: mbs }] = await Promise.all([
       supabase.from("pedidos")
         .select("*, loja:lojas(id,nome,plano,categoria,logo_url,comissao)")
         .eq("status", "entregue")
@@ -65,9 +72,11 @@ export default function RelatorioPage() {
         .lte("criado_em", fim)
         .order("criado_em", { ascending: false }),
       supabase.from("lojas").select("*").eq("status", "ativo"),
+      supabase.from("motoboys").select("id,nome,telefone,pix_key").eq("status", "ativo"),
     ])
     setPedidos((peds as Pedido[]) ?? [])
     setLojas((ls as Loja[]) ?? [])
+    setMotoboys((mbs as Motoboy[]) ?? [])
     setLoading(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [periodo, dataIni, dataFim])
@@ -97,12 +106,30 @@ export default function RelatorioPage() {
     repasse:  stats.reduce((s, x) => s + x.valor_a_repassar, 0),
   }
 
+  // Agrupamento por motoboy
+  const motoboyStats: MotoboyStats[] = motoboys
+    .map(mb => {
+      const entregas = pedidos.filter(p => p.motoboy_id === mb.id)
+      return {
+        motoboy: mb,
+        entregas: entregas.length,
+        total_ganho: entregas.reduce((s, p) => s + Number(p.taxa_entrega ?? 0), 0),
+      }
+    })
+    .filter(s => s.entregas > 0)
+    .sort((a, b) => b.total_ganho - a.total_ganho)
+
+  const totalMotoboys = {
+    entregas: motoboyStats.reduce((s, x) => s + x.entregas, 0),
+    ganho:    motoboyStats.reduce((s, x) => s + x.total_ganho, 0),
+  }
+
   const { ini: rIni, fim: rFim } = periodo === "custom"
     ? { ini: dataIni || "—", fim: dataFim || "—" }
     : { ini: new Date(calcRange(periodo).ini).toLocaleDateString("pt-BR"), fim: new Date().toLocaleDateString("pt-BR") }
 
   return (
-    <div style={{ padding: "32px 36px", minHeight: "100vh" }}>
+    <div style={{ padding: "24px 16px", minHeight: "100vh" }}>
       {/* Header */}
       <div style={{ marginBottom: 28, display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div>
@@ -185,7 +212,8 @@ export default function RelatorioPage() {
           <p style={{ fontSize: 14, fontWeight: 700 }}>Nenhum pedido entregue no período</p>
         </div>
       ) : (
-        <div style={{ background: "white", borderRadius: 16, border: "1.5px solid #F1F5F9", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+        <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" as any }}>
+        <div style={{ background: "white", borderRadius: 16, border: "1.5px solid #F1F5F9", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", minWidth: 720 }}>
           {/* Header da tabela */}
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 80px", gap: 0, padding: "10px 20px", background: "#F8FAFC", borderBottom: "1.5px solid #F1F5F9" }}>
             {["Loja", "Pedidos", "Volume vendas", "Taxa Chegô", "Taxa Asaas", "A repassar", ""].map((h, i) => (
@@ -286,6 +314,60 @@ export default function RelatorioPage() {
             <p style={{ fontSize: 13, fontWeight: 900, color: "#f59e0b", textAlign: "right" }}>{fmtR(totais.asaas)}</p>
             <p style={{ fontSize: 15, fontWeight: 900, color: "#22c55e", textAlign: "right" }}>{fmtR(totais.repasse)}</p>
             <div />
+          </div>
+        </div>
+        </div>
+      )}
+
+      {/* Tabela de repasse motoboys */}
+      {!loading && motoboyStats.length > 0 && (
+        <div style={{ marginTop: 28 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(139,92,246,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/>
+                <path d="M6 17L9 10l5 0 4 7"/><path d="M9 10l2-3 5 0 2 3"/>
+              </svg>
+            </div>
+            <div>
+              <p style={{ fontSize: 14, fontWeight: 900, color: "#0F172A" }}>Repasse Motoboys</p>
+              <p style={{ fontSize: 11, color: "#94a3b8" }}>Taxa de entrega a repassar por entregador</p>
+            </div>
+          </div>
+          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" as any }}>
+          <div style={{ background: "white", borderRadius: 16, border: "1.5px solid #F1F5F9", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", minWidth: 520 }}>
+            {/* Header */}
+            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1.5fr", padding: "10px 20px", background: "#F8FAFC", borderBottom: "1.5px solid #F1F5F9" }}>
+              {["Motoboy", "Entregas", "Total a repassar", "Chave PIX"].map((h, i) => (
+                <p key={h} style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.8, textAlign: i > 0 ? "right" : "left" }}>{h}</p>
+              ))}
+            </div>
+            {motoboyStats.map(s => (
+              <div key={s.motoboy.id} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1.5fr", padding: "14px 20px", borderBottom: "1px solid #F8FAFC", alignItems: "center" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(139,92,246,0.1)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 900, color: "#8b5cf6", flexShrink: 0 }}>
+                    {s.motoboy.nome.slice(0, 2).toUpperCase()}
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 800, color: "#0F172A" }}>{s.motoboy.nome}</p>
+                    <p style={{ fontSize: 10, color: "#94a3b8" }}>{s.motoboy.telefone ?? "—"}</p>
+                  </div>
+                </div>
+                <p style={{ fontSize: 13, fontWeight: 700, color: "#374151", textAlign: "right" }}>{s.entregas}</p>
+                <p style={{ fontSize: 14, fontWeight: 900, color: "#8b5cf6", textAlign: "right" }}>{fmtR(s.total_ganho)}</p>
+                <p style={{ fontSize: 11, color: "#64748b", textAlign: "right", fontFamily: "monospace", wordBreak: "break-all" }}>
+                  {(s.motoboy as any).pix_key ?? "—"}
+                </p>
+              </div>
+            ))}
+            {/* Total */}
+            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1.5fr", padding: "14px 20px", background: "#F8FAFC", borderTop: "2px solid #E2E8F0" }}>
+              <p style={{ fontSize: 12, fontWeight: 900, color: "#0F172A" }}>TOTAL ({motoboyStats.length} motoboys)</p>
+              <p style={{ fontSize: 13, fontWeight: 900, color: "#374151", textAlign: "right" }}>{totalMotoboys.entregas}</p>
+              <p style={{ fontSize: 15, fontWeight: 900, color: "#8b5cf6", textAlign: "right" }}>{fmtR(totalMotoboys.ganho)}</p>
+              <div />
+            </div>
+          </div>
           </div>
         </div>
       )}
