@@ -285,7 +285,7 @@ function CartaoProcessando({ pedidoId, onConfirmado }: { pedidoId: string; onCon
         <p style={{ fontSize: 28, marginBottom: 8 }}>❌</p>
         <p style={{ color: "#DC2626", fontWeight: 700, fontSize: 14, marginBottom: 8 }}>Pagamento não foi processado</p>
         <p style={{ color: "#6B7280", fontSize: 12, marginBottom: 16 }}>Este pedido foi cancelado. Por favor, faça um novo pedido e insira os dados do cartão novamente.</p>
-        <a href="/" style={{ display: "inline-block", background: "#DC2626", color: "#fff", borderRadius: 12, padding: "10px 24px", fontWeight: 700, fontSize: 14, textDecoration: "none" }}>
+        <a href="/" onClick={() => localStorage.removeItem("arago_pedido_ativo")} style={{ display: "inline-block", background: "#DC2626", color: "#fff", borderRadius: 12, padding: "10px 24px", fontWeight: 700, fontSize: 14, textDecoration: "none" }}>
           Fazer novo pedido
         </a>
       </div>
@@ -1064,7 +1064,7 @@ export default function AcompanhamentoPedido() {
           <p style={{ color: "#111827", fontSize: 14 }}>📍 {pedido.endereco_entrega}</p>
         </div>
 
-        <Link href="/" style={{ display: "block", textAlign: "center", padding: "13px", borderRadius: 12, background: "#ffffff", color: "#6B7280", fontWeight: 700, fontSize: 14, textDecoration: "none", border: "1px solid #e5e7eb" }}>
+        <Link href="/" onClick={() => localStorage.removeItem("arago_pedido_ativo")} style={{ display: "block", textAlign: "center", padding: "13px", borderRadius: 12, background: "#ffffff", color: "#6B7280", fontWeight: 700, fontSize: 14, textDecoration: "none", border: "1px solid #e5e7eb" }}>
           Fazer outro pedido
         </Link>
       </div>
