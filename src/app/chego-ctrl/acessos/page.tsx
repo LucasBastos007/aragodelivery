@@ -3,56 +3,26 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 
-interface Contagem {
-  hoje: number
-  semana: number
-  mes: number
-  total: number
+type Periodo = "hoje" | "7d" | "15d" | "30d"
+
+const PERIODO_LABELS: Record<Periodo, string> = {
+  hoje: "Hoje", "7d": "7 dias", "15d": "15 dias", "30d": "30 dias",
+}
+
+function inicioHoje() {
+  const d = new Date(); d.setHours(0, 0, 0, 0); return d.toISOString()
+}
+function inicioPeriodo(p: Periodo) {
+  const d = new Date()
+  if (p === "hoje")  { d.setHours(0, 0, 0, 0); return d.toISOString() }
+  if (p === "7d")  { d.setDate(d.getDate() - 6);  d.setHours(0, 0, 0, 0); return d.toISOString() }
+  if (p === "15d") { d.setDate(d.getDate() - 14); d.setHours(0, 0, 0, 0); return d.toISOString() }
+  if (p === "30d") { d.setDate(d.getDate() - 29); d.setHours(0, 0, 0, 0); return d.toISOString() }
+  return d.toISOString()
 }
 
 interface DiaCount { dia: string; n: number }
-
-function inicioDia() {
-  const d = new Date(); d.setHours(0, 0, 0, 0); return d.toISOString()
-}
-function inicioSemana() {
-  const d = new Date(); d.setDate(d.getDate() - 6); d.setHours(0, 0, 0, 0); return d.toISOString()
-}
-function inicioMes() {
-  const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d.toISOString()
-}
-
-function Card({ titulo, icon, cor, dados }: { titulo: string; icon: React.ReactNode; cor: string; dados: Contagem }) {
-  return (
-    <div style={{ background: "white", borderRadius: 16, padding: "20px 22px", border: "1px solid #e2e8f0", flex: 1, minWidth: 0 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-        <div style={{ width: 36, height: 36, borderRadius: 10, background: `${cor}15`, border: `1px solid ${cor}30`, display: "flex", alignItems: "center", justifyContent: "center", color: cor }}>
-          {icon}
-        </div>
-        <p style={{ fontWeight: 800, fontSize: 14, color: "#0F172A" }}>{titulo}</p>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <div style={{ background: "#f8fafc", borderRadius: 10, padding: "12px 14px" }}>
-          <p style={{ fontSize: 22, fontWeight: 900, color: cor }}>{dados.hoje}</p>
-          <p style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, marginTop: 2 }}>Hoje</p>
-        </div>
-        <div style={{ background: "#f8fafc", borderRadius: 10, padding: "12px 14px" }}>
-          <p style={{ fontSize: 22, fontWeight: 900, color: "#334155" }}>{dados.semana}</p>
-          <p style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, marginTop: 2 }}>7 dias</p>
-        </div>
-        <div style={{ background: "#f8fafc", borderRadius: 10, padding: "12px 14px" }}>
-          <p style={{ fontSize: 22, fontWeight: 900, color: "#334155" }}>{dados.mes}</p>
-          <p style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, marginTop: 2 }}>Este mês</p>
-        </div>
-        <div style={{ background: "#f8fafc", borderRadius: 10, padding: "12px 14px" }}>
-          <p style={{ fontSize: 22, fontWeight: 900, color: "#334155" }}>{dados.total}</p>
-          <p style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, marginTop: 2 }}>Total</p>
-        </div>
-      </div>
-    </div>
-  )
-}
+interface Cadastro  { nome: string; criado_em: string }
 
 function MiniChart({ dias, cor }: { dias: DiaCount[]; cor: string }) {
   if (dias.length === 0) return null
@@ -73,123 +43,98 @@ function MiniChart({ dias, cor }: { dias: DiaCount[]; cor: string }) {
   )
 }
 
+function fmt(iso: string) {
+  return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+}
+function fmtDia(iso: string) {
+  return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
+}
+
 export default function AcessosPage() {
-  const [acessos,   setAcessos]   = useState<Contagem>({ hoje: 0, semana: 0, mes: 0, total: 0 })
-  const [cadastros, setCadastros] = useState<Contagem>({ hoje: 0, semana: 0, mes: 0, total: 0 })
-  const [pedidos,   setPedidos]   = useState<Contagem>({ hoje: 0, semana: 0, mes: 0, total: 0 })
+  const [periodo, setPeriodo] = useState<Periodo>("hoje")
+
+  const [cntAcessos,   setCntAcessos]   = useState(0)
+  const [cntCadastros, setCntCadastros] = useState(0)
+  const [cntPedidos,   setCntPedidos]   = useState(0)
+  const [cntHoje,      setCntHoje]      = useState({ acessos: 0, cadastros: 0, pedidos: 0 })
+
   const [diasAcessos,   setDiasAcessos]   = useState<DiaCount[]>([])
   const [diasCadastros, setDiasCadastros] = useState<DiaCount[]>([])
   const [diasPedidos,   setDiasPedidos]   = useState<DiaCount[]>([])
-  const [loading, setLoading] = useState(true)
+
+  const [cadastrosList, setCadastrosList] = useState<Cadastro[]>([])
+
+  const [loading,   setLoading]   = useState(true)
   const [semTabela, setSemTabela] = useState(false)
 
-  async function load() {
-    const hoje   = inicioDia()
-    const semana = inicioSemana()
-    const mes    = inicioMes()
+  async function load(p: Periodo) {
+    setLoading(true)
+    const inicio = inicioPeriodo(p)
+    const hoje   = inicioHoje()
 
-    // Acessos (tabela acessos_app)
-    const [
-      { count: aHoje,   error: err1 },
-      { count: aSemana, error: err2 },
-      { count: aMes },
-      { count: aTotal },
-    ] = await Promise.all([
-      supabase.from("acessos_app").select("*", { count: "exact", head: true }).eq("tipo", "acesso").gte("criado_em", hoje),
-      supabase.from("acessos_app").select("*", { count: "exact", head: true }).eq("tipo", "acesso").gte("criado_em", semana),
-      supabase.from("acessos_app").select("*", { count: "exact", head: true }).eq("tipo", "acesso").gte("criado_em", mes),
-      supabase.from("acessos_app").select("*", { count: "exact", head: true }).eq("tipo", "acesso"),
-    ])
-
-    if (err1 || err2) { setSemTabela(true) }
-
-    setAcessos({ hoje: aHoje ?? 0, semana: aSemana ?? 0, mes: aMes ?? 0, total: aTotal ?? 0 })
-
-    // Cadastros (tabela clientes)
-    const [
-      { count: cHoje },
-      { count: cSemana },
-      { count: cMes },
-      { count: cTotal },
-    ] = await Promise.all([
-      supabase.from("clientes").select("*", { count: "exact", head: true }).gte("criado_em", hoje),
-      supabase.from("clientes").select("*", { count: "exact", head: true }).gte("criado_em", semana),
-      supabase.from("clientes").select("*", { count: "exact", head: true }).gte("criado_em", mes),
-      supabase.from("clientes").select("*", { count: "exact", head: true }),
-    ])
-    setCadastros({ hoje: cHoje ?? 0, semana: cSemana ?? 0, mes: cMes ?? 0, total: cTotal ?? 0 })
-
-    // Pedidos (tabela pedidos)
-    const [
-      { count: pHoje },
-      { count: pSemana },
-      { count: pMes },
-      { count: pTotal },
-    ] = await Promise.all([
-      supabase.from("pedidos").select("*", { count: "exact", head: true }).neq("status", "cancelado").gte("criado_em", hoje),
-      supabase.from("pedidos").select("*", { count: "exact", head: true }).neq("status", "cancelado").gte("criado_em", semana),
-      supabase.from("pedidos").select("*", { count: "exact", head: true }).neq("status", "cancelado").gte("criado_em", mes),
-      supabase.from("pedidos").select("*", { count: "exact", head: true }).neq("status", "cancelado"),
-    ])
-    setPedidos({ hoje: pHoje ?? 0, semana: pSemana ?? 0, mes: pMes ?? 0, total: pTotal ?? 0 })
-
-    // Gráfico últimos 7 dias
-    const dias7 = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(); d.setDate(d.getDate() - (6 - i)); d.setHours(0, 0, 0, 0)
+    const nDias = p === "hoje" ? 1 : p === "7d" ? 7 : p === "15d" ? 15 : 30
+    const dias = Array.from({ length: nDias }, (_, i) => {
+      const d = new Date(); d.setDate(d.getDate() - (nDias - 1 - i)); d.setHours(0, 0, 0, 0)
       return d.toISOString().slice(0, 10)
     })
 
-    // Pedidos por dia
-    const { data: pedDias } = await supabase
-      .from("pedidos")
-      .select("criado_em")
-      .neq("status", "cancelado")
-      .gte("criado_em", semana)
+    // Contagens do período
+    const [
+      { count: aTotal, error: err1 },
+      { count: cTotal },
+      { count: pTotal },
+      { count: aHoje },
+      { count: cHoje },
+      { count: pHoje },
+    ] = await Promise.all([
+      supabase.from("acessos_app").select("*", { count: "exact", head: true }).eq("tipo", "acesso").gte("criado_em", inicio),
+      supabase.from("clientes").select("*", { count: "exact", head: true }).gte("criado_em", inicio),
+      supabase.from("pedidos").select("*", { count: "exact", head: true }).eq("status", "entregue").gte("criado_em", inicio),
+      supabase.from("acessos_app").select("*", { count: "exact", head: true }).eq("tipo", "acesso").gte("criado_em", hoje),
+      supabase.from("clientes").select("*", { count: "exact", head: true }).gte("criado_em", hoje),
+      supabase.from("pedidos").select("*", { count: "exact", head: true }).eq("status", "entregue").gte("criado_em", hoje),
+    ])
 
-    const pedMap: Record<string, number> = {}
-    for (const p of pedDias ?? []) {
-      const dia = (p as any).criado_em.slice(0, 10)
-      pedMap[dia] = (pedMap[dia] ?? 0) + 1
+    if (err1) setSemTabela(true)
+
+    setCntAcessos(aTotal ?? 0)
+    setCntCadastros(cTotal ?? 0)
+    setCntPedidos(pTotal ?? 0)
+    setCntHoje({ acessos: aHoje ?? 0, cadastros: cHoje ?? 0, pedidos: pHoje ?? 0 })
+
+    // Gráfico por dia
+    const [{ data: accDias }, { data: cadDias }, { data: pedDias }] = await Promise.all([
+      err1 ? { data: [] } : supabase.from("acessos_app").select("criado_em").eq("tipo", "acesso").gte("criado_em", inicio),
+      supabase.from("clientes").select("criado_em").gte("criado_em", inicio),
+      supabase.from("pedidos").select("criado_em").eq("status", "entregue").gte("criado_em", inicio),
+    ])
+
+    const toMap = (rows: any[]) => {
+      const m: Record<string, number> = {}
+      for (const r of rows ?? []) { const d = r.criado_em.slice(0, 10); m[d] = (m[d] ?? 0) + 1 }
+      return m
     }
-    setDiasPedidos(dias7.map(dia => ({ dia, n: pedMap[dia] ?? 0 })))
+    const accMap = toMap(accDias ?? [])
+    const cadMap = toMap(cadDias ?? [])
+    const pedMap = toMap(pedDias ?? [])
 
-    // Cadastros por dia
-    const { data: cadDias } = await supabase
+    setDiasAcessos(dias.map(d => ({ dia: d, n: accMap[d] ?? 0 })))
+    setDiasCadastros(dias.map(d => ({ dia: d, n: cadMap[d] ?? 0 })))
+    setDiasPedidos(dias.map(d => ({ dia: d, n: pedMap[d] ?? 0 })))
+
+    // Lista de quem criou conta no período
+    const { data: cads } = await supabase
       .from("clientes")
-      .select("criado_em")
-      .gte("criado_em", semana)
-
-    const cadMap: Record<string, number> = {}
-    for (const c of cadDias ?? []) {
-      const dia = (c as any).criado_em.slice(0, 10)
-      cadMap[dia] = (cadMap[dia] ?? 0) + 1
-    }
-    setDiasCadastros(dias7.map(dia => ({ dia, n: cadMap[dia] ?? 0 })))
-
-    // Acessos por dia (se tabela existir)
-    if (!err1) {
-      const { data: accDias } = await supabase
-        .from("acessos_app")
-        .select("criado_em")
-        .eq("tipo", "acesso")
-        .gte("criado_em", semana)
-
-      const accMap: Record<string, number> = {}
-      for (const a of accDias ?? []) {
-        const dia = (a as any).criado_em.slice(0, 10)
-        accMap[dia] = (accMap[dia] ?? 0) + 1
-      }
-      setDiasAcessos(dias7.map(dia => ({ dia, n: accMap[dia] ?? 0 })))
-    }
+      .select("nome, criado_em")
+      .gte("criado_em", inicio)
+      .order("criado_em", { ascending: false })
+      .limit(50)
+    setCadastrosList((cads ?? []).map((c: any) => ({ nome: c.nome ?? "Sem nome", criado_em: c.criado_em })))
 
     setLoading(false)
   }
 
-  useEffect(() => {
-    load()
-    const iv = setInterval(load, 30_000)
-    return () => clearInterval(iv)
-  }, [])
+  useEffect(() => { load(periodo) }, [periodo])
 
   const iconAcesso = (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
@@ -215,39 +160,36 @@ export default function AcessosPage() {
     </svg>
   )
 
+  const periodos: Periodo[] = ["hoje", "7d", "15d", "30d"]
+
+  const cards = [
+    { titulo: "Acessos ao app",    icon: iconAcesso,   cor: "#f97316", total: cntAcessos,   hoje: cntHoje.acessos,   dias: diasAcessos,   oculto: semTabela },
+    { titulo: "Contas criadas",    icon: iconCadastro, cor: "#8b5cf6", total: cntCadastros, hoje: cntHoje.cadastros, dias: diasCadastros, oculto: false },
+    { titulo: "Pedidos entregues", icon: iconPedido,   cor: "#10b981", total: cntPedidos,   hoje: cntHoje.pedidos,   dias: diasPedidos,   oculto: false },
+  ]
+
   return (
-    <div className="p-4 sm:p-8" style={{ maxWidth: 900 }}>
-      <div style={{ marginBottom: 24 }}>
+    <div className="p-4 sm:p-8" style={{ maxWidth: 960 }}>
+      <div style={{ marginBottom: 20 }}>
         <h1 style={{ color: "#0F172A", fontSize: 22, fontWeight: 900 }}>Acessos</h1>
-        <p style={{ color: "#94a3b8", fontSize: 13, marginTop: 2 }}>Monitoramento de uso do app em tempo real</p>
+        <p style={{ color: "#94a3b8", fontSize: 13, marginTop: 2 }}>Monitoramento de uso do app</p>
       </div>
 
-      {semTabela && (
-        <div style={{
-          background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.3)",
-          borderRadius: 12, padding: "12px 16px", marginBottom: 20,
-          display: "flex", gap: 10, alignItems: "flex-start",
-        }}>
-          <span style={{ fontSize: 16 }}>⚠️</span>
-          <div>
-            <p style={{ fontSize: 13, fontWeight: 700, color: "#92400e" }}>Tabela de acessos não encontrada</p>
-            <p style={{ fontSize: 12, color: "#78350f", marginTop: 4 }}>
-              Execute o SQL abaixo no <strong>Supabase SQL Editor</strong> para ativar o contador de acessos:
-            </p>
-            <code style={{
-              display: "block", marginTop: 8, background: "#1e293b", color: "#7dd3fc",
-              fontSize: 11, padding: "8px 12px", borderRadius: 8, fontFamily: "monospace",
+      {/* Seletor de período */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 24, flexWrap: "wrap" }}>
+        {periodos.map(p => (
+          <button key={p} onClick={() => setPeriodo(p)}
+            style={{
+              fontSize: 11, padding: "5px 14px", borderRadius: 20, border: "none", cursor: "pointer",
+              background: periodo === p ? "#6366f1" : "#f1f5f9",
+              color:      periodo === p ? "white" : "#64748b",
+              fontWeight: periodo === p ? 700 : 400,
+              transition: "all 0.15s",
             }}>
-              {`CREATE TABLE acessos_app (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  tipo TEXT NOT NULL,
-  criado_em TIMESTAMPTZ DEFAULT NOW()
-);
-CREATE INDEX ON acessos_app (tipo, criado_em);`}
-            </code>
-          </div>
-        </div>
-      )}
+            {PERIODO_LABELS[p]}
+          </button>
+        ))}
+      </div>
 
       {loading ? (
         <p style={{ color: "#94a3b8", fontSize: 13 }}>Carregando...</p>
@@ -255,49 +197,79 @@ CREATE INDEX ON acessos_app (tipo, criado_em);`}
         <>
           {/* Cards */}
           <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 24 }}>
-            <Card titulo="Acessos ao app"    icon={iconAcesso}   cor="#f97316" dados={acessos}   />
-            <Card titulo="Contas criadas"    icon={iconCadastro} cor="#8b5cf6" dados={cadastros} />
-            <Card titulo="Pedidos realizados" icon={iconPedido}  cor="#10b981" dados={pedidos}   />
-          </div>
-
-          {/* Gráfico 7 dias */}
-          <div style={{ background: "white", borderRadius: 16, padding: "20px 22px", border: "1px solid #e2e8f0" }}>
-            <p style={{ fontWeight: 800, fontSize: 14, color: "#0F172A", marginBottom: 18 }}>Últimos 7 dias</p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-              {!semTabela && (
-                <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                    <span style={{ fontSize: 12, color: "#f97316", fontWeight: 700 }}>Acessos</span>
-                    <span style={{ fontSize: 12, color: "#94a3b8" }}>{acessos.semana} total</span>
+            {cards.filter(c => !c.oculto).map(c => (
+              <div key={c.titulo} style={{ background: "white", borderRadius: 16, padding: "18px 20px", border: "1px solid #e2e8f0", flex: 1, minWidth: 200 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 9, background: `${c.cor}15`, border: `1px solid ${c.cor}30`, display: "flex", alignItems: "center", justifyContent: "center", color: c.cor }}>
+                    {c.icon}
                   </div>
-                  <MiniChart dias={diasAcessos} cor="#f97316" />
+                  <p style={{ fontWeight: 800, fontSize: 13, color: "#0F172A" }}>{c.titulo}</p>
                 </div>
-              )}
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ fontSize: 12, color: "#8b5cf6", fontWeight: 700 }}>Cadastros</span>
-                  <span style={{ fontSize: 12, color: "#94a3b8" }}>{cadastros.semana} total</span>
-                </div>
-                <MiniChart dias={diasCadastros} cor="#8b5cf6" />
-              </div>
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                  <span style={{ fontSize: 12, color: "#10b981", fontWeight: 700 }}>Pedidos</span>
-                  <span style={{ fontSize: 12, color: "#94a3b8" }}>{pedidos.semana} total</span>
-                </div>
-                <MiniChart dias={diasPedidos} cor="#10b981" />
-              </div>
-            </div>
 
-            {/* Legenda dias */}
-            <div style={{ display: "flex", gap: 3, marginTop: 10 }}>
-              {diasPedidos.map(d => (
-                <div key={d.dia} style={{ flex: 1, textAlign: "center", fontSize: 9, color: "#94a3b8" }}>
-                  {new Date(d.dia + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "short" }).slice(0, 3)}
+                <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 4 }}>
+                  <p style={{ fontSize: 32, fontWeight: 900, color: c.cor, lineHeight: 1 }}>{c.total}</p>
+                  <p style={{ fontSize: 12, color: "#94a3b8" }}>{PERIODO_LABELS[periodo]}</p>
                 </div>
-              ))}
-            </div>
+                {periodo !== "hoje" && (
+                  <p style={{ fontSize: 12, color: "#64748b", marginBottom: 10 }}>
+                    Hoje: <strong style={{ color: "#0F172A" }}>{c.hoje}</strong>
+                  </p>
+                )}
+
+                {c.dias.length > 0 && (
+                  <div style={{ marginTop: 10 }}>
+                    <MiniChart dias={c.dias} cor={c.cor} />
+                    <div style={{ display: "flex", gap: 3, marginTop: 4 }}>
+                      {c.dias.filter((_, i) => i === 0 || i === Math.floor(c.dias.length / 2) || i === c.dias.length - 1).map(d => (
+                        <div key={d.dia} style={{ flex: 1, fontSize: 9, color: "#94a3b8", textAlign: d.dia === c.dias[0].dia ? "left" : d.dia === c.dias[c.dias.length - 1].dia ? "right" : "center" }}>
+                          {fmtDia(d.dia + "T12:00:00")}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
+
+          {/* Lista de cadastros */}
+          {cadastrosList.length > 0 && (
+            <div style={{ background: "white", borderRadius: 16, padding: "20px 22px", border: "1px solid #e2e8f0" }}>
+              <p style={{ fontWeight: 800, fontSize: 14, color: "#0F172A", marginBottom: 14 }}>
+                Contas criadas — {PERIODO_LABELS[periodo]}
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                {cadastrosList.map((c, i) => (
+                  <div key={i} style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    padding: "9px 0",
+                    borderBottom: i < cadastrosList.length - 1 ? "1px solid #f1f5f9" : "none",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{
+                        width: 28, height: 28, borderRadius: "50%",
+                        background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.2)",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 11, fontWeight: 800, color: "#8b5cf6", flexShrink: 0,
+                      }}>
+                        {c.nome.charAt(0).toUpperCase()}
+                      </div>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: "#0F172A" }}>{c.nome}</span>
+                    </div>
+                    <span style={{ fontSize: 11, color: "#94a3b8" }}>
+                      {fmtDia(c.criado_em)} {fmt(c.criado_em)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {cadastrosList.length === 0 && (
+            <div style={{ background: "white", borderRadius: 16, padding: "20px 22px", border: "1px solid #e2e8f0", textAlign: "center" }}>
+              <p style={{ color: "#94a3b8", fontSize: 13 }}>Nenhum cadastro no período selecionado.</p>
+            </div>
+          )}
         </>
       )}
     </div>
