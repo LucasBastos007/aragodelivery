@@ -563,6 +563,7 @@ export default function MotoboyPage() {
   })
   const [dispLoading,    setDispLoading]    = useState(true)
   const [togglingDisp,   setTogglingDisp]   = useState(false)
+  const [pushStatus,     setPushStatus]     = useState<"granted"|"denied"|"default"|"unsupported">("default")
 
   const [prontos,        setProntos]        = useState<Pedido[]>([])
   const [emAndamento,    setEmAndamento]    = useState<Pedido[]>([])
@@ -1123,27 +1124,37 @@ export default function MotoboyPage() {
   // ── Push — registrar SW + salvar subscription do motoboy ─────────────────
   useEffect(() => {
     if (!motoboy_id) return
-    async function registerPush() {
-      try {
-        if (!("serviceWorker" in navigator) || !("PushManager" in window)) return
-        const reg = await navigator.serviceWorker.register("/sw.js")
-        await reg.update()
-        const perm = await Notification.requestPermission()
-        if (perm !== "granted") return
-        const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
-        if (!vapidKey) return
-        const sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapidKey),
-        })
-        await fetch("/api/push", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "subscribe-motoboy", motoboy_id, subscription: sub }),
-        })
-      } catch {}
-    }
-    registerPush()
+    // Checa status atual sem pedir permissão
+    if (!("Notification" in window)) { setPushStatus("unsupported"); return }
+    setPushStatus(Notification.permission as any)
+    if (Notification.permission === "granted") registerPush(motoboy_id)
   }, [motoboy_id])
+
+  async function registerPush(mid: string) {
+    try {
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) return
+      const reg = await navigator.serviceWorker.register("/sw.js")
+      await reg.update()
+      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+      if (!vapidKey) return
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidKey),
+      })
+      await fetch("/api/push", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "subscribe-motoboy", motoboy_id: mid, subscription: sub }),
+      })
+    } catch {}
+  }
+
+  async function ativarPush() {
+    if (!motoboy_id) return
+    if (!("Notification" in window)) return
+    const perm = await Notification.requestPermission()
+    setPushStatus(perm as any)
+    if (perm === "granted") await registerPush(motoboy_id)
+  }
 
   // ── Push — ouvir mensagem do SW para tocar som em segundo plano ───────────
   useEffect(() => {
@@ -1655,6 +1666,38 @@ export default function MotoboyPage() {
           {togglingDisp ? "..." : disponivel ? "Online" : "Offline"}
         </span>
       </div>}
+
+      {/* ── Banner: push desativado ── */}
+      {pushStatus !== "granted" && pushStatus !== "unsupported" && !fullscreenMap && (
+        <div style={{
+          position: "absolute", top: 60, left: 12, right: 12, zIndex: 30,
+          background: "rgba(239,68,68,0.95)", backdropFilter: "blur(8px)",
+          borderRadius: 14, padding: "11px 14px",
+          display: "flex", alignItems: "center", gap: 10,
+          boxShadow: "0 4px 20px rgba(239,68,68,0.4)",
+        }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            <line x1="1" y1="1" x2="23" y2="23"/>
+          </svg>
+          <div style={{ flex: 1 }}>
+            <p style={{ color: "white", fontWeight: 800, fontSize: 12, lineHeight: 1.2 }}>Notificações desativadas</p>
+            <p style={{ color: "rgba(255,255,255,0.75)", fontSize: 11, marginTop: 2 }}>
+              {pushStatus === "denied" ? "Acesse as configurações do celular para permitir" : "Você pode perder corridas sem notificação"}
+            </p>
+          </div>
+          {pushStatus !== "denied" && (
+            <button onClick={ativarPush} style={{
+              background: "white", color: "#ef4444", border: "none",
+              borderRadius: 10, padding: "6px 12px", fontSize: 11, fontWeight: 800,
+              cursor: "pointer", flexShrink: 0,
+            }}>
+              Ativar
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ── Botão de raio de atuação — canto inferior direito sobre o mapa ── */}
       {!corridaAtiva && !corridaConcluida && (

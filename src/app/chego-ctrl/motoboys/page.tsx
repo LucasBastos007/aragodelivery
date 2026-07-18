@@ -477,6 +477,11 @@ export default function MotoboyPage() {
                           Online
                         </span>
                       )}
+                      {m.status === "ativo" && (
+                        <span title={m.push_subscription ? "Push ativado" : "Sem push — não receberá notificações"} style={{ padding: "2px 8px", borderRadius: 999, fontSize: 10, fontWeight: 800, background: m.push_subscription ? "rgba(6,182,212,0.12)" : "rgba(239,68,68,0.10)", color: m.push_subscription ? "#06b6d4" : "#ef4444", border: `1px solid ${m.push_subscription ? "rgba(6,182,212,0.25)" : "rgba(239,68,68,0.25)"}` }}>
+                          {m.push_subscription ? "Push ✓" : "Sem push"}
+                        </span>
+                      )}
                     </div>
                     <p style={{ color: "#94a3b8", fontSize: 12, marginTop: 3 }}>
                       {m.veiculo} · {m.placa} · {m.telefone}
