@@ -456,7 +456,19 @@ export default function Home() {
       if (saved) setLastAddress(saved)
       const ativo = localStorage.getItem("arago_pedido_ativo")
       if (ativo) {
-        try { setPedidoAtivo(JSON.parse(ativo)) } catch {}
+        try {
+          const parsed = JSON.parse(ativo)
+          setPedidoAtivo(parsed)
+          // Verifica status real — limpa se entregue ou cancelado
+          if (parsed?.id) {
+            supabase.from("pedidos").select("status").eq("id", parsed.id).maybeSingle().then(({ data }) => {
+              if (!data || data.status === "entregue" || data.status === "cancelado") {
+                localStorage.removeItem("arago_pedido_ativo")
+                setPedidoAtivo(null)
+              }
+            })
+          }
+        } catch {}
       }
       // Tenta obter localização do cliente: endereço salvo → GPS → sem coordenadas
       try {
