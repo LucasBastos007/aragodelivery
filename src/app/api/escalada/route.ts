@@ -102,13 +102,18 @@ export async function POST(req: NextRequest) {
   // Se o pedido já estava atribuído a alguém, ignora esse também
   if (pedido.motoboy_id) ignorar.add(pedido.motoboy_id)
 
-  const candidatos = motoboys
+  // Candidatos com localização: ordenados por distância
+  // Candidatos sem localização: incluídos no final (não filtrados por lat/lng)
+  const comLoc = motoboys
     .filter(m => m.id && !ignorar.has(m.id) && !ocupados.has(m.id) && m.lat && m.lng)
-    .map(m => {
-      const distLoja = lojaLat && lojaLng ? haversineKm(m.lat, m.lng, lojaLat, lojaLng) : 0
-      return { ...m, distLoja }
-    })
+    .map(m => ({ ...m, distLoja: lojaLat && lojaLng ? haversineKm(m.lat, m.lng, lojaLat, lojaLng) : 9999 }))
     .sort((a, b) => a.distLoja - b.distLoja)
+
+  const semLoc = motoboys
+    .filter(m => m.id && !ignorar.has(m.id) && !ocupados.has(m.id) && (!m.lat || !m.lng))
+    .map(m => ({ ...m, distLoja: 9999 }))
+
+  const candidatos = [...comLoc, ...semLoc]
 
   if (candidatos.length === 0) {
     if (pedido.status === "aguardando_aceite") {
@@ -117,14 +122,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, msg: "sem candidatos elegíveis" })
   }
 
+  // O mais próximo recebe a oferta formal (Realtime); todos recebem push
   const escolhido = candidatos[0]
 
   // Salva lat/lng da loja no pedido para o mapa do motoboy
   const lojaLatSalvar = lojaLat ?? (pedido.loja as any)?.lat
   const lojaLngSalvar = (pedido.loja as any)?.lng
 
-  // Atualização atômica: só reatribui se o pedido ainda está no mesmo estado que lemos
-  // (evita race condition entre duas chamadas de escalada simultâneas)
+  // Atualização atômica — só reatribui se o pedido ainda está no mesmo estado que lemos
   const updateQuery = supabase.from("pedidos").update({
     motoboy_id: escolhido.id,
     status: "aguardando_aceite",
@@ -138,34 +143,55 @@ export async function POST(req: NextRequest) {
     await updateQuery.is("motoboy_id", null)
   }
 
-  // Push notification para todos os dispositivos do motoboy
-  if (escolhido.push_subscription && initVapid()) {
-    const subs: any[] = Array.isArray(escolhido.push_subscription)
-      ? escolhido.push_subscription
-      : [escolhido.push_subscription]
-    const payload = JSON.stringify({
+  // Push para TODOS os candidatos disponíveis — garante que nenhum perde a notificação
+  if (initVapid()) {
+    const payloadEscolhido = JSON.stringify({
       title:      "Nova corrida disponível!",
       body:       `Pedido #${pedido.codigo} — R$ ${(pedido.taxa_entrega ?? 0).toFixed(2)}`,
-      tag:        `motoboy-${escolhido.id}`,
+      tag:        "corrida-nova",
       url:        "/motoboy",
-      pedido_id:  pedido_id,
-      motoboy_id: escolhido.id,
+      pedido_id,
       requireInteraction: true,
     })
-    const expiredEndpoints: string[] = []
+    const payloadOutros = JSON.stringify({
+      title: "Corrida na região!",
+      body:  `Pedido #${pedido.codigo} — fique disponível para receber`,
+      tag:   "corrida-nova",
+      url:   "/motoboy",
+      requireInteraction: false,
+    })
+
+    const expiredPorMotoboy: Record<string, string[]> = {}
+
     await Promise.allSettled(
-      subs.map(async sub => {
-        try { await webpush.sendNotification(sub, payload) }
-        catch (e: any) { if (e.statusCode === 410) expiredEndpoints.push(sub.endpoint) }
+      candidatos.map(async m => {
+        if (!m.push_subscription) return
+        const subs: any[] = Array.isArray(m.push_subscription) ? m.push_subscription : [m.push_subscription]
+        const payload = m.id === escolhido.id ? payloadEscolhido : payloadOutros
+        for (const sub of subs) {
+          try { await webpush.sendNotification(sub, payload) }
+          catch (e: any) {
+            if (e.statusCode === 410) {
+              if (!expiredPorMotoboy[m.id]) expiredPorMotoboy[m.id] = []
+              expiredPorMotoboy[m.id].push(sub.endpoint)
+            }
+          }
+        }
       })
     )
-    // Limpa subscrições expiradas
-    if (expiredEndpoints.length > 0) {
-      const filtradas = subs.filter(s => !expiredEndpoints.includes(s?.endpoint))
-      await supabase.from("motoboys")
-        .update({ push_subscription: filtradas.length ? filtradas : null })
-        .eq("id", escolhido.id)
-    }
+
+    // Limpa subscrições expiradas de cada motoboy
+    await Promise.allSettled(
+      Object.entries(expiredPorMotoboy).map(async ([mid, expired]) => {
+        const m = candidatos.find(c => c.id === mid)
+        if (!m) return
+        const subs: any[] = Array.isArray(m.push_subscription) ? m.push_subscription : [m.push_subscription]
+        const filtradas = subs.filter(s => !expired.includes(s?.endpoint))
+        await supabase.from("motoboys")
+          .update({ push_subscription: filtradas.length ? filtradas : null })
+          .eq("id", mid)
+      })
+    )
   }
 
   return NextResponse.json({ ok: true, motoboy_id: escolhido.id })

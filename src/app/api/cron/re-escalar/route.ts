@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "não autorizado" }, { status: 401 })
   }
 
-  const doisMinAtras = new Date(Date.now() - 2 * 60 * 1000).toISOString()
+  const doisMinAtras = new Date(Date.now() - 45 * 1000).toISOString()
 
   const { data: travados } = await supabase
     .from("pedidos")
