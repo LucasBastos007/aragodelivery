@@ -4,7 +4,11 @@ import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
 
-const MOTOBOY_PCT = 0.80
+function ganhoLiquido(taxa: number): number {
+  if (taxa <= 0) return 0
+  const fee = taxa > 30 ? 3 : taxa > 20 ? 2 : 1
+  return Math.max(0, taxa - fee)
+}
 
 const inp: React.CSSProperties = {
   width: "100%", padding: "10px 13px", borderRadius: 10, fontSize: 14,
@@ -27,6 +31,8 @@ export default function MotoboyFinanceiroPage() {
   const [editandoPix,   setEditandoPix]   = useState(false)
   const [pixInput,      setPixInput]      = useState("")
   const [bancoInput,    setBancoInput]    = useState("")
+  const [agenciaInput,  setAgenciaInput]  = useState("")
+  const [contaInput,    setContaInput]    = useState("")
   const [salvandoPix,   setSalvandoPix]   = useState(false)
 
   const [solicitando,   setSolicitando]   = useState(false)
@@ -45,9 +51,13 @@ export default function MotoboyFinanceiroPage() {
       const parsed = mb?.pix_key ? JSON.parse(mb.pix_key) : {}
       setPixInput(parsed.pix ?? "")
       setBancoInput(parsed.banco ?? "")
+      setAgenciaInput(parsed.agencia ?? "")
+      setContaInput(parsed.conta ?? "")
     } catch {
       setPixInput(mb?.pix_key ?? "")
       setBancoInput("")
+      setAgenciaInput("")
+      setContaInput("")
     }
 
     const { data: ped } = await supabase
@@ -57,7 +67,7 @@ export default function MotoboyFinanceiroPage() {
     const pedList = ped ?? []
     setEntregas(pedList.slice(0, 30))
 
-    const ganhos = pedList.reduce((s, p) => s + (p.taxa_entrega ?? 0) * MOTOBOY_PCT, 0)
+    const ganhos = pedList.reduce((s, p) => s + ganhoLiquido(p.taxa_entrega ?? 0), 0)
     setTotalGanhos(ganhos)
 
     const { data: saq } = await supabase
@@ -77,7 +87,7 @@ export default function MotoboyFinanceiroPage() {
   async function salvarPix() {
     if (!motoboy_id || !pixInput.trim()) return
     setSalvandoPix(true)
-    const payload = JSON.stringify({ pix: pixInput.trim(), banco: bancoInput.trim() })
+    const payload = JSON.stringify({ pix: pixInput.trim(), banco: bancoInput.trim(), agencia: agenciaInput.trim(), conta: contaInput.trim() })
     await supabase.from("motoboys").update({ pix_key: payload }).eq("id", motoboy_id)
     setSalvandoPix(false)
     setEditandoPix(false)
@@ -108,13 +118,17 @@ export default function MotoboyFinanceiroPage() {
 
   const pendentes = saques.filter(s => s.status === "solicitado")
 
-  // Parse pix_key (pode ser JSON { pix, banco } ou string legada)
+  // Parse pix_key (pode ser JSON { pix, banco, agencia, conta } ou string legada)
   let pixChaveDisplay = ""
-  let bancoDadosDisplay = ""
+  let bancoDisplay = ""
+  let agenciaDisplay = ""
+  let contaDisplay = ""
   try {
     const pk = motoboy?.pix_key ? JSON.parse(motoboy.pix_key) : {}
-    pixChaveDisplay   = pk.pix   ?? ""
-    bancoDadosDisplay = pk.banco ?? ""
+    pixChaveDisplay = pk.pix   ?? ""
+    bancoDisplay    = pk.banco ?? ""
+    agenciaDisplay  = pk.agencia ?? ""
+    contaDisplay    = pk.conta ?? ""
   } catch {
     pixChaveDisplay = motoboy?.pix_key ?? ""
   }
@@ -129,7 +143,7 @@ export default function MotoboyFinanceiroPage() {
 
       {saqueSucesso && (
         <div style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 14, padding: "14px 18px", marginBottom: 20 }}>
-          <p style={{ color: "#22c55e", fontWeight: 700, fontSize: 13 }}>✅ Saque solicitado! Prazo: até 2 dias úteis.</p>
+          <p style={{ color: "#22c55e", fontWeight: 700, fontSize: 13 }}>✅ Saque solicitado! Pagamentos realizados às terças e sextas-feiras.</p>
         </div>
       )}
 
@@ -153,10 +167,16 @@ export default function MotoboyFinanceiroPage() {
           <div style={{ flex: 1 }}>
             {!editandoPix && (
               <>
-                <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, fontWeight: 700, marginBottom: 4 }}>DADOS BANCÁRIOS</p>
-                <p style={{ color: bancoInput ? "white" : "#f87171", fontWeight: 600, fontSize: 13, marginBottom: 10 }}>
-                  {bancoInput || "Não cadastrado"}
-                </p>
+                <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, fontWeight: 700, marginBottom: 6 }}>DADOS BANCÁRIOS</p>
+                {bancoDisplay || agenciaDisplay || contaDisplay ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 3, marginBottom: 12 }}>
+                    <p style={{ color: "white", fontWeight: 700, fontSize: 13 }}>{bancoDisplay || "—"}</p>
+                    {agenciaDisplay && <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 12 }}>Ag: {agenciaDisplay}</p>}
+                    {contaDisplay   && <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 12 }}>Cc: {contaDisplay}</p>}
+                  </div>
+                ) : (
+                  <p style={{ color: "#f87171", fontWeight: 600, fontSize: 13, marginBottom: 12 }}>Não cadastrado</p>
+                )}
                 <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, fontWeight: 700, marginBottom: 4 }}>CHAVE PIX</p>
                 <p style={{ color: pixInput ? "white" : "#f87171", fontWeight: 700, fontSize: 14 }}>
                   {pixInput || "Não cadastrada"}
@@ -170,11 +190,27 @@ export default function MotoboyFinanceiroPage() {
           </button>
         </div>
         {editandoPix && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div>
-              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, marginBottom: 5 }}>DADOS BANCÁRIOS (banco, agência, conta)</p>
-              <input style={inp} value={bancoInput} onChange={e => setBancoInput(e.target.value)}
-                placeholder="Ex: Inter, Ag: 0001, Cc: 12345-6" />
+              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, marginBottom: 5 }}>BANCO</p>
+              <select style={{ ...inp, appearance: "none" }} value={bancoInput} onChange={e => setBancoInput(e.target.value)}>
+                <option value="">Selecione o banco...</option>
+                {["Nubank","Inter","Itaú","Bradesco","Banco do Brasil","Caixa Econômica Federal","Santander","C6 Bank","PicPay","Mercado Pago","PagBank","Sicoob","Sicredi","BTG Pactual","XP Investimentos","Neon","Next","Original","Safra","BRB","Banrisul","Banco do Nordeste","Banco da Amazônia","Votorantim","Daycoval","Rendimento","Outro"].map(b => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1.6fr", gap: 8 }}>
+              <div>
+                <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, marginBottom: 5 }}>AGÊNCIA</p>
+                <input style={inp} value={agenciaInput} onChange={e => setAgenciaInput(e.target.value)}
+                  placeholder="Ex: 0001" inputMode="numeric" />
+              </div>
+              <div>
+                <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, marginBottom: 5 }}>CONTA BANCÁRIA</p>
+                <input style={inp} value={contaInput} onChange={e => setContaInput(e.target.value)}
+                  placeholder="Ex: 12345-6" inputMode="numeric" />
+              </div>
             </div>
             <div>
               <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, marginBottom: 5 }}>CHAVE PIX</p>
@@ -221,15 +257,17 @@ export default function MotoboyFinanceiroPage() {
                 value={valorSaque} onChange={e => setValorSaque(e.target.value)} />
             </div>
             <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: "10px 14px" }}>
-              {bancoDadosDisplay && (
-                <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, marginBottom: 4 }}>
-                  Banco: <strong style={{ color: "white" }}>{bancoDadosDisplay}</strong>
+              {bancoDisplay && (
+                <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, marginBottom: 2 }}>
+                  Banco: <strong style={{ color: "white" }}>{bancoDisplay}</strong>
+                  {agenciaDisplay && <> · Ag: <strong style={{ color: "white" }}>{agenciaDisplay}</strong></>}
+                  {contaDisplay   && <> · Cc: <strong style={{ color: "white" }}>{contaDisplay}</strong></>}
                 </p>
               )}
               <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}>
                 Chave PIX: <strong style={{ color: "white" }}>{pixChaveDisplay}</strong>
               </p>
-              <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, marginTop: 3 }}>Prazo: até 2 dias úteis</p>
+              <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, marginTop: 3 }}>Pagamentos às terças e sextas-feiras</p>
             </div>
             {erroSaque && <p style={{ color: "#f87171", fontSize: 13, fontWeight: 600 }}>{erroSaque}</p>}
             <div style={{ display: "flex", gap: 8 }}>
@@ -305,7 +343,7 @@ export default function MotoboyFinanceiroPage() {
         ) : (
           <div>
             {entregas.map(p => {
-              const ganho = (p.taxa_entrega ?? 0) * MOTOBOY_PCT
+              const ganho = ganhoLiquido(p.taxa_entrega ?? 0)
               return (
                 <div key={p.id} style={{ padding: "11px 18px", borderBottom: "1px solid rgba(255,255,255,0.04)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
@@ -316,7 +354,7 @@ export default function MotoboyFinanceiroPage() {
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <p style={{ color: "#22c55e", fontWeight: 800, fontSize: 14 }}>+R$ {ganho.toFixed(2)}</p>
-                    <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 11 }}>taxa R$ {Number(p.taxa_entrega ?? 0).toFixed(2)}</p>
+                    <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 11 }}>taxa: R$ {Number(p.taxa_entrega ?? 0).toFixed(2)} − taxa Chegô</p>
                   </div>
                 </div>
               )
