@@ -156,6 +156,8 @@ export default function MotoboyPage() {
   const [loadingDocs,   setLoadingDocs]   = useState(false)
   const [gerandoCred,   setGerandoCred]   = useState(false)
   const [credencial,    setCredencial]    = useState<{ email: string; senha: string } | null>(null)
+  const [testPushId,    setTestPushId]    = useState<string | null>(null)
+  const [testPushMsg,   setTestPushMsg]   = useState<string | null>(null)
 
   // Busca signed URLs sempre que um motoboy é selecionado
   useEffect(() => {
@@ -783,6 +785,51 @@ export default function MotoboyPage() {
                     Reapresentar contrato
                   </button>
                 </>
+              )}
+
+              {/* Teste de push */}
+              {selecionado.status === "ativo" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <button
+                    onClick={async () => {
+                      setTestPushId(selecionado.id)
+                      setTestPushMsg(null)
+                      try {
+                        const res = await fetch("/api/admin/push-teste", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          credentials: "include",
+                          body: JSON.stringify({ motoboy_id: selecionado.id }),
+                        })
+                        const json = await res.json()
+                        setTestPushMsg(res.ok
+                          ? `✓ Notificação enviada (${json.enviados} dispositivo${json.enviados !== 1 ? "s" : ""})`
+                          : `✗ ${json.error}`)
+                      } catch {
+                        setTestPushMsg("✗ Erro ao enviar")
+                      } finally {
+                        setTestPushId(null)
+                      }
+                    }}
+                    disabled={testPushId === selecionado.id}
+                    style={{
+                      width: "100%", padding: "11px", borderRadius: 10,
+                      border: "1.5px solid rgba(6,182,212,0.35)", background: "rgba(6,182,212,0.07)",
+                      color: "#06b6d4", fontWeight: 700, fontSize: 13, cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                    }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                      <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                    </svg>
+                    {testPushId === selecionado.id ? "Enviando..." : "Testar notificação"}
+                  </button>
+                  {testPushMsg && selecionado.id && (
+                    <p style={{ fontSize: 11, textAlign: "center", color: testPushMsg.startsWith("✓") ? "#22c55e" : "#ef4444", fontWeight: 600 }}>
+                      {testPushMsg}
+                    </p>
+                  )}
+                </div>
               )}
 
               {/* Gerar credenciais */}
