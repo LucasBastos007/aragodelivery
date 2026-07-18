@@ -8,6 +8,8 @@ import type { Pedido, StatusPedido } from "@/types"
 
 // AudioContext persistente e desbloqueado pelo primeiro toque do usuário
 let _audioCtx: AudioContext | null = null
+// Elemento de áudio pré-carregado no primeiro toque — necessário para iOS PWA
+let _audioEl: HTMLAudioElement | null = null
 
 function getAudioCtx(): AudioContext | null {
   try {
@@ -21,29 +23,40 @@ function getAudioCtx(): AudioContext | null {
 
 function tocaSomPedido() {
   try {
-    // Tenta tocar o arquivo de áudio primeiro
-    const audio = new Audio("/novo-pedido.mp3")
-    audio.volume = 0.8
-    audio.play().catch(() => {
-      // Fallback: sintetiza som via Web Audio API (funciona sem arquivo)
-      const ctx = getAudioCtx()
-      if (!ctx) return
-      const play = (freq: number, start: number, dur: number, vol = 0.5) => {
-        const o = ctx.createOscillator()
-        const g = ctx.createGain()
-        o.connect(g); g.connect(ctx.destination)
-        o.type = "sine"
-        o.frequency.value = freq
-        g.gain.setValueAtTime(vol, ctx.currentTime + start)
-        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur)
-        o.start(ctx.currentTime + start)
-        o.stop(ctx.currentTime + start + dur + 0.05)
-      }
-      // Ding-dong — dois tons agradáveis
-      play(1047, 0,    0.3, 0.5)  // Dó
-      play(784,  0.35, 0.4, 0.4)  // Sol
-      play(1047, 0.75, 0.3, 0.3)  // Dó de novo
-    })
+    // Usa o elemento pré-carregado (iOS/Android PWA) — mais confiável
+    if (_audioEl) {
+      _audioEl.currentTime = 0
+      _audioEl.volume = 0.9
+      _audioEl.play().catch(() => tocaWebAudio())
+      return
+    }
+    // Fallback: cria elemento de áudio na hora
+    const audio = new Audio("/splash.mp3")
+    audio.volume = 0.9
+    // Escuta erro de carregamento antes de tocar
+    audio.addEventListener("error", () => tocaWebAudio(), { once: true })
+    audio.play().catch(() => tocaWebAudio())
+  } catch { tocaWebAudio() }
+}
+
+function tocaWebAudio() {
+  try {
+    const ctx = getAudioCtx()
+    if (!ctx) return
+    const play = (freq: number, start: number, dur: number, vol = 0.5) => {
+      const o = ctx.createOscillator()
+      const g = ctx.createGain()
+      o.connect(g); g.connect(ctx.destination)
+      o.type = "sine"
+      o.frequency.value = freq
+      g.gain.setValueAtTime(vol, ctx.currentTime + start)
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur)
+      o.start(ctx.currentTime + start)
+      o.stop(ctx.currentTime + start + dur + 0.05)
+    }
+    play(1047, 0,    0.3, 0.5)
+    play(784,  0.35, 0.4, 0.4)
+    play(1047, 0.75, 0.3, 0.3)
   } catch {}
 }
 
@@ -208,13 +221,21 @@ export default function LojaDashboard() {
   const [modalImpressao, setModalImpressao] = useState(false)
   const audioUnlocked = useRef(false)
 
-  // Desbloqueia AudioContext no primeiro toque (obrigatório no iOS/Safari)
+  // Desbloqueia áudio no primeiro toque — obrigatório para iOS/Android PWA
+  // iOS exige que o elemento Audio seja criado E tocado dentro de um gesto do usuário
   useEffect(() => {
     if (audioUnlocked.current) return
     const unlock = () => {
       if (audioUnlocked.current) return
       audioUnlocked.current = true
-      getAudioCtx() // inicializa e resume o contexto
+      // Inicializa AudioContext (Web Audio API fallback)
+      getAudioCtx()
+      // Pré-carrega e toca silenciosamente para "ativar" o elemento no iOS
+      const audio = new Audio("/splash.mp3")
+      audio.volume = 0.001
+      audio.play()
+        .then(() => { _audioEl = audio })
+        .catch(() => {})
     }
     window.addEventListener("pointerdown", unlock, { once: true })
     return () => window.removeEventListener("pointerdown", unlock)
@@ -312,7 +333,7 @@ export default function LojaDashboard() {
       fetch("/api/loja/status-pedido", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pedido_id: p.id, status: "cancelado", loja_id }),
+        body: JSON.stringify({ pedido_id: p.id, status: "cancelado", loja_id, motivo_cancelamento: "timeout_aceite" }),
       }).catch(() => {})
     }
   }
@@ -982,9 +1003,9 @@ export default function LojaDashboard() {
               {p.itens && p.itens.length > 0 && (
                 <div style={{ marginBottom: 12, display: "flex", flexDirection: "column", gap: 4 }}>
                   {p.itens.map((item: any) => (
-                    <div key={item.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
-                      <span style={{ color: "#374151" }}>{item.quantidade}x {item.nome}</span>
-                      <span style={{ color: "#9CA3AF" }}>R$ {(item.preco * item.quantidade).toFixed(2)}</span>
+                    <div key={item.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 15 }}>
+                      <span style={{ color: "#111827", fontWeight: 800 }}>{item.quantidade}x {item.nome}</span>
+                      <span style={{ color: "#374151", fontWeight: 700 }}>R$ {(item.preco * item.quantidade).toFixed(2)}</span>
                     </div>
                   ))}
                 </div>
@@ -1028,7 +1049,7 @@ export default function LojaDashboard() {
               </div>
 
               {p.itens && (
-                <p style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 8 }}>
+                <p style={{ fontSize: 13, color: "#111827", fontWeight: 700, marginBottom: 8 }}>
                   {p.itens.map((i: any) => `${i.quantidade}x ${i.nome}`).join(", ")}
                 </p>
               )}
