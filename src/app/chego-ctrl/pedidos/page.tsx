@@ -4,6 +4,109 @@ import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import type { Pedido, StatusPedido } from "@/types"
 
+const WA_SVG = (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+    <path d="M11.999 0C5.372 0 0 5.373 0 12c0 2.117.554 4.103 1.523 5.829L.054 23.5l5.832-1.528A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12 0-6.628-5.373-12-12.001-12zm.001 21.818a9.822 9.822 0 01-5.004-1.372l-.36-.213-3.463.908.924-3.375-.234-.374A9.816 9.816 0 012.182 12C2.182 6.57 6.569 2.182 12 2.182S21.818 6.57 21.818 12c0 5.43-4.387 9.818-9.818 9.818z"/>
+  </svg>
+)
+
+function BotaoWA({ telefone, msg, label }: { telefone?: string | null; msg: string; label: string }) {
+  if (!telefone) return null
+  const tel = telefone.replace(/\D/g, "")
+  if (!tel) return null
+  return (
+    <a
+      href={`https://wa.me/55${tel}?text=${encodeURIComponent(msg)}`}
+      target="_blank" rel="noopener noreferrer"
+      title={`WhatsApp ${label}`}
+      onClick={e => e.stopPropagation()}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 4,
+        fontSize: 10, padding: "3px 8px", borderRadius: 6,
+        border: "1px solid rgba(37,211,102,0.35)",
+        background: "rgba(37,211,102,0.07)", color: "#16a34a",
+        fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap",
+      }}
+    >
+      {WA_SVG} {label}
+    </a>
+  )
+}
+
+// Etapas da timeline com campo de timestamp correspondente
+const ETAPAS_PEDIDO = [
+  { key: "pedido",   label: "Pedido",   statuses: ["pendente", "aguardando_pagamento"], tsKey: "criado_em"  },
+  { key: "aceito",   label: "Aceito",   statuses: ["aceito"],                           tsKey: "aceito_em"  },
+  { key: "preparo",  label: "Pronto",   statuses: ["preparando", "pronto"],             tsKey: "pronto_em"  },
+  { key: "motoboy",  label: "Motoboy",  statuses: ["aguardando_aceite", "indo_para_loja", "na_loja"], tsKey: null },
+  { key: "rota",     label: "Coletou",  statuses: ["em_rota", "coletado"],              tsKey: "coletado_em" },
+  { key: "entregue", label: "Entregue", statuses: ["entregue"],                         tsKey: "entregue_em" },
+] as const
+
+const ETAPAS_RETIRADA = [
+  { key: "pedido",   label: "Pedido",          statuses: ["pendente", "aguardando_pagamento"],                                     tsKey: "criado_em"  },
+  { key: "aceito",   label: "Aceito",          statuses: ["aceito"],                                                               tsKey: "aceito_em"  },
+  { key: "preparo",  label: "Em Preparo",      statuses: ["preparando"],                                                           tsKey: "pronto_em"  },
+  { key: "pronto",   label: "Pronto p/ Ret.",  statuses: ["pronto", "aguardando_aceite", "indo_para_loja", "na_loja", "em_rota", "coletado"], tsKey: "pronto_em" },
+  { key: "entregue", label: "Retirado",        statuses: ["entregue"],                                                             tsKey: "entregue_em" },
+] as const
+
+function TimelinePedido({ status, pedido }: { status: StatusPedido; pedido: Pedido }) {
+  const fmtTs = (iso?: string | null) =>
+    iso ? new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : null
+
+  if (status === "cancelado") {
+    return (
+      <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#ef4444", flexShrink: 0 }} />
+        <span style={{ fontSize: 10, color: "#ef4444", fontWeight: 700 }}>Pedido cancelado</span>
+      </div>
+    )
+  }
+
+  const isRetirada = pedido.endereco_entrega?.includes("Retirada") ?? false
+  const etapas = isRetirada ? ETAPAS_RETIRADA : ETAPAS_PEDIDO
+  const idxAtual = etapas.findIndex(e => (e.statuses as readonly string[]).includes(status))
+
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 0, marginTop: 10 }}>
+      {etapas.map((e, i) => {
+        const done    = i < idxAtual
+        const current = i === idxAtual
+        const dotColor  = (done || current) ? "#f97316" : "#e2e8f0"
+        const lineColor = done ? "#f97316" : "#e2e8f0"
+        const textColor = (done || current) ? "#f97316" : "#94a3b8"
+        const hora = e.tsKey ? fmtTs((pedido as any)[e.tsKey]) : null
+
+        return (
+          <div key={e.key} style={{ display: "flex", alignItems: "flex-start", flex: i < etapas.length - 1 ? 1 : undefined }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+              <div style={{
+                width: current ? 10 : 8, height: current ? 10 : 8,
+                borderRadius: "50%", background: dotColor, flexShrink: 0,
+                boxShadow: current ? "0 0 0 3px rgba(249,115,22,0.2)" : "none",
+                marginTop: 1,
+              }} />
+              <span style={{ fontSize: 8, color: textColor, fontWeight: current ? 800 : done ? 600 : 400, whiteSpace: "nowrap", textAlign: "center" }}>
+                {e.label}
+              </span>
+              {hora && (
+                <span style={{ fontSize: 8, color: done ? "#64748b" : "#f97316", fontWeight: 700, whiteSpace: "nowrap" }}>
+                  {hora}
+                </span>
+              )}
+            </div>
+            {i < etapas.length - 1 && (
+              <div style={{ flex: 1, height: 2, background: lineColor, margin: "0 2px", marginTop: 4, minWidth: 6, transition: "background 0.3s" }} />
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function PercursoItem({ cor, label, hora, linha }: { cor: string; label: string; hora: string; linha: boolean }) {
   return (
     <div style={{ display: "flex", gap: 10 }}>
@@ -210,7 +313,7 @@ export default function PedidosPage() {
     const [{ data: pedData }, { data: avData }] = await Promise.all([
       supabase
         .from("pedidos")
-        .select("*, loja:lojas(nome, telefone), motoboy:motoboys(nome), itens:itens_pedido(*)")
+        .select("*, loja:lojas(nome, telefone), motoboy:motoboys(nome, telefone), itens:itens_pedido(*)")
         .gte("criado_em", inicio)
         .lte("criado_em", fim)
         .order("criado_em", { ascending: false })
@@ -503,6 +606,29 @@ export default function PedidosPage() {
                         {p.nome_cliente}{p.telefone_cliente ? ` · ${p.telefone_cliente}` : ""}
                       </p>
                     )}
+
+                    {/* Botões WhatsApp */}
+                    <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 6 }} onClick={e => e.stopPropagation()}>
+                      <BotaoWA
+                        telefone={(p.loja as any)?.telefone}
+                        label="Loja"
+                        msg={`Olá! Preciso de uma atualização sobre o pedido *#${p.codigo}*.`}
+                      />
+                      <BotaoWA
+                        telefone={p.telefone_cliente}
+                        label="Cliente"
+                        msg={`Olá${p.nome_cliente ? ` ${p.nome_cliente.split(" ")[0]}` : ""}! Seu pedido *#${p.codigo}* está em andamento. Qualquer dúvida, estamos aqui!`}
+                      />
+                      <BotaoWA
+                        telefone={(p.motoboy as any)?.telefone}
+                        label="Motoboy"
+                        msg={`Olá! Preciso de uma atualização sobre a entrega do pedido *#${p.codigo}*.`}
+                      />
+                    </div>
+
+                    {/* Timeline */}
+                    <TimelinePedido status={p.status} pedido={p} />
+
                     {(p.coletado_em || p.entregue_em) && (
                       <div style={{
                         marginTop: 6, padding: "5px 10px", borderRadius: 8,
