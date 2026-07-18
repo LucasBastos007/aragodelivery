@@ -177,6 +177,21 @@ function BotaoWhatsApp({ avulsa, fone }: { avulsa: any; fone?: string }) {
 }
 
 type Filtro = "todos" | "avulsas" | StatusPedido
+type Periodo = "hoje" | "7d" | "15d" | "30d" | "custom"
+
+const PERIODO_LABELS: Record<Periodo, string> = {
+  hoje: "Hoje", "7d": "7 dias", "15d": "15 dias", "30d": "30 dias", custom: "Personalizado",
+}
+
+function rangeDatas(periodo: Periodo, ci: string, cf: string) {
+  const hoje = new Date().toISOString().slice(0, 10)
+  if (periodo === "hoje")  return { inicio: `${hoje}T00:00:00`, fim: `${hoje}T23:59:59` }
+  if (periodo === "7d")  { const d = new Date(); d.setDate(d.getDate() - 6);  return { inicio: d.toISOString().slice(0,10)+"T00:00:00", fim: `${hoje}T23:59:59` } }
+  if (periodo === "15d") { const d = new Date(); d.setDate(d.getDate() - 14); return { inicio: d.toISOString().slice(0,10)+"T00:00:00", fim: `${hoje}T23:59:59` } }
+  if (periodo === "30d") { const d = new Date(); d.setDate(d.getDate() - 29); return { inicio: d.toISOString().slice(0,10)+"T00:00:00", fim: `${hoje}T23:59:59` } }
+  if (ci && cf) return { inicio: `${ci}T00:00:00`, fim: `${cf}T23:59:59` }
+  return { inicio: `${hoje}T00:00:00`, fim: `${hoje}T23:59:59` }
+}
 
 export default function PedidosPage() {
   const [pedidos, setPedidos] = useState<Pedido[]>([])
@@ -186,19 +201,27 @@ export default function PedidosPage() {
   const [loading, setLoading]  = useState(true)
   const [filtro, setFiltro]    = useState<Filtro>("todos")
   const [expandido, setExpandido] = useState<string | null>(null)
+  const [periodo, setPeriodo]  = useState<Periodo>("hoje")
+  const [customInicio, setCustomInicio] = useState("")
+  const [customFim,    setCustomFim]    = useState("")
 
-  async function load() {
+  async function load(per = periodo, ci = customInicio, cf = customFim) {
+    const { inicio, fim } = rangeDatas(per, ci, cf)
     const [{ data: pedData }, { data: avData }] = await Promise.all([
       supabase
         .from("pedidos")
         .select("*, loja:lojas(nome, telefone), motoboy:motoboys(nome), itens:itens_pedido(*)")
+        .gte("criado_em", inicio)
+        .lte("criado_em", fim)
         .order("criado_em", { ascending: false })
-        .limit(200),
+        .limit(1000),
       supabase
         .from("entregas_avulsas")
         .select("*")
+        .gte("criado_em", inicio)
+        .lte("criado_em", fim)
         .order("criado_em", { ascending: false })
-        .limit(200),
+        .limit(1000),
     ])
     setPedidos((pedData as Pedido[]) ?? [])
 
@@ -226,12 +249,13 @@ export default function PedidosPage() {
   }
 
   useEffect(() => {
-    load()
-    const iv = setInterval(load, 5_000)
-    return () => clearInterval(iv)
-  }, [])
-
-  const hoje = new Date().toISOString().slice(0, 10)
+    if (periodo === "custom" && (!customInicio || !customFim)) return
+    load(periodo, customInicio, customFim)
+    if (periodo === "hoje") {
+      const iv = setInterval(() => load("hoje", "", ""), 5_000)
+      return () => clearInterval(iv)
+    }
+  }, [periodo, customInicio, customFim])
 
   const pedidosFiltrados = filtro === "avulsas"
     ? []
@@ -255,8 +279,8 @@ export default function PedidosPage() {
       ? avulsasFiltradas.map(a => ({ tipo: "avulsa" as const, data: a, criado_em: a.criado_em }))
       : pedidosFiltrados.map(p => ({ tipo: "pedido" as const, data: p, criado_em: p.criado_em }))
 
-  const totalHoje = pedidos
-    .filter(p => p.criado_em.slice(0, 10) === hoje && p.status === "entregue")
+  const totalPeriodo = pedidos
+    .filter(p => p.status === "entregue")
     .reduce((s, p) => s + p.total, 0)
 
   const fmt = (iso: string) =>
@@ -268,15 +292,53 @@ export default function PedidosPage() {
 
   return (
     <div className="p-4 sm:p-8">
-      <div className="flex items-center justify-between mb-4 sm:mb-6">
-        <div style={{ minWidth: 0 }}>
-          <h1 style={{ color: "#0F172A", fontSize: 22, fontWeight: 900 }}>Pedidos</h1>
-          <p className="text-sm mt-0.5" style={{ color: "#94a3b8" }}>
-            Hoje: <span className="font-bold text-green-400">
-              R$ {totalHoje.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-            </span>
-          </p>
+      <div className="mb-4 sm:mb-5">
+        <div className="flex items-center justify-between">
+          <div style={{ minWidth: 0 }}>
+            <h1 style={{ color: "#0F172A", fontSize: 22, fontWeight: 900 }}>Pedidos</h1>
+            <p className="text-sm mt-0.5" style={{ color: "#94a3b8" }}>
+              {PERIODO_LABELS[periodo]}:{" "}
+              <span className="font-bold text-green-400">
+                R$ {totalPeriodo.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+              </span>
+              <span style={{ color: "#cbd5e1", marginLeft: 6, fontSize: 12 }}>
+                ({pedidos.filter(p => p.status === "entregue").length} entregues)
+              </span>
+            </p>
+          </div>
         </div>
+
+        {/* Seletor de período */}
+        <div className="flex gap-1.5 mt-3 flex-wrap">
+          {(["hoje", "7d", "15d", "30d", "custom"] as Periodo[]).map(p => (
+            <button key={p} onClick={() => setPeriodo(p)}
+              className="btn-ghost"
+              style={{
+                fontSize: 10, padding: "4px 10px",
+                background: periodo === p ? "rgba(99,102,241,0.12)" : undefined,
+                color:      periodo === p ? "#6366f1" : "#64748b",
+                border:     periodo === p ? "1px solid rgba(99,102,241,0.3)" : undefined,
+                fontWeight: periodo === p ? 700 : 400,
+              }}>
+              {PERIODO_LABELS[p]}
+            </button>
+          ))}
+        </div>
+
+        {/* Inputs de período personalizado */}
+        {periodo === "custom" && (
+          <div className="flex gap-2 mt-2 items-center flex-wrap">
+            <input
+              type="date" value={customInicio} onChange={e => setCustomInicio(e.target.value)}
+              style={{ fontSize: 12, padding: "5px 8px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#0F172A" }}
+            />
+            <span style={{ fontSize: 12, color: "#94a3b8" }}>até</span>
+            <input
+              type="date" value={customFim} onChange={e => setCustomFim(e.target.value)}
+              style={{ fontSize: 12, padding: "5px 8px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#0F172A" }}
+            />
+          </div>
+        )}
       </div>
 
       <div className="flex gap-1.5 mb-4 sm:mb-6 flex-wrap">
