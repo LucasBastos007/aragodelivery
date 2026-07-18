@@ -576,7 +576,7 @@ export default function LojaDashboard() {
 
   useEffect(() => {
     if (pendentes.length === 0) return
-    const id = setInterval(() => tocaSomPedido(), 30_000)
+    const id = setInterval(() => tocaSomPedido(), 7_000)
     return () => clearInterval(id)
   }, [pendentes.length])
 
