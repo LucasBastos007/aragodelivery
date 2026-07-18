@@ -1431,6 +1431,8 @@ export default function MotoboyPage() {
     ? [{ lat: (segundaEntrega as any).lat_entrega, lng: (segundaEntrega as any).lng_entrega, type: "destino" as const }].filter(p => p.lat && p.lng)
     : []
 
+  const temOferta = !!(pedidoOferta || avulsaOferta)
+
   return (
     <div style={{
       position: "fixed",
@@ -1515,6 +1517,48 @@ export default function MotoboyPage() {
         }}>
           <p style={{ color: "#FF4444", fontWeight: 700, fontSize: 14 }}>{toastMsg}</p>
         </div>
+      )}
+
+      {/* ── Alerta visual piscante quando chega oferta ── */}
+      <style>{`
+        @keyframes moto-flash {
+          0%   { opacity: 0; }
+          50%  { opacity: 1; }
+          100% { opacity: 0; }
+        }
+        @keyframes moto-border {
+          0%   { box-shadow: inset 0 0 0 0px #f97316; }
+          50%  { box-shadow: inset 0 0 0 6px #f97316; }
+          100% { box-shadow: inset 0 0 0 0px #f97316; }
+        }
+      `}</style>
+      {temOferta && (
+        <>
+          {/* Fundo laranja piscando */}
+          <div style={{
+            position: "absolute", inset: 0, zIndex: 4, pointerEvents: "none",
+            background: "rgba(249,115,22,0.18)",
+            animation: "moto-flash 0.7s ease-in-out infinite",
+          }} />
+          {/* Borda laranja piscando */}
+          <div style={{
+            position: "absolute", inset: 0, zIndex: 5, pointerEvents: "none",
+            animation: "moto-border 0.7s ease-in-out infinite",
+          }} />
+          {/* Banner topo */}
+          <div style={{
+            position: "absolute", top: 0, left: 0, right: 0, zIndex: 30,
+            background: "#f97316",
+            padding: "8px 0",
+            textAlign: "center",
+            animation: "moto-flash 0.5s ease-in-out infinite",
+            pointerEvents: "none",
+          }}>
+            <p style={{ color: "white", fontWeight: 900, fontSize: 15, letterSpacing: 1 }}>
+              🛵 NOVA ENTREGA DISPONÍVEL!
+            </p>
+          </div>
+        </>
       )}
 
       {/* ── Card de oferta de corrida (Tópico 02) ── */}
@@ -3336,6 +3380,8 @@ function playNotificationSound() {
     audio.volume = 1
     audio.play().catch(() => beep())
   } catch { beep() }
+  // Vibração longa + pausa + duas curtas (padrão "atenção")
+  try { navigator.vibrate?.([600, 200, 300, 200, 300]) } catch {}
 }
 
 function beep() {
