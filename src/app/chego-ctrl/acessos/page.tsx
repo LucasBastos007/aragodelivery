@@ -170,17 +170,6 @@ export default function AcessosPage() {
 
   return (
     <div className="p-4 sm:p-8" style={{ maxWidth: 960 }}>
-      <style>{`
-        @media print {
-          .admin-sidebar, .admin-topbar, .admin-bottomnav { display: none !important; }
-          .admin-main { margin: 0 !important; height: auto !important; overflow: visible !important; }
-          .print-hide { display: none !important; }
-          .print-only { display: block !important; }
-          body { background: white !important; }
-          @page { margin: 20mm; size: A4; }
-        }
-      `}</style>
-
       <div className="print-hide" style={{ marginBottom: 20 }}>
         <h1 style={{ color: "#0F172A", fontSize: 22, fontWeight: 900 }}>Acessos</h1>
         <p style={{ color: "#94a3b8", fontSize: 13, marginTop: 2 }}>Monitoramento de uso do app</p>

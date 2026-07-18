@@ -195,6 +195,14 @@ export default function AdminLayoutClient({ children }: { children: React.ReactN
         }
         @keyframes spin { to { transform: rotate(360deg) } }
         @keyframes slideIn { from { transform: translateX(-100%) } to { transform: translateX(0) } }
+        @media print {
+          .admin-sidebar, .admin-topbar, .admin-bottomnav { display: none !important; }
+          .admin-main { margin: 0 !important; height: auto !important; overflow: visible !important; width: 100% !important; }
+          .print-hide { display: none !important; }
+          .print-only { display: block !important; }
+          body { background: white !important; }
+          @page { margin: 18mm; size: A4; }
+        }
       `}</style>
 
       <div style={{ display: "flex", minHeight: "100vh", background: "#F1F5F9" }}>
