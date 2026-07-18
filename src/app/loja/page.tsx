@@ -98,7 +98,8 @@ function imprimirPedido(pedido: Pedido, largura: "80mm" | "58mm" = "80mm") {
 
   const bodyW  = largura === "58mm" ? "54mm" : "76mm"
   const pageW  = largura
-  const fsBase = largura === "58mm" ? "10px" : "11px"
+  const fsBase = largura === "58mm" ? "11px" : "12px"
+  const fsBig  = largura === "58mm" ? "13px" : "14px"
 
   const html = `<!DOCTYPE html>
 <html>
@@ -110,20 +111,22 @@ function imprimirPedido(pedido: Pedido, largura: "80mm" | "58mm" = "80mm") {
     body {
       font-family: 'Courier New', Courier, monospace;
       font-size: ${fsBase};
+      font-weight: 700;
       width: ${bodyW};
       padding: 3mm 3mm;
       color: #000;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
     }
-    h1 { font-size: 15px; text-align: center; letter-spacing: 1px; margin-bottom: 2px; }
     .center { text-align: center; }
-    .bold { font-weight: bold; }
     .r { text-align: right; white-space: nowrap; }
-    .dash { border-top: 1px dashed #000; margin: 5px 0; }
+    .dash { border-top: 2px solid #000; margin: 5px 0; }
     table { width: 100%; border-collapse: collapse; }
-    td { padding: 1.5px 0; vertical-align: top; }
-    .obs { color: #555; font-size: 9px; }
-    .total-row td { font-size: 13px; font-weight: bold; padding-top: 4px; }
-    .section { font-weight: bold; margin: 4px 0 2px; font-size: ${fsBase}; text-transform: uppercase; }
+    td { padding: 2px 0; vertical-align: top; }
+    .obs { font-size: 10px; padding-left: 8px; }
+    .total-row td { font-size: ${fsBig}; padding-top: 5px; border-top: 2px solid #000; }
+    .section { margin: 5px 0 3px; font-size: ${fsBig}; text-transform: uppercase; letter-spacing: 0.5px; }
+    .codigo { font-size: 16px; letter-spacing: 1px; }
     @media print {
       body { margin: 0; }
       @page { margin: 2mm; size: ${pageW} auto; }
@@ -135,10 +138,10 @@ function imprimirPedido(pedido: Pedido, largura: "80mm" | "58mm" = "80mm") {
     <img src="https://chegodelivery.com/logo-chego.jpg" alt="Chegô" style="width:64px;height:64px;object-fit:contain;border-radius:8px;" />
   </div>
   <div class="dash"></div>
-  <p class="bold" style="font-size:14px;">PEDIDO #${pedido.codigo}</p>
+  <p class="codigo">PEDIDO #${pedido.codigo}</p>
   <p>${data} às ${hora}</p>
   <div class="dash"></div>
-  <p class="section">Itens</p>
+  <p class="section">ITENS</p>
   <table>${itensHtml}</table>
   <div class="dash"></div>
   <table>
@@ -147,12 +150,12 @@ function imprimirPedido(pedido: Pedido, largura: "80mm" | "58mm" = "80mm") {
     <tr class="total-row"><td>TOTAL</td><td class="r">R$ ${pedido.total.toFixed(2).replace(".", ",")}</td></tr>
   </table>
   <div class="dash"></div>
-  <p><span class="bold">PAGAMENTO:</span> ${PGTO[pedido.forma_pagamento] ?? pedido.forma_pagamento}</p>
-  ${pedido.nome_cliente ? `<div class="dash"></div><p class="section">Cliente</p><p>${pedido.nome_cliente}</p>${pedido.telefone_cliente ? `<p>Tel: ${pedido.telefone_cliente}</p>` : ""}` : ""}
-  ${pedido.endereco_entrega ? `<div class="dash"></div><p class="section">Endereço de entrega</p><p>${pedido.endereco_entrega}</p>` : ""}
-  ${pedido.observacao ? `<div class="dash"></div><p class="section">Observação</p><p>${pedido.observacao}</p>` : ""}
+  <p>PAGAMENTO: ${PGTO[pedido.forma_pagamento] ?? pedido.forma_pagamento}</p>
+  ${pedido.nome_cliente ? `<div class="dash"></div><p class="section">CLIENTE</p><p>${pedido.nome_cliente}</p>${pedido.telefone_cliente ? `<p>Tel: ${pedido.telefone_cliente}</p>` : ""}` : ""}
+  ${pedido.endereco_entrega ? `<div class="dash"></div><p class="section">ENDEREÇO DE ENTREGA</p><p>${pedido.endereco_entrega}</p>` : ""}
+  ${pedido.observacao ? `<div class="dash"></div><p class="section">OBSERVAÇÃO</p><p>${pedido.observacao}</p>` : ""}
   <div class="dash"></div>
-  <p class="center bold" style="font-size:13px;">*** CHEGÔ DELIVERY ***</p>
+  <p class="center" style="font-size:13px;">*** CHEGÔ DELIVERY ***</p>
   <br><br>
 </body>
 </html>`
