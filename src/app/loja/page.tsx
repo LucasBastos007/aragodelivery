@@ -371,11 +371,17 @@ export default function LojaDashboard() {
       .on("postgres_changes", {
         event: "INSERT", schema: "public", table: "pedidos",
         filter: `loja_id=eq.${loja_id}`,
-      }, () => load())
+      }, () => { load(); tocaSomPedido() })
       .on("postgres_changes", {
         event: "UPDATE", schema: "public", table: "pedidos",
         filter: `loja_id=eq.${loja_id}`,
-      }, () => load())
+      }, (payload) => {
+        load()
+        // Toca som quando pagamento PIX é aprovado (aguardando_pagamento → pendente)
+        if ((payload.new as any)?.status === "pendente" && (payload.old as any)?.status === "aguardando_pagamento") {
+          tocaSomPedido()
+        }
+      })
       .subscribe()
     return () => { clearInterval(interval); supabase.removeChannel(ch) }
   }, [loja_id])
