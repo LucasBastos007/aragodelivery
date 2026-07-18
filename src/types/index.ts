@@ -109,6 +109,9 @@ export interface Motoboy {
   selfie_contrato?: string | null
   modalidade_assinatura?: "digital" | "gov_br" | "presencial" | null
   contrato_pdf_url?: string | null
+  push_subscription?: unknown | null
+  lat?: number | null
+  lng?: number | null
 }
 
 export interface AdicionalProduto {
