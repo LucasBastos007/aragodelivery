@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 
 interface Props {
   lat: number
@@ -9,16 +9,16 @@ interface Props {
 }
 
 export default function MapaPicker({ lat, lng, onMove }: Props) {
-  const divRef   = useRef<HTMLDivElement>(null)
-  const mapRef   = useRef<any>(null)
-  const markerRef = useRef<any>(null)
+  const divRef    = useRef<HTMLDivElement>(null)
+  const mapRef    = useRef<any>(null)
   const onMoveRef = useRef(onMove)
   onMoveRef.current = onMove
+
+  const [localizando, setLocalizando] = useState(false)
 
   useEffect(() => {
     if (!divRef.current || mapRef.current) return
 
-    // Injeta CSS do Leaflet uma vez
     if (!document.getElementById("leaflet-css")) {
       const link = document.createElement("link")
       link.id = "leaflet-css"
@@ -30,17 +30,9 @@ export default function MapaPicker({ lat, lng, onMove }: Props) {
     import("leaflet").then((L) => {
       if (!divRef.current || mapRef.current) return
 
-      delete (L.Icon.Default.prototype as any)._getIconUrl
-      L.Icon.Default.mergeOptions({
-        iconUrl:       "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-        iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-        shadowUrl:     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-      })
-
       const map = L.map(divRef.current, { zoomControl: true })
         .setView([lat, lng], 17)
 
-      // Tenta tile padrão; se falhar em 4s usa fallback sem subdomínio
       const tileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution: "© OpenStreetMap",
@@ -55,63 +47,111 @@ export default function MapaPicker({ lat, lng, onMove }: Props) {
         }
       }, 4000)
 
-      // Força recálculo do tamanho — evita tiles em branco quando o div
-      // ainda estava oculto ou com altura zero no momento da inicialização
       setTimeout(() => { if (mapRef.current) mapRef.current.invalidateSize() }, 100)
       setTimeout(() => { if (mapRef.current) mapRef.current.invalidateSize() }, 500)
 
-      // Pin laranja customizado
-      const icon = L.divIcon({
-        className: "",
-        html: `<div style="
-          width:22px;height:30px;
-          background:#f97316;
-          border-radius:50% 50% 50% 0;
-          transform:rotate(-45deg);
-          border:3px solid white;
-          box-shadow:0 2px 12px rgba(0,0,0,0.45);
-        "></div>`,
-        iconSize:   [22, 30],
-        iconAnchor: [11, 30],
-      })
-
-      const marker = L.marker([lat, lng], { draggable: true, icon }).addTo(map)
-
-      marker.on("dragend", () => {
-        const { lat, lng } = marker.getLatLng()
+      // Emite coordenadas do centro sempre que o mapa para de mover
+      map.on("moveend", () => {
+        const { lat, lng } = map.getCenter()
         onMoveRef.current(lat, lng)
       })
 
-      map.on("click", (e: any) => {
-        marker.setLatLng(e.latlng)
-        onMoveRef.current(e.latlng.lat, e.latlng.lng)
-      })
-
-      mapRef.current   = map
-      markerRef.current = marker
+      mapRef.current = map
     })
 
     return () => {
       mapRef.current?.remove()
-      mapRef.current   = null
-      markerRef.current = null
+      mapRef.current = null
     }
   }, [])
 
-  // Sincroniza pin quando lat/lng muda externamente (GPS)
+  // Sincroniza quando lat/lng muda externamente (GPS)
   useEffect(() => {
-    if (!mapRef.current || !markerRef.current) return
-    import("leaflet").then((L) => {
-      const ll = L.latLng(lat, lng)
-      markerRef.current.setLatLng(ll)
-      mapRef.current.panTo(ll)
-    })
+    if (!mapRef.current) return
+    const center = mapRef.current.getCenter()
+    if (Math.abs(center.lat - lat) > 0.00001 || Math.abs(center.lng - lng) > 0.00001) {
+      mapRef.current.panTo([lat, lng])
+    }
   }, [lat, lng])
 
+  function usarMinhaLocalizacao() {
+    if (!navigator.geolocation) return
+    setLocalizando(true)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords
+        mapRef.current?.setView([latitude, longitude], 17)
+        onMoveRef.current(latitude, longitude)
+        setLocalizando(false)
+      },
+      () => setLocalizando(false),
+      { enableHighAccuracy: true, timeout: 8000 }
+    )
+  }
+
   return (
-    <div
-      ref={divRef}
-      style={{ width: "100%", height: 260, borderRadius: 14, overflow: "hidden", position: "relative" }}
-    />
+    <div style={{ position: "relative", width: "100%", height: 260, borderRadius: 14, overflow: "hidden" }}>
+      {/* Mapa */}
+      <div ref={divRef} style={{ width: "100%", height: "100%" }} />
+
+      {/* Pino fixo no centro */}
+      <div style={{
+        position: "absolute", top: "50%", left: "50%",
+        transform: "translate(-50%, -100%)",
+        pointerEvents: "none", zIndex: 1000,
+      }}>
+        <div style={{
+          width: 22, height: 30,
+          background: "#f97316",
+          borderRadius: "50% 50% 50% 0",
+          transform: "rotate(-45deg)",
+          border: "3px solid white",
+          boxShadow: "0 2px 12px rgba(0,0,0,0.45)",
+        }} />
+      </div>
+
+      {/* Sombra do pino no chão */}
+      <div style={{
+        position: "absolute", top: "50%", left: "50%",
+        transform: "translate(-50%, 2px)",
+        width: 10, height: 5,
+        background: "rgba(0,0,0,0.25)",
+        borderRadius: "50%",
+        pointerEvents: "none", zIndex: 1000,
+      }} />
+
+      {/* Botão GPS */}
+      <button
+        onClick={usarMinhaLocalizacao}
+        disabled={localizando}
+        style={{
+          position: "absolute", bottom: 12, right: 12, zIndex: 1001,
+          background: "white",
+          border: "none",
+          borderRadius: 8,
+          width: 40, height: 40,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
+          cursor: localizando ? "wait" : "pointer",
+        }}
+        title="Usar minha localização"
+      >
+        {localizando ? (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" strokeDasharray="40" strokeDashoffset="10">
+              <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/>
+            </circle>
+          </svg>
+        ) : (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <line x1="12" y1="2" x2="12" y2="6"/>
+            <line x1="12" y1="18" x2="12" y2="22"/>
+            <line x1="2" y1="12" x2="6" y2="12"/>
+            <line x1="18" y1="12" x2="22" y2="12"/>
+          </svg>
+        )}
+      </button>
+    </div>
   )
 }
