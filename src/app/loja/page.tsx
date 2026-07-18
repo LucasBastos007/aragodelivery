@@ -327,8 +327,8 @@ export default function LojaDashboard() {
     setContadorClientes(contador)
     setLoading(false)
 
-    // Auto-cancelamento: pedidos pendentes há mais de 5 minutos
-    const cincoMinAtras = new Date(Date.now() - 5 * 60 * 1000)
+    // Auto-cancelamento: pedidos pendentes há mais de 10 minutos
+    const cincoMinAtras = new Date(Date.now() - 10 * 60 * 1000)
     const expirados = resultado.filter(
       p => p.status === "pendente" && new Date(p.criado_em) < cincoMinAtras
     )
