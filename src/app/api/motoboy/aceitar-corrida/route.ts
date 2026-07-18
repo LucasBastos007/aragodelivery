@@ -45,12 +45,19 @@ export async function POST(req: NextRequest) {
     }, { status: 422 })
   }
 
-  // Atualização atômica: só aceita se ainda estiver em aguardando_aceite
+  // Bloqueia aceitação de pedidos de retirada
+  const { data: chk } = await sb.from("pedidos").select("endereco_entrega").eq("id", pedido_id).single()
+  if (chk?.endereco_entrega?.includes("Retirada")) {
+    return NextResponse.json({ error: "Pedido de retirada — sem entregador necessário" }, { status: 422 })
+  }
+
+  // Atualização atômica: aceita se ainda aguardando E (broadcast sem dono OU designado a este motoboy)
   const { data, error } = await sb
     .from("pedidos")
     .update({ status: "indo_para_loja", motoboy_id })
     .eq("id", pedido_id)
     .eq("status", "aguardando_aceite")
+    .or(`motoboy_id.is.null,motoboy_id.eq.${motoboy_id}`)
     .select("id, status")
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

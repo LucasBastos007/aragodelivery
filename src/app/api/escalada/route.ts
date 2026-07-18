@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
   // Busca o pedido — sem colunas opcionais que podem não existir
   const { data: pedido, error: pedidoErr } = await supabase
     .from("pedidos")
-    .select("id, codigo, motoboy_id, status, loja_id, taxa_entrega, loja_lat, loja_lng, loja:lojas(lat, lng, endereco)")
+    .select("id, codigo, motoboy_id, status, loja_id, taxa_entrega, loja_lat, loja_lng, endereco_entrega, loja:lojas(lat, lng, endereco)")
     .eq("id", pedido_id)
     .single()
 
@@ -64,8 +64,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "não autorizado" }, { status: 403 })
   }
 
-  if (!["aguardando_aceite", "pronto", "preparando"].includes(pedido.status)) {
+  if (!["aguardando_aceite", "pronto", "preparando", "aceito"].includes(pedido.status)) {
     return NextResponse.json({ ok: true, msg: "status não elegível para escalada" })
+  }
+
+  // Pedidos de retirada não precisam de motoboy
+  if ((pedido as any).endereco_entrega?.includes("Retirada")) {
+    return NextResponse.json({ ok: true, msg: "pedido de retirada — sem motoboy necessário" })
   }
 
   const lojaLat = (pedido as any).loja_lat ?? (pedido.loja as any)?.lat ?? null
@@ -122,43 +127,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, msg: "sem candidatos elegíveis" })
   }
 
-  // O mais próximo recebe a oferta formal (Realtime); todos recebem push
-  const escolhido = candidatos[0]
-
   // Salva lat/lng da loja no pedido para o mapa do motoboy
   const lojaLatSalvar = lojaLat ?? (pedido.loja as any)?.lat
   const lojaLngSalvar = (pedido.loja as any)?.lng
 
-  // Atualização atômica — só reatribui se o pedido ainda está no mesmo estado que lemos
-  const updateQuery = supabase.from("pedidos").update({
-    motoboy_id: escolhido.id,
+  // Broadcast: limpa motoboy_id e sinaliza para todos os motoboys disponíveis
+  await supabase.from("pedidos").update({
+    motoboy_id: null,
     status: "aguardando_aceite",
     ...(lojaLatSalvar != null ? { loja_lat: lojaLatSalvar } : {}),
     ...(lojaLngSalvar != null ? { loja_lng: lojaLngSalvar } : {}),
   }).eq("id", pedido_id).eq("status", pedido.status)
 
-  if (pedido.motoboy_id) {
-    await updateQuery.eq("motoboy_id", pedido.motoboy_id)
-  } else {
-    await updateQuery.is("motoboy_id", null)
-  }
-
-  // Push para TODOS os candidatos disponíveis — garante que nenhum perde a notificação
+  // Push para TODOS os candidatos disponíveis
   if (initVapid()) {
-    const payloadEscolhido = JSON.stringify({
+    const pushPayload = JSON.stringify({
       title:      "Nova corrida disponível!",
       body:       `Pedido #${pedido.codigo} — R$ ${(pedido.taxa_entrega ?? 0).toFixed(2)}`,
       tag:        "corrida-nova",
       url:        "/motoboy",
       pedido_id,
       requireInteraction: true,
-    })
-    const payloadOutros = JSON.stringify({
-      title: "Corrida na região!",
-      body:  `Pedido #${pedido.codigo} — fique disponível para receber`,
-      tag:   "corrida-nova",
-      url:   "/motoboy",
-      requireInteraction: false,
     })
 
     const expiredPorMotoboy: Record<string, string[]> = {}
@@ -167,9 +156,8 @@ export async function POST(req: NextRequest) {
       candidatos.map(async m => {
         if (!m.push_subscription) return
         const subs: any[] = Array.isArray(m.push_subscription) ? m.push_subscription : [m.push_subscription]
-        const payload = m.id === escolhido.id ? payloadEscolhido : payloadOutros
         for (const sub of subs) {
-          try { await webpush.sendNotification(sub, payload) }
+          try { await webpush.sendNotification(sub, pushPayload) }
           catch (e: any) {
             if (e.statusCode === 410) {
               if (!expiredPorMotoboy[m.id]) expiredPorMotoboy[m.id] = []
@@ -194,5 +182,25 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  return NextResponse.json({ ok: true, motoboy_id: escolhido.id })
+  // Re-escalada em background: pedidos presos em aguardando_aceite há mais de 60s
+  void (async () => {
+    const limite = new Date(Date.now() - 60_000).toISOString()
+    const { data: presos } = await supabase
+      .from("pedidos")
+      .select("id, motoboy_id, endereco_entrega")
+      .eq("status", "aguardando_aceite")
+      .lt("atualizado_em", limite)
+      .not("endereco_entrega", "ilike", "%Retirada%")
+      .neq("id", pedido_id) // não re-escalar o próprio pedido que acabou de ser tratado
+
+    for (const preso of presos ?? []) {
+      fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? "https://chegodelivery.com"}/api/escalada`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-internal-secret": process.env.INTERNAL_API_SECRET ?? "" },
+        body: JSON.stringify({ pedido_id: preso.id, motoboy_recusou_id: preso.motoboy_id ?? undefined }),
+      }).catch(() => {})
+    }
+  })()
+
+  return NextResponse.json({ ok: true, broadcast: candidatos.length })
 }
