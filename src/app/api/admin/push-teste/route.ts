@@ -26,7 +26,8 @@ export async function POST(req: NextRequest) {
   const sess = getSession(req)
   if (sess?.role !== "admin") return unauthorized()
 
-  const { motoboy_id } = await req.json()
+  const reqBody = await req.json()
+  const { motoboy_id, url: customUrl, title: customTitle, body: customBody, tag: customTag, requireInteraction: customReqInt } = reqBody
   if (!motoboy_id) return NextResponse.json({ error: "motoboy_id obrigatório" }, { status: 400 })
 
   const { data: m } = await supabase
@@ -48,11 +49,11 @@ export async function POST(req: NextRequest) {
   const subs: any[] = Array.isArray(m.push_subscription) ? m.push_subscription : [m.push_subscription]
 
   const payload = JSON.stringify({
-    title: "🔔 Teste de notificação",
-    body:  "Isso é apenas um teste — nenhuma ação necessária.",
-    tag:   "push-teste",
-    url:   "/motoboy",
-    requireInteraction: false,
+    title: customTitle ?? "🔔 Teste de notificação",
+    body:  customBody  ?? "Isso é apenas um teste — nenhuma ação necessária.",
+    tag:   customTag   ?? "push-teste",
+    url:   customUrl   ?? "/motoboy",
+    requireInteraction: customReqInt ?? false,
   })
 
   const expiredEndpoints: string[] = []
