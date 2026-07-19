@@ -205,13 +205,16 @@ self.addEventListener("notificationclick", (event) => {
         // Para URLs de motoboy, faz match amplo (ignora query string)
         const matches = isMotoboy ? c.url.includes("/motoboy") : c.url.includes(url)
         if (matches && "focus" in c) {
-          c.focus()
-          if (isCorridaTeste) {
-            c.postMessage({ type: "corrida-teste" })
-          } else if (pedidoId) {
-            c.postMessage({ type: "nova-corrida", pedido_id: pedidoId })
-          }
-          return c
+          return c.focus().then(() => {
+            if (isCorridaTeste) {
+              c.postMessage({ type: "corrida-teste" })
+              // iOS fallback: navega para URL com param (força reload + useEffect no mount)
+              if (typeof c.navigate === "function") c.navigate(url).catch(() => {})
+            } else if (pedidoId) {
+              c.postMessage({ type: "nova-corrida", pedido_id: pedidoId })
+            }
+            return c
+          })
         }
       }
       if (clients.openWindow) return clients.openWindow(url)

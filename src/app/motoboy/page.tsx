@@ -680,15 +680,49 @@ export default function MotoboyPage() {
 
   // ── Teste de corrida (notificação fictícia) ───────────────────────────────
   const [mostrarObrigadoTeste, setMostrarObrigadoTeste] = useState(false)
-  useEffect(() => {
+
+  function mostrarFakeCorrida() {
+    setPedidoOferta({
+      _isTeste: true,
+      id: "corrida-teste",
+      taxa_entrega: 8.00,
+      forma_pagamento: "pix",
+      endereco_entrega: "Rua Teste, 123 — Centro",
+      itens: [{ id: "1" }, { id: "2" }],
+      loja: { nome: "Loja Teste", endereco: "Av. Principal, 456 — Bairro" },
+    })
+    setTimerOferta(30)
+    setDistKmOferta(1.4)
+  }
+
+  // Verifica URL param corrida_teste (funciona no mount e no visibilitychange)
+  function checkCorridaTesteUrl() {
     if (typeof window === "undefined") return
     const params = new URLSearchParams(window.location.search)
     if (!params.get("corrida_teste")) return
-    setMostrarObrigadoTeste(true)
     const url = new URL(window.location.href)
     url.searchParams.delete("corrida_teste")
     window.history.replaceState({}, "", url.toString())
-    setTimeout(() => setMostrarObrigadoTeste(false), 6000)
+    mostrarFakeCorrida()
+  }
+
+  // Checa na montagem
+  useEffect(() => { checkCorridaTesteUrl() }, [])
+
+  // Checa quando o app volta ao foco (iOS: SW navega para URL com param)
+  useEffect(() => {
+    const handler = () => { if (document.visibilityState === "visible") checkCorridaTesteUrl() }
+    document.addEventListener("visibilitychange", handler)
+    return () => document.removeEventListener("visibilitychange", handler)
+  }, [])
+
+  // Listener SW para postMessage "corrida-teste" — sem dep de motoboy_id
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === "corrida-teste") mostrarFakeCorrida()
+    }
+    navigator.serviceWorker?.addEventListener("message", handler)
+    return () => navigator.serviceWorker?.removeEventListener("message", handler)
   }, [])
 
   // ── Ganhos do dia ──────────────────────────────────────────────────────────
@@ -739,24 +773,10 @@ export default function MotoboyPage() {
     document.head.appendChild(s)
   }, [])
 
-  // ── Mensagem do SW: "nova-corrida" / "corrida-teste" ao clicar na notificação
+  // ── Mensagem do SW: "nova-corrida" ao clicar na notificação ─────────────
   useEffect(() => {
     if (!motoboy_id) return
     const handler = (event: MessageEvent) => {
-      if (event.data?.type === "corrida-teste") {
-        setPedidoOferta({
-          _isTeste: true,
-          id: "corrida-teste",
-          taxa_entrega: 8.00,
-          forma_pagamento: "pix",
-          endereco_entrega: "Rua Teste, 123 — Centro",
-          itens: [{ id: "1" }, { id: "2" }],
-          loja: { nome: "Loja Teste", endereco: "Av. Principal, 456 — Bairro" },
-        })
-        setTimerOferta(30)
-        setDistKmOferta(1.4)
-        return
-      }
       if (event.data?.type !== "nova-corrida") return
       const pedidoId = event.data.pedido_id
       if (!pedidoId || dismissedIdsRef.current.has(pedidoId)) return
