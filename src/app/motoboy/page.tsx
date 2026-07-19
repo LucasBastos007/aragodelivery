@@ -673,10 +673,22 @@ export default function MotoboyPage() {
     const params = new URLSearchParams(window.location.search)
     if (!params.get("confirmar_teste")) return
     fetch("/api/motoboy/confirmar-teste", { method: "POST", credentials: "include" }).catch(() => {})
-    // Remove o param da URL sem recarregar
     const url = new URL(window.location.href)
     url.searchParams.delete("confirmar_teste")
     window.history.replaceState({}, "", url.toString())
+  }, [])
+
+  // ── Teste de corrida (notificação fictícia) ───────────────────────────────
+  const [mostrarObrigadoTeste, setMostrarObrigadoTeste] = useState(false)
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    if (!params.get("corrida_teste")) return
+    setMostrarObrigadoTeste(true)
+    const url = new URL(window.location.href)
+    url.searchParams.delete("corrida_teste")
+    window.history.replaceState({}, "", url.toString())
+    setTimeout(() => setMostrarObrigadoTeste(false), 6000)
   }, [])
 
   // ── Ganhos do dia ──────────────────────────────────────────────────────────
@@ -1522,6 +1534,24 @@ export default function MotoboyPage() {
       zIndex: fullscreenMap ? 999 : "auto" as any,
       transition: "top 0.25s, bottom 0.25s",
     }}>
+
+      {/* Toast de teste de notificação */}
+      {mostrarObrigadoTeste && (
+        <div style={{
+          position: "fixed", top: 64, left: 16, right: 16, zIndex: 9999,
+          background: "linear-gradient(135deg, #16a34a, #15803d)",
+          borderRadius: 16, padding: "18px 20px",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+          display: "flex", alignItems: "center", gap: 14,
+          animation: "slideUpCard 300ms ease-out",
+        }}>
+          <span style={{ fontSize: 36 }}>✅</span>
+          <div>
+            <p style={{ color: "#fff", fontWeight: 900, fontSize: 16, margin: 0 }}>Notificação funcionando!</p>
+            <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, marginTop: 4 }}>Obrigado pelo teste. O sistema está 100%!</p>
+          </div>
+        </div>
+      )}
 
       {/* Mapa */}
       <MapaMotoboy
