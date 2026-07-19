@@ -120,10 +120,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
-  // ── Enviar notificação à loja (novo pedido) — rate limit, sem sessão (cliente no checkout) ──
+  // ── Enviar notificação à loja (novo pedido) ──────────────────────────────────
+  // Aceita: (a) x-internal-secret igual ao CRON_SECRET (calls server-side),
+  //      ou (b) rate limit por IP (call do checkout client-side)
   if (action === "send-loja") {
-    const rateLimited = checkRateLimit(req)
-    if (rateLimited) return rateLimited
+    const internalSecret = req.headers.get("x-internal-secret")
+    const isInternal = internalSecret && internalSecret === process.env.CRON_SECRET
+    if (!isInternal) {
+      const rateLimited = checkRateLimit(req)
+      if (rateLimited) return rateLimited
+    }
 
     const { loja_id, pedido_id, codigo, nome_cliente, total, qtd_itens } = body
     if (!loja_id) {
@@ -167,14 +173,22 @@ export async function POST(req: NextRequest) {
     if (!pedido_id || !status) {
       return NextResponse.json({ error: "pedido_id e status obrigatórios" }, { status: 400 })
     }
-    const msg = STATUS_MSG_CLIENTE[status]
+    let msg = STATUS_MSG_CLIENTE[status]
     if (!msg) return NextResponse.json({ ok: true, skipped: true })
 
     const { data: pedido } = await supabaseAdmin
-      .from("pedidos").select("push_subscription").eq("id", pedido_id).single()
+      .from("pedidos").select("push_subscription, endereco_entrega").eq("id", pedido_id).single()
 
     if (!pedido?.push_subscription) {
       return NextResponse.json({ ok: true, skipped: "no subscription" })
+    }
+
+    // Para retirada, ajusta mensagem de "pronto" e "entregue"
+    const isRetirada = pedido.endereco_entrega?.includes("Retirada") ?? false
+    if (isRetirada && status === "pronto") {
+      msg = { title: "🏪 Pedido pronto para retirada!", body: "Seu pedido está pronto. Pode vir buscar na loja!" }
+    } else if (isRetirada && status === "entregue") {
+      msg = { title: "✅ Retirada confirmada!", body: "Obrigado! Seu pedido foi retirado com sucesso." }
     }
 
     const isCheguei = status === "cheguei"
