@@ -685,14 +685,18 @@ export default function MotoboyPage() {
     setPedidoOferta({
       _isTeste: true,
       id: "corrida-teste",
-      taxa_entrega: 8.00,
+      codigo: "TESTE1",
+      taxa_entrega: 8.50,
       forma_pagamento: "pix",
-      endereco_entrega: "Rua Teste, 123 — Centro",
-      itens: [{ id: "1" }, { id: "2" }],
-      loja: { nome: "Loja Teste", endereco: "Av. Principal, 456 — Bairro" },
+      endereco_entrega: "Quadra 14 Lote 24, Sonia Rodrigues — Aragoiânia",
+      itens: [{ id: "1" }, { id: "2" }, { id: "3" }],
+      loja: {
+        nome: "Loja Teste",
+        endereco: "Rua Pedro Nestor Pereira, 01 — Aragoiânia",
+      },
     })
     setTimerOferta(30)
-    setDistKmOferta(1.4)
+    setDistKmOferta(2.3)
   }
 
   // Verifica URL param corrida_teste (funciona no mount e no visibilitychange)
@@ -1612,8 +1616,8 @@ export default function MotoboyPage() {
         }}>
           <span style={{ fontSize: 36 }}>✅</span>
           <div>
-            <p style={{ color: "#fff", fontWeight: 900, fontSize: 16, margin: 0 }}>Notificação funcionando!</p>
-            <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, marginTop: 4 }}>Obrigado pelo teste. O sistema está 100%!</p>
+            <p style={{ color: "#fff", fontWeight: 900, fontSize: 17, margin: 0 }}>Obrigado pelo teste!</p>
+            <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, marginTop: 4 }}>Notificação, card e aceite funcionando 100%! 🚀</p>
           </div>
         </div>
       )}
