@@ -744,8 +744,17 @@ export default function MotoboyPage() {
     if (!motoboy_id) return
     const handler = (event: MessageEvent) => {
       if (event.data?.type === "corrida-teste") {
-        setMostrarObrigadoTeste(true)
-        setTimeout(() => setMostrarObrigadoTeste(false), 6000)
+        setPedidoOferta({
+          _isTeste: true,
+          id: "corrida-teste",
+          taxa_entrega: 8.00,
+          forma_pagamento: "pix",
+          endereco_entrega: "Rua Teste, 123 — Centro",
+          itens: [{ id: "1" }, { id: "2" }],
+          loja: { nome: "Loja Teste", endereco: "Av. Principal, 456 — Bairro" },
+        })
+        setTimerOferta(30)
+        setDistKmOferta(1.4)
         return
       }
       if (event.data?.type !== "nova-corrida") return
@@ -1308,6 +1317,12 @@ export default function MotoboyPage() {
   // ── Aceitar corrida (atômico — protege contra dois motoboys) ──────────────
   async function aceitarCorrida() {
     if (!pedidoOferta || !motoboy_id) return
+    if (pedidoOferta._isTeste) {
+      setPedidoOferta(null)
+      setMostrarObrigadoTeste(true)
+      setTimeout(() => setMostrarObrigadoTeste(false), 6000)
+      return
+    }
     setAceitandoCorrida(true)
     const res = await fetch("/api/motoboy/aceitar-corrida", {
       method: "POST",
@@ -1336,6 +1351,7 @@ export default function MotoboyPage() {
   // ── Recusar corrida ────────────────────────────────────────────────────────
   async function recusarCorrida() {
     if (!pedidoOferta || !motoboy_id) return
+    if (pedidoOferta._isTeste) { setPedidoOferta(null); return }
     const ofertaId = pedidoOferta.id
     setPedidoOferta(null)
     dismissedIdsRef.current.add(ofertaId)
