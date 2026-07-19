@@ -1,5 +1,5 @@
 // sw.js — bump CACHE_NAME a cada deploy para forçar atualização
-const CACHE_NAME = "chego-v6"
+const CACHE_NAME = "chego-v7"
 
 // ─── Background Location ──────────────────────────────────────────────────────
 // Armazena última posição recebida da aba principal para envio em background
@@ -194,15 +194,23 @@ self.addEventListener("notificationclick", (event) => {
   }
 
   // Ação "open" ou clique normal → abre o app e avisa para recarregar corrida
-  const url = notifData.url ?? "/"
-  const pedidoId = notifData.pedido_id ?? null
+  const url       = notifData.url ?? "/"
+  const pedidoId  = notifData.pedido_id ?? null
+  const isMotoboy = url.includes("/motoboy")
+  const isCorridaTeste = url.includes("corrida_teste")
+
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
       for (const c of list) {
-        if (c.url.includes(url) && "focus" in c) {
+        // Para URLs de motoboy, faz match amplo (ignora query string)
+        const matches = isMotoboy ? c.url.includes("/motoboy") : c.url.includes(url)
+        if (matches && "focus" in c) {
           c.focus()
-          // Avisa a página para buscar nova oferta imediatamente
-          if (pedidoId) c.postMessage({ type: "nova-corrida", pedido_id: pedidoId })
+          if (isCorridaTeste) {
+            c.postMessage({ type: "corrida-teste" })
+          } else if (pedidoId) {
+            c.postMessage({ type: "nova-corrida", pedido_id: pedidoId })
+          }
           return c
         }
       }

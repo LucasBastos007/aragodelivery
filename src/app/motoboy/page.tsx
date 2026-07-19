@@ -739,10 +739,15 @@ export default function MotoboyPage() {
     document.head.appendChild(s)
   }, [])
 
-  // ── Mensagem do SW: "nova-corrida" ao clicar na notificação ─────────────
+  // ── Mensagem do SW: "nova-corrida" / "corrida-teste" ao clicar na notificação
   useEffect(() => {
     if (!motoboy_id) return
     const handler = (event: MessageEvent) => {
+      if (event.data?.type === "corrida-teste") {
+        setMostrarObrigadoTeste(true)
+        setTimeout(() => setMostrarObrigadoTeste(false), 6000)
+        return
+      }
       if (event.data?.type !== "nova-corrida") return
       const pedidoId = event.data.pedido_id
       if (!pedidoId || dismissedIdsRef.current.has(pedidoId)) return
