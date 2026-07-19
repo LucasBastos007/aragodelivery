@@ -2277,6 +2277,22 @@ export default function MotoboyPage() {
                 </svg>
               </div>
               <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 13 }}>Novos pedidos aparecerão aqui</p>
+
+              {/* Botão de teste exclusivo para Carlos */}
+              {motoboy_id === "c4cdc45e-ca42-4965-80e5-af05cb518b11" && (
+                <button
+                  onClick={mostrarFakeCorrida}
+                  style={{
+                    marginTop: 20, padding: "12px 24px",
+                    background: "rgba(255,140,0,0.12)",
+                    border: "1.5px dashed rgba(255,140,0,0.4)",
+                    borderRadius: 14, color: "#FF8C00",
+                    fontWeight: 800, fontSize: 13, cursor: "pointer",
+                  }}
+                >
+                  🧪 Simular corrida teste
+                </button>
+              )}
             </div>
           )}
 
