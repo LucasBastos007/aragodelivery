@@ -706,12 +706,36 @@ export default function MotoboyPage() {
     mostrarFakeCorrida()
   }
 
-  // Checa na montagem
-  useEffect(() => { checkCorridaTesteUrl() }, [])
+  // Verifica URL param pedido_id (corrida real vinda de notificação)
+  function checkPedidoUrl() {
+    if (typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    const pedidoId = params.get("pedido_id")
+    if (!pedidoId || dismissedIdsRef.current.has(pedidoId)) return
+    const url = new URL(window.location.href)
+    url.searchParams.delete("pedido_id")
+    window.history.replaceState({}, "", url.toString())
+    supabase.from("pedidos")
+      .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
+      .eq("id", pedidoId)
+      .single()
+      .then(({ data }) => {
+        if (data && !dismissedIdsRef.current.has(data.id)) {
+          setPedidoOferta(data); setTimerOferta(30); setDistKmOferta(null)
+        }
+      })
+  }
+
+  // Checa na montagem (corrida_teste + pedido_id)
+  useEffect(() => { checkCorridaTesteUrl(); checkPedidoUrl() }, [])
 
   // Checa quando o app volta ao foco (iOS: SW navega para URL com param)
   useEffect(() => {
-    const handler = () => { if (document.visibilityState === "visible") checkCorridaTesteUrl() }
+    const handler = () => {
+      if (document.visibilityState !== "visible") return
+      checkCorridaTesteUrl()
+      checkPedidoUrl()
+    }
     document.addEventListener("visibilitychange", handler)
     return () => document.removeEventListener("visibilitychange", handler)
   }, [])

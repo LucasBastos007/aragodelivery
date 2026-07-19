@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
       title:      "Nova corrida disponível!",
       body:       `Pedido #${pedido.codigo} — R$ ${(pedido.taxa_entrega ?? 0).toFixed(2)}`,
       tag:        "corrida-nova",
-      url:        "/motoboy",
+      url:        `/motoboy?pedido_id=${pedido_id}`,
       pedido_id,
       requireInteraction: true,
     })
