@@ -23,8 +23,10 @@ function initVapid() {
 }
 
 export async function POST(req: NextRequest) {
-  const sess = getSession(req)
-  if (sess?.role !== "admin") return unauthorized()
+  const internalSecret = req.headers.get("x-internal-secret")
+  const isInternal = internalSecret && internalSecret === process.env.CRON_SECRET
+  const sess = isInternal ? null : getSession(req)
+  if (!isInternal && sess?.role !== "admin") return unauthorized()
 
   const reqBody = await req.json()
   const { motoboy_id, url: customUrl, title: customTitle, body: customBody, tag: customTag, requireInteraction: customReqInt } = reqBody
