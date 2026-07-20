@@ -190,7 +190,7 @@ export default function BuscaPage() {
                     {loja.logo_url
                       ? <img src={loja.logo_url} alt={loja.nome} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                       : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>
-                          {{ Restaurante: "🍔", Mercadinho: "🛒", "Farmácia": "💊", Outros: "📦" }[loja.categoria] ?? "📦"}
+                          {({ Restaurante: "🍔", Mercadinho: "🛒", "Farmácia": "💊", Outros: "📦", "Hambúrguer": "🍔", Pizza: "🍕", Italiana: "🍝", "Japonês": "🍣", Lanches: "🌭", Bebidas: "🥤", "Doces e Bolos": "🎂", Mercado: "🛒" } as Record<string, string>)[loja.categoria] ?? "📦"}
                         </div>}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
