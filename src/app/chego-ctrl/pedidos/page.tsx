@@ -286,14 +286,33 @@ const PERIODO_LABELS: Record<Periodo, string> = {
   hoje: "Hoje", "7d": "7 dias", "15d": "15 dias", "30d": "30 dias", custom: "Personalizado",
 }
 
+// Retorna "YYYY-MM-DD" no fuso de Brasília (UTC-3, sem DST desde 2019)
+function dataBRT(offsetDias = 0): string {
+  const d = new Date(Date.now() + offsetDias * 86_400_000)
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(d)
+}
+
+// criado_em é timestamptz em UTC no Supabase.
+// 00:00 BRT = 03:00 UTC | 23:59:59 BRT = 02:59:59 UTC do dia seguinte.
 function rangeDatas(periodo: Periodo, ci: string, cf: string) {
-  const hoje = new Date().toISOString().slice(0, 10)
-  if (periodo === "hoje")  return { inicio: `${hoje}T00:00:00`, fim: `${hoje}T23:59:59` }
-  if (periodo === "7d")  { const d = new Date(); d.setDate(d.getDate() - 6);  return { inicio: d.toISOString().slice(0,10)+"T00:00:00", fim: `${hoje}T23:59:59` } }
-  if (periodo === "15d") { const d = new Date(); d.setDate(d.getDate() - 14); return { inicio: d.toISOString().slice(0,10)+"T00:00:00", fim: `${hoje}T23:59:59` } }
-  if (periodo === "30d") { const d = new Date(); d.setDate(d.getDate() - 29); return { inicio: d.toISOString().slice(0,10)+"T00:00:00", fim: `${hoje}T23:59:59` } }
-  if (ci && cf) return { inicio: `${ci}T00:00:00`, fim: `${cf}T23:59:59` }
-  return { inicio: `${hoje}T00:00:00`, fim: `${hoje}T23:59:59` }
+  if (periodo === "hoje") return {
+    inicio: `${dataBRT()}T03:00:00`,
+    fim:    `${dataBRT(1)}T02:59:59`,
+  }
+  if (periodo === "7d") return {
+    inicio: `${dataBRT(-6)}T03:00:00`,
+    fim:    `${dataBRT(1)}T02:59:59`,
+  }
+  if (periodo === "15d") return {
+    inicio: `${dataBRT(-14)}T03:00:00`,
+    fim:    `${dataBRT(1)}T02:59:59`,
+  }
+  if (periodo === "30d") return {
+    inicio: `${dataBRT(-29)}T03:00:00`,
+    fim:    `${dataBRT(1)}T02:59:59`,
+  }
+  if (ci && cf) return { inicio: `${ci}T03:00:00`, fim: `${cf}T02:59:59` }  // custom: datas já em BRT
+  return { inicio: `${dataBRT()}T03:00:00`, fim: `${dataBRT(1)}T02:59:59` }
 }
 
 export default function PedidosPage() {
@@ -304,6 +323,20 @@ export default function PedidosPage() {
   const [loading, setLoading]  = useState(true)
   const [filtro, setFiltro]    = useState<Filtro>("todos")
   const [expandido, setExpandido] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [deletando, setDeletando] = useState(false)
+
+  async function excluirPedido(id: string) {
+    setDeletando(true)
+    await fetch("/api/chego-ctrl/excluir-pedido", {
+      method: "DELETE", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pedido_id: id }),
+    })
+    setPedidos(prev => prev.filter(p => p.id !== id))
+    setConfirmDelete(null)
+    setDeletando(false)
+  }
   const [periodo, setPeriodo]  = useState<Periodo>("hoje")
   const [customInicio, setCustomInicio] = useState("")
   const [customFim,    setCustomFim]    = useState("")
@@ -360,28 +393,6 @@ export default function PedidosPage() {
     }
   }, [periodo, customInicio, customFim])
 
-  const pedidosFiltrados = filtro === "avulsas"
-    ? []
-    : filtro === "todos"
-      ? pedidos
-      : pedidos.filter(p => p.status === filtro)
-
-  const avulsasFiltradas = filtro === "todos" || filtro === "avulsas" ? avulsas : []
-
-  // Mistura e ordena por data desc quando filtro é "todos"
-  type ItemLista =
-    | { tipo: "pedido"; data: Pedido; criado_em: string }
-    | { tipo: "avulsa"; data: any;    criado_em: string }
-
-  const lista: ItemLista[] = filtro === "todos"
-    ? [
-        ...pedidosFiltrados.map(p => ({ tipo: "pedido" as const, data: p, criado_em: p.criado_em })),
-        ...avulsasFiltradas.map(a => ({ tipo: "avulsa" as const, data: a, criado_em: a.criado_em })),
-      ].sort((a, b) => b.criado_em.localeCompare(a.criado_em))
-    : filtro === "avulsas"
-      ? avulsasFiltradas.map(a => ({ tipo: "avulsa" as const, data: a, criado_em: a.criado_em }))
-      : pedidosFiltrados.map(p => ({ tipo: "pedido" as const, data: p, criado_em: p.criado_em }))
-
   const totalPeriodo = pedidos
     .filter(p => p.status === "entregue")
     .reduce((s, p) => s + p.total, 0)
@@ -391,323 +402,235 @@ export default function PedidosPage() {
   const diffMin = (a: string, b: string) =>
     Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60000)
 
-  const statusFiltros: Filtro[] = ["todos", "pendente", "aceito", "preparando", "pronto", "coletado", "entregue", "cancelado"]
+  // ── Definição das colunas do kanban ─────────────────────────────────────────
+  const COLUNAS = [
+    { id: "aguardando_pagamento", label: "Aguard. Pagamento", color: "#f59e0b", statuses: ["aguardando_pagamento"], tsKey: "criado_em",   tsLabel: "Criado"   },
+    { id: "pendente",   label: "Pendente",   color: "#f97316", statuses: ["pendente"],                                    tsKey: "criado_em",   tsLabel: "Criado"   },
+    { id: "aceito",     label: "Aceito",     color: "#3b82f6", statuses: ["aceito"],                                      tsKey: "aceito_em",   tsLabel: "Aceito"   },
+    { id: "preparando", label: "Preparando", color: "#8b5cf6", statuses: ["preparando"],                                  tsKey: "aceito_em",   tsLabel: "Iniciado" },
+    { id: "pronto",     label: "Pronto",     color: "#06b6d4", statuses: ["pronto","aguardando_aceite","indo_para_loja","na_loja"], tsKey: "pronto_em", tsLabel: "Pronto" },
+    { id: "coletado",   label: "Coletado",   color: "#f97316", statuses: ["em_rota","coletado"],                          tsKey: "coletado_em", tsLabel: "Coletado" },
+    { id: "entregue",   label: "Entregue",   color: "#22c55e", statuses: ["entregue"],                                    tsKey: "entregue_em", tsLabel: "Entregue" },
+  ] as const
+
+  const cancelados = pedidos.filter(p => p.status === "cancelado")
 
   return (
-    <div className="p-4 sm:p-8">
-      <div className="mb-4 sm:mb-5">
-        <div className="flex items-center justify-between">
-          <div style={{ minWidth: 0 }}>
-            <h1 style={{ color: "#0F172A", fontSize: 22, fontWeight: 900 }}>Pedidos</h1>
-            <p className="text-sm mt-0.5" style={{ color: "#94a3b8" }}>
-              {PERIODO_LABELS[periodo]}:{" "}
-              <span className="font-bold text-green-400">
-                R$ {totalPeriodo.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-              </span>
-              <span style={{ color: "#cbd5e1", marginLeft: 6, fontSize: 12 }}>
-                ({pedidos.filter(p => p.status === "entregue").length} entregues)
-              </span>
-            </p>
-          </div>
+    <div style={{ padding: "24px 24px 40px" }}>
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+          <h1 style={{ color: "#0F172A", fontSize: 22, fontWeight: 900, margin: 0 }}>Pipeline de Pedidos</h1>
+          <span style={{ color: "#22c55e", fontWeight: 800, fontSize: 15 }}>
+            R$ {totalPeriodo.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+          </span>
+          <span style={{ color: "#94a3b8", fontSize: 12 }}>
+            ({pedidos.filter(p => p.status === "entregue").length} entregues · {pedidos.length} total)
+          </span>
         </div>
 
         {/* Seletor de período */}
-        <div className="flex gap-1.5 mt-3 flex-wrap">
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {(["hoje", "7d", "15d", "30d", "custom"] as Periodo[]).map(p => (
-            <button key={p} onClick={() => setPeriodo(p)}
-              className="btn-ghost"
-              style={{
-                fontSize: 10, padding: "4px 10px",
-                background: periodo === p ? "rgba(99,102,241,0.12)" : undefined,
-                color:      periodo === p ? "#6366f1" : "#64748b",
-                border:     periodo === p ? "1px solid rgba(99,102,241,0.3)" : undefined,
-                fontWeight: periodo === p ? 700 : 400,
-              }}>
+            <button key={p} onClick={() => setPeriodo(p)} style={{
+              fontSize: 11, padding: "4px 12px", borderRadius: 20, border: "1px solid",
+              background:   periodo === p ? "rgba(99,102,241,0.1)" : "#f8fafc",
+              color:        periodo === p ? "#6366f1" : "#64748b",
+              borderColor:  periodo === p ? "rgba(99,102,241,0.4)" : "#e2e8f0",
+              fontWeight:   periodo === p ? 700 : 400, cursor: "pointer",
+            }}>
               {PERIODO_LABELS[p]}
             </button>
           ))}
         </div>
-
-        {/* Inputs de período personalizado */}
         {periodo === "custom" && (
-          <div className="flex gap-2 mt-2 items-center flex-wrap">
-            <input
-              type="date" value={customInicio} onChange={e => setCustomInicio(e.target.value)}
-              style={{ fontSize: 12, padding: "5px 8px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#0F172A" }}
-            />
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
+            <input type="date" value={customInicio} onChange={e => setCustomInicio(e.target.value)}
+              style={{ fontSize: 12, padding: "5px 8px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#0F172A" }} />
             <span style={{ fontSize: 12, color: "#94a3b8" }}>até</span>
-            <input
-              type="date" value={customFim} onChange={e => setCustomFim(e.target.value)}
-              style={{ fontSize: 12, padding: "5px 8px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#0F172A" }}
-            />
+            <input type="date" value={customFim} onChange={e => setCustomFim(e.target.value)}
+              style={{ fontSize: 12, padding: "5px 8px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#0F172A" }} />
           </div>
         )}
       </div>
 
-      <div className="flex gap-1.5 mb-4 sm:mb-6 flex-wrap">
-        {statusFiltros.map(s => (
-          <button key={s} onClick={() => setFiltro(s)}
-            className="btn-ghost"
-            style={{
-              fontSize: 10, padding: "5px 9px",
-              background: filtro === s ? "rgba(249,115,22,0.12)" : undefined,
-              color:      filtro === s ? "#f97316" : undefined,
-              border:     filtro === s ? "1px solid rgba(249,115,22,0.3)" : undefined,
-            }}>
-            {s === "todos" ? "Todos" : STATUS_LABEL[s as StatusPedido]}
-            {s !== "todos" && (
-              <span style={{ color: "#CBD5E1" }}>
-                {" "}({pedidos.filter(p => p.status === s).length})
-              </span>
-            )}
-          </button>
-        ))}
-
-        {/* Botão Avulsas */}
-        <button onClick={() => setFiltro("avulsas")}
-          className="btn-ghost"
-          style={{
-            fontSize: 10, padding: "5px 9px",
-            background: filtro === "avulsas" ? "rgba(139,92,246,0.12)" : undefined,
-            color:      filtro === "avulsas" ? "#8b5cf6" : undefined,
-            border:     filtro === "avulsas" ? "1px solid rgba(139,92,246,0.3)" : undefined,
-          }}>
-          Avulsas
-          <span style={{ color: "#CBD5E1" }}> ({avulsas.length})</span>
-        </button>
-      </div>
-
-      <div className="flex flex-col gap-3">
-        {loading ? (
-          <p style={{ color: "#94a3b8", fontSize: 13 }}>Carregando...</p>
-        ) : lista.length === 0 ? (
-          <p style={{ color: "#94a3b8", fontSize: 13 }}>Nenhum pedido encontrado.</p>
-        ) : (
-          lista.map(item => {
-            if (item.tipo === "avulsa") {
-              const a = item.data
+      {/* ── Kanban ─────────────────────────────────────────────────────────── */}
+      {loading ? (
+        <p style={{ color: "#94a3b8", fontSize: 13 }}>Carregando...</p>
+      ) : (
+        <>
+          {/* Board horizontal */}
+          <div style={{ display: "flex", gap: 14, overflowX: "auto", paddingBottom: 16, alignItems: "flex-start" }}>
+            {COLUNAS.map(col => {
+              const cards = pedidos
+                .filter(p => (col.statuses as readonly string[]).includes(p.status))
+                .sort((a, b) => b.criado_em.localeCompare(a.criado_em))
               return (
-                <div key={`avulsa-${a.id}`} className="card p-3 sm:p-4 flex items-start gap-3"
-                  style={{ borderLeft: "3px solid #8b5cf6" }}>
-                  <div className="flex-shrink-0 text-center" style={{ minWidth: 52 }}>
-                    <p className="text-xs font-black">#{a.codigo}</p>
-                    <p className="text-[10px] mt-0.5" style={{ color: "#94a3b8" }}>{fmt(a.criado_em)}</p>
-                    <span style={{
-                      display: "inline-block", marginTop: 4,
-                      fontSize: 8, fontWeight: 900, padding: "1px 5px", borderRadius: 4,
-                      background: "rgba(139,92,246,0.1)", color: "#8b5cf6",
-                      border: "1px solid rgba(139,92,246,0.25)", letterSpacing: 0.5,
-                    }}>AVULSO</span>
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    {/* Status */}
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className={`badge ${AVULSA_STATUS_BADGE[a.status] ?? "badge-yellow"}`}>
-                        {AVULSA_STATUS_LABEL[a.status] ?? a.status}
-                      </span>
-                    </div>
-
-                    {/* Loja */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
-                      </svg>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: "#334155" }}>{a.loja_nome ?? "—"}</span>
-                      {lojaFone[a.loja_id] && a.status !== "entregue" && a.status !== "cancelado" && (
-                        <BotaoWhatsApp avulsa={a} fone={lojaFone[a.loja_id]} />
-                      )}
-                    </div>
-
-                    {/* Motoboy */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={a.motoboy_nome ? "#8b5cf6" : "#cbd5e1"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/>
-                        <path d="M6 17L9 10l5 0 4 7"/><path d="M9 10l2-3 5 0 2 3"/>
-                      </svg>
-                      <span style={{ fontSize: 12, fontWeight: a.motoboy_nome ? 700 : 400, color: a.motoboy_nome ? "#334155" : "#94a3b8" }}>
-                        {a.motoboy_nome ?? "Aguardando motoboy"}
-                      </span>
-                      {a.motoboy_id && motoboyFone[a.motoboy_id] && (
-                        <a
-                          href={`https://wa.me/55${motoboyFone[a.motoboy_id].replace(/\D/g,"")}?text=${encodeURIComponent(`Olá ${a.motoboy_nome}! Preciso de uma atualização sobre a entrega *${a.codigo}* para *${a.cliente_nome}*.`)}`}
-                          target="_blank" rel="noopener noreferrer"
-                          style={{
-                            display: "inline-flex", alignItems: "center", gap: 3,
-                            fontSize: 10, padding: "2px 6px", borderRadius: 5,
-                            border: "1px solid rgba(37,211,102,0.4)",
-                            background: "rgba(37,211,102,0.08)", color: "#16a34a",
-                            fontWeight: 700, textDecoration: "none",
-                          }}
-                        >
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="#16a34a">
-                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-                            <path d="M11.999 0C5.372 0 0 5.373 0 12c0 2.117.554 4.103 1.523 5.829L.054 23.5l5.832-1.528A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12 0-6.628-5.373-12-12.001-12zm.001 21.818a9.822 9.822 0 01-5.004-1.372l-.36-.213-3.463.908.924-3.375-.234-.374A9.816 9.816 0 012.182 12C2.182 6.57 6.569 2.182 12 2.182S21.818 6.57 21.818 12c0 5.43-4.387 9.818-9.818 9.818z"/>
-                          </svg>
-                          Entregador
-                        </a>
-                      )}
-                    </div>
-
-                    {/* Cliente + endereço */}
-                    <p className="text-xs truncate" style={{ color: "#94a3b8" }}>
-                      {a.cliente_nome} · {a.endereco}
-                    </p>
-
-                    <ProgressoAvulsa status={a.status} />
-                  </div>
-
-                  <div className="text-right flex-shrink-0">
-                    <p className="font-black text-sm" style={{ color: "#0F172A" }}>
-                      R$ {(a.taxa_entrega ?? 0).toFixed(2)}
-                    </p>
-                    <p className="text-[10px] mt-0.5" style={{ color: "#94a3b8" }}>Taxa</p>
-                    {a.valor_pedido > 0 && (
-                      <p className="text-[10px] mt-0.5" style={{ color: "#cbd5e1" }}>
-                        Pedido R$ {(a.valor_pedido ?? 0).toFixed(2)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )
-            }
-
-            // Pedido regular
-            const p = item.data
-            const aberto = expandido === p.id
-            const itens: any[] = (p as any).itens ?? []
-            return (
-              <div key={`pedido-${p.id}`} className="card" style={{ overflow: "hidden" }}>
-                {/* Cabeçalho clicável */}
-                <div
-                  className="p-3 sm:p-4 flex items-start gap-3"
-                  onClick={() => setExpandido(aberto ? null : p.id)}
-                  style={{ cursor: "pointer", userSelect: "none" }}
-                >
-                  <div className="flex-shrink-0 text-center" style={{ minWidth: 48 }}>
-                    <p className="text-xs font-black">#{p.codigo}</p>
-                    <p className="text-[10px] mt-0.5" style={{ color: "#94a3b8" }}>
-                      {fmt(p.criado_em)}
-                    </p>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                      <span className={`badge ${STATUS_BADGE[p.status]}`}>{STATUS_LABEL[p.status]}</span>
-                      <span className="text-xs truncate" style={{ color: "#64748b" }}>{(p.loja as any)?.nome ?? "—"}</span>
-                    </div>
-                    <p className="text-xs truncate" style={{ color: "#94a3b8" }}>
-                      {(p.motoboy as any)?.nome ?? "Sem motoboy"}
-                    </p>
-                    <p className="text-xs truncate" style={{ color: "#94a3b8" }}>
-                      {p.endereco_entrega}
-                    </p>
-                    {p.nome_cliente && (
-                      <p className="text-xs" style={{ color: "#64748b", marginTop: 2 }}>
-                        {p.nome_cliente}{p.telefone_cliente ? ` · ${p.telefone_cliente}` : ""}
-                      </p>
-                    )}
-
-                    {/* Botões WhatsApp */}
-                    <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 6 }} onClick={e => e.stopPropagation()}>
-                      <BotaoWA
-                        telefone={(p.loja as any)?.telefone}
-                        label="Loja"
-                        msg={`Olá! Preciso de uma atualização sobre o pedido *#${p.codigo}*.`}
-                      />
-                      <BotaoWA
-                        telefone={p.telefone_cliente}
-                        label="Cliente"
-                        msg={`Olá${p.nome_cliente ? ` ${p.nome_cliente.split(" ")[0]}` : ""}! Seu pedido *#${p.codigo}* está em andamento. Qualquer dúvida, estamos aqui!`}
-                      />
-                      <BotaoWA
-                        telefone={(p.motoboy as any)?.telefone}
-                        label="Motoboy"
-                        msg={`Olá! Preciso de uma atualização sobre a entrega do pedido *#${p.codigo}*.`}
-                      />
-                    </div>
-
-                    {/* Timeline */}
-                    <TimelinePedido status={p.status} pedido={p} />
-
-                    {(p.coletado_em || p.entregue_em) && (
-                      <div style={{
-                        marginTop: 6, padding: "5px 10px", borderRadius: 8,
-                        background: p.entregue_em ? "rgba(34,197,94,0.07)" : "rgba(249,115,22,0.06)",
-                        border: `1px solid ${p.entregue_em ? "rgba(34,197,94,0.15)" : "rgba(249,115,22,0.15)"}`,
-                        display: "flex", flexWrap: "wrap", gap: "2px 12px",
-                      }}>
-                        {p.coletado_em && (
-                          <span style={{ fontSize: 11, color: "#64748b" }}>
-                            Coletou <strong style={{ color: "#0F172A" }}>{fmt(p.coletado_em)}</strong>
-                          </span>
-                        )}
-                        {p.entregue_em && (
-                          <span style={{ fontSize: 11, color: "#64748b" }}>
-                            Entregou <strong style={{ color: "#0F172A" }}>{fmt(p.entregue_em)}</strong>
-                          </span>
-                        )}
-                        {p.coletado_em && p.entregue_em && (
-                          <span style={{ fontSize: 11, fontWeight: 700, color: "#22c55e" }}>
-                            {diffMin(p.coletado_em, p.entregue_em)} min
-                          </span>
-                        )}
-                        {p.coletado_em && !p.entregue_em && p.status !== "entregue" && (
-                          <span style={{ fontSize: 11, fontWeight: 700, color: "#f97316" }}>Em rota</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="font-black text-sm" style={{ color: "#0F172A" }}>
-                      R$ {p.total.toFixed(2)}
-                    </p>
-                    <p className="text-[10px] mt-0.5" style={{ color: "#94a3b8" }}>
-                      {PAGAMENTO_ICON[p.forma_pagamento]}
-                    </p>
-                    {p.status === "aguardando_pagamento" && p.forma_pagamento === "cartao" && (
-                      <ConfirmarCartaoBtn pedidoId={p.id} onConfirmado={() => setPedidos(prev =>
-                        prev.map(x => x.id === p.id ? { ...x, status: "pendente" as StatusPedido } : x)
-                      )} />
-                    )}
-                    {/* Indicador expandir */}
-                    <p style={{ fontSize: 10, color: "#94a3b8", marginTop: 4 }}>
-                      {aberto ? "▲ fechar" : "▼ itens"}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Itens expandidos */}
-                {aberto && (
+                <div key={col.id} style={{ minWidth: 240, maxWidth: 260, flex: "0 0 250px", display: "flex", flexDirection: "column", gap: 10 }}>
+                  {/* Cabeçalho da coluna */}
                   <div style={{
-                    borderTop: "1px solid #f1f5f9",
-                    padding: "12px 16px 14px",
-                    background: "#f8fafc",
+                    padding: "8px 12px", borderRadius: 10,
+                    background: `${col.color}15`,
+                    border: `1px solid ${col.color}35`,
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
                   }}>
-                    {itens.length === 0 ? (
-                      <p style={{ fontSize: 12, color: "#94a3b8" }}>Nenhum item encontrado.</p>
-                    ) : (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        {itens.map((it: any, i: number) => (
-                          <div key={it.id ?? i} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <p style={{ fontSize: 13, fontWeight: 700, color: "#0F172A" }}>
-                                {it.quantidade}x {it.nome}
-                              </p>
-                              {Array.isArray(it.adicionais) && it.adicionais.length > 0 && (
-                                <div style={{ marginTop: 3 }}>
-                                  {it.adicionais.map((ad: any, j: number) => (
-                                    <p key={j} style={{ fontSize: 11, color: "#64748b" }}>
-                                      + {ad.nome ?? ad}
-                                      {ad.preco > 0 ? ` (R$ ${Number(ad.preco).toFixed(2)})` : ""}
-                                    </p>
-                                  ))}
+                    <span style={{ fontSize: 12, fontWeight: 800, color: col.color }}>{col.label}</span>
+                    <span style={{
+                      fontSize: 11, fontWeight: 900, color: "white",
+                      background: col.color, borderRadius: 20, padding: "1px 8px", minWidth: 22, textAlign: "center",
+                    }}>{cards.length}</span>
+                  </div>
+
+                  {/* Cards */}
+                  {cards.length === 0 ? (
+                    <div style={{ padding: "16px 0", textAlign: "center" }}>
+                      <span style={{ fontSize: 11, color: "#cbd5e1" }}>Vazio</span>
+                    </div>
+                  ) : cards.map(p => {
+                    const aberto = expandido === p.id
+                    const itens: any[] = (p as any).itens ?? []
+                    const ts = col.tsKey ? (p as any)[col.tsKey] : null
+                    return (
+                      <div key={p.id} style={{
+                        background: "white", borderRadius: 12,
+                        border: `1px solid #e2e8f0`,
+                        borderTop: `3px solid ${col.color}`,
+                        overflow: "hidden",
+                        boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+                      }}>
+                        {/* Card header */}
+                        <div
+                          onClick={() => setExpandido(aberto ? null : p.id)}
+                          style={{ padding: "10px 12px", cursor: "pointer" }}
+                        >
+                          {/* Código + timestamp + lixeira */}
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+                            <span style={{ fontSize: 13, fontWeight: 900, color: "#0F172A" }}>#{p.codigo}</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: 4 }} onClick={e => e.stopPropagation()}>
+                              {ts && (
+                                <span style={{
+                                  fontSize: 10, fontWeight: 700,
+                                  background: `${col.color}15`, color: col.color,
+                                  borderRadius: 6, padding: "2px 7px",
+                                }}>
+                                  {col.tsLabel} {fmt(ts)}
+                                </span>
+                              )}
+                              {confirmDelete === p.id ? (
+                                <div style={{ display: "flex", gap: 3 }}>
+                                  <button
+                                    onClick={() => excluirPedido(p.id)}
+                                    disabled={deletando}
+                                    style={{
+                                      fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 5, border: "none",
+                                      background: "#ef4444", color: "white", cursor: "pointer",
+                                    }}
+                                  >
+                                    {deletando ? "..." : "Confirmar"}
+                                  </button>
+                                  <button
+                                    onClick={() => setConfirmDelete(null)}
+                                    style={{
+                                      fontSize: 10, padding: "2px 6px", borderRadius: 5, border: "1px solid #e2e8f0",
+                                      background: "#f8fafc", color: "#64748b", cursor: "pointer",
+                                    }}
+                                  >
+                                    Cancelar
+                                  </button>
                                 </div>
+                              ) : (
+                                <button
+                                  onClick={() => setConfirmDelete(p.id)}
+                                  title="Excluir pedido"
+                                  style={{
+                                    background: "none", border: "none", cursor: "pointer",
+                                    padding: "2px 4px", borderRadius: 4,
+                                    color: "#cbd5e1", lineHeight: 1,
+                                  }}
+                                >
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                                  </svg>
+                                </button>
                               )}
-                              {it.observacao && (
-                                <p style={{ fontSize: 11, color: "#f97316", marginTop: 2 }}>
-                                  Obs: {it.observacao}
+                            </div>
+                          </div>
+
+                          {/* Loja */}
+                          <p style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {(p.loja as any)?.nome ?? "—"}
+                          </p>
+
+                          {/* Cliente */}
+                          {p.nome_cliente && (
+                            <p style={{ fontSize: 11, color: "#64748b", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {p.nome_cliente}
+                            </p>
+                          )}
+
+                          {/* Motoboy */}
+                          {(p.motoboy as any)?.nome && (
+                            <p style={{ fontSize: 11, color: "#8b5cf6", marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              🛵 {(p.motoboy as any).nome}
+                            </p>
+                          )}
+
+                          {/* Valor + pagamento */}
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+                            <span style={{ fontSize: 14, fontWeight: 900, color: "#0F172A" }}>
+                              R$ {p.total.toFixed(2)}
+                            </span>
+                            <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600 }}>
+                              {PAGAMENTO_ICON[p.forma_pagamento]}
+                            </span>
+                          </div>
+
+                          {/* Timeline de horários */}
+                          <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: "3px 8px" }}>
+                            <span style={{ fontSize: 10, color: "#94a3b8" }}>🕐 {fmt(p.criado_em)}</span>
+                            {(p as any).aceito_em   && <span style={{ fontSize: 10, color: "#3b82f6" }}>✓ {fmt((p as any).aceito_em)}</span>}
+                            {(p as any).pronto_em   && <span style={{ fontSize: 10, color: "#06b6d4" }}>📦 {fmt((p as any).pronto_em)}</span>}
+                            {(p as any).coletado_em && <span style={{ fontSize: 10, color: "#f97316" }}>🛵 {fmt((p as any).coletado_em)}</span>}
+                            {(p as any).entregue_em && <span style={{ fontSize: 10, color: "#22c55e" }}>✅ {fmt((p as any).entregue_em)}</span>}
+                          </div>
+
+                          {/* WhatsApp */}
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 8 }} onClick={e => e.stopPropagation()}>
+                            <BotaoWA telefone={(p.loja as any)?.telefone} label="Loja" msg={`Pedido *#${p.codigo}*`} />
+                            <BotaoWA telefone={p.telefone_cliente} label="Cliente" msg={`Pedido *#${p.codigo}*`} />
+                            <BotaoWA telefone={(p.motoboy as any)?.telefone} label="Motoboy" msg={`Entrega *#${p.codigo}*`} />
+                          </div>
+
+                          {p.status === "aguardando_pagamento" && p.forma_pagamento === "cartao" && (
+                            <div onClick={e => e.stopPropagation()}>
+                              <ConfirmarCartaoBtn pedidoId={p.id} onConfirmado={() => setPedidos(prev =>
+                                prev.map(x => x.id === p.id ? { ...x, status: "pendente" as StatusPedido } : x)
+                              )} />
+                            </div>
+                          )}
+
+                          <p style={{ fontSize: 10, color: "#94a3b8", marginTop: 6, textAlign: "right" }}>
+                            {aberto ? "▲ fechar" : "▼ ver itens"}
+                          </p>
+                        </div>
+
+                        {/* Itens expandidos */}
+                        {aberto && (
+                          <div style={{ borderTop: "1px solid #f1f5f9", padding: "10px 12px 12px", background: "#f8fafc" }}>
+                            {itens.length === 0 ? (
+                              <p style={{ fontSize: 12, color: "#94a3b8" }}>Sem itens.</p>
+                            ) : (
+                              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                                {itens.map((it: any, i: number) => (
+                                  <div key={it.id ?? i} style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <p style={{ fontSize: 12, fontWeight: 700, color: "#0F172A" }}>{it.quantidade}x {it.nome}</p>
+                                      {Array.isArray(it.adicionais) && it.adicionais.length > 0 && it.adicionais.map((ad: any, j: number) => (
+                                        <p key={j} style={{ fontSize: 10, color: "#64748b" }}>+ {ad.nome ?? ad}{ad.preco > 0 ? ` R$ ${Number(ad.preco).toFixed(2)}` : ""}</p>
+                                      ))}
+                                      {it.observacao && <p style={{ fontSize: 10, color: "#f97316" }}>Obs: {it.observacao}
                                 </p>
-                              )}
+                              }
                             </div>
                             <p style={{ fontSize: 13, fontWeight: 700, color: "#0F172A", flexShrink: 0 }}>
                               R$ {(it.preco * it.quantidade).toFixed(2)}
@@ -761,8 +684,89 @@ export default function PedidosPage() {
               </div>
             )
           })
-        )}
-      </div>
+        }
+                </div>
+              )
+            })}
+          </div>
+
+          {/* ── Cancelados ─────────────────────────────────────────────── */}
+          {cancelados.length > 0 && (
+            <div style={{ marginTop: 28 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 800, color: "#ef4444", marginBottom: 10 }}>
+                ✕ Cancelados ({cancelados.length})
+              </h3>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {cancelados.map(p => (
+                  <div key={p.id} style={{
+                    background: "white", borderRadius: 10,
+                    border: "1px solid #fee2e2", borderLeft: "3px solid #ef4444",
+                    padding: "10px 14px", minWidth: 200, maxWidth: 240,
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                      <span style={{ fontSize: 13, fontWeight: 900, color: "#0F172A" }}>#{p.codigo}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <span style={{ fontSize: 10, color: "#94a3b8" }}>{fmt(p.criado_em)}</span>
+                        {confirmDelete === p.id ? (
+                          <div style={{ display: "flex", gap: 3 }}>
+                            <button onClick={() => excluirPedido(p.id)} disabled={deletando}
+                              style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 5, border: "none", background: "#ef4444", color: "white", cursor: "pointer" }}>
+                              {deletando ? "..." : "Confirmar"}
+                            </button>
+                            <button onClick={() => setConfirmDelete(null)}
+                              style={{ fontSize: 10, padding: "2px 6px", borderRadius: 5, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#64748b", cursor: "pointer" }}>
+                              Cancelar
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setConfirmDelete(p.id)} title="Excluir pedido"
+                            style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 4px", borderRadius: 4, color: "#cbd5e1", lineHeight: 1 }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <p style={{ fontSize: 12, color: "#64748b", margin: 0 }}>{(p.loja as any)?.nome}</p>
+                    {p.nome_cliente && <p style={{ fontSize: 11, color: "#94a3b8", margin: "2px 0 0" }}>{p.nome_cliente}</p>}
+                    <p style={{ fontSize: 13, fontWeight: 800, color: "#ef4444", marginTop: 4 }}>R$ {p.total.toFixed(2)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Avulsas ────────────────────────────────────────────────── */}
+          {avulsas.length > 0 && (
+            <div style={{ marginTop: 20 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 800, color: "#8b5cf6", marginBottom: 10 }}>
+                🛵 Avulsas ({avulsas.length})
+              </h3>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {avulsas.map((a: any) => (
+                  <div key={a.id} style={{
+                    background: "white", borderRadius: 10,
+                    border: "1px solid rgba(139,92,246,0.2)", borderLeft: "3px solid #8b5cf6",
+                    padding: "10px 14px", minWidth: 200, maxWidth: 240,
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                      <span style={{ fontSize: 13, fontWeight: 900, color: "#0F172A" }}>#{a.codigo}</span>
+                      <span style={{ fontSize: 10, color: "#94a3b8" }}>{fmt(a.criado_em)}</span>
+                    </div>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: "#8b5cf6", background: "rgba(139,92,246,0.1)", borderRadius: 4, padding: "1px 5px" }}>
+                      {AVULSA_STATUS_LABEL[a.status] ?? a.status}
+                    </span>
+                    <p style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{a.loja_nome}</p>
+                    {a.cliente_nome && <p style={{ fontSize: 11, color: "#94a3b8", margin: "2px 0 0" }}>{a.cliente_nome}</p>}
+                    <p style={{ fontSize: 13, fontWeight: 800, color: "#8b5cf6", marginTop: 4 }}>R$ {(a.taxa_entrega ?? 0).toFixed(2)} taxa</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }
