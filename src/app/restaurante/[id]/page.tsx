@@ -422,11 +422,9 @@ export default function RestaurantePage() {
     return true
   }
 
-  // Categorias com pelo menos 1 produto e dentro do horário programado
+  // Categorias com pelo menos 1 produto (ativas ou inativas — todas aparecem)
   const categoriasComProdutos = useMemo(() =>
-    categorias.filter(cat =>
-      produtos.some(p => p.categoria_id === cat.id) && categoriaAtiva(cat)
-    ),
+    categorias.filter(cat => produtos.some(p => p.categoria_id === cat.id)),
     [categorias, produtos])
 
   const catAtual = catSelecionada ? categorias.find(c => c.id === catSelecionada) : null
@@ -690,22 +688,30 @@ export default function RestaurantePage() {
                 <h2 style={{ color: "#111827", fontWeight: 900, fontSize: 17, marginBottom: 14 }}>Categorias</h2>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
                   {categoriasComProdutos.map(cat => {
+                    const ativa = categoriaAtiva(cat)
                     const qtdProdutos = produtos.filter(p => p.categoria_id === cat.id).length
                     const thumb = cat.foto_url || produtos.find(p => p.categoria_id === cat.id && p.foto_url)?.foto_url
+                    const horarioLabel = cat.cardapio_do_dia && cat.horario_inicio
+                      ? `Disponível a partir das ${cat.horario_inicio}`
+                      : null
                     return (
                       <button
                         key={cat.id}
-                        onClick={() => setCatSelecionada(cat.id)}
+                        onClick={() => ativa && setCatSelecionada(cat.id)}
+                        disabled={!ativa}
                         style={{
                           display: "flex", alignItems: "center", gap: 12,
                           padding: "14px 10px", borderRadius: 14,
-                          background: "white", border: "1.5px solid #E5E7EB",
-                          cursor: "pointer", textAlign: "left", width: "100%", minWidth: 0,
-                          boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+                          background: ativa ? "white" : "#F9FAFB",
+                          border: `1.5px solid ${ativa ? "#E5E7EB" : "#E5E7EB"}`,
+                          cursor: ativa ? "pointer" : "not-allowed",
+                          textAlign: "left", width: "100%", minWidth: 0,
+                          boxShadow: ativa ? "0 2px 8px rgba(0,0,0,0.05)" : "none",
                           transition: "border-color 0.15s, box-shadow 0.15s",
+                          opacity: ativa ? 1 : 0.45,
                         }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(220,38,38,0.4)"; e.currentTarget.style.boxShadow = "0 4px 16px rgba(220,38,38,0.12)" }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = "#E5E7EB"; e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.05)" }}
+                        onMouseEnter={e => { if (ativa) { e.currentTarget.style.borderColor = "rgba(220,38,38,0.4)"; e.currentTarget.style.boxShadow = "0 4px 16px rgba(220,38,38,0.12)" } }}
+                        onMouseLeave={e => { if (ativa) { e.currentTarget.style.borderColor = "#E5E7EB"; e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.05)" } }}
                       >
                         {/* Thumbnail */}
                         <div style={{
@@ -714,21 +720,21 @@ export default function RestaurantePage() {
                           display: "flex", alignItems: "center", justifyContent: "center",
                         }}>
                           {thumb
-                            ? <img src={thumb} alt={cat.nome} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                            ? <img src={thumb} alt={cat.nome} style={{ width: "100%", height: "100%", objectFit: "cover", filter: ativa ? "none" : "grayscale(1)" }} />
                             : <span style={{ fontSize: 22 }}>🛍️</span>
                           }
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <p style={{
-                            color: "#111827", fontWeight: 700, fontSize: 13, lineHeight: 1.3,
+                            color: ativa ? "#111827" : "#9CA3AF", fontWeight: 700, fontSize: 13, lineHeight: 1.3,
                             overflow: "hidden", display: "-webkit-box",
                             WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
                           }}>{cat.nome}</p>
                           <p style={{ color: "#9CA3AF", fontSize: 11, marginTop: 3 }}>
-                            {qtdProdutos} {qtdProdutos === 1 ? "item" : "itens"}
+                            {ativa ? `${qtdProdutos} ${qtdProdutos === 1 ? "item" : "itens"}` : (horarioLabel ?? `${qtdProdutos} itens`)}
                           </p>
                         </div>
-                        <span style={{ color: "#D1D5DB", fontSize: 16, flexShrink: 0 }}>›</span>
+                        <span style={{ color: "#D1D5DB", fontSize: 16, flexShrink: 0 }}>{ativa ? "›" : "🔒"}</span>
                       </button>
                     )
                   })}
