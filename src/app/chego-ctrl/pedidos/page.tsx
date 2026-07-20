@@ -413,7 +413,17 @@ export default function PedidosPage() {
     { id: "entregue",   label: "Entregue",   color: "#22c55e", statuses: ["entregue"],                                    tsKey: "entregue_em", tsLabel: "Entregue" },
   ] as const
 
+  // Mapeia status da entrega avulsa para coluna do kanban
+  function avulsaColuna(status: string): string {
+    if (status === "aguardando" || status === "aguardando_aceite") return "pendente"
+    if (status === "aceito") return "aceito"
+    if (status === "coletado" || status === "em_rota") return "coletado"
+    if (status === "entregue") return "entregue"
+    return ""
+  }
+
   const cancelados = pedidos.filter(p => p.status === "cancelado")
+  const avulsasCanceladas = avulsas.filter((a: any) => a.status === "cancelado")
 
   return (
     <div style={{ padding: "24px 24px 40px" }}>
@@ -465,6 +475,10 @@ export default function PedidosPage() {
               const cards = pedidos
                 .filter(p => (col.statuses as readonly string[]).includes(p.status))
                 .sort((a, b) => b.criado_em.localeCompare(a.criado_em))
+              const avulsasCol = avulsas
+                .filter((a: any) => avulsaColuna(a.status) === col.id)
+                .sort((a: any, b: any) => b.criado_em.localeCompare(a.criado_em))
+              const totalCol = cards.length + avulsasCol.length
               return (
                 <div key={col.id} style={{ minWidth: 240, maxWidth: 260, flex: "0 0 250px", display: "flex", flexDirection: "column", gap: 10 }}>
                   {/* Cabeçalho da coluna */}
@@ -478,11 +492,42 @@ export default function PedidosPage() {
                     <span style={{
                       fontSize: 11, fontWeight: 900, color: "white",
                       background: col.color, borderRadius: 20, padding: "1px 8px", minWidth: 22, textAlign: "center",
-                    }}>{cards.length}</span>
+                    }}>{totalCol}</span>
                   </div>
 
-                  {/* Cards */}
-                  {cards.length === 0 ? (
+                  {/* Cards avulsas (roxo) */}
+                  {avulsasCol.map((a: any) => (
+                    <div key={a.id} style={{
+                      background: "white", borderRadius: 12,
+                      border: "1px solid rgba(139,92,246,0.25)",
+                      borderTop: "3px solid #8b5cf6",
+                      padding: "10px 12px",
+                      boxShadow: "0 1px 4px rgba(139,92,246,0.08)",
+                    }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                        <span style={{ fontSize: 13, fontWeight: 900, color: "#0F172A" }}>#{a.codigo}</span>
+                        <span style={{ fontSize: 9, fontWeight: 800, color: "#8b5cf6", background: "rgba(139,92,246,0.1)", borderRadius: 5, padding: "1px 6px" }}>🛵 AVULSA</span>
+                      </div>
+                      <p style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {a.loja_nome ?? "—"}
+                      </p>
+                      {a.cliente_nome && (
+                        <p style={{ fontSize: 11, color: "#64748b", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.cliente_nome}</p>
+                      )}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+                        <span style={{ fontSize: 13, fontWeight: 900, color: "#8b5cf6" }}>R$ {(a.taxa_entrega ?? 0).toFixed(2)}</span>
+                        <span style={{ fontSize: 10, color: "#94a3b8" }}>🕐 {fmt(a.criado_em)}</span>
+                      </div>
+                      <div style={{ display: "flex", gap: 4, marginTop: 6 }} onClick={e => e.stopPropagation()}>
+                        <BotaoWA telefone={lojaFone[a.loja_id]} label="Loja" msg={`Entrega avulsa *#${a.codigo}*`} />
+                        <BotaoWA telefone={a.cliente_tel} label="Cliente" msg={`Entrega avulsa *#${a.codigo}*`} />
+                        <BotaoWA telefone={motoboyFone[a.motoboy_id]} label="Motoboy" msg={`Entrega avulsa *#${a.codigo}*`} />
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Cards pedidos normais */}
+                  {totalCol === 0 ? (
                     <div style={{ padding: "16px 0", textAlign: "center" }}>
                       <span style={{ fontSize: 11, color: "#cbd5e1" }}>Vazio</span>
                     </div>
@@ -737,34 +782,6 @@ export default function PedidosPage() {
             </div>
           )}
 
-          {/* ── Avulsas ────────────────────────────────────────────────── */}
-          {avulsas.length > 0 && (
-            <div style={{ marginTop: 20 }}>
-              <h3 style={{ fontSize: 13, fontWeight: 800, color: "#8b5cf6", marginBottom: 10 }}>
-                🛵 Avulsas ({avulsas.length})
-              </h3>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                {avulsas.map((a: any) => (
-                  <div key={a.id} style={{
-                    background: "white", borderRadius: 10,
-                    border: "1px solid rgba(139,92,246,0.2)", borderLeft: "3px solid #8b5cf6",
-                    padding: "10px 14px", minWidth: 200, maxWidth: 240,
-                  }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                      <span style={{ fontSize: 13, fontWeight: 900, color: "#0F172A" }}>#{a.codigo}</span>
-                      <span style={{ fontSize: 10, color: "#94a3b8" }}>{fmt(a.criado_em)}</span>
-                    </div>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: "#8b5cf6", background: "rgba(139,92,246,0.1)", borderRadius: 4, padding: "1px 5px" }}>
-                      {AVULSA_STATUS_LABEL[a.status] ?? a.status}
-                    </span>
-                    <p style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{a.loja_nome}</p>
-                    {a.cliente_nome && <p style={{ fontSize: 11, color: "#94a3b8", margin: "2px 0 0" }}>{a.cliente_nome}</p>}
-                    <p style={{ fontSize: 13, fontWeight: 800, color: "#8b5cf6", marginTop: 4 }}>R$ {(a.taxa_entrega ?? 0).toFixed(2)} taxa</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </>
       )}
     </div>
