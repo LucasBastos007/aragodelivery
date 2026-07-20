@@ -1114,19 +1114,25 @@ export default function MotoboyPage() {
     }
 
     // Localização da loja: usa loja_lat/loja_lng gravados no pedido pela escalada
-    if ((p as any).loja_lat && (p as any).loja_lng) {
-      setLojaLat((p as any).loja_lat)
-      setLojaLng((p as any).loja_lng)
+    // Coordenada default (-16.9146388, -49.4499148) = nunca foi configurada → geocodifica
+    const DEFAULT_LAT = -16.9146388
+    const isDefaultCoord = (lat: number) => Math.abs(lat - DEFAULT_LAT) < 0.0001
+    const pLat = (p as any).loja_lat
+    const pLng = (p as any).loja_lng
+    if (pLat && pLng && !isDefaultCoord(pLat)) {
+      setLojaLat(pLat)
+      setLojaLng(pLng)
     } else {
-      // Fallback: busca direto na tabela lojas (pedidos antigos sem loja_lat/loja_lng)
+      // Fallback: busca direto na tabela lojas
       const lojaId = (p as any).loja_id
       if (lojaId) {
         supabase.from("lojas").select("lat, lng, endereco").eq("id", lojaId).single()
           .then(({ data: loja }) => {
-            if (loja?.lat && loja?.lng) {
+            if (loja?.lat && loja?.lng && !isDefaultCoord(loja.lat)) {
               setLojaLat(loja.lat)
               setLojaLng(loja.lng)
             } else if (loja?.endereco) {
+              // Geocodifica pelo endereço quando coordenadas não foram configuradas
               geocodeAddress(loja.endereco).then(ll => {
                 if (ll) { setLojaLat(ll[0]); setLojaLng(ll[1]) }
               })
@@ -2952,7 +2958,27 @@ function CorridaAtivaPanel({
           <>
             <div style={{ marginBottom: 10 }}>
               <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>Entregar em</p>
-              <p style={{ color: "white", fontWeight: 800, fontSize: 14, lineHeight: 1.4, wordBreak: "break-word", overflowWrap: "anywhere" }}>{p?.endereco_entrega}</p>
+              {(() => {
+                const enderecoRaw = p?.endereco_entrega ?? ""
+                const refIdx = enderecoRaw.indexOf(" — Ref: ")
+                const enderecoLimpo = refIdx >= 0 ? enderecoRaw.substring(0, refIdx) : enderecoRaw
+                const pontoRef = refIdx >= 0 ? enderecoRaw.substring(refIdx + 8) : ""
+                return (
+                  <>
+                    <p style={{ color: "white", fontWeight: 800, fontSize: 14, lineHeight: 1.4, wordBreak: "break-word", overflowWrap: "anywhere" }}>{enderecoLimpo}</p>
+                    {pontoRef && (
+                      <div style={{
+                        marginTop: 6, display: "inline-flex", alignItems: "center", gap: 5,
+                        background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.3)",
+                        borderRadius: 8, padding: "5px 10px",
+                      }}>
+                        <span style={{ fontSize: 13 }}>📌</span>
+                        <span style={{ color: "#fbbf24", fontSize: 12, fontWeight: 700 }}>{pontoRef}</span>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
               {p?.observacao && (
                 <p style={{ color: "#aaa", fontSize: 12, marginTop: 4, wordBreak: "break-word" }}>{p.observacao}</p>
               )}
@@ -3328,27 +3354,45 @@ function CardCorrida({
         </div>
 
         {/* Bloco ENTREGA */}
-        <div style={{ padding: "0 20px 16px", display: "flex", gap: 14, alignItems: "flex-start" }}>
-          <div style={{
-            width: 38, height: 38, borderRadius: "50%", flexShrink: 0,
-            background: "rgba(34,197,94,0.1)", border: "1.5px solid rgba(34,197,94,0.3)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/>
-              <circle cx="12" cy="10" r="3"/>
-            </svg>
-          </div>
-          <div style={{ flex: 1 }}>
-            <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>Entrega</p>
-            <p style={{ color: "white", fontSize: 15, fontWeight: 700 }}>{pedido.endereco_entrega}</p>
-            <p style={{ color: "#888", fontSize: 12, marginTop: 2 }}>
-              {distKm !== null
-                ? `~${distKm.toFixed(1).replace(".", ",")} km de você`
-                : "Calculando distância..."}
-            </p>
-          </div>
-        </div>
+        {(() => {
+          const enderecoRaw = pedido.endereco_entrega ?? ""
+          const refIdx = enderecoRaw.indexOf(" — Ref: ")
+          const enderecoLimpo = refIdx >= 0 ? enderecoRaw.substring(0, refIdx) : enderecoRaw
+          const pontoRef = refIdx >= 0 ? enderecoRaw.substring(refIdx + 8) : ""
+          return (
+            <div style={{ padding: "0 20px 16px", display: "flex", gap: 14, alignItems: "flex-start" }}>
+              <div style={{
+                width: 38, height: 38, borderRadius: "50%", flexShrink: 0,
+                background: "rgba(34,197,94,0.1)", border: "1.5px solid rgba(34,197,94,0.3)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/>
+                  <circle cx="12" cy="10" r="3"/>
+                </svg>
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>Entrega</p>
+                <p style={{ color: "white", fontSize: 15, fontWeight: 700 }}>{enderecoLimpo}</p>
+                <p style={{ color: "#888", fontSize: 12, marginTop: 2 }}>
+                  {distKm !== null
+                    ? `~${distKm.toFixed(1).replace(".", ",")} km de você`
+                    : "Calculando distância..."}
+                </p>
+                {pontoRef && (
+                  <div style={{
+                    marginTop: 8, display: "inline-flex", alignItems: "center", gap: 5,
+                    background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.3)",
+                    borderRadius: 8, padding: "5px 10px",
+                  }}>
+                    <span style={{ fontSize: 13 }}>📌</span>
+                    <span style={{ color: "#fbbf24", fontSize: 12, fontWeight: 700 }}>{pontoRef}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })()}
 
         {/* Separator */}
         <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0 20px 16px" }} />

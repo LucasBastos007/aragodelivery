@@ -73,8 +73,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, msg: "pedido de retirada — sem motoboy necessário" })
   }
 
-  const lojaLat = (pedido as any).loja_lat ?? (pedido.loja as any)?.lat ?? null
-  const lojaLng = (pedido.loja as any)?.lng ?? null
+  // Coordenada default usada em cadastros sem localização real — tratar como nula
+  const isDefaultCoord = (lat: number | null) => lat != null && Math.abs(lat - (-16.9146388)) < 0.0001
+  const rawLat = (pedido as any).loja_lat ?? (pedido.loja as any)?.lat ?? null
+  const rawLng = (pedido as any).loja_lng ?? (pedido.loja as any)?.lng ?? null
+  const lojaLat = isDefaultCoord(rawLat) ? null : rawLat
+  const lojaLng = isDefaultCoord(rawLat) ? null : rawLng
 
   // Busca motoboys disponíveis e ativos
   const { data: motoboyData } = await supabase
@@ -127,9 +131,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, msg: "sem candidatos elegíveis" })
   }
 
-  // Salva lat/lng da loja no pedido para o mapa do motoboy
-  const lojaLatSalvar = lojaLat ?? (pedido.loja as any)?.lat
-  const lojaLngSalvar = (pedido.loja as any)?.lng
+  // Salva lat/lng da loja no pedido para o mapa do motoboy (só se for válida — não default)
+  const lojaLatSalvar = lojaLat
+  const lojaLngSalvar = lojaLng
 
   // Broadcast: limpa motoboy_id e sinaliza para todos os motoboys disponíveis
   await supabase.from("pedidos").update({
