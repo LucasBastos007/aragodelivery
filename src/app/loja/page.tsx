@@ -88,13 +88,19 @@ function imprimirPedido(pedido: Pedido, largura: "80mm" | "58mm" = "80mm") {
     maquininha: "Maquininha", apple_pay: "Apple Pay", google_pay: "Google Pay",
   }
 
-  const itensHtml = (pedido.itens ?? []).map((i: any) => `
+  const itensHtml = (pedido.itens ?? []).map((i: any) => {
+    const adicionaisHtml = (i.adicionais ?? []).map((a: any) =>
+      `<tr><td colspan="2" class="obs">  + ${a.nome}${a.preco > 0 ? ` R$ ${a.preco.toFixed(2).replace(".", ",")}` : ""}</td></tr>`
+    ).join("")
+    return `
     <tr>
       <td>${i.quantidade}x ${i.nome}</td>
       <td class="r">R$ ${(i.preco * i.quantidade).toFixed(2).replace(".", ",")}</td>
     </tr>
+    ${adicionaisHtml}
     ${i.observacao ? `<tr><td colspan="2" class="obs">  obs: ${i.observacao}</td></tr>` : ""}
-  `).join("")
+  `
+  }).join("")
 
   const bodyW  = largura === "58mm" ? "54mm" : "76mm"
   const pageW  = largura
