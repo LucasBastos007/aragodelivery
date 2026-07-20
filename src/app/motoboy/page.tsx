@@ -1178,17 +1178,23 @@ export default function MotoboyPage() {
     }
     watchIdRef.current = navigator.geolocation.watchPosition(
       ({ coords }) => {
-        setMyLat(coords.latitude); setMyLng(coords.longitude)
-        lastPosRef.current = { lat: coords.latitude, lng: coords.longitude }
+        const { latitude: lat, longitude: lng } = coords
+        const prev = lastPosRef.current
+        // Ignora jitter: só atualiza estado se moveu mais de 8 metros
+        const movedM = prev ? haversineKm(prev.lat, prev.lng, lat, lng) * 1000 : 999
+        lastPosRef.current = { lat, lng }
+        sendLocation(lat, lng)
         setGpsReady(true)
-        sendLocation(coords.latitude, coords.longitude)
+        if (movedM > 8) {
+          setMyLat(lat); setMyLng(lng)
+        }
         if (firstGeoRef.current) {
           firstGeoRef.current = false
-          reverseGeocode(coords.latitude, coords.longitude).then(c => { if (c) setCidadeAtual(c) })
+          reverseGeocode(lat, lng).then(c => { if (c) setCidadeAtual(c) })
         }
       },
       () => setCompartilhando(false),
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 }
     )
     // Envio forçado a cada 8s para garantir atualização mesmo sem mudança de GPS
     forceIvRef.current = setInterval(() => {
