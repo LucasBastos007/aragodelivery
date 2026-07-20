@@ -52,7 +52,13 @@ export default function CardapioPage() {
   const [formProd, setFormProd] = useState<ProdutoForm>(FORM_VAZIO)
   const [fotoFile, setFotoFile] = useState<File | null>(null)
   const [fotoPreview, setFotoPreview] = useState<string>("")
-  const [nomeCat, setNomeCat] = useState("")
+  const [catForm, setCatForm] = useState({
+    nome: "",
+    cardapio_do_dia: false,
+    horario_inicio: "11:00",
+    horario_fim: "15:00",
+    dias_semana: [] as number[],
+  })
   const [salvando, setSalvando] = useState(false)
   const [erroSalvar, setErroSalvar] = useState("")
   const fotoInputRef = useRef<HTMLInputElement>(null)
@@ -77,13 +83,21 @@ export default function CardapioPage() {
   }
 
   async function salvarCategoria() {
-    if (!nomeCat.trim() || !lojaId) return
+    if (!catForm.nome.trim() || !lojaId) return
     setSalvando(true)
     setErroSalvar("")
     const res = await fetch("/api/loja/categorias", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ loja_id: lojaId, nome: nomeCat.trim(), ordem: categorias.length }),
+      body: JSON.stringify({
+        loja_id: lojaId,
+        nome: catForm.nome.trim(),
+        ordem: categorias.length,
+        cardapio_do_dia: catForm.cardapio_do_dia,
+        horario_inicio: catForm.horario_inicio,
+        horario_fim: catForm.horario_fim,
+        dias_semana: catForm.dias_semana,
+      }),
     })
     if (!res.ok) {
       const d = await res.json()
@@ -91,7 +105,8 @@ export default function CardapioPage() {
       setSalvando(false)
       return
     }
-    setNomeCat(""); setModalCat(false)
+    setCatForm({ nome: "", cardapio_do_dia: false, horario_inicio: "11:00", horario_fim: "15:00", dias_semana: [] })
+    setModalCat(false)
     await carregarTudo()
     setSalvando(false)
   }
@@ -312,6 +327,12 @@ export default function CardapioPage() {
                 <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: "#F3F4F6", color: "#6B7280" }}>
                   {items.length}
                 </span>
+                {cat.cardapio_do_dia && (
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 20, background: "#FEF3C7", color: "#D97706", display: "flex", alignItems: "center", gap: 4 }}>
+                    🕐 {cat.horario_inicio}–{cat.horario_fim}
+                    {cat.dias_semana && cat.dias_semana.length > 0 && ` · ${DIAS.filter(d => cat.dias_semana!.includes(d.v)).map(d => d.l).join(" ")}`}
+                  </span>
+                )}
                 <input
                   type="file" accept="image/*" style={{ display: "none" }}
                   ref={el => { if (el) el.dataset.catId = cat.id }}
@@ -556,10 +577,70 @@ export default function CardapioPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div>
               <label className="label">Nome da categoria</label>
-              <input className="input" placeholder="Ex: Lanches, Bebidas, Pratos..." value={nomeCat}
-                onChange={e => setNomeCat(e.target.value)}
+              <input className="input" placeholder="Ex: Lanches, Bebidas, Pratos Executivos..." value={catForm.nome}
+                onChange={e => setCatForm(f => ({ ...f, nome: e.target.value }))}
                 onKeyDown={e => e.key === "Enter" && salvarCategoria()} autoFocus />
             </div>
+
+            {/* Cardápio do Dia toggle */}
+            <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
+                <div
+                  onClick={() => setCatForm(f => ({ ...f, cardapio_do_dia: !f.cardapio_do_dia }))}
+                  style={{ width: 40, height: 22, borderRadius: 11, transition: "background 0.2s", background: catForm.cardapio_do_dia ? "#f97316" : "#E5E7EB", position: "relative", cursor: "pointer", flexShrink: 0 }}>
+                  <div style={{ width: 18, height: 18, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, transition: "left 0.2s", left: catForm.cardapio_do_dia ? 20 : 2 }} />
+                </div>
+                <div>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: "#111827", margin: 0 }}>Cardápio do Dia</p>
+                  <p style={{ fontSize: 12, color: "#9CA3AF", margin: 0 }}>Define horário e dias em que esta categoria aparece</p>
+                </div>
+              </label>
+
+              {catForm.cardapio_do_dia && (
+                <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+                  {/* Horários */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <div>
+                      <label className="label">Início</label>
+                      <input className="input" type="time" value={catForm.horario_inicio}
+                        onChange={e => setCatForm(f => ({ ...f, horario_inicio: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="label">Fim</label>
+                      <input className="input" type="time" value={catForm.horario_fim}
+                        onChange={e => setCatForm(f => ({ ...f, horario_fim: e.target.value }))} />
+                    </div>
+                  </div>
+
+                  {/* Dias da semana */}
+                  <div>
+                    <label className="label">Dias da semana <span style={{ fontWeight: 400, color: "#9CA3AF" }}>(vazio = todos os dias)</span></label>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                      {DIAS.map(d => {
+                        const sel = catForm.dias_semana.includes(d.v)
+                        return (
+                          <button key={d.v} type="button"
+                            onClick={() => setCatForm(f => ({
+                              ...f,
+                              dias_semana: sel ? f.dias_semana.filter(x => x !== d.v) : [...f.dias_semana, d.v],
+                            }))}
+                            style={{
+                              padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 700,
+                              border: sel ? "none" : "1.5px solid #E5E7EB",
+                              background: sel ? "#f97316" : "transparent",
+                              color: sel ? "#fff" : "#6B7280",
+                              cursor: "pointer",
+                            }}>
+                            {d.l}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {erroSalvar && (
               <p style={{ color: "#ef4444", fontSize: 13, fontWeight: 600, background: "rgba(239,68,68,0.08)", padding: "10px 14px", borderRadius: 10 }}>
                 ⚠️ {erroSalvar}
@@ -567,7 +648,7 @@ export default function CardapioPage() {
             )}
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={() => { setModalCat(false); setErroSalvar("") }} className="btn-ghost" style={{ flex: 1, justifyContent: "center" }}>Cancelar</button>
-              <button onClick={salvarCategoria} disabled={salvando || !nomeCat.trim()}
+              <button onClick={salvarCategoria} disabled={salvando || !catForm.nome.trim()}
                 className="btn-primary" style={{ flex: 1, justifyContent: "center" }}>
                 {salvando ? "Salvando..." : "Criar categoria"}
               </button>

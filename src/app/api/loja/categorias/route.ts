@@ -15,11 +15,17 @@ export async function POST(req: NextRequest) {
   if (!_sess) return unauthorized()
   const sessLojaId = _sess.loja_id
 
-  const { nome, ordem } = await req.json()
+  const { nome, ordem, cardapio_do_dia, horario_inicio, horario_fim, dias_semana } = await req.json()
   const loja_id = sessLojaId
   if (!loja_id || !nome) return NextResponse.json({ error: "loja_id e nome obrigatórios" }, { status: 400 })
 
-  const { error } = await adminClient().from("categorias_produto").insert({ loja_id, nome: nome.trim(), ordem })
+  const { error } = await adminClient().from("categorias_produto").insert({
+    loja_id, nome: nome.trim(), ordem,
+    cardapio_do_dia: cardapio_do_dia ?? false,
+    horario_inicio: cardapio_do_dia ? (horario_inicio ?? null) : null,
+    horario_fim:    cardapio_do_dia ? (horario_fim ?? null) : null,
+    dias_semana:    cardapio_do_dia ? (dias_semana ?? []) : [],
+  })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
@@ -29,12 +35,18 @@ export async function PATCH(req: NextRequest) {
   if (!_sess) return unauthorized()
   const sessLojaId = _sess.loja_id
 
-  const { id, nome, foto_url } = await req.json()
+  const { id, nome, foto_url, cardapio_do_dia, horario_inicio, horario_fim, dias_semana } = await req.json()
   if (!id) return NextResponse.json({ error: "id obrigatório" }, { status: 400 })
 
   const updates: Record<string, unknown> = {}
   if (nome !== undefined) updates.nome = nome.trim()
   if (foto_url !== undefined) updates.foto_url = foto_url || null
+  if (cardapio_do_dia !== undefined) {
+    updates.cardapio_do_dia = cardapio_do_dia
+    updates.horario_inicio  = cardapio_do_dia ? (horario_inicio ?? null) : null
+    updates.horario_fim     = cardapio_do_dia ? (horario_fim ?? null) : null
+    updates.dias_semana     = cardapio_do_dia ? (dias_semana ?? []) : []
+  }
 
   const { error } = await adminClient()
     .from("categorias_produto")

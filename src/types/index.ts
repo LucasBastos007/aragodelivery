@@ -3,7 +3,7 @@ export type PlanoLoja = "select" | "prime" | "black" | "gold"
 export type StatusMotoboy = "pendente" | "aprovado" | "contrato_assinado" | "ativo" | "suspenso" | "offline"
 export type StatusPedido = "aguardando_pagamento" | "pendente" | "aceito" | "preparando" | "pronto" | "aguardando_aceite" | "indo_para_loja" | "na_loja" | "em_rota" | "coletado" | "entregue" | "cancelado"
 export type FormaPagamento = "pix" | "cartao" | "dinheiro" | "maquininha" | "google_pay"
-export type CategoriaLoja = "Restaurante" | "Mercadinho" | "Farmácia" | "Outros"
+export type CategoriaLoja = "Restaurante" | "Mercadinho" | "Farmácia" | "Outros" | "Hambúrguer" | "Pizza" | "Italiana" | "Japonês" | "Lanches" | "Bebidas" | "Doces e Bolos" | "Mercado"
 
 export interface Loja {
   id: string
@@ -150,6 +150,10 @@ export interface CategoriaProduto {
   nome: string
   ordem: number
   foto_url?: string | null
+  cardapio_do_dia?: boolean
+  horario_inicio?: string | null
+  horario_fim?: string | null
+  dias_semana?: number[] | null
 }
 
 export interface ItemPedido {
@@ -176,11 +180,13 @@ export interface Pedido {
   endereco_entrega: string
   observacao: string
   criado_em: string
+  aceito_em?: string | null
+  pronto_em?: string | null
+  coletado_em?: string | null
+  entregue_em?: string | null
   nome_cliente?: string
   telefone_cliente?: string
   foto_entrega?: string
-  coletado_em?: string | null
-  entregue_em?: string | null
   loja?: Loja
   motoboy?: Motoboy
   itens?: ItemPedido[]

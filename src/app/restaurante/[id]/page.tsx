@@ -408,9 +408,25 @@ export default function RestaurantePage() {
     : []
   const semCategoria = produtos.filter(p => !p.categoria_id)
 
-  // Categorias com pelo menos 1 produto
+  function categoriaAtiva(cat: CategoriaProduto): boolean {
+    if (!cat.cardapio_do_dia) return true
+    const agora = new Date()
+    const hh = agora.getHours().toString().padStart(2, "0")
+    const mm = agora.getMinutes().toString().padStart(2, "0")
+    const horaAtual = `${hh}:${mm}`
+    const inicio = cat.horario_inicio ?? "00:00"
+    const fim = cat.horario_fim ?? "23:59"
+    if (horaAtual < inicio || horaAtual > fim) return false
+    const dias = cat.dias_semana ?? []
+    if (dias.length > 0 && !dias.includes(agora.getDay())) return false
+    return true
+  }
+
+  // Categorias com pelo menos 1 produto e dentro do horário programado
   const categoriasComProdutos = useMemo(() =>
-    categorias.filter(cat => produtos.some(p => p.categoria_id === cat.id)),
+    categorias.filter(cat =>
+      produtos.some(p => p.categoria_id === cat.id) && categoriaAtiva(cat)
+    ),
     [categorias, produtos])
 
   const catAtual = catSelecionada ? categorias.find(c => c.id === catSelecionada) : null
