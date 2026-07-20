@@ -410,6 +410,8 @@ export default function RestaurantePage() {
 
   function categoriaAtiva(cat: CategoriaProduto): boolean {
     if (!cat.cardapio_do_dia) return true
+    // sem horário definido = bloqueado indefinidamente
+    if (!cat.horario_inicio && !cat.horario_fim) return false
     const agora = new Date()
     const hh = agora.getHours().toString().padStart(2, "0")
     const mm = agora.getMinutes().toString().padStart(2, "0")
