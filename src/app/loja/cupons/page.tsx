@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
 
-type Tipo = "percentual" | "fixo"
+type Tipo = "percentual" | "fixo" | "frete_gratis"
 
 interface Cupom {
   id: string; codigo: string; tipo: Tipo; valor: number
@@ -44,11 +44,11 @@ export default function LojaCuponsPage() {
 
   async function handleCriar() {
     if (!codigo.trim()) { setErro("Informe o código do cupom"); return }
-    if (!valor || isNaN(Number(valor)) || Number(valor) <= 0) { setErro("Informe um valor válido"); return }
+    if (tipo !== "frete_gratis" && (!valor || isNaN(Number(valor)) || Number(valor) <= 0)) { setErro("Informe um valor válido"); return }
     setErro(""); setSalvando(true)
     const res = await fetch("/api/loja/cupons", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ loja_id, codigo, tipo, valor: Number(valor), pedido_minimo: Number(minimo) || 0, validade: validade || null }),
+      method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ loja_id, codigo, tipo, valor: tipo === "frete_gratis" ? 0 : Number(valor), pedido_minimo: Number(minimo) || 0, validade: validade || null }),
     })
     const json = await res.json()
     if (!res.ok) { setErro(json.error?.includes("unique") ? "Esse código já existe." : json.error); setSalvando(false); return }
@@ -58,7 +58,7 @@ export default function LojaCuponsPage() {
 
   async function toggleAtivo(c: Cupom) {
     await fetch("/api/loja/cupons", {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
+      method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: c.id, loja_id, ativo: !c.ativo }),
     })
     setCupons(prev => prev.map(x => x.id === c.id ? { ...x, ativo: !x.ativo } : x))
@@ -67,7 +67,7 @@ export default function LojaCuponsPage() {
   async function excluir(id: string) {
     if (!confirm("Excluir cupom?")) return
     await fetch("/api/loja/cupons", {
-      method: "DELETE", headers: { "Content-Type": "application/json" },
+      method: "DELETE", credentials: "include", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, loja_id }),
     })
     setCupons(prev => prev.filter(x => x.id !== id))
@@ -99,24 +99,26 @@ export default function LojaCuponsPage() {
             <div>
               <label style={{ display: "block", color: "#6B7280", fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: "uppercase" }}>Tipo</label>
               <div style={{ display: "flex", gap: 8 }}>
-                {(["percentual", "fixo"] as Tipo[]).map(t => (
+                {(["percentual", "fixo", "frete_gratis"] as Tipo[]).map(t => (
                   <button key={t} onClick={() => setTipo(t)} style={{
                     flex: 1, padding: "10px", borderRadius: 10, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13,
                     background: tipo === t ? "rgba(249,115,22,0.12)" : "#F3F4F6",
                     color: tipo === t ? "#f97316" : "#6B7280",
                     outline: tipo === t ? "1px solid rgba(249,115,22,0.4)" : "none",
                   }}>
-                    {t === "percentual" ? "% Percentual" : "R$ Fixo"}
+                    {t === "percentual" ? "% Percentual" : t === "fixo" ? "R$ Fixo" : "🛵 Frete grátis"}
                   </button>
                 ))}
               </div>
             </div>
-            <div>
-              <label style={{ display: "block", color: "#6B7280", fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: "uppercase" }}>
-                {tipo === "percentual" ? "Desconto (%)" : "Desconto (R$)"} *
-              </label>
-              <input style={inp} type="number" min="0" value={valor} onChange={e => setValor(e.target.value)} placeholder={tipo === "percentual" ? "10" : "5.00"} />
-            </div>
+            {tipo !== "frete_gratis" && (
+              <div>
+                <label style={{ display: "block", color: "#6B7280", fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: "uppercase" }}>
+                  {tipo === "percentual" ? "Desconto (%)" : "Desconto (R$)"} *
+                </label>
+                <input style={inp} type="number" min="0" value={valor} onChange={e => setValor(e.target.value)} placeholder={tipo === "percentual" ? "10" : "5.00"} />
+              </div>
+            )}
             <div>
               <label style={{ display: "block", color: "#6B7280", fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: "uppercase" }}>Pedido mínimo (R$)</label>
               <input style={inp} type="number" min="0" value={minimo} onChange={e => setMinimo(e.target.value)} placeholder="0 = sem mínimo" />
@@ -167,7 +169,7 @@ export default function LojaCuponsPage() {
                 </div>
                 <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#6B7280", flexWrap: "wrap" }}>
                   <span>
-                    {c.tipo === "percentual" ? `${c.valor}% de desconto` : `R$ ${Number(c.valor).toFixed(2)} de desconto`}
+                    {c.tipo === "percentual" ? `${c.valor}% de desconto` : c.tipo === "frete_gratis" ? "🛵 Frete grátis" : `R$ ${Number(c.valor).toFixed(2)} de desconto`}
                   </span>
                   {c.pedido_minimo > 0 && <span>· Mín. R$ {Number(c.pedido_minimo).toFixed(2)}</span>}
                   {c.validade && <span>· Válido até {new Date(c.validade + "T12:00:00").toLocaleDateString("pt-BR")}</span>}

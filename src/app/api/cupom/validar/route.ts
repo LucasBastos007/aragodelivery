@@ -23,8 +23,8 @@ export async function GET(req: NextRequest) {
 
   // Busca cupom global (loja_id nulo) ou da loja específica
   const queries = [
-    client.from("cupons").select("id, codigo, tipo, valor, pedido_minimo, validade, ativo, usos, usos_maximos").eq("codigo", codigo).is("loja_id", null).eq("ativo", true).limit(1),
-    ...(loja_id ? [client.from("cupons").select("id, codigo, tipo, valor, pedido_minimo, validade, ativo, usos, usos_maximos").eq("codigo", codigo).eq("loja_id", loja_id).eq("ativo", true).limit(1)] : []),
+    client.from("cupons").select("id, codigo, tipo, valor, pedido_minimo, validade, ativo, usos, max_usos").eq("codigo", codigo).is("loja_id", null).eq("ativo", true).limit(1),
+    ...(loja_id ? [client.from("cupons").select("id, codigo, tipo, valor, pedido_minimo, validade, ativo, usos, max_usos").eq("codigo", codigo).eq("loja_id", loja_id).eq("ativo", true).limit(1)] : []),
   ]
   const results = await Promise.all(queries)
   if (results.some(r => r.error)) {
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
 
   if (!cupom || !cupom.ativo) return NextResponse.json({ error: "Cupom inválido ou expirado." }, { status: 404 })
   if (cupom.validade && new Date(cupom.validade) < new Date()) return NextResponse.json({ error: "Este cupom expirou." }, { status: 422 })
-  if (cupom.usos_maximos != null && (cupom.usos ?? 0) >= cupom.usos_maximos) {
+  if (cupom.max_usos != null && (cupom.usos ?? 0) >= cupom.max_usos) {
     return NextResponse.json({ error: "Este cupom já atingiu o limite de usos." }, { status: 422 })
   }
   if (cupom.pedido_minimo > 0 && subtotal < cupom.pedido_minimo) {

@@ -182,21 +182,25 @@ export async function POST(req: NextRequest) {
   if (cupom_codigo) {
     const { data: cupom } = await sb
       .from("cupons")
-      .select("id, tipo, valor, pedido_minimo, validade, ativo, usos, usos_maximos")
+      .select("id, tipo, valor, pedido_minimo, validade, ativo, usos, max_usos")
       .eq("codigo", cupom_codigo.toUpperCase().trim())
       .or(`loja_id.is.null,loja_id.eq.${loja_id}`)
       .maybeSingle()
 
     if (cupom && cupom.ativo) {
       const expirado = cupom.validade && new Date(cupom.validade) < new Date()
-      const lotado   = cupom.usos_maximos != null && (cupom.usos ?? 0) >= cupom.usos_maximos
+      const lotado   = cupom.max_usos != null && (cupom.usos ?? 0) >= cupom.max_usos
       const minOk    = !cupom.pedido_minimo || subtotal >= cupom.pedido_minimo
 
       if (!expirado && !lotado && minOk) {
         cupomId = cupom.id
-        desconto = cupom.tipo === "percentual"
-          ? Math.round(subtotal * (cupom.valor / 100) * 100) / 100
-          : Math.min(cupom.valor, subtotal)
+        if (cupom.tipo === "frete_gratis") {
+          taxa_entrega = 0
+        } else {
+          desconto = cupom.tipo === "percentual"
+            ? Math.round(subtotal * (cupom.valor / 100) * 100) / 100
+            : Math.min(cupom.valor, subtotal)
+        }
       }
     }
   }
@@ -262,7 +266,7 @@ export async function POST(req: NextRequest) {
 
   // 10. Incrementa uso do cupom (server-side, com service role key) — compare-and-swap: o
   // update só é aceito se "usos" ainda for o mesmo valor lido, senão outro pedido concorrente
-  // já incrementou e tentamos de novo com o valor atual (evita passar de usos_maximos sob
+  // já incrementou e tentamos de novo com o valor atual (evita passar de max_usos sob
   // concorrência, já que não temos acesso a criar uma função de incremento atômico no banco).
   if (cupomId) {
     for (let tentativa = 0; tentativa < 3; tentativa++) {
