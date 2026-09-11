@@ -634,25 +634,28 @@ export default function MotoboyPage() {
   const [raioDisplay,      setRaioDisplay]      = useState<number>(20)
   const [fotoMotoboy,      setFotoMotoboy]      = useState<string | null>(null)
   const [sosModal,         setSosModal]         = useState(false)
-  const [maxPedidos,       setMaxPedidos]       = useState(2)
+  const [maxPedidosGlobal, setMaxPedidosGlobal] = useState(2)
+  const [limitePedidosMotoboy, setLimitePedidosMotoboy] = useState<number | null>(null)
+  const maxPedidos = limitePedidosMotoboy ?? maxPedidosGlobal
   const [segundoAberto,    setSegundoAberto]    = useState(false)
   const [disponiveisAberto, setDisponiveisAberto] = useState(false)
 
-  // ── Carrega config de max pedidos ──────────────────────────────────────────
+  // ── Carrega config de max pedidos (usada só se o motoboy não tiver limite próprio) ──
   useEffect(() => {
     supabase.from("configuracoes")
       .select("valor")
       .eq("chave", "max_pedidos_motoboy")
       .single()
-      .then(({ data }) => { if (data?.valor) setMaxPedidos(parseInt(data.valor, 10)) })
+      .then(({ data }) => { if (data?.valor) setMaxPedidosGlobal(parseInt(data.valor, 10)) })
   }, [])
 
   // ── Carrega motoboy ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!motoboy_id) return
-    supabase.from("motoboys").select("disponivel, lat, lng, raio_km, foto").eq("id", motoboy_id).single()
+    supabase.from("motoboys").select("disponivel, lat, lng, raio_km, foto, limite_pedidos").eq("id", motoboy_id).single()
       .then(({ data }) => {
         if (data) {
+          setLimitePedidosMotoboy(data.limite_pedidos ?? null)
           // Só sincroniza o estado do DB se não houver preferência local salva
           // (garante que a preferência do usuário não seja sobrescrita ao trocar de aba)
           const localPref = localStorage.getItem("motoboy_online")

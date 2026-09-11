@@ -24,13 +24,22 @@ export async function POST(req: NextRequest) {
 
   const sb = adminClient()
 
-  // Busca o limite de pedidos simultâneos configurado
-  const { data: cfgRow } = await sb
-    .from("configuracoes")
-    .select("valor")
-    .eq("chave", "max_pedidos_motoboy")
+  // Limite por motoboy (override individual) tem prioridade sobre o limite global
+  const { data: motoboyRow } = await sb
+    .from("motoboys")
+    .select("limite_pedidos")
+    .eq("id", motoboy_id)
     .single()
-  const maxPedidos = cfgRow ? parseInt(cfgRow.valor, 10) : 2
+
+  let maxPedidos = motoboyRow?.limite_pedidos ?? null
+  if (maxPedidos === null) {
+    const { data: cfgRow } = await sb
+      .from("configuracoes")
+      .select("valor")
+      .eq("chave", "max_pedidos_motoboy")
+      .single()
+    maxPedidos = cfgRow ? parseInt(cfgRow.valor, 10) : 2
+  }
 
   // Conta pedidos ativos do motoboy
   const { count } = await sb
