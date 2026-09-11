@@ -152,6 +152,54 @@ function ConfirmarCartaoBtn({ pedidoId, onConfirmado }: { pedidoId: string; onCo
   )
 }
 
+const STATUSES_FORCAVEIS: readonly string[] = ["pronto", "aguardando_aceite", "indo_para_loja", "na_loja", "em_rota", "coletado"]
+
+function ForcarEntregaBtn({ pedidoId, onForcado }: { pedidoId: string; onForcado: () => void }) {
+  const [confirmando, setConfirmando] = useState(false)
+  const [loading, setLoading] = useState(false)
+
+  async function forcar() {
+    setLoading(true)
+    const r = await fetch("/api/admin/completar-pedido", {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pedido_id: pedidoId }),
+    }).then(r => r.json()).catch(() => ({}))
+    setLoading(false)
+    setConfirmando(false)
+    if (r.ok) onForcado()
+  }
+
+  if (confirmando) {
+    return (
+      <div style={{ display: "flex", gap: 3 }}>
+        <button onClick={forcar} disabled={loading} style={{
+          fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 5, border: "none",
+          background: "#22c55e", color: "white", cursor: loading ? "not-allowed" : "pointer",
+        }}>
+          {loading ? "..." : "Confirmar entrega"}
+        </button>
+        <button onClick={() => setConfirmando(false)} style={{
+          fontSize: 10, padding: "2px 6px", borderRadius: 5, border: "1px solid #e2e8f0",
+          background: "#f8fafc", color: "#64748b", cursor: "pointer",
+        }}>
+          Cancelar
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <button onClick={() => setConfirmando(true)} title="Forçar avanço para Entregue" style={{
+      fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 6,
+      border: "1px solid rgba(34,197,94,0.35)", background: "rgba(34,197,94,0.07)",
+      color: "#16a34a", cursor: "pointer", whiteSpace: "nowrap",
+    }}>
+      ✅ Avançar
+    </button>
+  )
+}
+
 const STATUS_LABEL: Record<StatusPedido, string> = {
   aguardando_pagamento: "Aguard. pagamento",
   pendente:          "Pendente",
@@ -645,6 +693,15 @@ export default function PedidosPage() {
                             <BotaoWA telefone={p.telefone_cliente} label="Cliente" msg={`Pedido *#${p.codigo}*`} />
                             <BotaoWA telefone={(p.motoboy as any)?.telefone} label="Motoboy" msg={`Entrega *#${p.codigo}*`} />
                           </div>
+
+                          {/* Forçar avanço p/ pedidos travados no fluxo de entrega */}
+                          {STATUSES_FORCAVEIS.includes(p.status) && (
+                            <div style={{ marginTop: 6 }} onClick={e => e.stopPropagation()}>
+                              <ForcarEntregaBtn pedidoId={p.id} onForcado={() => setPedidos(prev =>
+                                prev.map(x => x.id === p.id ? { ...x, status: "entregue" as StatusPedido, entregue_em: new Date().toISOString() } as Pedido : x)
+                              )} />
+                            </div>
+                          )}
 
                           {p.status === "aguardando_pagamento" && p.forma_pagamento === "cartao" && (
                             <div onClick={e => e.stopPropagation()}>
