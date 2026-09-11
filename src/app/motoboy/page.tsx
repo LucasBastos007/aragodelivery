@@ -56,10 +56,19 @@ function urlBase64ToUint8Array(base64String: string) {
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)))
 }
 
+// Aragoiânia-GO — mesmo centro usado no checkout (LAT_DEFAULT/LNG_DEFAULT). Sem esse viés
+// geográfico, um endereço com nome de rua comum (ex: "Rua 15") pode geocodificar pra uma
+// via de mesmo nome numa cidade bem maior e mais "importante" no resto do Brasil, jogando
+// o pino do motoboy pro lugar errado no mapa.
+const GEOCODE_BIAS_LAT = -17.6547
+const GEOCODE_BIAS_LNG = -49.4378
+
 async function geocodeAddress(address: string): Promise<[number, number] | null> {
   try {
+    // Não força a cidade no texto da busca (a região atendida não é só Aragoiânia — ver
+    // tabela_frete por município) — só empurra o resultado pra perto via bias de lat/lon.
     const q   = encodeURIComponent(`${address}, Brasil`)
-    const res = await fetch(`/api/geocode/search?q=${q}`)
+    const res = await fetch(`/api/geocode/search?q=${q}&lat=${GEOCODE_BIAS_LAT}&lon=${GEOCODE_BIAS_LNG}`)
     const data = await res.json()
     if (Array.isArray(data) && data[0]?.lat && data[0]?.lon) {
       return [parseFloat(data[0].lat), parseFloat(data[0].lon)]

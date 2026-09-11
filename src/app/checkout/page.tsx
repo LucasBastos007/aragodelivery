@@ -334,9 +334,10 @@ export default function CheckoutPage() {
     setEnderecoSalvo(addrBase)
     geoRef.current = { geo: { rua: addrBase.rua, bairro: addrBase.bairro, cidade: addrBase.cidade, lat: 0, lng: 0 }, numero: addrBase.numero, complemento: addrBase.complemento }
 
-    // Geocodifica para obter coordenadas reais e permitir cálculo de frete
+    // Geocodifica para obter coordenadas reais e permitir cálculo de frete — bias pela região
+    // atendida, senão um nome de rua comum pode resolver pra outra cidade bem mais populosa.
     const query = [perfil.endereco_rua, perfil.endereco_numero, perfil.endereco_bairro, perfil.endereco_cidade].filter(Boolean).join(", ")
-    fetch(`/api/geocode/search?q=${encodeURIComponent(query)}`)
+    fetch(`/api/geocode/search?q=${encodeURIComponent(query)}&lat=${LAT_DEFAULT}&lon=${LNG_DEFAULT}`)
       .then(r => r.json())
       .then(results => {
         if (!results[0]) return
@@ -401,7 +402,7 @@ export default function CheckoutPage() {
     if (lat && lng) { setLojaCoords({ lat, lng }); return }
     if (!lojaData.endereco) return
     setTaxaCalculando(true)
-    fetch(`/api/geocode/search?q=${encodeURIComponent(lojaData.endereco)}`)
+    fetch(`/api/geocode/search?q=${encodeURIComponent(lojaData.endereco)}&lat=${LAT_DEFAULT}&lon=${LNG_DEFAULT}`)
       .then(r => r.json())
       .then((results: any[]) => {
         if (results[0]) {
