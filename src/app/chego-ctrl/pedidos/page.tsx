@@ -153,6 +153,9 @@ function ConfirmarCartaoBtn({ pedidoId, onConfirmado }: { pedidoId: string; onCo
 }
 
 const STATUSES_FORCAVEIS: readonly string[] = ["pronto", "aguardando_aceite", "indo_para_loja", "na_loja", "em_rota", "coletado"]
+// /api/escalada só faz rebroadcast de verdade nessas duas — antes do motoboy aceitar. Depois
+// disso (indo_para_loja em diante) o backend não reatribui, só o "Forçar Avanço" se aplica.
+const STATUSES_REESCALAVEIS: readonly string[] = ["pronto", "aguardando_aceite"]
 
 function ForcarEntregaBtn({ pedidoId, onForcado }: { pedidoId: string; onForcado: () => void }) {
   const [confirmando, setConfirmando] = useState(false)
@@ -247,8 +250,9 @@ function ChamarOutroMotoboyBtn({ pedidoId, motoboyAtualId, onChamado }: { pedido
       body: JSON.stringify({ pedido_id: pedidoId, motoboy_recusou_id: motoboyAtualId ?? undefined }),
     }).then(r => r.json()).catch(() => ({}))
     setLoading(false)
-    if (r.ok) { setMsg(r.msg ? "Ninguém disponível" : "Chamando…"); onChamado() }
-    else setMsg("Erro")
+    if (r.ok && r.broadcast) { setMsg(`Chamando ${r.broadcast} motoboy(s)…`); onChamado() }
+    else if (r.ok) setMsg(r.msg ?? "Nada a fazer")
+    else setMsg(r.error ?? "Erro")
   }
 
   return (
@@ -785,14 +789,16 @@ export default function PedidosPage() {
                           )}
 
                           {/* Chamar outro motoboy + Forçar avanço p/ pedidos travados no fluxo de entrega */}
-                          {STATUSES_FORCAVEIS.includes(p.status) && (
+                          {(STATUSES_REESCALAVEIS.includes(p.status) || STATUSES_FORCAVEIS.includes(p.status)) && (
                             <div style={{ marginTop: 6, display: "flex", gap: 4, flexWrap: "wrap" }} onClick={e => e.stopPropagation()}>
-                              <ChamarOutroMotoboyBtn pedidoId={p.id} motoboyAtualId={p.motoboy_id} onChamado={() => setPedidos(prev =>
-                                prev.map(x => x.id === p.id ? { ...x, status: "aguardando_aceite" as StatusPedido, motoboy_id: null } as Pedido : x)
-                              )} />
-                              <ForcarEntregaBtn pedidoId={p.id} onForcado={() => setPedidos(prev =>
-                                prev.map(x => x.id === p.id ? { ...x, status: "entregue" as StatusPedido, entregue_em: new Date().toISOString() } as Pedido : x)
-                              )} />
+                              {STATUSES_REESCALAVEIS.includes(p.status) && (
+                                <ChamarOutroMotoboyBtn pedidoId={p.id} motoboyAtualId={p.motoboy_id} onChamado={() => load()} />
+                              )}
+                              {STATUSES_FORCAVEIS.includes(p.status) && (
+                                <ForcarEntregaBtn pedidoId={p.id} onForcado={() => setPedidos(prev =>
+                                  prev.map(x => x.id === p.id ? { ...x, status: "entregue" as StatusPedido, entregue_em: new Date().toISOString() } as Pedido : x)
+                                )} />
+                              )}
                             </div>
                           )}
 
