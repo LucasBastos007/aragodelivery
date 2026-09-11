@@ -442,13 +442,17 @@ export default function PedidosPage() {
 
   async function excluirPedido(id: string) {
     setDeletando(true)
-    await fetch("/api/chego-ctrl/excluir-pedido", {
+    const res = await fetch("/api/chego-ctrl/excluir-pedido", {
       method: "DELETE", credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pedido_id: id }),
-    })
-    setPedidos(prev => prev.filter(p => p.id !== id))
-    setConfirmDelete(null)
+    }).catch(() => null)
+    // Só remove da tela se o servidor confirmou — senão a próxima atualização
+    // automática (15s) traz o pedido de volta e parece que "voltou sozinho".
+    if (res?.ok) {
+      setPedidos(prev => prev.filter(p => p.id !== id))
+      setConfirmDelete(null)
+    }
     setDeletando(false)
   }
   const [periodo, setPeriodo]  = useState<Periodo>("hoje")
