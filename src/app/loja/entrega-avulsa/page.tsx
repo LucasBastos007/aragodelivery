@@ -90,6 +90,7 @@ export default function EntregaAvulsaPage() {
   const loja_id = sessao?.role === "lojista" ? (sessao as any).loja_id : null
 
   const [plano, setPlano]         = useState<string | null>(null)
+  const [avulsaLiberada, setAvulsaLiberada] = useState(false)
   const [lojaCoords, setLojaCoords] = useState<{ lat: number | null; lng: number | null; taxa_entrega: number | null } | null>(null)
   const [loading, setLoading]     = useState(true)
   const [enviando, setEnviando]   = useState(false)
@@ -134,10 +135,11 @@ export default function EntregaAvulsaPage() {
   async function carregar() {
     if (!loja_id) return
     const [{ data: lojaData }, { data: entregasData }] = await Promise.all([
-      supabase.from("lojas").select("plano, lat, lng, taxa_entrega").eq("id", loja_id).single(),
+      supabase.from("lojas").select("plano, lat, lng, taxa_entrega, entrega_avulsa_liberada").eq("id", loja_id).single(),
       supabase.from("entregas_avulsas").select("*").eq("loja_id", loja_id).order("criado_em", { ascending: false }).limit(50),
     ])
     setPlano(lojaData?.plano ?? null)
+    setAvulsaLiberada(lojaData?.entrega_avulsa_liberada ?? false)
     setLojaCoords({ lat: lojaData?.lat ?? null, lng: lojaData?.lng ?? null, taxa_entrega: lojaData?.taxa_entrega ?? null })
     setEntregas(entregasData ?? [])
     setLoading(false)
@@ -379,7 +381,7 @@ export default function EntregaAvulsaPage() {
     )
   }
 
-  if (!plano || !PLANOS_COM_AVULSA.includes(plano)) {
+  if (!avulsaLiberada && (!plano || !PLANOS_COM_AVULSA.includes(plano))) {
     return (
       <div style={{ padding: "40px 24px", maxWidth: 480, margin: "0 auto", textAlign: "center" }}>
         <div style={{ fontSize: 48, marginBottom: 16 }}>🛵</div>

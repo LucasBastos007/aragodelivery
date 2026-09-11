@@ -34,6 +34,7 @@ export interface Loja {
   total_avaliacoes?: number | null
   plano?: PlanoLoja | null
   plano_ativo_desde?: string | null
+  entrega_avulsa_liberada?: boolean
   asaas_customer_id?: string | null
   asaas_subscription_id?: string | null
   asaas_wallet_id?: string | null

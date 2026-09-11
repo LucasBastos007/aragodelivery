@@ -91,12 +91,12 @@ export async function POST(req: NextRequest) {
     }
 
     const { data: loja } = await admin
-      .from("lojas").select("nome, plano, status, lat, lng").eq("id", loja_id).single()
+      .from("lojas").select("nome, plano, status, lat, lng, entrega_avulsa_liberada").eq("id", loja_id).single()
 
     if (!loja || loja.status !== "ativo") {
       return NextResponse.json({ error: "Loja não está ativa" }, { status: 403 })
     }
-    if (!loja.plano || loja.plano === "gold") {
+    if (!loja.entrega_avulsa_liberada && (!loja.plano || loja.plano === "gold")) {
       return NextResponse.json({ error: "Plano não inclui entrega avulsa" }, { status: 403 })
     }
 
