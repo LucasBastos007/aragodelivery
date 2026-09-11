@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
   const produtoIds = items.map((i: any) => i.produto_id)
   const { data: produtos, error: prodErr } = await sb
     .from("produtos")
-    .select("id, nome, preco, disponivel, loja_id")
+    .select("id, nome, preco, disponivel, loja_id, adicionais")
     .in("id", produtoIds)
 
   if (prodErr || !produtos?.length) {
@@ -131,10 +131,30 @@ export async function POST(req: NextRequest) {
     if (!item.quantidade || item.quantidade < 1) return NextResponse.json({ error: "Quantidade inválida." }, { status: 422 })
   }
 
-  // 3. Calcula subtotal com preços reais do banco
-  const subtotal = items.reduce((sum: number, item: any) => {
+  // 3. Calcula subtotal com preços reais do banco — inclusive dos adicionais, nunca
+  // confiando no "preco"/"nome" que vêm no body (cliente pode mandar qualquer valor).
+  // Preço do adicional é por unidade do item, igual ao que o carrinho já mostra pro
+  // cliente (restaurante/[id]/page.tsx: preco = prod.preco + totalAdicionais, somado
+  // ao carrinho quantidade vezes) — soma na mesma multiplicação por quantidade abaixo.
+  function adicionaisValidados(produto: any, adicionaisPedidos: any[]): { id: string; nome: string; preco: number }[] {
+    if (!Array.isArray(adicionaisPedidos) || adicionaisPedidos.length === 0) return []
+    const catalogo: { id: string; nome: string; preco: number }[] = []
+    for (const entry of produto.adicionais ?? []) {
+      if (Array.isArray(entry.itens)) catalogo.push(...entry.itens) // grupo de adicionais
+      else catalogo.push(entry)                                     // adicional avulso
+    }
+    return adicionaisPedidos
+      .map((a: any) => catalogo.find(c => c.id === a.id))
+      .filter(Boolean) as { id: string; nome: string; preco: number }[]
+  }
+
+  const adicionaisPorItem = new Map<number, { id: string; nome: string; preco: number }[]>()
+  const subtotal = items.reduce((sum: number, item: any, idx: number) => {
     const produto = produtos.find((p: any) => p.id === item.produto_id)!
-    return sum + Number(produto.preco) * Number(item.quantidade)
+    const reais = adicionaisValidados(produto, item.adicionais)
+    adicionaisPorItem.set(idx, reais)
+    const precoAdicionais = reais.reduce((s, a) => s + Number(a.preco), 0)
+    return sum + (Number(produto.preco) + precoAdicionais) * Number(item.quantidade)
   }, 0)
 
   // 4. Taxa de entrega: tabela fixa por município tem prioridade sobre distância
@@ -219,9 +239,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Erro ao criar pedido." }, { status: 500 })
   }
 
-  // 9. Insere itens com preços do banco
+  // 9. Insere itens com preços do banco — adicionais também validados (nunca o que o
+  // cliente mandou), senão o cupom impresso/painel admin mostra um preço de adicional
+  // diferente do que foi de fato somado no subtotal calculado acima.
   await sb.from("itens_pedido").insert(
-    items.map((item: any) => {
+    items.map((item: any, idx: number) => {
       const produto = produtos.find((p: any) => p.id === item.produto_id)!
       return {
         pedido_id:  pedido.id,
@@ -230,7 +252,7 @@ export async function POST(req: NextRequest) {
         preco:      Number(produto.preco),
         quantidade: Number(item.quantidade),
         observacao: item.observacao ?? "",
-        adicionais: item.adicionais ?? [],
+        adicionais: adicionaisPorItem.get(idx) ?? [],
       }
     })
   )

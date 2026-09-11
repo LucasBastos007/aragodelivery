@@ -12,13 +12,19 @@ function adminSb() {
 }
 
 export async function POST(req: NextRequest) {
-  const { pedido_id, valor, nome, telefone, email, cpf_cliente, loja_id } = await req.json()
+  const { pedido_id, nome, telefone, email, cpf_cliente, loja_id } = await req.json()
 
-  if (!pedido_id || !valor || !nome) {
+  if (!pedido_id || !nome) {
     return NextResponse.json({ error: "Dados incompletos" }, { status: 400 })
   }
 
   const sb = adminSb()
+
+  // Valor sempre vem do pedido já validado no servidor — nunca confiar no que o
+  // cliente manda no body, senão dá pra gerar um PIX de qualquer valor.
+  const { data: pedidoDb } = await sb.from("pedidos").select("total").eq("id", pedido_id).single()
+  if (!pedidoDb) return NextResponse.json({ error: "Pedido não encontrado" }, { status: 404 })
+  const valor = pedidoDb.total
 
   // Monta split se a loja tiver subconta Asaas
   let split: AsaasSplit | undefined

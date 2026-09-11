@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
-import { useIsMobile } from "@/lib/use-mobile"
 import type { Pedido, StatusPedido } from "@/types"
 
 const WA_SVG = (
@@ -201,6 +200,71 @@ function ForcarEntregaBtn({ pedidoId, onForcado }: { pedidoId: string; onForcado
   )
 }
 
+// Etapas antes do motoboy entrar em cena (pendente → aceito → preparando → pronto) —
+// normalmente quem avança é a loja; isso destrava quando ela está lenta/off.
+const STATUSES_AVANCAVEIS_ADMIN: readonly string[] = ["pendente", "aceito", "preparando"]
+const PROXIMO_LABEL_ADMIN: Record<string, string> = {
+  pendente:   "✓ Aceitar",
+  aceito:     "Iniciar preparo",
+  preparando: "Marcar pronto",
+}
+
+function AvancarPedidoBtn({ pedidoId, statusAtual, onAvancado }: { pedidoId: string; statusAtual: string; onAvancado: (novoStatus: string) => void }) {
+  const [loading, setLoading] = useState(false)
+
+  async function avancar() {
+    setLoading(true)
+    const r = await fetch("/api/admin/avancar-pedido", {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pedido_id: pedidoId }),
+    }).then(r => r.json()).catch(() => ({}))
+    setLoading(false)
+    if (r.ok) onAvancado(r.pedido.status)
+  }
+
+  return (
+    <button onClick={avancar} disabled={loading} title="Avançar pra próxima etapa (no lugar da loja)" style={{
+      fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 6,
+      border: "1px solid rgba(34,197,94,0.35)", background: "rgba(34,197,94,0.07)",
+      color: "#16a34a", cursor: loading ? "not-allowed" : "pointer", whiteSpace: "nowrap",
+    }}>
+      {loading ? "..." : `✅ ${PROXIMO_LABEL_ADMIN[statusAtual] ?? "Avançar"}`}
+    </button>
+  )
+}
+
+function ChamarOutroMotoboyBtn({ pedidoId, motoboyAtualId, onChamado }: { pedidoId: string; motoboyAtualId?: string | null; onChamado: () => void }) {
+  const [loading, setLoading] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  async function chamar() {
+    setLoading(true)
+    setMsg(null)
+    const r = await fetch("/api/escalada", {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pedido_id: pedidoId, motoboy_recusou_id: motoboyAtualId ?? undefined }),
+    }).then(r => r.json()).catch(() => ({}))
+    setLoading(false)
+    if (r.ok) { setMsg(r.msg ? "Ninguém disponível" : "Chamando…"); onChamado() }
+    else setMsg("Erro")
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <button onClick={chamar} disabled={loading} title="Chamar outro motoboy (rebroadcast)" style={{
+        fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 6,
+        border: "1px solid rgba(249,115,22,0.35)", background: "rgba(249,115,22,0.07)",
+        color: "#c2410c", cursor: loading ? "not-allowed" : "pointer", whiteSpace: "nowrap",
+      }}>
+        {loading ? "..." : "🛵 Chamar outro"}
+      </button>
+      {msg && <p style={{ fontSize: 9, color: "#94a3b8" }}>{msg}</p>}
+    </div>
+  )
+}
+
 const STATUS_LABEL: Record<StatusPedido, string> = {
   aguardando_pagamento: "Aguard. pagamento",
   pendente:          "Pendente",
@@ -365,7 +429,6 @@ function rangeDatas(periodo: Periodo, ci: string, cf: string) {
 }
 
 export default function PedidosPage() {
-  const isMobile = useIsMobile()
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [avulsas, setAvulsas] = useState<any[]>([])
   const [lojaFone,    setLojaFone]    = useState<Record<string, string>>({})
@@ -525,11 +588,9 @@ export default function PedidosPage() {
         <p style={{ color: "#94a3b8", fontSize: 13 }}>Carregando...</p>
       ) : (
         <>
-          {/* Board horizontal no desktop; colunas empilhadas em largura total no mobile */}
-          <div style={isMobile
-            ? { display: "flex", flexDirection: "column", gap: 20 }
-            : { display: "flex", gap: 14, overflowX: "auto", paddingBottom: 16, alignItems: "flex-start" }
-          }>
+          {/* Board sempre horizontal (lado a lado), com scroll — inclusive no mobile,
+              pra acompanhar o pipeline completo mesmo com volume alto de pedidos */}
+          <div style={{ display: "flex", gap: 14, overflowX: "auto", paddingBottom: 16, alignItems: "flex-start" }}>
             {COLUNAS.map(col => {
               const cards = pedidos
                 .filter(p => (col.statuses as readonly string[]).includes(p.status))
@@ -539,10 +600,7 @@ export default function PedidosPage() {
                 .sort((a: any, b: any) => b.criado_em.localeCompare(a.criado_em))
               const totalCol = cards.length + avulsasCol.length
               return (
-                <div key={col.id} style={isMobile
-                  ? { width: "100%", display: "flex", flexDirection: "column", gap: 10 }
-                  : { minWidth: 240, maxWidth: 260, flex: "0 0 250px", display: "flex", flexDirection: "column", gap: 10 }
-                }>
+                <div key={col.id} style={{ minWidth: 240, maxWidth: 260, flex: "0 0 250px", display: "flex", flexDirection: "column", gap: 10 }}>
                   {/* Cabeçalho da coluna */}
                   <div style={{
                     padding: "8px 12px", borderRadius: 10,
@@ -713,9 +771,21 @@ export default function PedidosPage() {
                             <BotaoWA telefone={(p.motoboy as any)?.telefone} label="Motoboy" msg={`Entrega *#${p.codigo}*`} />
                           </div>
 
-                          {/* Forçar avanço p/ pedidos travados no fluxo de entrega */}
+                          {/* Avançar etapa (pendente/aceito/preparando) no lugar da loja */}
+                          {STATUSES_AVANCAVEIS_ADMIN.includes(p.status) && (
+                            <div style={{ marginTop: 6, display: "flex", gap: 4 }} onClick={e => e.stopPropagation()}>
+                              <AvancarPedidoBtn pedidoId={p.id} statusAtual={p.status} onAvancado={novoStatus => setPedidos(prev =>
+                                prev.map(x => x.id === p.id ? { ...x, status: novoStatus as StatusPedido } as Pedido : x)
+                              )} />
+                            </div>
+                          )}
+
+                          {/* Chamar outro motoboy + Forçar avanço p/ pedidos travados no fluxo de entrega */}
                           {STATUSES_FORCAVEIS.includes(p.status) && (
-                            <div style={{ marginTop: 6 }} onClick={e => e.stopPropagation()}>
+                            <div style={{ marginTop: 6, display: "flex", gap: 4, flexWrap: "wrap" }} onClick={e => e.stopPropagation()}>
+                              <ChamarOutroMotoboyBtn pedidoId={p.id} motoboyAtualId={p.motoboy_id} onChamado={() => setPedidos(prev =>
+                                prev.map(x => x.id === p.id ? { ...x, status: "aguardando_aceite" as StatusPedido, motoboy_id: null } as Pedido : x)
+                              )} />
                               <ForcarEntregaBtn pedidoId={p.id} onForcado={() => setPedidos(prev =>
                                 prev.map(x => x.id === p.id ? { ...x, status: "entregue" as StatusPedido, entregue_em: new Date().toISOString() } as Pedido : x)
                               )} />
