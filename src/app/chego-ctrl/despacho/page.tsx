@@ -312,6 +312,7 @@ export default function AdminDespachoPage() {
       supabase.from("pedidos")
         .select("*, loja:lojas(nome, endereco, lat, lng), itens:itens_pedido(*)")
         .eq("status", "pronto").is("motoboy_id", null)
+        .not("endereco_entrega", "ilike", "%Retirada%") // retirada na loja nunca precisa de motoboy
         .order("criado_em", { ascending: true }),
       supabase.from("motoboys")
         .select("id, nome, disponivel, status, lat, lng, veiculo")

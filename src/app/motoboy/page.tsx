@@ -883,6 +883,7 @@ export default function MotoboyPage() {
       supabase.from("pedidos")
         .select("*, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng)")
         .eq("status", "pronto").is("motoboy_id", null)
+        .not("endereco_entrega", "ilike", "%Retirada%") // retirada na loja nunca precisa de motoboy
         .order("criado_em", { ascending: true }),
       supabase.from("pedidos")
         .select("*, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng)")

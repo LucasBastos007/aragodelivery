@@ -35,13 +35,15 @@ export async function POST(req: NextRequest) {
 
   const sb = adminClient()
 
-  // Atualização atômica: só despacha se ainda estiver pronto e sem motoboy
+  // Atualização atômica: só despacha se ainda estiver pronto, sem motoboy e não for retirada
+  // na loja (retirada nunca precisa de entregador).
   const { data, error } = await sb
     .from("pedidos")
     .update({ motoboy_id, status: "aguardando_aceite" })
     .eq("id", pedido_id)
     .eq("status", "pronto")
     .is("motoboy_id", null)
+    .not("endereco_entrega", "ilike", "%Retirada%")
     .select("id, codigo, taxa_entrega")
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
