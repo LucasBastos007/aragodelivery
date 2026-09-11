@@ -17,6 +17,8 @@ const PAGAMENTOS: { value: FormaPagamento; label: string; platforms: ("ios"|"and
   { value: "pix",        label: "PIX",        platforms: ["ios","android","other"] },
   { value: "cartao",     label: "Cartão",     platforms: ["ios","android","other"] },
   { value: "google_pay", label: "Google Pay", platforms: ["android"] },
+  { value: "dinheiro",   label: "Dinheiro",   platforms: ["ios","android","other"] },
+  { value: "maquininha", label: "Maquininha", platforms: ["ios","android","other"] },
 ]
 
 // Logo PIX — diamante arredondado + 2 lentes diagonais brancas (padrão oficial BCB)
@@ -74,6 +76,8 @@ function PaymentIcon({ method }: { method: FormaPagamento }) {
   if (method === "pix")        return <PixLogo />
   if (method === "cartao")     return <CardLogo />
   if (method === "google_pay") return <GooglePayLogo />
+  if (method === "dinheiro")   return <span style={{ fontSize: 22 }}>💵</span>
+  if (method === "maquininha") return <span style={{ fontSize: 22 }}>💳</span>
   return null
 }
 
@@ -1356,6 +1360,8 @@ export default function CheckoutPage() {
                     {p.value === "pix"        && "Confirmação imediata · sem taxas"}
                     {p.value === "cartao"     && (cartaoSalvo ? `•••• ${cartaoSalvo.last4} — ${cartaoSalvo.nome}` : "Crédito ou débito")}
                     {p.value === "google_pay" && "Pague com sua conta Google"}
+                    {p.value === "dinheiro"   && "Pague em dinheiro na entrega"}
+                    {p.value === "maquininha" && "Cartão na maquininha do entregador"}
                   </p>
                 </div>
 

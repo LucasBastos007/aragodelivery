@@ -3,12 +3,11 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
+import { ganhoMotoboy } from "@/lib/comissao"
 
 // Calcula o valor líquido que o motoboy recebe após a taxa da plataforma
-function ganhoLiquido(taxa: number): number {
-  if (taxa <= 0) return 0
-  const fee = taxa > 30 ? 3 : taxa > 20 ? 2 : 1
-  return Math.max(0, taxa - fee)
+function ganhoLiquido(taxa: number, criadoEm?: string | null): number {
+  return ganhoMotoboy(taxa, criadoEm)
 }
 import type { Pedido } from "@/types"
 import { useJsApiLoader } from "@react-google-maps/api"
@@ -776,7 +775,7 @@ export default function MotoboyPage() {
     ]).then(([{ data: pedidosData }, { data: avulsasData }]) => {
       const pedidos = pedidosData ?? []
       const avulsas = avulsasData ?? []
-      setGanhosDia([...pedidos, ...avulsas].reduce((s: number, p: any) => s + ganhoLiquido(p.taxa_entrega ?? 0), 0))
+      setGanhosDia([...pedidos, ...avulsas].reduce((s: number, p: any) => s + ganhoLiquido(p.taxa_entrega ?? 0, p.criado_em), 0))
       setCorridasDia(pedidos.length + avulsas.length)
     })
   }, [motoboy_id])
@@ -904,10 +903,13 @@ export default function MotoboyPage() {
         setEmAndamento(dados)
       }
     }
-    // Polling fallback: exibe oferta se realtime perdeu o evento
+    // Polling fallback: exibe oferta se realtime perdeu o evento — toca o mesmo
+    // som de alerta do caminho realtime, senão a corrida aparece muda quando o
+    // WebSocket cai (comum com o app em segundo plano ou rede instável).
     if (!pedidoOfertaRef.current && ofertaData && ofertaData.length > 0) {
       const oferta = ofertaData[0]
       if (!dismissedIdsRef.current.has(oferta.id)) {
+        playNotificationSound()
         setPedidoOferta(oferta); setTimerOferta(30); setDistKmOferta(null)
       }
     }
@@ -938,6 +940,7 @@ export default function MotoboyPage() {
       .limit(1)
       .then(({ data }) => {
         if (data && data.length > 0 && !dismissedIdsRef.current.has(data[0].id)) {
+          playNotificationSound()
           setPedidoOferta(data[0]); setTimerOferta(30); setDistKmOferta(null)
         }
       })
@@ -1075,7 +1078,7 @@ export default function MotoboyPage() {
           })
         } else if (novo?.status === "entregue" && novo.motoboy_id === motoboy_id) {
           setEmAndamentoAvulsa(prev => prev.filter((a: any) => a.id !== novo.id))
-          setGanhosDia(g => g + ganhoLiquido(novo.taxa_entrega ?? 0))
+          setGanhosDia(g => g + ganhoLiquido(novo.taxa_entrega ?? 0, novo.criado_em))
           setCorridasDia(c => c + 1)
         }
       })
@@ -1370,7 +1373,7 @@ export default function MotoboyPage() {
     setAtualizando(pedido.id)
     await supabase.from("pedidos").update({ status: "entregue" }).eq("id", pedido.id)
     enviarPush(pedido.id, "entregue", pedido.codigo)
-    setGanhosDia(prev => prev + ganhoLiquido(pedido.taxa_entrega ?? 0))
+    setGanhosDia(prev => prev + ganhoLiquido(pedido.taxa_entrega ?? 0, pedido.criado_em))
     setCorridasDia(prev => prev + 1)
     await loadPedidos()
     setAtualizando(null)
@@ -1485,7 +1488,7 @@ export default function MotoboyPage() {
     const next: string = json.nextStatus
     if (next === "entregue") {
       setEmAndamentoAvulsa(prev => prev.filter((a: any) => a.id !== avulsa.id))
-      setGanhosDia(g => g + ganhoLiquido(avulsa.taxa_entrega ?? 0))
+      setGanhosDia(g => g + ganhoLiquido(avulsa.taxa_entrega ?? 0, avulsa.criado_em))
       setCorridasDia(c => c + 1)
     } else {
       setEmAndamentoAvulsa(prev => prev.map((a: any) => a.id === avulsa.id ? { ...a, status: next } : a))
@@ -1545,7 +1548,7 @@ export default function MotoboyPage() {
     if (nextStatus === "entregue") {
       setCorridaConcluida(ativa)
       setEmAndamento(prev => prev.filter(p => p.id !== ativa.id))
-      setGanhosDia(prev => prev + ganhoLiquido(ativa.taxa_entrega ?? 0))
+      setGanhosDia(prev => prev + ganhoLiquido(ativa.taxa_entrega ?? 0, ativa.criado_em))
       setCorridasDia(prev => prev + 1)
       setSegundoAberto(false)
       enviarPush(ativa.id, "entregue", ativa.codigo)
@@ -2086,7 +2089,7 @@ export default function MotoboyPage() {
                 2° pedido — #{segundaEntrega.codigo}
               </p>
               <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, marginTop: 2 }}>
-                R$ {ganhoLiquido(segundaEntrega.taxa_entrega ?? 0).toFixed(2)} • {(segundaEntrega as any).loja?.nome ?? "—"}
+                R$ {ganhoLiquido(segundaEntrega.taxa_entrega ?? 0, segundaEntrega.criado_em).toFixed(2)} • {(segundaEntrega as any).loja?.nome ?? "—"}
               </p>
             </div>
             <button onClick={() => setSegundoAberto(false)} style={{ background: "transparent", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 20, cursor: "pointer" }}>×</button>
@@ -2166,7 +2169,7 @@ export default function MotoboyPage() {
                 <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 11 }}>
                   #{p.codigo} · {(p as any).loja?.nome ?? "—"}
                 </p>
-                <p style={{ color: "#22c55e", fontWeight: 900, fontSize: 15 }}>R$ {ganhoLiquido(p.taxa_entrega ?? 0).toFixed(2)}</p>
+                <p style={{ color: "#22c55e", fontWeight: 900, fontSize: 15 }}>R$ {ganhoLiquido(p.taxa_entrega ?? 0, p.criado_em).toFixed(2)}</p>
               </div>
               <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, marginBottom: 10 }}>{p.endereco_entrega}</p>
               <button onClick={() => aceitarEntrega(p)} disabled={!!atualizando} style={{
@@ -2352,7 +2355,7 @@ export default function MotoboyPage() {
                   </span>
                   <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 12 }}>#{p.codigo}</span>
                 </div>
-                <p style={{ color: "white", fontWeight: 900, fontSize: 18 }}>R$ {ganhoLiquido(p.taxa_entrega ?? 0).toFixed(2)}</p>
+                <p style={{ color: "white", fontWeight: 900, fontSize: 18 }}>R$ {ganhoLiquido(p.taxa_entrega ?? 0, p.criado_em).toFixed(2)}</p>
               </div>
 
               <div style={{ padding: "12px 16px" }}>
@@ -2498,7 +2501,7 @@ export default function MotoboyPage() {
                   </span>
                   <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 12 }}>#{a.codigo}</span>
                 </div>
-                <p style={{ color: "white", fontWeight: 900, fontSize: 18 }}>R$ {ganhoLiquido(a.taxa_entrega ?? 0).toFixed(2)}</p>
+                <p style={{ color: "white", fontWeight: 900, fontSize: 18 }}>R$ {ganhoLiquido(a.taxa_entrega ?? 0, a.criado_em).toFixed(2)}</p>
               </div>
               <div style={{ padding: "12px 16px" }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
@@ -2605,7 +2608,7 @@ export default function MotoboyPage() {
                         #{p.codigo} · {new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
-                    <p style={{ color: "white", fontWeight: 900, fontSize: 17 }}>R$ {ganhoLiquido(p.taxa_entrega ?? 0).toFixed(2)}</p>
+                    <p style={{ color: "white", fontWeight: 900, fontSize: 17 }}>R$ {ganhoLiquido(p.taxa_entrega ?? 0, p.criado_em).toFixed(2)}</p>
                   </div>
                   <div style={{ padding: "12px 16px" }}>
                     <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 12 }}>
@@ -2890,7 +2893,7 @@ function CorridaAtivaPanel({
               Pedido #{p?.codigo} entregue com sucesso
             </p>
             <p style={{ color: "#FF8C00", fontWeight: 900, fontSize: 26, marginBottom: 14 }}>
-              + R$ {ganhoLiquido((p?.taxa_entrega ?? 0) as number).toFixed(2).replace(".", ",")}
+              + R$ {ganhoLiquido((p?.taxa_entrega ?? 0) as number, p?.criado_em).toFixed(2).replace(".", ",")}
             </p>
             <button onClick={onConcluir} style={{
               width: "100%", padding: "15px", borderRadius: 14,
@@ -3159,7 +3162,7 @@ function CardAvulsa({
               </p>
             )}
             <p style={{ color: "#FF8C00", fontWeight: 900, fontSize: 34, lineHeight: 1, letterSpacing: -0.5 }}>
-              R$ {ganhoLiquido(avulsa.taxa_entrega ?? 0).toFixed(2).replace(".", ",")}
+              R$ {ganhoLiquido(avulsa.taxa_entrega ?? 0, avulsa.criado_em).toFixed(2).replace(".", ",")}
             </p>
             <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, marginTop: 6 }}>
               {avulsa.codigo} · {avulsa.cliente_nome}
@@ -3293,7 +3296,7 @@ function CardCorrida({
               Nova corrida!
             </p>
             <p style={{ color: "#FF8C00", fontWeight: 900, fontSize: 34, lineHeight: 1, letterSpacing: -0.5 }}>
-              R$ {ganhoLiquido(pedido.taxa_entrega ?? 0).toFixed(2).replace(".", ",")}
+              R$ {ganhoLiquido(pedido.taxa_entrega ?? 0, pedido.criado_em).toFixed(2).replace(".", ",")}
             </p>
             {pedido.itens?.length > 0 && (
               <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, marginTop: 6 }}>

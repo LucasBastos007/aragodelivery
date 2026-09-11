@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
+import { ganhoMotoboy } from "@/lib/comissao"
 
 type Periodo = "hoje" | "semana" | "mes" | "total"
 
@@ -25,8 +26,10 @@ function dateInicio(periodo: Periodo): Date {
   return new Date(2020, 0, 1)
 }
 
+// Calcula sempre pela fórmula canônica — a coluna ganho_motoboy no banco tem histórico
+// de valores gravados por caminhos divergentes (ex: 100% da taxa) e não é confiável.
 function ganhoReal(p: any): number {
-  return p.ganho_motoboy ?? p.taxa_entrega ?? 0
+  return ganhoMotoboy(p.taxa_entrega ?? 0, p.criado_em)
 }
 
 export default function MotoboyHistoricoPage() {
@@ -71,7 +74,7 @@ export default function MotoboyHistoricoPage() {
     if (novaPagina === 0) {
       const { data: todos } = await supabase
         .from("pedidos")
-        .select("taxa_entrega, ganho_motoboy")
+        .select("taxa_entrega, criado_em")
         .eq("motoboy_id", motoboy_id)
         .eq("status", "entregue")
         .gte("criado_em", inicio.toISOString())

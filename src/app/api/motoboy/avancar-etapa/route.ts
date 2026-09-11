@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { requireMotoboy, unauthorized } from "@/lib/session"
 import { emitirNfcePedido } from "@/lib/emitir-nfce"
+import { ganhoMotoboy } from "@/lib/comissao"
 
 function adminClient() {
   return createClient(
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest) {
   if (!_sess) return unauthorized()
   const motoboy_id = _sess.motoboy_id
 
-  const { pedido_id, status_atual, taxa_entrega } = await req.json()
+  const { pedido_id, status_atual } = await req.json()
 
   if (!pedido_id || !status_atual) {
     return NextResponse.json({ error: "pedido_id e status_atual são obrigatórios" }, { status: 400 })
@@ -42,7 +43,10 @@ export async function POST(req: NextRequest) {
   }
   if (nextStatus === "entregue") {
     updates.entregue_em = new Date().toISOString()
-    if (taxa_entrega != null) updates.ganho_motoboy = taxa_entrega
+    // Taxa e data vêm do banco, nunca do body — cliente não pode influenciar o próprio ganho.
+    const { data: pedidoAtual } = await sb
+      .from("pedidos").select("taxa_entrega, criado_em").eq("id", pedido_id).single()
+    if (pedidoAtual) updates.ganho_motoboy = ganhoMotoboy(pedidoAtual.taxa_entrega, pedidoAtual.criado_em)
   }
 
   const { error } = await sb

@@ -228,10 +228,20 @@ export async function POST(req: NextRequest) {
     })
   )
 
-  // 10. Incrementa uso do cupom (server-side, com service role key)
+  // 10. Incrementa uso do cupom (server-side, com service role key) — compare-and-swap: o
+  // update só é aceito se "usos" ainda for o mesmo valor lido, senão outro pedido concorrente
+  // já incrementou e tentamos de novo com o valor atual (evita passar de usos_maximos sob
+  // concorrência, já que não temos acesso a criar uma função de incremento atômico no banco).
   if (cupomId) {
-    const { data: cupomAtual } = await sb.from("cupons").select("usos").eq("id", cupomId).single()
-    await sb.from("cupons").update({ usos: ((cupomAtual as any)?.usos ?? 0) + 1 }).eq("id", cupomId)
+    for (let tentativa = 0; tentativa < 3; tentativa++) {
+      const { data: cupomAtual } = await sb.from("cupons").select("usos").eq("id", cupomId).single()
+      const usosLidos = (cupomAtual as any)?.usos ?? 0
+      const { data: atualizado } = await sb
+        .from("cupons").update({ usos: usosLidos + 1 })
+        .eq("id", cupomId).eq("usos", usosLidos)
+        .select("id")
+      if (atualizado && atualizado.length > 0) break
+    }
   }
 
   // Rastreia pedido realizado

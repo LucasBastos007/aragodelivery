@@ -3,12 +3,7 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
-
-function ganhoLiquido(taxa: number): number {
-  if (taxa <= 0) return 0
-  const fee = taxa > 30 ? 3 : taxa > 20 ? 2 : 1
-  return Math.max(0, taxa - fee)
-}
+import { ganhoMotoboy as ganhoLiquido } from "@/lib/comissao"
 
 const inp: React.CSSProperties = {
   width: "100%", padding: "10px 13px", borderRadius: 10, fontSize: 14,
@@ -60,14 +55,22 @@ export default function MotoboyFinanceiroPage() {
       setContaInput("")
     }
 
-    const { data: ped } = await supabase
-      .from("pedidos").select("id, codigo, taxa_entrega, criado_em, loja:lojas(nome)")
-      .eq("motoboy_id", motoboy_id).eq("status", "entregue")
-      .order("criado_em", { ascending: false })
+    const [{ data: ped }, { data: avulsas }] = await Promise.all([
+      supabase
+        .from("pedidos").select("id, codigo, taxa_entrega, criado_em, loja:lojas(nome)")
+        .eq("motoboy_id", motoboy_id).eq("status", "entregue")
+        .order("criado_em", { ascending: false }),
+      supabase
+        .from("entregas_avulsas").select("taxa_entrega, criado_em")
+        .eq("motoboy_id", motoboy_id).eq("status", "entregue"),
+    ])
     const pedList = ped ?? []
     setEntregas(pedList.slice(0, 30))
 
-    const ganhos = pedList.reduce((s, p) => s + ganhoLiquido(p.taxa_entrega ?? 0), 0)
+    // Inclui entregas avulsas no total — mesma base de cálculo do saldo sacável (/api/motoboy/saque)
+    const ganhos =
+      pedList.reduce((s, p) => s + ganhoLiquido(p.taxa_entrega ?? 0, p.criado_em), 0) +
+      (avulsas ?? []).reduce((s, a) => s + ganhoLiquido(a.taxa_entrega ?? 0, a.criado_em), 0)
     setTotalGanhos(ganhos)
 
     const { data: saq } = await supabase
@@ -138,7 +141,7 @@ export default function MotoboyFinanceiroPage() {
     <div style={{ maxWidth: 600, margin: "0 auto", padding: "24px 16px" }}>
       <h1 style={{ color: "white", fontWeight: 900, fontSize: 20, marginBottom: 4 }}>Meus ganhos</h1>
       <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13, marginBottom: 24 }}>
-        80% da taxa de entrega de cada pedido entregue
+        Valor líquido, já descontada a taxa de comissão do app em cada pedido entregue
       </p>
 
       {saqueSucesso && (
@@ -343,7 +346,7 @@ export default function MotoboyFinanceiroPage() {
         ) : (
           <div>
             {entregas.map(p => {
-              const ganho = ganhoLiquido(p.taxa_entrega ?? 0)
+              const ganho = ganhoLiquido(p.taxa_entrega ?? 0, p.criado_em)
               return (
                 <div key={p.id} style={{ padding: "11px 18px", borderBottom: "1px solid rgba(255,255,255,0.04)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>

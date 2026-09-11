@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { useIsMobile } from "@/lib/use-mobile"
 import type { Pedido, StatusPedido } from "@/types"
 
 const WA_SVG = (
@@ -364,10 +365,12 @@ function rangeDatas(periodo: Periodo, ci: string, cf: string) {
 }
 
 export default function PedidosPage() {
+  const isMobile = useIsMobile()
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [avulsas, setAvulsas] = useState<any[]>([])
   const [lojaFone,    setLojaFone]    = useState<Record<string, string>>({})
   const [motoboyFone, setMotoboyFone] = useState<Record<string, string>>({})
+  const [motoboyNome, setMotoboyNome] = useState<Record<string, string>>({})
   const [loading, setLoading]  = useState(true)
   const [filtro, setFiltro]    = useState<Filtro>("todos")
   const [expandido, setExpandido] = useState<string | null>(null)
@@ -417,8 +420,8 @@ export default function PedidosPage() {
     const motoboyIds = [...new Set(avList.map((a: any) => a.motoboy_id).filter(Boolean))]
 
     const [{ data: lojasData }, { data: motoboysData }] = await Promise.all([
-      lojaIds.length    > 0 ? supabase.from("lojas").select("id, telefone").in("id", lojaIds)       : Promise.resolve({ data: [] }),
-      motoboyIds.length > 0 ? supabase.from("motoboys").select("id, telefone").in("id", motoboyIds) : Promise.resolve({ data: [] }),
+      lojaIds.length    > 0 ? supabase.from("lojas").select("id, telefone").in("id", lojaIds)             : Promise.resolve({ data: [] }),
+      motoboyIds.length > 0 ? supabase.from("motoboys").select("id, nome, telefone").in("id", motoboyIds) : Promise.resolve({ data: [] }),
     ])
 
     const fones: Record<string, string> = {}
@@ -426,8 +429,13 @@ export default function PedidosPage() {
     setLojaFone(fones)
 
     const mFones: Record<string, string> = {}
-    for (const m of motoboysData ?? []) { if (m.telefone) mFones[m.id] = m.telefone }
+    const mNomes: Record<string, string> = {}
+    for (const m of motoboysData ?? []) {
+      if (m.telefone) mFones[m.id] = m.telefone
+      if (m.nome) mNomes[m.id] = m.nome
+    }
     setMotoboyFone(mFones)
+    setMotoboyNome(mNomes)
 
     setLoading(false)
   }
@@ -517,8 +525,11 @@ export default function PedidosPage() {
         <p style={{ color: "#94a3b8", fontSize: 13 }}>Carregando...</p>
       ) : (
         <>
-          {/* Board horizontal */}
-          <div style={{ display: "flex", gap: 14, overflowX: "auto", paddingBottom: 16, alignItems: "flex-start" }}>
+          {/* Board horizontal no desktop; colunas empilhadas em largura total no mobile */}
+          <div style={isMobile
+            ? { display: "flex", flexDirection: "column", gap: 20 }
+            : { display: "flex", gap: 14, overflowX: "auto", paddingBottom: 16, alignItems: "flex-start" }
+          }>
             {COLUNAS.map(col => {
               const cards = pedidos
                 .filter(p => (col.statuses as readonly string[]).includes(p.status))
@@ -528,7 +539,10 @@ export default function PedidosPage() {
                 .sort((a: any, b: any) => b.criado_em.localeCompare(a.criado_em))
               const totalCol = cards.length + avulsasCol.length
               return (
-                <div key={col.id} style={{ minWidth: 240, maxWidth: 260, flex: "0 0 250px", display: "flex", flexDirection: "column", gap: 10 }}>
+                <div key={col.id} style={isMobile
+                  ? { width: "100%", display: "flex", flexDirection: "column", gap: 10 }
+                  : { minWidth: 240, maxWidth: 260, flex: "0 0 250px", display: "flex", flexDirection: "column", gap: 10 }
+                }>
                   {/* Cabeçalho da coluna */}
                   <div style={{
                     padding: "8px 12px", borderRadius: 10,
@@ -561,6 +575,11 @@ export default function PedidosPage() {
                       </p>
                       {a.cliente_nome && (
                         <p style={{ fontSize: 11, color: "#64748b", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.cliente_nome}</p>
+                      )}
+                      {a.motoboy_id && motoboyNome[a.motoboy_id] && (
+                        <p style={{ fontSize: 11, fontWeight: 700, color: "#8b5cf6", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          🛵 {motoboyNome[a.motoboy_id]}
+                        </p>
                       )}
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
                         <span style={{ fontSize: 13, fontWeight: 900, color: "#8b5cf6" }}>R$ {(a.taxa_entrega ?? 0).toFixed(2)}</span>
