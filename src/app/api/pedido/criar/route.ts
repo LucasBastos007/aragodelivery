@@ -171,6 +171,9 @@ export async function POST(req: NextRequest) {
     taxa_entrega = taxaFixa !== null
       ? taxaFixa
       : calcularTaxaEntrega(loja.lat, loja.lng, lat_entrega, lng_entrega, (loja as any).taxa_entrega ?? 6.00)
+    // Nunca negativa — loja com taxa_entrega cadastrada errada (< 0) não pode reduzir
+    // o total do pedido do cliente.
+    taxa_entrega = Math.max(0, taxa_entrega)
   }
 
   // 5. Valida e aplica cupom no servidor

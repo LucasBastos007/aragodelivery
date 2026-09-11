@@ -166,6 +166,8 @@ export async function POST(req: NextRequest) {
             if (e.statusCode === 410) {
               if (!expiredPorMotoboy[m.id]) expiredPorMotoboy[m.id] = []
               expiredPorMotoboy[m.id].push(sub.endpoint)
+            } else {
+              console.error("[escalada] push falhou pro motoboy", m.id, "status:", e.statusCode, "body:", e.body ?? e.message)
             }
           }
         }

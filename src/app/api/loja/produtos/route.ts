@@ -10,6 +10,36 @@ function adminClient() {
   )
 }
 
+// Campos que a loja pode de fato editar — nunca repassar o body inteiro pro update/insert,
+// senão dá pra injetar loja_id (move o produto pra outra loja) ou outras colunas arbitrárias.
+const CAMPOS_PERMITIDOS = [
+  "nome", "descricao", "preco", "categoria_id", "foto_url",
+  "disponivel", "adicionais", "dias_semana", "ncm",
+] as const
+
+function validarPrecos(dados: Record<string, any>): string | null {
+  if (dados.preco != null && (!Number.isFinite(dados.preco) || dados.preco < 0)) {
+    return "Preço do produto inválido."
+  }
+  for (const entry of dados.adicionais ?? []) {
+    const itens = Array.isArray(entry.itens) ? entry.itens : [entry]
+    for (const it of itens) {
+      if (it.preco != null && (!Number.isFinite(it.preco) || it.preco < 0)) {
+        return "Preço de adicional inválido."
+      }
+    }
+  }
+  return null
+}
+
+function sanitizar(body: Record<string, any>): Record<string, any> {
+  const dados: Record<string, any> = {}
+  for (const campo of CAMPOS_PERMITIDOS) {
+    if (campo in body) dados[campo] = body[campo]
+  }
+  return dados
+}
+
 // POST — insert ou update
 export async function POST(req: NextRequest) {
   const _sess = requireLoja(req)
@@ -17,10 +47,14 @@ export async function POST(req: NextRequest) {
   const sessLojaId = _sess.loja_id
 
   const body = await req.json()
-  const { id, ...dados } = body
+  const { id } = body
+  const dados = sanitizar(body)
   const loja_id = sessLojaId
 
   if (!loja_id) return NextResponse.json({ error: "loja_id obrigatório" }, { status: 400 })
+
+  const erroPreco = validarPrecos(dados)
+  if (erroPreco) return NextResponse.json({ error: erroPreco }, { status: 422 })
 
   const sb = adminClient()
 

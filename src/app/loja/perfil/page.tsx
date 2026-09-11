@@ -255,7 +255,7 @@ export default function PerfilPage() {
       estado: form.estado.trim() || "GO",
       endereco: enderecoCompleto || null,
       telefone: form.telefone.trim(),
-      taxa_entrega: parseFloat(form.taxa_entrega) || 0,
+      taxa_entrega: Math.max(0, parseFloat(form.taxa_entrega) || 0),
       tempo_min: parseInt(form.tempo_min) || 30,
       tempo_max: parseInt(form.tempo_max) || 60,
       nome_responsavel: form.nome_responsavel.trim(),

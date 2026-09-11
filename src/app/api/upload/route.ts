@@ -27,6 +27,15 @@ export async function POST(req: NextRequest) {
   const path = form.get("path") as string | null
 
   if (!file || !path) return NextResponse.json({ error: "file e path são obrigatórios" }, { status: 400 })
+
+  // Loja só pode escrever dentro da própria pasta — senão dá pra sobrescrever foto de
+  // produto/categoria/banner de outra loja mandando o path de outra loja_id.
+  if (sess.role === "loja") {
+    const prefixosPermitidos = [`produtos/${sess.loja_id}/`, `categorias/${sess.loja_id}/`, `lojas/${sess.loja_id}/`]
+    if (!prefixosPermitidos.some(p => path.startsWith(p))) {
+      return NextResponse.json({ error: "Caminho de upload não autorizado para esta loja" }, { status: 403 })
+    }
+  }
   if (file.size > 5 * 1024 * 1024) return NextResponse.json({ error: "Arquivo muito grande (máx. 5MB)" }, { status: 400 })
 
   // Valida magic bytes — não confia apenas no file.type do cliente

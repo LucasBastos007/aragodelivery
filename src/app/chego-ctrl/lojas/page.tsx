@@ -119,6 +119,7 @@ export default function LojasPage() {
   const [novaTaxa,          setNovaTaxa]            = useState("")
   const [criandoCred,       setCriandoCred]         = useState(false)
   const [credResult,        setCredResult]          = useState<{ senhaTemporaria: string; emailEnviado: boolean; avisoEmail?: string } | null>(null)
+  const [togglingAberto,    setTogglingAberto]      = useState(false)
 
   async function load() {
     const { data } = await supabase.from("lojas").select("*").order("criado_em", { ascending: false })
@@ -133,6 +134,15 @@ export default function LojasPage() {
     await load()
     setSelecionada(prev => prev ? { ...prev, status: novoStatus, ...extra } as Loja : null)
     setSalvando(false)
+  }
+
+  async function toggleAbertoAdmin(loja: Loja) {
+    setTogglingAberto(true)
+    const novoEstado = !loja.aberto
+    await supabase.from("lojas").update({ aberto: novoEstado }).eq("id", loja.id)
+    await load()
+    setSelecionada(prev => prev ? { ...prev, aberto: novoEstado } as Loja : null)
+    setTogglingAberto(false)
   }
 
   async function ativarLoja(loja: Loja) {
@@ -487,6 +497,16 @@ export default function LojasPage() {
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
                     <p style={{ fontWeight: 800, fontSize: 14, color: "#0F172A" }}>{l.nome}</p>
                     <StatusBadge status={l.status} />
+                    {l.status === "ativo" && (
+                      <span style={{
+                        fontSize: 9, fontWeight: 800, borderRadius: 50, padding: "1px 6px",
+                        color: l.aberto ? "#059669" : "#dc2626",
+                        background: l.aberto ? "#ECFDF5" : "#FEF2F2",
+                        border: `1px solid ${l.aberto ? "#A7F3D0" : "#FECACA"}`,
+                      }}>
+                        {l.aberto ? "🟢 aberta" : "🔴 fechada"}
+                      </span>
+                    )}
                     <PlanoBadge plano={l.plano} />
                     {l.asaas_wallet_id && (
                       <span style={{ fontSize: 9, fontWeight: 800, color: "#059669", background: "#ECFDF5", padding: "1px 6px", borderRadius: 50, border: "1px solid #A7F3D0" }}>
@@ -569,6 +589,39 @@ export default function LojasPage() {
               {selecionada.descricao && (
                 <p style={{ fontSize: 12, color: "#94a3b8", marginTop: 2, lineHeight: 1.5 }}>{selecionada.descricao}</p>
               )}
+            </div>
+
+            {/* Aberto/Fechado — controle manual do admin */}
+            <div style={{
+              margin: "0 20px 16px", padding: "12px 14px", borderRadius: 12,
+              border: selecionada.aberto ? "1px solid rgba(34,197,94,0.3)" : "1px solid #E2E8F0",
+              background: selecionada.aberto ? "rgba(34,197,94,0.06)" : "#F8FAFC",
+              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+            }}>
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 800, color: "#0F172A" }}>{selecionada.aberto ? "🟢 Loja aberta" : "🔴 Loja fechada"}</p>
+                <p style={{ fontSize: 11, color: "#64748b", marginTop: 1 }}>
+                  {selecionada.aberto ? "Recebendo pedidos agora" : "Nenhum pedido será recebido"}
+                </p>
+              </div>
+              <button
+                onClick={() => toggleAbertoAdmin(selecionada)}
+                disabled={togglingAberto || selecionada.status !== "ativo"}
+                title={selecionada.status !== "ativo" ? "Loja precisa estar ativa" : ""}
+                style={{
+                  width: 52, height: 28, borderRadius: 14, border: "none",
+                  cursor: (togglingAberto || selecionada.status !== "ativo") ? "not-allowed" : "pointer",
+                  background: selecionada.aberto ? "#22c55e" : "#E5E7EB",
+                  position: "relative", transition: "background 0.25s", flexShrink: 0,
+                  opacity: togglingAberto ? 0.5 : 1,
+                }}
+              >
+                <div style={{
+                  width: 20, height: 20, borderRadius: "50%", background: "white",
+                  position: "absolute", top: 4, transition: "left 0.25s",
+                  left: selecionada.aberto ? 28 : 4,
+                }} />
+              </button>
             </div>
 
             {/* ── DADOS CADASTRAIS ── */}

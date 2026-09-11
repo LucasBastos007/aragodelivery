@@ -1,5 +1,5 @@
 // sw.js — bump CACHE_NAME a cada deploy para forçar atualização
-const CACHE_NAME = "chego-v9"
+const CACHE_NAME = "chego-v10"
 
 // ─── Background Location ──────────────────────────────────────────────────────
 // Armazena última posição recebida da aba principal para envio em background
@@ -118,7 +118,7 @@ self.addEventListener("push", (event) => {
   const data = event.data?.json() ?? {}
   const title = data.title ?? "Chegô Delivery"
   const tag = data.tag ?? "chego-update"
-  const isMotoboy = tag.startsWith("motoboy-") || tag.startsWith("avulsa-")
+  const isMotoboy = tag.startsWith("motoboy-") || tag.startsWith("avulsa-") || tag === "corrida-nova"
   const isEntregue = title.includes("entregue") || title.includes("Entregue")
   const isCheguei  = tag.startsWith("cheguei-")
 
