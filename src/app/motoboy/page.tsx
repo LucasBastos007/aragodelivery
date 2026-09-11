@@ -2377,6 +2377,11 @@ export default function MotoboyPage() {
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                     <div style={{ width: 7, height: 7, borderRadius: 2, background: PGTO_COLOR[p.forma_pagamento] ?? "#818cf8", flexShrink: 0 }} />
                     <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}>{PGTO[p.forma_pagamento] ?? p.forma_pagamento}</p>
+                    {p.forma_pagamento === "dinheiro" && (
+                      <p style={{ color: "#facc15", fontSize: 12, fontWeight: 800 }}>
+                        {p.troco_para ? `· Troco para R$ ${Number(p.troco_para).toFixed(2)}` : "· Sem troco"}
+                      </p>
+                    )}
                   </div>
                   {p.observacao && (
                     <div style={{ display: "flex", gap: 8 }}>

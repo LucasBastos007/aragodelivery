@@ -157,6 +157,7 @@ function imprimirPedido(pedido: Pedido, largura: "80mm" | "58mm" = "80mm") {
   </table>
   <div class="dash"></div>
   <p>PAGAMENTO: ${PGTO[pedido.forma_pagamento] ?? pedido.forma_pagamento}</p>
+  ${pedido.forma_pagamento === "dinheiro" ? `<p>${(pedido as any).troco_para ? `TROCO PARA: R$ ${Number((pedido as any).troco_para).toFixed(2).replace(".", ",")}` : "SEM TROCO"}</p>` : ""}
   ${pedido.nome_cliente ? `<div class="dash"></div><p class="section">CLIENTE</p><p>${pedido.nome_cliente}</p>${pedido.telefone_cliente ? `<p>Tel: ${pedido.telefone_cliente}</p>` : ""}` : ""}
   ${pedido.endereco_entrega ? `<div class="dash"></div><p class="section">ENDEREÇO DE ENTREGA</p><p>${pedido.endereco_entrega}</p>` : ""}
   ${pedido.observacao ? `<div class="dash"></div><p class="section">OBSERVAÇÃO</p><p>${pedido.observacao}</p>` : ""}
@@ -1035,6 +1036,11 @@ export default function LojaDashboard() {
 
               <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#9CA3AF" }}>
                 <span style={{ fontWeight: 600 }}>{PAGAMENTO_ICON[p.forma_pagamento] ?? p.forma_pagamento}</span>
+                {p.forma_pagamento === "dinheiro" && (
+                  <span style={{ fontWeight: 700, color: "#ca8a04" }}>
+                    {(p as any).troco_para ? `· Troco para R$ ${Number((p as any).troco_para).toFixed(2)}` : "· Sem troco"}
+                  </span>
+                )}
               </div>
 
               <ClienteInfo pedido={p} />

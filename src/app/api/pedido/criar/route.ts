@@ -87,6 +87,7 @@ export async function POST(req: NextRequest) {
     nome_cliente,
     telefone_cliente,
     email_cliente,
+    troco_para,      // pagamento em dinheiro: valor pra troco (null = sem troco)
     tipo = "normal", // "normal" | "manual"
   } = body
 
@@ -180,6 +181,11 @@ export async function POST(req: NextRequest) {
   // 6. Total final (nunca pode ser negativo)
   const total = Math.max(0, subtotal - desconto) + taxa_entrega
 
+  // Troco só faz sentido pagando em dinheiro com valor maior que o total do pedido
+  const trocoValido = forma_pagamento === "dinheiro" && troco_para != null && Number(troco_para) > total
+    ? Math.round(Number(troco_para) * 100) / 100
+    : null
+
   // 7. Gera token secreto do cliente para autenticar subscribe de push
   const cliente_push_token = crypto.randomBytes(32).toString("hex")
 
@@ -201,6 +207,7 @@ export async function POST(req: NextRequest) {
     lat_entrega: lat_entrega ?? null,
     lng_entrega: lng_entrega ?? null,
     observacao: observacao ?? "",
+    troco_para: trocoValido,
     cliente_push_token,
     nome_cliente:    nome_cliente    ?? null,
     telefone_cliente: telefone_cliente ?? null,

@@ -175,6 +175,7 @@ export interface Pedido {
   motoboy_id: string | null
   status: StatusPedido
   forma_pagamento: FormaPagamento
+  troco_para?: number | null
   subtotal: number
   taxa_entrega: number
   total: number

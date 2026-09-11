@@ -248,6 +248,9 @@ export default function CheckoutPage() {
   const [telefone, setTelefone]   = useState("")
   const [cpf, setCpf]             = useState("")
   const [pagamento, setPagamento] = useState<FormaPagamento>("pix")
+  const [precisaTroco, setPrecisaTroco] = useState(false)
+  const [trocoPara, setTrocoPara]       = useState("")
+  const [tipoMaquininha, setTipoMaquininha] = useState<"credito" | "debito">("credito")
   const [obs, setObs]             = useState("")
   const [enviando, setEnviando]   = useState(false)
   const [pedidoCodigo, setPedidoCodigo] = useState<string | null>(null)
@@ -780,6 +783,12 @@ export default function CheckoutPage() {
     }
 
     if (!loja_id) { setErro("Erro: loja não identificada"); return }
+
+    if (pagamento === "dinheiro" && precisaTroco) {
+      const valor = parseFloat(trocoPara.replace(",", "."))
+      if (!valor || valor <= totalFinal) { setErro(`Informe um valor maior que o total (R$ ${totalFinal.toFixed(2)}) pra calcular o troco`); return }
+    }
+
     setErro("")
     setEnviando(true)
 
@@ -793,8 +802,13 @@ export default function CheckoutPage() {
       `Cliente: ${nome.trim()}`,
       `Tel: ${telefone.trim()}`,
       tipoEntrega === "retirada" ? "🏪 RETIRADA NA LOJA" : "",
+      pagamento === "maquininha" ? `💳 Maquininha: ${tipoMaquininha === "credito" ? "Crédito" : "Débito"}` : "",
       obs.trim(),
     ].filter(Boolean).join(" | ")
+
+    const trocoParaEnviar = pagamento === "dinheiro" && precisaTroco && trocoPara
+      ? parseFloat(trocoPara.replace(",", "."))
+      : null
 
     // Cria pedido via API server-side — preços validados no servidor, nunca no cliente
     const criarRes = await fetch("/api/pedido/criar", {
@@ -812,6 +826,7 @@ export default function CheckoutPage() {
         cidade_entrega:   enderecoSalvo?.cidade || geoRef.current?.geo?.cidade || "",
         bairro_entrega:   enderecoSalvo?.bairro || geoRef.current?.geo?.bairro || "",
         observacao:       obsCompleta,
+        troco_para:       trocoParaEnviar,
         cupom_codigo:     cupomValido?.codigo ?? null,
         nome_cliente:     nome.trim() || null,
         telefone_cliente: telefone.trim() || null,
@@ -1498,6 +1513,58 @@ export default function CheckoutPage() {
                   )}
                 </>
               )}
+            </div>
+          )}
+
+          {/* Troco — só faz sentido pagando em dinheiro na entrega */}
+          {pagamento === "dinheiro" && (
+            <div style={{ padding: "16px 18px", borderTop: "1px solid #F3F4F6", display: "flex", flexDirection: "column", gap: 10 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={precisaTroco}
+                  onChange={e => { setPrecisaTroco(e.target.checked); if (!e.target.checked) setTrocoPara("") }}
+                  style={{ width: 16, height: 16, accentColor: "#DC2626" }}
+                />
+                <span style={{ color: "#374151", fontSize: 13, fontWeight: 600 }}>Precisa de troco?</span>
+              </label>
+              {precisaTroco && (
+                <div>
+                  <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Troco para quanto?</label>
+                  <input
+                    value={trocoPara}
+                    onChange={e => setTrocoPara(e.target.value.replace(/[^0-9,]/g, ""))}
+                    placeholder="Ex: 50,00"
+                    inputMode="decimal"
+                    style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 14, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", boxSizing: "border-box" }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Crédito ou débito — só faz sentido pagando na maquininha do entregador */}
+          {pagamento === "maquininha" && (
+            <div style={{ padding: "16px 18px", borderTop: "1px solid #F3F4F6", display: "flex", flexDirection: "column", gap: 10 }}>
+              <p style={{ color: "#6B7280", fontSize: 12, fontWeight: 600 }}>Crédito ou débito?</p>
+              <div style={{ display: "flex", gap: 10 }}>
+                {(["credito", "debito"] as const).map(t => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setTipoMaquininha(t)}
+                    style={{
+                      flex: 1, padding: "11px 0", borderRadius: 10, fontSize: 13, fontWeight: 700,
+                      border: tipoMaquininha === t ? "1.5px solid #DC2626" : "1px solid #E5E7EB",
+                      background: tipoMaquininha === t ? "rgba(220,38,38,0.05)" : "#F9FAFB",
+                      color: tipoMaquininha === t ? "#DC2626" : "#374151",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {t === "credito" ? "Crédito" : "Débito"}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>
