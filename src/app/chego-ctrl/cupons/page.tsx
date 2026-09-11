@@ -9,8 +9,15 @@ interface Cupom {
   id: string; codigo: string; tipo: Tipo; valor: number
   loja_id: string | null; pedido_minimo: number; validade: string | null
   ativo: boolean; usos: number; criado_em: string
+  lojas_ids: string[] | null; raio_km: number | null
   loja?: { nome: string }
 }
+
+interface LojaResumo { id: string; nome: string }
+
+// Aragoiânia-GO — mesmo centro usado no checkout, pra enviesar a busca de endereço
+const GEOCODE_BIAS_LAT = -17.6547
+const GEOCODE_BIAS_LNG = -49.4378
 
 const inp: React.CSSProperties = {
   width: "100%", padding: "10px 13px", borderRadius: 10, fontSize: 14,
@@ -31,7 +38,18 @@ export default function AdminCuponsPage() {
   const [salvando, setSalvando] = useState(false)
   const [erro,     setErro]     = useState("")
 
-  useEffect(() => { carregar() }, [])
+  // Restrição por loja(s) — vazio = vale pra todas
+  const [lojasDisponiveis, setLojasDisponiveis] = useState<LojaResumo[]>([])
+  const [lojasSelecionadas, setLojasSelecionadas] = useState<string[]>([])
+
+  // Restrição por raio de entrega — endereço central + km de alcance
+  const [enderecoRaio,   setEnderecoRaio]   = useState("")
+  const [buscandoRaio,   setBuscandoRaio]   = useState(false)
+  const [centroResolvido, setCentroResolvido] = useState<{ lat: number; lng: number; display: string } | null>(null)
+  const [raioKm,         setRaioKm]         = useState("")
+  const [erroRaio,       setErroRaio]       = useState("")
+
+  useEffect(() => { carregar(); carregarLojas() }, [])
 
   async function carregar() {
     setLoading(true)
@@ -40,18 +58,47 @@ export default function AdminCuponsPage() {
     setLoading(false)
   }
 
+  async function carregarLojas() {
+    const { data } = await supabase.from("lojas").select("id, nome").eq("status", "ativo").order("nome")
+    setLojasDisponiveis((data as LojaResumo[]) ?? [])
+  }
+
+  function toggleLoja(id: string) {
+    setLojasSelecionadas(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  async function buscarCentroRaio() {
+    if (!enderecoRaio.trim()) return
+    setBuscandoRaio(true); setErroRaio(""); setCentroResolvido(null)
+    const res = await fetch(`/api/geocode/search?q=${encodeURIComponent(enderecoRaio.trim())}&lat=${GEOCODE_BIAS_LAT}&lon=${GEOCODE_BIAS_LNG}`)
+      .then(r => r.json()).catch(() => [])
+    const primeiro = res?.[0]
+    if (!primeiro) { setErroRaio("Endereço não encontrado"); setBuscandoRaio(false); return }
+    setCentroResolvido({ lat: parseFloat(primeiro.lat), lng: parseFloat(primeiro.lon), display: primeiro.display_name })
+    setBuscandoRaio(false)
+  }
+
   async function handleCriar() {
     if (!codigo.trim()) { setErro("Informe o código"); return }
     // Frete grátis não tem "valor" de desconto — zera o frete inteiro, não um número fixo
     if (tipo !== "frete_gratis" && (!valor || isNaN(Number(valor)) || Number(valor) <= 0)) { setErro("Valor inválido"); return }
+    if (raioKm && !centroResolvido) { setErro("Busque o endereço central do raio antes de salvar"); return }
     setErro(""); setSalvando(true)
     const res = await fetch("/api/admin/cupons", {
       method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ codigo, tipo, valor: tipo === "frete_gratis" ? 0 : Number(valor), pedido_minimo: Number(minimo) || 0, validade: validade || null }),
+      body: JSON.stringify({
+        codigo, tipo, valor: tipo === "frete_gratis" ? 0 : Number(valor),
+        pedido_minimo: Number(minimo) || 0, validade: validade || null,
+        lojas_ids: lojasSelecionadas.length > 0 ? lojasSelecionadas : null,
+        centro_lat: centroResolvido && raioKm ? centroResolvido.lat : null,
+        centro_lng: centroResolvido && raioKm ? centroResolvido.lng : null,
+        raio_km:    centroResolvido && raioKm ? Number(raioKm) : null,
+      }),
     })
     const json = await res.json()
     if (!res.ok) { setErro(json.error?.includes("unique") ? "Código já existe." : json.error); setSalvando(false); return }
     setCodigo(""); setValor(""); setMinimo(""); setValidade(""); setTipo("percentual")
+    setLojasSelecionadas([]); setEnderecoRaio(""); setCentroResolvido(null); setRaioKm(""); setErroRaio("")
     setCriando(false); setSalvando(false); carregar()
   }
 
@@ -125,6 +172,43 @@ export default function AdminCuponsPage() {
               <input style={inp} type="date" value={validade} onChange={e => setValidade(e.target.value)} />
             </div>
           </div>
+
+          {/* Restrição por loja(s) — vazio = vale pra todas */}
+          <div>
+            <label style={{ display: "block", color: "#64748B", fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: "uppercase" }}>
+              Lojas onde vale {lojasSelecionadas.length > 0 && `(${lojasSelecionadas.length} selecionada${lojasSelecionadas.length > 1 ? "s" : ""})`}
+            </label>
+            <p style={{ fontSize: 11, color: "#94a3b8", marginBottom: 8 }}>Nenhuma marcada = vale em todas as lojas</p>
+            <div style={{ maxHeight: 160, overflowY: "auto", border: "1px solid #E2E8F0", borderRadius: 10, padding: 8, display: "flex", flexDirection: "column", gap: 2, background: "#F9FAFB" }}>
+              {lojasDisponiveis.map(l => (
+                <label key={l.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 6px", borderRadius: 7, cursor: "pointer", fontSize: 13, color: "#374151" }}>
+                  <input type="checkbox" checked={lojasSelecionadas.includes(l.id)} onChange={() => toggleLoja(l.id)} />
+                  {l.nome}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Restrição por raio de entrega */}
+          <div>
+            <label style={{ display: "block", color: "#64748B", fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: "uppercase" }}>
+              Raio de alcance (opcional)
+            </label>
+            <p style={{ fontSize: 11, color: "#94a3b8", marginBottom: 8 }}>Só vale se o endereço de entrega do cliente estiver dentro do raio</p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input style={inp} value={enderecoRaio} onChange={e => { setEnderecoRaio(e.target.value); setCentroResolvido(null) }} placeholder="Endereço central (ex: Praça Central, Aragoiânia)" />
+              <button onClick={buscarCentroRaio} disabled={buscandoRaio} style={{
+                padding: "0 16px", borderRadius: 10, border: "1px solid #E2E8F0", background: "white",
+                color: "#374151", fontWeight: 700, fontSize: 12, cursor: buscandoRaio ? "not-allowed" : "pointer", whiteSpace: "nowrap",
+              }}>
+                {buscandoRaio ? "..." : "Buscar"}
+              </button>
+              <input style={{ ...inp, width: 110, flexShrink: 0 }} type="number" min="0" step="0.5" value={raioKm} onChange={e => setRaioKm(e.target.value)} placeholder="Raio (km)" />
+            </div>
+            {erroRaio && <p style={{ color: "#f87171", fontSize: 12, marginTop: 6 }}>{erroRaio}</p>}
+            {centroResolvido && <p style={{ color: "#22c55e", fontSize: 12, marginTop: 6 }}>✓ Centro: {centroResolvido.display}</p>}
+          </div>
+
           {erro && <p style={{ color: "#f87171", fontSize: 13, fontWeight: 600 }}>{erro}</p>}
           <button onClick={handleCriar} disabled={salvando} style={{
             padding: "12px 24px", borderRadius: 12, border: "none",
@@ -156,8 +240,13 @@ export default function AdminCuponsPage() {
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
                   <p style={{ color: "#f97316", fontWeight: 900, fontSize: 16, fontFamily: "monospace", letterSpacing: 1 }}>{c.codigo}</p>
                   <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "rgba(96,165,250,0.12)", color: "#60a5fa" }}>
-                    Global
+                    {c.lojas_ids?.length ? `${c.lojas_ids.length} loja${c.lojas_ids.length > 1 ? "s" : ""}` : "Global"}
                   </span>
+                  {c.raio_km != null && (
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "rgba(139,92,246,0.12)", color: "#8b5cf6" }}>
+                      📍 {c.raio_km}km
+                    </span>
+                  )}
                   <span style={{
                     fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999,
                     background: c.ativo ? "rgba(34,197,94,0.12)" : "#F9FAFB",

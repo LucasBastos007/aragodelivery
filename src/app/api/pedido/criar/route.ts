@@ -180,19 +180,31 @@ export async function POST(req: NextRequest) {
   let desconto = 0
   let cupomId: string | null = null
   if (cupom_codigo) {
+    // Busca só pelo código — a elegibilidade por loja/raio é decidida em JS logo abaixo,
+    // porque um cupom pode valer por loja_id único, por uma lista (lojas_ids) ou global.
     const { data: cupom } = await sb
       .from("cupons")
-      .select("id, tipo, valor, pedido_minimo, validade, ativo, usos, max_usos")
+      .select("id, tipo, valor, pedido_minimo, validade, ativo, usos, max_usos, loja_id, lojas_ids, centro_lat, centro_lng, raio_km")
       .eq("codigo", cupom_codigo.toUpperCase().trim())
-      .or(`loja_id.is.null,loja_id.eq.${loja_id}`)
       .maybeSingle()
 
     if (cupom && cupom.ativo) {
+      const valeParaLoja =
+        (!cupom.loja_id && !(cupom.lojas_ids?.length)) || // global — sem restrição de loja
+        cupom.loja_id === loja_id ||
+        (cupom.lojas_ids ?? []).includes(loja_id)
+
+      const dentroDoRaio = (() => {
+        if (cupom.raio_km == null || cupom.centro_lat == null || cupom.centro_lng == null) return true
+        if (lat_entrega == null || lng_entrega == null) return false // sem coordenada, não dá pra confirmar
+        return haversineKm(cupom.centro_lat, cupom.centro_lng, lat_entrega, lng_entrega) <= cupom.raio_km
+      })()
+
       const expirado = cupom.validade && new Date(cupom.validade) < new Date()
       const lotado   = cupom.max_usos != null && (cupom.usos ?? 0) >= cupom.max_usos
       const minOk    = !cupom.pedido_minimo || subtotal >= cupom.pedido_minimo
 
-      if (!expirado && !lotado && minOk) {
+      if (valeParaLoja && dentroDoRaio && !expirado && !lotado && minOk) {
         cupomId = cupom.id
         if (cupom.tipo === "frete_gratis") {
           taxa_entrega = 0

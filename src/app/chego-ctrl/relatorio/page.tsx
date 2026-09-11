@@ -28,6 +28,8 @@ type MotoboyStats = {
   total_ganho: number
 }
 
+type ProdutoRanking = { nome: string; quantidade: number; receita: number }
+
 function fmtR(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
 }
@@ -57,6 +59,7 @@ export default function RelatorioPage() {
   const [dataIni,  setDataIni]   = useState("")
   const [dataFim,  setDataFim]   = useState("")
   const [expandida, setExpandida] = useState<string | null>(null)
+  const [exportLojaId, setExportLojaId] = useState<string | null>(null)
 
   // calcula range baseado no período
   function calcRange(p: typeof periodo) {
@@ -78,7 +81,7 @@ export default function RelatorioPage() {
 
     const [{ data: peds }, { data: ls }, { data: mbs }] = await Promise.all([
       supabase.from("pedidos")
-        .select("*, loja:lojas(id,nome,plano,categoria,logo_url,comissao)")
+        .select("*, loja:lojas(id,nome,plano,categoria,logo_url,comissao), itens:itens_pedido(nome,quantidade,preco)")
         .eq("status", "entregue")
         .gte("criado_em", ini)
         .lte("criado_em", fim)
@@ -109,6 +112,28 @@ export default function RelatorioPage() {
     })
     .filter(s => s.pedidos.length > 0)
     .sort((a, b) => b.total_vendas - a.total_vendas)
+
+  // Ranking de produtos mais vendidos — agrupa por nome do item, somando quantidade e receita
+  function ranquearProdutos(peds: Pedido[]): ProdutoRanking[] {
+    const mapa = new Map<string, ProdutoRanking>()
+    for (const p of peds) {
+      for (const item of ((p as any).itens ?? []) as { nome: string; quantidade: number; preco: number }[]) {
+        const atual = mapa.get(item.nome) ?? { nome: item.nome, quantidade: 0, receita: 0 }
+        atual.quantidade += Number(item.quantidade ?? 0)
+        atual.receita += Number(item.preco ?? 0) * Number(item.quantidade ?? 0)
+        mapa.set(item.nome, atual)
+      }
+    }
+    return [...mapa.values()].sort((a, b) => b.quantidade - a.quantidade)
+  }
+  const rankingGeral = ranquearProdutos(pedidos)
+
+  function exportarLoja(lojaId: string) {
+    setExpandida(lojaId)
+    setExportLojaId(lojaId)
+    window.onafterprint = () => { setExportLojaId(null); window.onafterprint = null }
+    setTimeout(() => window.print(), 50)
+  }
 
   const totais = {
     pedidos:  pedidos.length,
@@ -145,6 +170,17 @@ export default function RelatorioPage() {
 
   return (
     <div style={{ padding: "24px 16px", minHeight: "100vh" }}>
+      {/* Ao exportar uma loja específica, esconde tudo que não é dela na hora de imprimir —
+          o resto da tela continua normal, só o print/PDF fica filtrado. */}
+      {exportLojaId && (
+        <style>{`
+          @media print {
+            [data-loja-block]:not([data-loja-id="${exportLojaId}"]) { display: none !important; }
+            .oculta-no-export-loja { display: none !important; }
+          }
+        `}</style>
+      )}
+
       {/* Header */}
       <div style={{ marginBottom: 28, display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
         <div>
@@ -174,7 +210,7 @@ export default function RelatorioPage() {
       </div>
 
       {/* Filtros de período */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap", alignItems: "center" }}>
+      <div className="oculta-no-export-loja" style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap", alignItems: "center" }}>
         {(["semana", "quinzena", "mes", "custom"] as const).map(p => (
           <button key={p} onClick={() => setPeriodo(p)} style={{
             padding: "7px 14px", borderRadius: 9, border: "1.5px solid",
@@ -198,7 +234,7 @@ export default function RelatorioPage() {
       </div>
 
       {/* Cards de totais */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: 12, marginBottom: 28 }}>
+      <div className="oculta-no-export-loja" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: 12, marginBottom: 28 }}>
         {[
           { label: "Total de pedidos",      value: String(totais.pedidos), color: "#3b82f6", sub: "pedidos entregues" },
           { label: "Volume total de vendas", value: fmtR(totais.vendas),   color: "#8b5cf6", sub: "soma dos pedidos" },
@@ -213,6 +249,30 @@ export default function RelatorioPage() {
           </div>
         ))}
       </div>
+
+      {/* Ranking geral de produtos mais vendidos (todas as lojas, no período) */}
+      {!loading && rankingGeral.length > 0 && (
+        <div className="oculta-no-export-loja" style={{ background: "white", borderRadius: 16, border: "1.5px solid #F1F5F9", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", padding: "18px 20px", marginBottom: 24 }}>
+          <p style={{ fontSize: 14, fontWeight: 900, color: "#0F172A", marginBottom: 2 }}>🏆 Produtos mais vendidos</p>
+          <p style={{ fontSize: 11, color: "#94a3b8", marginBottom: 14 }}>Todas as lojas, no período selecionado</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {rankingGeral.slice(0, 10).map((r, i) => (
+              <div key={r.nome} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{
+                  width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 10, fontWeight: 800,
+                  background: i === 0 ? "#FEF3C7" : i === 1 ? "#F1F5F9" : i === 2 ? "#FFEDD5" : "#F8FAFC",
+                  color: i === 0 ? "#b45309" : i === 1 ? "#64748b" : i === 2 ? "#c2410c" : "#94a3b8",
+                }}>{i + 1}</span>
+                <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: "#374151" }}>{r.nome}</span>
+                <span style={{ fontSize: 12, fontWeight: 800, color: "#8b5cf6" }}>{r.quantidade}x</span>
+                <span style={{ fontSize: 12, color: "#94a3b8", minWidth: 90, textAlign: "right" }}>{fmtR(r.receita)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Tabela principal */}
       {loading ? (
@@ -230,19 +290,19 @@ export default function RelatorioPage() {
         <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" as any }}>
         <div style={{ background: "white", borderRadius: 16, border: "1.5px solid #F1F5F9", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.04)", minWidth: 720 }}>
           {/* Header da tabela */}
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 80px", gap: 0, padding: "10px 20px", background: "#F8FAFC", borderBottom: "1.5px solid #F1F5F9" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 160px", gap: 0, padding: "10px 20px", background: "#F8FAFC", borderBottom: "1.5px solid #F1F5F9" }}>
             {["Loja", "Pedidos", "Volume vendas", "Taxa Chegô", "Taxa Asaas", "A repassar", ""].map((h, i) => (
               <p key={i} style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.8, textAlign: i > 0 ? "right" : "left" }}>{h}</p>
             ))}
           </div>
 
           {stats.map((s, idx) => (
-            <div key={s.loja.id}>
+            <div key={s.loja.id} data-loja-block data-loja-id={s.loja.id}>
               {/* Linha da loja */}
               <div
                 onClick={() => setExpandida(expandida === s.loja.id ? null : s.loja.id)}
                 style={{
-                  display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 80px",
+                  display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 160px",
                   gap: 0, padding: "14px 20px", cursor: "pointer",
                   borderBottom: expandida === s.loja.id ? "none" : "1px solid #F8FAFC",
                   background: expandida === s.loja.id ? "#FAFFFE" : "white",
@@ -278,9 +338,21 @@ export default function RelatorioPage() {
                 <p style={{ fontSize: 13, fontWeight: 700, color: "#f97316", textAlign: "right", alignSelf: "center" }}>{fmtR(s.taxa_chego)}</p>
                 <p style={{ fontSize: 13, fontWeight: 700, color: "#f59e0b", textAlign: "right", alignSelf: "center" }}>{fmtR(s.taxa_asaas)}</p>
                 <p style={{ fontSize: 14, fontWeight: 900, color: "#22c55e", textAlign: "right", alignSelf: "center" }}>{fmtR(s.valor_a_repassar)}</p>
-                <p style={{ fontSize: 11, color: "#94a3b8", textAlign: "right", alignSelf: "center" }}>
-                  {expandida === s.loja.id ? "▲" : "▼"} detalhes
-                </p>
+                <div className="oculta-no-export-loja" style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, alignSelf: "center" }}>
+                  <button
+                    onClick={e => { e.stopPropagation(); exportarLoja(s.loja.id) }}
+                    title="Exportar relatório só desta loja"
+                    style={{
+                      fontSize: 10, fontWeight: 700, padding: "4px 8px", borderRadius: 7,
+                      border: "1px solid #E2E8F0", background: "white", color: "#374151", cursor: "pointer",
+                    }}
+                  >
+                    Exportar
+                  </button>
+                  <p style={{ fontSize: 11, color: "#94a3b8" }}>
+                    {expandida === s.loja.id ? "▲" : "▼"} detalhes
+                  </p>
+                </div>
               </div>
 
               {/* Detalhe expandido — pedidos da loja */}
@@ -291,16 +363,46 @@ export default function RelatorioPage() {
                       <p key={h} style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.5, textAlign: i === 3 ? "right" : "left" }}>{h}</p>
                     ))}
                   </div>
-                  <div style={{ maxHeight: 260, overflowY: "auto", display: "flex", flexDirection: "column", gap: 1 }}>
+                  <div style={{ maxHeight: 320, overflowY: "auto", display: "flex", flexDirection: "column", gap: 1 }}>
                     {s.pedidos.map(p => (
-                      <div key={p.id} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 0, padding: "7px 0", borderBottom: "1px solid #F1F5F9" }}>
-                        <p style={{ fontSize: 12, fontWeight: 700, color: "#374151", fontFamily: "monospace" }}>#{p.codigo}</p>
-                        <p style={{ fontSize: 12, color: "#64748b" }}>{fmtData(p.criado_em)}</p>
-                        <p style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.3 }}>{p.forma_pagamento}</p>
-                        <p style={{ fontSize: 12, fontWeight: 800, color: "#0F172A", textAlign: "right" }}>{fmtR(Number(p.total))}</p>
+                      <div key={p.id} style={{ padding: "7px 0", borderBottom: "1px solid #F1F5F9" }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 0 }}>
+                          <p style={{ fontSize: 12, fontWeight: 700, color: "#374151", fontFamily: "monospace" }}>#{p.codigo}</p>
+                          <p style={{ fontSize: 12, color: "#64748b" }}>{fmtData(p.criado_em)}</p>
+                          <p style={{ fontSize: 12, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.3 }}>{p.forma_pagamento}</p>
+                          <p style={{ fontSize: 12, fontWeight: 800, color: "#0F172A", textAlign: "right" }}>{fmtR(Number(p.total))}</p>
+                        </div>
+                        {(((p as any).itens ?? []) as { nome: string; quantidade: number }[]).length > 0 && (
+                          <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 3, lineHeight: 1.4 }}>
+                            {((p as any).itens as { nome: string; quantidade: number }[])
+                              .map(it => `${it.quantidade}x ${it.nome}`).join(", ")}
+                          </p>
+                        )}
                       </div>
                     ))}
                   </div>
+
+                  {/* Ranking de produtos mais vendidos desta loja */}
+                  {(() => {
+                    const rankingLoja = ranquearProdutos(s.pedidos).slice(0, 5)
+                    if (rankingLoja.length === 0) return null
+                    return (
+                      <div style={{ marginTop: 12, padding: "10px 0 0", borderTop: "1.5px solid #DCFCE7" }}>
+                        <p style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+                          🏆 Mais vendidos nesta loja
+                        </p>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          {rankingLoja.map((r, i) => (
+                            <div key={r.nome} style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                              <span style={{ color: "#374151" }}>{i + 1}º {r.nome}</span>
+                              <span style={{ color: "#64748b", fontWeight: 700 }}>{r.quantidade}x · {fmtR(r.receita)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })()}
+
                   {/* Subtotais da loja */}
                   <div style={{ marginTop: 10, padding: "10px 0 0", borderTop: "1.5px solid #DCFCE7", display: "flex", gap: 20, flexWrap: "wrap" }}>
                     {[
@@ -321,7 +423,7 @@ export default function RelatorioPage() {
           ))}
 
           {/* Linha de total */}
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 80px", gap: 0, padding: "16px 20px", background: "#F8FAFC", borderTop: "2px solid #E2E8F0" }}>
+          <div className="oculta-no-export-loja" style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr 1fr 160px", gap: 0, padding: "16px 20px", background: "#F8FAFC", borderTop: "2px solid #E2E8F0" }}>
             <p style={{ fontSize: 12, fontWeight: 900, color: "#0F172A" }}>TOTAL GERAL ({stats.length} lojas)</p>
             <p style={{ fontSize: 13, fontWeight: 900, color: "#374151", textAlign: "right" }}>{totais.pedidos}</p>
             <p style={{ fontSize: 13, fontWeight: 900, color: "#8b5cf6", textAlign: "right" }}>{fmtR(totais.vendas)}</p>
@@ -336,7 +438,7 @@ export default function RelatorioPage() {
 
       {/* Tabela de repasse motoboys */}
       {!loading && motoboyStats.length > 0 && (
-        <div style={{ marginTop: 28 }}>
+        <div className="oculta-no-export-loja" style={{ marginTop: 28 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
             <div style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(139,92,246,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">

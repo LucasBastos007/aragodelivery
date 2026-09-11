@@ -485,6 +485,7 @@ export default function CheckoutPage() {
       codigo:   cupomInput.trim().toUpperCase(),
       subtotal: String(subtotal),
       ...(loja_id ? { loja_id } : {}),
+      ...(clienteCoords?.lat && clienteCoords.lng ? { lat: String(clienteCoords.lat), lng: String(clienteCoords.lng) } : {}),
     })
     const res  = await fetch(`/api/cupom/validar?${params}`)
     const json = await res.json()
