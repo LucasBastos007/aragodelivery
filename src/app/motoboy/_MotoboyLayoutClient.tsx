@@ -32,6 +32,23 @@ const NAV = [
     ),
   },
   {
+    href: "/motoboy/pedidos",
+    label: "Pedidos",
+    icon: (active: boolean) => (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2.2 : 1.8} strokeLinecap="round" strokeLinejoin="round">
+        {/* Panela */}
+        <path d="M4 11 h16 v6 a2 2 0 0 1 -2 2 h-12 a2 2 0 0 1 -2 -2 z" fill={active ? "currentColor" : "none"} fillOpacity={active ? 0.15 : 0}/>
+        {/* Alças */}
+        <path d="M2 11 h2 M20 11 h2"/>
+        {/* Tampa */}
+        <path d="M5 11 a7 4 0 0 1 14 0"/>
+        {/* Cabo da tampa */}
+        <line x1="12" y1="4.5" x2="12" y2="2.5"/>
+        <circle cx="12" cy="2" r="0.8" fill="currentColor"/>
+      </svg>
+    ),
+  },
+  {
     href: "/motoboy/dashboard",
     label: "Início",
     icon: (active: boolean) => (
