@@ -515,7 +515,7 @@ export default function Home() {
       router.replace("/onboarding"); return
     }
     supabase.from("lojas").select("*").eq("status", "ativo")
-      .order("aberto", { ascending: false }).order("nome")
+      .order("destaque", { ascending: false }).order("aberto", { ascending: false }).order("nome")
       .then(({ data }) => { setLojas((data as Loja[]) ?? []); setLoading(false) })
 
     // Splash já foi exibido nesta sessão — fecha imediatamente

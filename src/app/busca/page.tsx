@@ -57,7 +57,7 @@ export default function BuscaPage() {
     let q = supabase.from("lojas").select("*").eq("status", "ativo")
     if (filtro) q = q.eq("categoria", filtro)
     if (busca)  q = q.ilike("nome", `%${busca}%`)
-    q.order("aberto", { ascending: false }).order("nome")
+    q.order("destaque", { ascending: false }).order("aberto", { ascending: false }).order("nome")
       .then(({ data }) => { setLojas((data as Loja[]) ?? []); setLoading(false) })
   }, [busca, filtro])
 
