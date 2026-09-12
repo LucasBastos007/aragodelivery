@@ -90,7 +90,7 @@ export default function MapaPicker({ lat, lng, onMove }: Props) {
   }
 
   return (
-    <div style={{ position: "relative", width: "100%", height: 260, borderRadius: 14, overflow: "hidden" }}>
+    <div style={{ position: "relative", width: "100%", height: 420, borderRadius: 14, overflow: "hidden" }}>
       {/* Mapa */}
       <div ref={divRef} style={{ width: "100%", height: "100%" }} />
 
