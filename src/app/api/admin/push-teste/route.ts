@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
   const results = await Promise.allSettled(
     subs.map(async sub => {
       try {
-        await webpush.sendNotification(sub, payload)
+        await webpush.sendNotification(sub, payload, { urgency: "high" })
         return "ok"
       } catch (e: any) {
         if (e.statusCode === 410) expiredEndpoints.push(sub.endpoint)

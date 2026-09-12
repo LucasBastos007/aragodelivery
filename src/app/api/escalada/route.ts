@@ -152,7 +152,7 @@ export async function POST(req: NextRequest) {
         tag:   "corrida-reatribuida",
         url:   "/motoboy",
       })
-      await Promise.allSettled(subs.map(sub => webpush.sendNotification(sub, payload).catch(() => {})))
+      await Promise.allSettled(subs.map(sub => webpush.sendNotification(sub, payload, { urgency: "high" }).catch(() => {})))
     }
   }
 
@@ -182,7 +182,7 @@ export async function POST(req: NextRequest) {
         if (!m.push_subscription) return
         const subs: any[] = Array.isArray(m.push_subscription) ? m.push_subscription : [m.push_subscription]
         for (const sub of subs) {
-          try { await webpush.sendNotification(sub, pushPayload) }
+          try { await webpush.sendNotification(sub, pushPayload, { urgency: "high" }) }
           catch (e: any) {
             if (e.statusCode === 410) {
               if (!expiredPorMotoboy[m.id]) expiredPorMotoboy[m.id] = []

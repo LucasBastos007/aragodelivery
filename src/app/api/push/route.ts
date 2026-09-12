@@ -47,7 +47,10 @@ async function sendPushToAll(
   await Promise.allSettled(
     subs.map(async sub => {
       try {
-        await webpush.sendNotification(sub, JSON.stringify(payload))
+        // urgency "high" — motoboy costuma estar com a tela bloqueada esperando corrida;
+        // prioridade "normal" (padrão da lib) pode ficar retida pelo Doze/economia de
+        // bateria do Android até a próxima janela de manutenção do sistema.
+        await webpush.sendNotification(sub, JSON.stringify(payload), { urgency: "high" })
       } catch (err: any) {
         if (err.statusCode === 410 && onExpired) onExpired(sub.endpoint)
       }
