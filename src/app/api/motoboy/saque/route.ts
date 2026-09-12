@@ -35,17 +35,21 @@ export async function POST(req: NextRequest) {
   if (!mb) return NextResponse.json({ error: "Motoboy não encontrado" }, { status: 404 })
   if (!mb.pix_key) return NextResponse.json({ error: "Cadastre sua chave PIX antes de solicitar" }, { status: 422 })
 
-  // Calcula saldo real a partir de pedidos entregues, entregas avulsas e saques anteriores —
-  // mesma fórmula canônica (src/lib/comissao.ts) usada nas telas de ganhos do motoboy, senão
-  // o saldo mostrado na tela diverge do que o servidor realmente libera aqui.
-  const [{ data: pedidos }, { data: avulsas }, { data: saquesAnt }] = await Promise.all([
+  // Calcula saldo real a partir de pedidos entregues, entregas avulsas, saques anteriores e
+  // ajustes manuais de saldo — mesma fórmula canônica (src/lib/comissao.ts) usada nas telas
+  // de ganhos do motoboy, senão o saldo mostrado na tela diverge do que o servidor libera aqui.
+  // Ajuste positivo = crédito a favor do motoboy (ex: compensação por corrida mais longa que
+  // o calculado); negativo = débito. Só entram os ainda não quitados.
+  const [{ data: pedidos }, { data: avulsas }, { data: saquesAnt }, { data: ajustes }] = await Promise.all([
     sb.from("pedidos").select("taxa_entrega, criado_em").eq("motoboy_id", motoboy_id).eq("status", "entregue"),
     sb.from("entregas_avulsas").select("taxa_entrega, criado_em").eq("motoboy_id", motoboy_id).eq("status", "entregue"),
     sb.from("saques").select("valor, status").eq("motoboy_id", motoboy_id).eq("tipo", "motoboy"),
+    sb.from("saldo_ajustes").select("valor").eq("motoboy_id", motoboy_id).eq("tipo", "motoboy").is("quitado_em", null),
   ])
   const ganhos =
     (pedidos ?? []).reduce((s, p) => s + ganhoMotoboy(p.taxa_entrega ?? 0, p.criado_em), 0) +
-    (avulsas ?? []).reduce((s, a) => s + ganhoMotoboy(a.taxa_entrega ?? 0, a.criado_em), 0)
+    (avulsas ?? []).reduce((s, a) => s + ganhoMotoboy(a.taxa_entrega ?? 0, a.criado_em), 0) +
+    (ajustes ?? []).reduce((s, a) => s + Number(a.valor ?? 0), 0)
   const pagos      = (saquesAnt ?? []).filter(s => s.status === "pago").reduce((s, x) => s + x.valor, 0)
   const solicitado = (saquesAnt ?? []).filter(s => s.status === "solicitado").reduce((s, x) => s + x.valor, 0)
   const saldo      = Math.max(0, ganhos - pagos - solicitado)

@@ -55,7 +55,7 @@ export default function MotoboyFinanceiroPage() {
       setContaInput("")
     }
 
-    const [{ data: ped }, { data: avulsas }] = await Promise.all([
+    const [{ data: ped }, { data: avulsas }, { data: ajustes }] = await Promise.all([
       supabase
         .from("pedidos").select("id, codigo, taxa_entrega, criado_em, loja:lojas(nome)")
         .eq("motoboy_id", motoboy_id).eq("status", "entregue")
@@ -63,14 +63,19 @@ export default function MotoboyFinanceiroPage() {
       supabase
         .from("entregas_avulsas").select("taxa_entrega, criado_em")
         .eq("motoboy_id", motoboy_id).eq("status", "entregue"),
+      supabase
+        .from("saldo_ajustes").select("valor")
+        .eq("motoboy_id", motoboy_id).eq("tipo", "motoboy").is("quitado_em", null),
     ])
     const pedList = ped ?? []
     setEntregas(pedList.slice(0, 30))
 
-    // Inclui entregas avulsas no total — mesma base de cálculo do saldo sacável (/api/motoboy/saque)
+    // Inclui entregas avulsas e ajustes manuais de saldo — mesma base de cálculo do saldo
+    // sacável (/api/motoboy/saque), senão a tela mostra um valor diferente do que sai de fato
     const ganhos =
       pedList.reduce((s, p) => s + ganhoLiquido(p.taxa_entrega ?? 0, p.criado_em), 0) +
-      (avulsas ?? []).reduce((s, a) => s + ganhoLiquido(a.taxa_entrega ?? 0, a.criado_em), 0)
+      (avulsas ?? []).reduce((s, a) => s + ganhoLiquido(a.taxa_entrega ?? 0, a.criado_em), 0) +
+      (ajustes ?? []).reduce((s, a) => s + Number(a.valor ?? 0), 0)
     setTotalGanhos(ganhos)
 
     const { data: saq } = await supabase
