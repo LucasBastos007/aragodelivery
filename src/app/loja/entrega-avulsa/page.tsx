@@ -85,6 +85,93 @@ function calcularFrete(distKm: number, taxaBase: number): number {
   return Math.round((taxaBase + (distKm - 6) * 1.00) * 100) / 100
 }
 
+// Mesmo layout de comanda usado em loja/page.tsx (imprimirPedido), adaptado pra entrega
+// avulsa — sem lista de itens (é só um valor total do pedido) e sem forma de pagamento
+// (não é rastreada aqui, o pagamento é combinado direto com o cliente por fora do app).
+function imprimirEntregaAvulsa(entrega: EntregaAvulsa, largura: "80mm" | "58mm" = "80mm") {
+  const now  = new Date(entrega.criado_em)
+  const data = now.toLocaleDateString("pt-BR")
+  const hora = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+
+  const bodyW  = largura === "58mm" ? "54mm" : "76mm"
+  const pageW  = largura
+  const fsBase = largura === "58mm" ? "11px" : "12px"
+  const fsBig  = largura === "58mm" ? "13px" : "14px"
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Entrega #${entrega.codigo}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: ${fsBase};
+      font-weight: 700;
+      width: ${bodyW};
+      padding: 3mm 3mm;
+      color: #000;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .center { text-align: center; }
+    .r { text-align: right; white-space: nowrap; }
+    .dash { border-top: 2px solid #000; margin: 5px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    td { padding: 2px 0; vertical-align: top; }
+    .total-row td { font-size: ${fsBig}; padding-top: 5px; border-top: 2px solid #000; }
+    .section { margin: 5px 0 3px; font-size: ${fsBig}; text-transform: uppercase; letter-spacing: 0.5px; }
+    .codigo { font-size: 16px; letter-spacing: 1px; }
+    @media print {
+      body { margin: 0; }
+      @page { margin: 2mm; size: ${pageW} auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="center" style="margin-bottom:6px;">
+    <img src="https://chegodelivery.com/logo-chego.jpg" alt="Chegô" style="width:64px;height:64px;object-fit:contain;border-radius:8px;" />
+  </div>
+  <div class="dash"></div>
+  <p class="codigo">ENTREGA AVULSA #${entrega.codigo}</p>
+  <p>${data} às ${hora}</p>
+  <div class="dash"></div>
+  <table>
+    <tr><td>Valor do pedido</td><td class="r">R$ ${entrega.valor_pedido.toFixed(2).replace(".", ",")}</td></tr>
+    <tr><td>Taxa de entrega</td><td class="r">R$ ${entrega.taxa_entrega.toFixed(2).replace(".", ",")}</td></tr>
+    <tr class="total-row"><td>TOTAL</td><td class="r">R$ ${(entrega.valor_pedido + entrega.taxa_entrega).toFixed(2).replace(".", ",")}</td></tr>
+  </table>
+  <div class="dash"></div>
+  <p class="section">CLIENTE</p>
+  <p>${entrega.cliente_nome}</p>
+  ${entrega.cliente_tel ? `<p>Tel: ${entrega.cliente_tel}</p>` : ""}
+  <div class="dash"></div>
+  <p class="section">ENDEREÇO DE ENTREGA</p>
+  <p>${entrega.endereco}</p>
+  ${entrega.observacao ? `<div class="dash"></div><p class="section">OBSERVAÇÃO</p><p>${entrega.observacao}</p>` : ""}
+  <div class="dash"></div>
+  <p class="center" style="font-size:13px;">*** CHEGÔ DELIVERY ***</p>
+  <br><br>
+</body>
+</html>`
+
+  const win = window.open("", "_blank", "width=420,height=600,menubar=no,toolbar=no")
+  if (win) {
+    win.document.write(html)
+    win.document.close()
+    win.focus()
+    const img = win.document.querySelector("img")
+    if (img && !img.complete) {
+      img.onload = () => { win.print(); win.close() }
+      img.onerror = () => { win.print(); win.close() }
+      setTimeout(() => { win.print(); win.close() }, 3000)
+    } else {
+      setTimeout(() => { win.print(); win.close() }, 400)
+    }
+  }
+}
+
 export default function EntregaAvulsaPage() {
   const { sessao, logout } = useAuth()
   const loja_id = sessao?.role === "lojista" ? (sessao as any).loja_id : null
@@ -120,6 +207,17 @@ export default function EntregaAvulsaPage() {
   const [distInfo, setDistInfo] = useState<{ km: number; taxa: number } | null>(null)
   const [geocodando, setGeocodando] = useState(false)
   const [erroGeocode, setErroGeocode] = useState<string | null>(null)
+
+  // Localização colada do WhatsApp (link do Google Maps que o cliente mandou)
+  const [linkMaps, setLinkMaps]           = useState("")
+  const [resolvendoLink, setResolvendoLink] = useState(false)
+  const [erroLink, setErroLink]           = useState<string | null>(null)
+  const [clienteCoords, setClienteCoords] = useState<{ lat: number; lng: number } | null>(null)
+
+  const [larguraPapel] = useState<"80mm" | "58mm">(() => {
+    if (typeof window !== "undefined") return (localStorage.getItem("print_largura") as "80mm" | "58mm") ?? "80mm"
+    return "80mm"
+  })
 
   const [form, setForm] = useState({
     cliente_nome:  "",
@@ -253,6 +351,53 @@ export default function EntregaAvulsaPage() {
     setSugestoes([])
     setDistInfo(null)
     setErroGeocode(null)
+    setClienteCoords(null)
+    setLinkMaps("")
+    setErroLink(null)
+  }
+
+  // Cliente manda a localização pelo WhatsApp (geralmente um link do Google Maps) — em vez
+  // de digitar o endereço manualmente, o lojista cola o link aqui. Resolve a coordenada real
+  // (segue redirecionamento se for link curto), faz reverse geocode pra preencher os campos
+  // de texto, e calcula a taxa direto pela distância real — mais preciso que a busca textual.
+  async function usarLinkMaps() {
+    if (!linkMaps.trim()) return
+    setResolvendoLink(true)
+    setErroLink(null)
+    try {
+      const res = await fetch(`/api/geocode/resolver-link?texto=${encodeURIComponent(linkMaps.trim())}`)
+      const data = await res.json()
+      if (!res.ok || typeof data.lat !== "number") {
+        setErroLink(data.error ?? "Não consegui identificar a localização nesse link.")
+        return
+      }
+      setClienteCoords({ lat: data.lat, lng: data.lng })
+
+      const revRes = await fetch(`/api/geocode/reverse?lat=${data.lat}&lon=${data.lng}`)
+      const revData = await revRes.json().catch(() => ({}))
+      const addr = revData.address ?? {}
+      const cidade = addr.city || addr.town || addr.village || addr.municipality || ""
+      const rua = [addr.road, addr.house_number].filter(Boolean).join(", ")
+
+      if (cidade) {
+        setEndBusca(cidade)
+        setEndSelecionado({ place_id: "link-maps", display_name: cidade, lat: String(data.lat), lon: String(data.lng) })
+      }
+      if (rua) setEndCompl(rua)
+
+      const latL = lojaCoords?.lat
+      const lngL = lojaCoords?.lng
+      if (latL && lngL) {
+        const dist = haversineKm(latL, lngL, data.lat, data.lng)
+        const taxaFixa = cidade ? buscarTabelaFrete(tabelaFrete, cidade) : null
+        const taxaBase = lojaCoords?.taxa_entrega ?? 6.00
+        setDistInfo({ km: dist, taxa: taxaFixa ?? calcularFrete(dist, taxaBase) })
+      }
+    } catch {
+      setErroLink("Erro ao processar o link. Tente colar de novo.")
+    } finally {
+      setResolvendoLink(false)
+    }
   }
 
   async function geocodificarMunicipio(municipio: string) {
@@ -325,6 +470,7 @@ export default function EntregaAvulsaPage() {
     e.preventDefault()
     if (!loja_id) return
     if (!endBusca.trim()) { alert("Informe o endereço de entrega"); return }
+    if (!form.cliente_tel.trim()) { alert("Informe o telefone do cliente"); return }
     setEnviando(true)
     try {
       const res = await fetch("/api/entrega-avulsa", {
@@ -339,6 +485,8 @@ export default function EntregaAvulsaPage() {
           valor_pedido:  parseFloat(form.valor_pedido || "0"),
           taxa_entrega:  distInfo?.taxa ?? 0,
           observacao:    form.observacao,
+          cliente_lat:   clienteCoords?.lat ?? null,
+          cliente_lng:   clienteCoords?.lng ?? null,
         }),
       })
       const json = await res.json()
@@ -483,6 +631,37 @@ export default function EntregaAvulsaPage() {
         boxShadow: "0 4px 24px rgba(0,0,0,0.06)", padding: "20px 20px", marginBottom: 24,
       }}>
 
+        {/* Localização enviada pelo cliente no WhatsApp (link do Google Maps) */}
+        <div style={{ marginBottom: 14 }}>
+          <p style={labelStyle}>Localização do WhatsApp (opcional)</p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              value={linkMaps}
+              onChange={e => setLinkMaps(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); usarLinkMaps() } }}
+              placeholder="Cole aqui o link do Google Maps que o cliente mandou"
+              style={{ ...campoStyle, flex: 1 }}
+            />
+            <button
+              type="button"
+              onClick={usarLinkMaps}
+              disabled={resolvendoLink || !linkMaps.trim()}
+              style={{
+                flexShrink: 0, padding: "0 16px", borderRadius: 10, border: "none",
+                background: resolvendoLink || !linkMaps.trim() ? "#e5e7eb" : "#f97316",
+                color: resolvendoLink || !linkMaps.trim() ? "#9ca3af" : "white",
+                fontWeight: 700, fontSize: 13, cursor: resolvendoLink || !linkMaps.trim() ? "not-allowed" : "pointer",
+              }}
+            >
+              {resolvendoLink ? "..." : "📍 Usar"}
+            </button>
+          </div>
+          {erroLink && <p style={{ fontSize: 11, color: "#dc2626", marginTop: 6 }}>⚠ {erroLink}</p>}
+          {clienteCoords && !erroLink && (
+            <p style={{ fontSize: 11, color: "#16a34a", marginTop: 6 }}>✓ Localização identificada — endereço preenchido abaixo</p>
+          )}
+        </div>
+
         {/* 1. Endereço com autocomplete */}
         <div ref={endRef} style={{ marginBottom: 14, position: "relative" }}>
           <p style={labelStyle}>Município *</p>
@@ -601,8 +780,9 @@ export default function EntregaAvulsaPage() {
             />
           </div>
           <div>
-            <p style={labelStyle}>Telefone</p>
+            <p style={labelStyle}>Telefone *</p>
             <input
+              required
               value={form.cliente_tel}
               onChange={e => set("cliente_tel", e.target.value)}
               placeholder="(99) 99999-9999"
@@ -701,9 +881,23 @@ export default function EntregaAvulsaPage() {
                     <span style={{ fontSize: 12, fontWeight: 800, color: "#f97316" }}>#{e.codigo}</span>
                     <StatusBadge status={e.status} />
                   </div>
-                  <span style={{ fontSize: 11, color: "#94a3b8" }}>
-                    {new Date(e.criado_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontSize: 11, color: "#94a3b8" }}>
+                      {new Date(e.criado_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => imprimirEntregaAvulsa(e, larguraPapel)}
+                      title="Imprimir comanda"
+                      style={{
+                        display: "flex", alignItems: "center", gap: 4, padding: "4px 9px", borderRadius: 7,
+                        border: "1px solid #E2E8F0", background: "#F8FAFC", color: "#64748b",
+                        fontSize: 11, fontWeight: 700, cursor: "pointer",
+                      }}
+                    >
+                      🖨️ Imprimir
+                    </button>
+                  </div>
                 </div>
                 <p style={{ fontSize: 13, fontWeight: 700, color: "#0F172A", marginBottom: 2 }}>{e.cliente_nome}</p>
                 <p style={{ fontSize: 12, color: "#64748b" }}>{e.endereco}</p>

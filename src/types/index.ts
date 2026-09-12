@@ -79,6 +79,8 @@ export interface EntregaAvulsa {
   status: "aguardando" | "aceito" | "em_rota" | "entregue" | "cancelado"
   codigo: string
   criado_em: string
+  cliente_lat?: number | null
+  cliente_lng?: number | null
 }
 
 export interface Motoboy {

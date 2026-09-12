@@ -83,11 +83,14 @@ export async function POST(req: NextRequest) {
   const loja_id = sess.loja_id
 
   try {
-    const { cliente_nome, cliente_tel, endereco, valor_pedido, taxa_entrega, observacao } =
+    const { cliente_nome, cliente_tel, endereco, valor_pedido, taxa_entrega, observacao, cliente_lat, cliente_lng } =
       await req.json()
 
     if (!cliente_nome || !endereco) {
       return NextResponse.json({ error: "Campos obrigatórios ausentes" }, { status: 400 })
+    }
+    if (!cliente_tel || !String(cliente_tel).trim()) {
+      return NextResponse.json({ error: "Telefone do cliente é obrigatório" }, { status: 400 })
     }
 
     const { data: loja } = await admin
@@ -115,6 +118,8 @@ export async function POST(req: NextRequest) {
         observacao:   observacao   || "",
         status:       "aguardando",
         codigo:       gerarCodigo(),
+        cliente_lat:  cliente_lat  ?? null,
+        cliente_lng:  cliente_lng  ?? null,
       })
       .select()
       .single()
