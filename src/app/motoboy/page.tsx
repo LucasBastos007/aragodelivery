@@ -9,6 +9,36 @@ import { ganhoMotoboy } from "@/lib/comissao"
 function ganhoLiquido(taxa: number, criadoEm?: string | null): number {
   return ganhoMotoboy(taxa, criadoEm)
 }
+
+// Crédito/débito da maquininha não tem coluna própria — vem embutido na observação do
+// pedido (checkout grava "💳 Maquininha: Crédito/Débito" ali). Extrai pra exibir separado.
+function extrairTipoMaquininha(observacao?: string | null): string | null {
+  if (!observacao) return null
+  const m = observacao.match(/Maquininha:\s*(Crédito|Débito)/i)
+  return m ? m[1] : null
+}
+
+// Quanto o motoboy precisa cobrar do cliente na entrega — só relevante pra dinheiro/maquininha
+// (PIX e cartão salvo já foram cobrados no app). Mostrado tanto na oferta quanto na corrida ativa.
+function DetalheCobranca({ pedido }: { pedido: any }) {
+  if (pedido.forma_pagamento === "dinheiro") {
+    return (
+      <p style={{ color: "#facc15", fontSize: 12, fontWeight: 800 }}>
+        💵 Cobrar R$ {Number(pedido.total ?? 0).toFixed(2)}
+        {pedido.troco_para ? ` · Troco para R$ ${Number(pedido.troco_para).toFixed(2)}` : " · Sem troco"}
+      </p>
+    )
+  }
+  if (pedido.forma_pagamento === "maquininha") {
+    const tipo = extrairTipoMaquininha(pedido.observacao)
+    return (
+      <p style={{ color: "#facc15", fontSize: 12, fontWeight: 800 }}>
+        💳 Cobrar R$ {Number(pedido.total ?? 0).toFixed(2)}{tipo ? ` na maquininha (${tipo})` : " na maquininha"}
+      </p>
+    )
+  }
+  return null
+}
 import type { Pedido } from "@/types"
 import { useJsApiLoader } from "@react-google-maps/api"
 
@@ -2387,12 +2417,8 @@ export default function MotoboyPage() {
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                     <div style={{ width: 7, height: 7, borderRadius: 2, background: PGTO_COLOR[p.forma_pagamento] ?? "#818cf8", flexShrink: 0 }} />
                     <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}>{PGTO[p.forma_pagamento] ?? p.forma_pagamento}</p>
-                    {p.forma_pagamento === "dinheiro" && (
-                      <p style={{ color: "#facc15", fontSize: 12, fontWeight: 800 }}>
-                        {p.troco_para ? `· Troco para R$ ${Number(p.troco_para).toFixed(2)}` : "· Sem troco"}
-                      </p>
-                    )}
                   </div>
+                  <DetalheCobranca pedido={p} />
                   {p.observacao && (
                     <div style={{ display: "flex", gap: 8 }}>
                       <div style={{ width: 7, height: 7, borderRadius: "50%", background: "rgba(255,255,255,0.15)", flexShrink: 0, marginTop: 4 }} />
@@ -2644,6 +2670,7 @@ export default function MotoboyPage() {
                         <div style={{ width: 7, height: 7, borderRadius: 2, background: PGTO_COLOR[p.forma_pagamento] ?? "#818cf8", flexShrink: 0 }} />
                         <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 12 }}>{PGTO[p.forma_pagamento] ?? p.forma_pagamento}</p>
                       </div>
+                      <DetalheCobranca pedido={p} />
                       {p.itens && p.itens.length > 0 && (
                         <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 11, marginLeft: 21 }}>
                           {p.itens.map((i: any) => `${i.quantidade}x ${i.nome}`).join(" · ")}
@@ -3006,6 +3033,7 @@ function CorridaAtivaPanel({
                   </>
                 )
               })()}
+              {p && <div style={{ marginTop: 4 }}><DetalheCobranca pedido={p} /></div>}
               {p?.observacao && (
                 <p style={{ color: "#aaa", fontSize: 12, marginTop: 4, wordBreak: "break-word" }}>{p.observacao}</p>
               )}
@@ -3318,6 +3346,7 @@ function CardCorrida({
                 {pedido.itens.length} iten{pedido.itens.length > 1 ? "s" : ""} · {pedido.forma_pagamento?.toUpperCase()}
               </p>
             )}
+            <div style={{ marginTop: 4 }}><DetalheCobranca pedido={pedido} /></div>
           </div>
 
           {/* Timer circular SVG */}
