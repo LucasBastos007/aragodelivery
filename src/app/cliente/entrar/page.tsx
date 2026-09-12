@@ -43,7 +43,9 @@ export default function ClienteEntrarPage() {
       if (err) setErro(err === "Invalid login credentials" ? "Email ou senha incorretos." : err)
       else router.push("/")
     } else {
-      if (!nome.trim()) { setErro("Informe seu nome."); setLoading(false); return }
+      if (nome.trim().length < 5) { setErro("Informe seu nome completo (mínimo 5 caracteres)."); setLoading(false); return }
+      const telDigits = telefone.replace(/\D/g, "")
+      if (telDigits.length < 10) { setErro("Informe um telefone válido, com DDD."); setLoading(false); return }
       if (senha.length < 6) { setErro("A senha precisa ter pelo menos 6 caracteres."); setLoading(false); return }
       const err = await cadastrar(email.trim(), senha, nome, telefone)
       if (err) setErro(err)
@@ -120,7 +122,7 @@ export default function ClienteEntrarPage() {
                   <input style={inp} value={nome} onChange={e => setNome(e.target.value)} placeholder="João Silva" />
                 </div>
                 <div>
-                  <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>WhatsApp</label>
+                  <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>WhatsApp *</label>
                   <input style={inp} value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(64) 9 9999-1234" inputMode="tel" />
                 </div>
               </>

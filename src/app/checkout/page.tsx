@@ -741,9 +741,9 @@ export default function CheckoutPage() {
       } catch { /* localStorage corrompido — ignora */ }
     }
 
-    if (!nome.trim()) { setErro("Informe seu nome"); return }
+    if (nome.trim().length < 5) { setErro("Informe seu nome completo"); return }
     const telDigits = telefone.replace(/\D/g, "")
-    if (telDigits.length > 0 && telDigits.length < 10) { setErro("Telefone inválido — informe com DDD (ex: 62 9 9999-9999)"); return }
+    if (telDigits.length < 10) { setErro("Informe seu telefone com DDD (ex: 62 9 9999-9999)"); return }
 
     // CPF: estado local → perfil DB → metadados auth → busca no banco
     let cpfFinal = cpf.replace(/\D/g, "")
@@ -1004,6 +1004,12 @@ export default function CheckoutPage() {
       }
     }
 
+    // Cadastro antigo sem telefone — como o campo apareceu no checkout e foi preenchido
+    // agora, salva no perfil pra não pedir de novo nos próximos pedidos.
+    if (user && perfil && !perfil.telefone && telDigits.length >= 10) {
+      salvarPerfil(perfil.nome, telefone).catch(() => {})
+    }
+
     // Salva cartão (sem CVV, com token se disponível) se LGPD consentido
     if (pagamento === "cartao" && salvarCartao && lgpdConsent) {
       const digits = cardNumber.replace(/\D/g, "")
@@ -1192,20 +1198,35 @@ export default function CheckoutPage() {
           </div>
 
           {user && (nome || perfil?.nome) ? (
-            /* Usuário logado — mostra dados do perfil, sem redigitar */
-            <div style={{ background: "#f8fafc", borderRadius: 12, padding: "14px 16px", border: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(220,38,38,0.08)", border: "2px solid rgba(220,38,38,0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                {user.user_metadata?.avatar_url
-                  ? <img src={user.user_metadata.avatar_url} style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} />
-                  : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>}
+            /* Usuário logado — mostra dados do perfil, sem redigitar (nome só) */
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ background: "#f8fafc", borderRadius: 12, padding: "14px 16px", border: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(220,38,38,0.08)", border: "2px solid rgba(220,38,38,0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  {user.user_metadata?.avatar_url
+                    ? <img src={user.user_metadata.avatar_url} style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} />
+                    : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ color: "#111827", fontWeight: 700, fontSize: 14 }}>{nome || perfil?.nome}</p>
+                  {(telefone || perfil?.telefone) && <p style={{ color: "#9CA3AF", fontSize: 12 }}>{telefone || perfil?.telefone}</p>}
+                </div>
+                <Link href="/cliente/alterar-dados" style={{ color: "#DC2626", fontSize: 12, fontWeight: 700, textDecoration: "none", flexShrink: 0 }}>
+                  Editar
+                </Link>
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ color: "#111827", fontWeight: 700, fontSize: 14 }}>{nome || perfil?.nome}</p>
-                <p style={{ color: "#9CA3AF", fontSize: 12 }}>{telefone || perfil?.telefone || user.email}</p>
-              </div>
-              <Link href="/cliente/alterar-dados" style={{ color: "#DC2626", fontSize: 12, fontWeight: 700, textDecoration: "none", flexShrink: 0 }}>
-                Editar
-              </Link>
+              {/* Cadastro antigo sem telefone salvo — pede aqui mesmo, sem sair do checkout */}
+              {!(telefone || perfil?.telefone) && (
+                <div>
+                  <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
+                    Seu WhatsApp * <span style={{ fontWeight: 400, color: "#9CA3AF" }}>(seu cadastro está sem telefone)</span>
+                  </label>
+                  <input
+                    value={telefone} onChange={e => setTelefone(e.target.value)}
+                    placeholder="(64) 9 9999-1234" inputMode="tel"
+                    style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 16, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", boxSizing: "border-box" }}
+                  />
+                </div>
+              )}
             </div>
           ) : (
             /* Não logado — pede os dados */

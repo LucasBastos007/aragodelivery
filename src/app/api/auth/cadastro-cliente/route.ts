@@ -13,6 +13,13 @@ export async function POST(req: NextRequest) {
     if (!email || !senha || !nome) {
       return NextResponse.json({ error: "Dados obrigatórios ausentes." }, { status: 400 })
     }
+    if (String(nome).trim().length < 5) {
+      return NextResponse.json({ error: "Informe o nome completo (mínimo 5 caracteres)." }, { status: 400 })
+    }
+    const telDigits = String(telefone ?? "").replace(/\D/g, "")
+    if (telDigits.length < 10) {
+      return NextResponse.json({ error: "Informe um telefone válido, com DDD." }, { status: 400 })
+    }
 
     // Cria usuário já confirmado — sem enviar email de confirmação
     const { data, error } = await admin.auth.admin.createUser({
