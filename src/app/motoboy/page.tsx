@@ -90,8 +90,10 @@ function urlBase64ToUint8Array(base64String: string) {
 // geográfico, um endereço com nome de rua comum (ex: "Rua 15") pode geocodificar pra uma
 // via de mesmo nome numa cidade bem maior e mais "importante" no resto do Brasil, jogando
 // o pino do motoboy pro lugar errado no mapa.
-const GEOCODE_BIAS_LAT = -17.6547
-const GEOCODE_BIAS_LNG = -49.4378
+// ATENÇÃO: valor anterior (-17.6547, -49.4378) era Aloândia-GO, ~82km de Aragoiânia — o
+// viés geográfico estava, ele mesmo, jogando os resultados pro lugar errado. Corrigido.
+const GEOCODE_BIAS_LAT = -16.9214
+const GEOCODE_BIAS_LNG = -49.4497
 
 async function geocodeAddress(address: string): Promise<[number, number] | null> {
   try {

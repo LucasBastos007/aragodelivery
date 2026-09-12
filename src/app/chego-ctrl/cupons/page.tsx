@@ -15,9 +15,10 @@ interface Cupom {
 
 interface LojaResumo { id: string; nome: string }
 
-// Aragoiânia-GO — mesmo centro usado no checkout, pra enviesar a busca de endereço
-const GEOCODE_BIAS_LAT = -17.6547
-const GEOCODE_BIAS_LNG = -49.4378
+// Aragoiânia-GO — mesmo centro usado no checkout, pra enviesar a busca de endereço.
+// ATENÇÃO: valor anterior (-17.6547, -49.4378) era Aloândia-GO, ~82km de Aragoiânia. Corrigido.
+const GEOCODE_BIAS_LAT = -16.9214
+const GEOCODE_BIAS_LNG = -49.4497
 
 const inp: React.CSSProperties = {
   width: "100%", padding: "10px 13px", borderRadius: 10, fontSize: 14,

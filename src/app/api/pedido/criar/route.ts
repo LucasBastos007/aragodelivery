@@ -168,6 +168,24 @@ export async function POST(req: NextRequest) {
     const taxaFixa = buscarTabelaFrete(tabelaFrete ?? [], cidade_entrega)
       ?? buscarTabelaFrete(tabelaFrete ?? [], bairro_entrega)
 
+    // Trava de segurança: sem tabela fixa pro município, um endereço geocodificado errado
+    // (nome de rua comum casando com outra cidade distante, bias de busca ruim, GPS
+    // impreciso etc.) pode gerar uma distância absurda e cobrar uma taxa gigante do cliente
+    // sem ninguém perceber até o motoboy reclamar — foi exatamente o que aconteceu no
+    // pedido JZ89NC (2026-09-12): R$79,89 de frete pra um endereço que devia ser R$4,00,
+    // por causa de um viés geográfico de geocodificação com coordenada errada (ver
+    // checkout/page.tsx LAT_DEFAULT). Acima de RAIO_MAXIMO_KM sem tabela fixa cadastrada,
+    // rejeita o pedido em vez de cobrar — mais seguro pedir pra revisar o endereço.
+    const RAIO_MAXIMO_KM = 30
+    if (taxaFixa === null && loja.lat && loja.lng && lat_entrega && lng_entrega) {
+      const distKm = haversineKm(loja.lat, loja.lng, lat_entrega, lng_entrega)
+      if (distKm > RAIO_MAXIMO_KM) {
+        return NextResponse.json({
+          error: `Endereço fora da área de entrega (${distKm.toFixed(0)}km da loja). Confira se o endereço está correto.`,
+        }, { status: 400 })
+      }
+    }
+
     taxa_entrega = taxaFixa !== null
       ? taxaFixa
       : calcularTaxaEntrega(loja.lat, loja.lng, lat_entrega, lng_entrega, (loja as any).taxa_entrega ?? 6.00)

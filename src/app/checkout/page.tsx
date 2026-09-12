@@ -81,9 +81,12 @@ function PaymentIcon({ method }: { method: FormaPagamento }) {
   return null
 }
 
-// Aragoiânia, GO — coordenadas padrão quando GPS não está disponível
-const LAT_DEFAULT = -17.6547
-const LNG_DEFAULT = -49.4378
+// Aragoiânia, GO — coordenadas padrão quando GPS não está disponível.
+// ATENÇÃO: valor anterior (-17.6547, -49.4378) era na verdade Aloândia-GO, ~82km daqui —
+// causou pelo menos um pedido real cobrando R$79,89 de frete pra um endereço que devia
+// ser R$4,00 (pedido JZ89NC, 2026-09-12). Corrigido pro centro real de Aragoiânia.
+const LAT_DEFAULT = -16.9214
+const LNG_DEFAULT = -49.4497
 
 function normalizar(s: string) {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim()
