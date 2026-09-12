@@ -88,19 +88,6 @@ function PaymentIcon({ method }: { method: FormaPagamento }) {
 const LAT_DEFAULT = -16.9214
 const LNG_DEFAULT = -49.4497
 
-function normalizar(s: string) {
-  return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim()
-}
-
-function buscarTabelaFrete(tabela: { municipio: string; taxa: number }[], nome: string): number | null {
-  if (!nome) return null
-  const n = normalizar(nome)
-  for (const entry of tabela) {
-    const e = normalizar(entry.municipio)
-    if (n.includes(e) || e.includes(n)) return entry.taxa
-  }
-  return null
-}
 
 
 interface GeoResult {
@@ -381,9 +368,7 @@ export default function CheckoutPage() {
 
   const loja_id    = items[0]?.loja_id ?? null
   const [lojaData, setLojaData]   = useState<{ lat: number | null; lng: number | null; endereco: string; nome: string; taxa_entrega: number | null } | null>(null)
-  const [lojaCoords, setLojaCoords]   = useState<{ lat: number; lng: number } | null>(null)
   const [taxaCalculando, setTaxaCalculando] = useState(false)
-  const [tabelaFrete, setTabelaFrete] = useState<{ municipio: string; taxa: number }[]>([])
   const [clienteCidade, setClienteCidade] = useState("")
   const [clienteBairro, setClienteBairro] = useState("")
 
@@ -391,68 +376,41 @@ export default function CheckoutPage() {
     if (!loja_id) return
     supabase.from("lojas").select("lat,lng,endereco,nome,taxa_entrega").eq("id", loja_id).single()
       .then(({ data }) => setLojaData(data as any))
-    fetch(`/api/frete/tabela?loja_id=${loja_id}`)
-      .then(r => r.ok ? r.json() : [])
-      .then(setTabelaFrete)
-      .catch(() => {})
   }, [loja_id])
 
-  // Geocodifica endereço da loja se não houver lat/lng no banco
+  // Coordenadas/cidade/bairro do cliente que valem no momento (edição em aberto ou endereço salvo)
+  const clienteLatAtual = editandoEndereco
+    ? (clienteCoords?.lat && clienteCoords.lat !== 0 ? clienteCoords.lat : null)
+    : (enderecoSalvo?.lat && enderecoSalvo.lat !== 0) ? enderecoSalvo.lat
+      : (clienteCoords?.lat && clienteCoords.lat !== 0) ? clienteCoords.lat : null
+  const clienteLngAtual = editandoEndereco
+    ? (clienteCoords?.lng && clienteCoords.lng !== 0 ? clienteCoords.lng : null)
+    : (enderecoSalvo?.lng && enderecoSalvo.lng !== 0) ? enderecoSalvo.lng
+      : (clienteCoords?.lng && clienteCoords.lng !== 0) ? clienteCoords.lng : null
+  const clienteCidadeAtual = editandoEndereco ? clienteCidade : (enderecoSalvo?.cidade || clienteCidade)
+  const clienteBairroAtual = editandoEndereco ? clienteBairro : (enderecoSalvo?.bairro || clienteBairro)
+
+  const [taxaEntrega, setTaxaEntrega] = useState<number>(6.00)
+
+  // Prévia da taxa de entrega — sempre pelo mesmo cálculo do servidor usado na criação
+  // real do pedido (rota real via Mapbox, com fallback), pra nunca divergir do que é cobrado.
   useEffect(() => {
-    if (!lojaData) return
-    const lat = typeof lojaData.lat === "number" && lojaData.lat !== 0 ? lojaData.lat : null
-    const lng = typeof lojaData.lng === "number" && lojaData.lng !== 0 ? lojaData.lng : null
-    if (lat && lng) { setLojaCoords({ lat, lng }); return }
-    if (!lojaData.endereco) return
+    if (!loja_id) return
+    if (tipoEntrega === "retirada") { setTaxaEntrega(0); return }
     setTaxaCalculando(true)
-    fetch(`/api/geocode/search?q=${encodeURIComponent(lojaData.endereco)}&lat=${LAT_DEFAULT}&lon=${LNG_DEFAULT}`)
-      .then(r => r.json())
-      .then((results: any[]) => {
-        if (results[0]) {
-          const lt = parseFloat(results[0].lat)
-          const lg = parseFloat(results[0].lon)
-          if (!isNaN(lt) && !isNaN(lg)) setLojaCoords({ lat: lt, lng: lg })
-        }
-      })
+    const params = new URLSearchParams({ loja_id, tipo_entrega: tipoEntrega })
+    if (clienteLatAtual && clienteLngAtual) {
+      params.set("lat", String(clienteLatAtual))
+      params.set("lng", String(clienteLngAtual))
+    }
+    if (clienteCidadeAtual) params.set("cidade", clienteCidadeAtual)
+    if (clienteBairroAtual) params.set("bairro", clienteBairroAtual)
+    fetch(`/api/frete/calcular?${params}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(json => { if (json && typeof json.taxa_entrega === "number") setTaxaEntrega(json.taxa_entrega) })
       .catch(() => {})
       .finally(() => setTaxaCalculando(false))
-  }, [lojaData])
-
-  function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
-    const R = 6371
-    const dLat = (lat2 - lat1) * Math.PI / 180
-    const dLng = (lng2 - lng1) * Math.PI / 180
-    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-  }
-
-  function calcularTaxa(): number {
-    if (tipoEntrega === "retirada") return 0
-    const base = lojaData?.taxa_entrega ?? 6.00
-
-    // Tabela fixa por município tem prioridade sobre cálculo por distância
-    if (tabelaFrete.length > 0) {
-      const cidade = editandoEndereco ? clienteCidade : (enderecoSalvo?.cidade || clienteCidade)
-      const bairro = editandoEndereco ? clienteBairro : (enderecoSalvo?.bairro || clienteBairro)
-      const taxaFixa = buscarTabelaFrete(tabelaFrete, cidade) ?? buscarTabelaFrete(tabelaFrete, bairro)
-      if (taxaFixa !== null) return taxaFixa
-    }
-
-    const latL = lojaCoords?.lat ?? null
-    const lngL = lojaCoords?.lng ?? null
-    const latC = editandoEndereco
-      ? (clienteCoords?.lat && clienteCoords.lat !== 0 ? clienteCoords.lat : null)
-      : (enderecoSalvo?.lat && enderecoSalvo.lat !== 0) ? enderecoSalvo.lat
-        : (clienteCoords?.lat && clienteCoords.lat !== 0) ? clienteCoords.lat : null
-    const lngC = editandoEndereco
-      ? (clienteCoords?.lng && clienteCoords.lng !== 0 ? clienteCoords.lng : null)
-      : (enderecoSalvo?.lng && enderecoSalvo.lng !== 0) ? enderecoSalvo.lng
-        : (clienteCoords?.lng && clienteCoords.lng !== 0) ? clienteCoords.lng : null
-
-    if (!latL || !lngL || !latC || !lngC) return base
-    const dist = haversineKm(latL, lngL, latC, lngC)
-    return dist <= 6 ? base : Math.round((base + (dist - 6) * 1.00) * 100) / 100
-  }
+  }, [loja_id, tipoEntrega, clienteLatAtual, clienteLngAtual, clienteCidadeAtual, clienteBairroAtual])
 
   // Polling PIX — verifica a cada 4s se o pagamento foi confirmado
   useEffect(() => {
@@ -470,7 +428,7 @@ export default function CheckoutPage() {
     return () => clearInterval(interval)
   }, [pixModal, pedidoId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const taxaBase    = calcularTaxa()
+  const taxaBase    = taxaEntrega
   const freteGratis = cupomValido?.tipo === "frete_gratis"
   const taxa        = freteGratis ? 0 : taxaBase
   const subtotal    = total

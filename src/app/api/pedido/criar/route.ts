@@ -8,35 +8,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import crypto from "crypto"
-
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
-  const R = 6371
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLng = (lng2 - lng1) * Math.PI / 180
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
-
-function calcularTaxaEntrega(latLoja: number | null, lngLoja: number | null, latCliente: number | null, lngCliente: number | null, base = 6.00): number {
-  if (!latLoja || !lngLoja || !latCliente || !lngCliente) return base
-  const dist = haversineKm(latLoja, lngLoja, latCliente, lngCliente)
-  if (dist <= 6) return base
-  return Math.round((base + (dist - 6) * 1.00) * 100) / 100
-}
-
-function normalizar(s: string) {
-  return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim()
-}
-
-function buscarTabelaFrete(tabela: { municipio: string; taxa: number }[], nome: string): number | null {
-  if (!nome) return null
-  const n = normalizar(nome)
-  for (const entry of tabela) {
-    const e = normalizar(entry.municipio)
-    if (n.includes(e) || e.includes(n)) return entry.taxa
-  }
-  return null
-}
+import { calcularTaxaEntregaCompleta, haversineKm, EnderecoForaDoRaioError } from "@/lib/frete"
 
 function adminSb() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -157,41 +129,27 @@ export async function POST(req: NextRequest) {
     return sum + (Number(produto.preco) + precoAdicionais) * Number(item.quantidade)
   }, 0)
 
-  // 4. Taxa de entrega: tabela fixa por município tem prioridade sobre distância
-  let taxa_entrega = 0
-  if (tipo_entrega !== "retirada") {
-    const { data: tabelaFrete } = await sb
-      .from("tabela_frete")
-      .select("municipio, taxa")
-      .eq("loja_id", loja_id)
-
-    const taxaFixa = buscarTabelaFrete(tabelaFrete ?? [], cidade_entrega)
-      ?? buscarTabelaFrete(tabelaFrete ?? [], bairro_entrega)
-
-    // Trava de segurança: sem tabela fixa pro município, um endereço geocodificado errado
-    // (nome de rua comum casando com outra cidade distante, bias de busca ruim, GPS
-    // impreciso etc.) pode gerar uma distância absurda e cobrar uma taxa gigante do cliente
-    // sem ninguém perceber até o motoboy reclamar — foi exatamente o que aconteceu no
-    // pedido JZ89NC (2026-09-12): R$79,89 de frete pra um endereço que devia ser R$4,00,
-    // por causa de um viés geográfico de geocodificação com coordenada errada (ver
-    // checkout/page.tsx LAT_DEFAULT). Acima de RAIO_MAXIMO_KM sem tabela fixa cadastrada,
-    // rejeita o pedido em vez de cobrar — mais seguro pedir pra revisar o endereço.
-    const RAIO_MAXIMO_KM = 30
-    if (taxaFixa === null && loja.lat && loja.lng && lat_entrega && lng_entrega) {
-      const distKm = haversineKm(loja.lat, loja.lng, lat_entrega, lng_entrega)
-      if (distKm > RAIO_MAXIMO_KM) {
-        return NextResponse.json({
-          error: `Endereço fora da área de entrega (${distKm.toFixed(0)}km da loja). Confira se o endereço está correto.`,
-        }, { status: 400 })
-      }
+  // 4. Taxa de entrega — mesma função usada na prévia do checkout (/api/frete/calcular),
+  // pra nunca divergir entre o que o cliente vê antes de confirmar e o que é cobrado.
+  // (let, não const: cupom frete_gratis zera essa variável mais abaixo)
+  let taxa_entrega: number
+  try {
+    taxa_entrega = await calcularTaxaEntregaCompleta(sb, {
+      loja_id,
+      loja_lat: loja.lat,
+      loja_lng: loja.lng,
+      loja_taxa_base: (loja as any).taxa_entrega,
+      tipo_entrega,
+      lat_entrega,
+      lng_entrega,
+      cidade_entrega,
+      bairro_entrega,
+    })
+  } catch (e) {
+    if (e instanceof EnderecoForaDoRaioError) {
+      return NextResponse.json({ error: e.message }, { status: 400 })
     }
-
-    taxa_entrega = taxaFixa !== null
-      ? taxaFixa
-      : calcularTaxaEntrega(loja.lat, loja.lng, lat_entrega, lng_entrega, (loja as any).taxa_entrega ?? 6.00)
-    // Nunca negativa — loja com taxa_entrega cadastrada errada (< 0) não pode reduzir
-    // o total do pedido do cliente.
-    taxa_entrega = Math.max(0, taxa_entrega)
+    throw e
   }
 
   // 5. Valida e aplica cupom no servidor
