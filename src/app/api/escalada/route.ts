@@ -64,9 +64,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "não autorizado" }, { status: 403 })
   }
 
-  if (!["aguardando_aceite", "pronto", "preparando", "aceito"].includes(pedido.status)) {
+  // indo_para_loja/na_loja: motoboy já aceitou mas ainda não coletou — dá pra reatribuir
+  // (admin decide trocar o entregador). A partir de coletado/em_rota o pedido já está
+  // fisicamente com o motoboy, não faz sentido reatribuir.
+  if (!["aguardando_aceite", "pronto", "preparando", "aceito", "indo_para_loja", "na_loja"].includes(pedido.status)) {
     return NextResponse.json({ ok: true, msg: "status não elegível para escalada" })
   }
+  const reatribuindoAceito = ["indo_para_loja", "na_loja"].includes(pedido.status)
 
   // Pedidos de retirada não precisam de motoboy
   if ((pedido as any).endereco_entrega?.includes("Retirada")) {
@@ -134,6 +138,23 @@ export async function POST(req: NextRequest) {
   // Salva lat/lng da loja no pedido para o mapa do motoboy (só se for válida — não default)
   const lojaLatSalvar = lojaLat
   const lojaLngSalvar = lojaLng
+
+  // Reatribuindo um pedido que o motoboy já tinha aceitado — avisa ele que perdeu a corrida
+  // antes de tirar (senão ele só percebe quando o pedido some da lista dele, sem explicação).
+  if (reatribuindoAceito && pedido.motoboy_id && initVapid()) {
+    const { data: motoboyAntigo } = await supabase
+      .from("motoboys").select("push_subscription").eq("id", pedido.motoboy_id).single()
+    if (motoboyAntigo?.push_subscription) {
+      const subs: any[] = Array.isArray(motoboyAntigo.push_subscription) ? motoboyAntigo.push_subscription : [motoboyAntigo.push_subscription]
+      const payload = JSON.stringify({
+        title: "Corrida reatribuída",
+        body:  `O pedido #${pedido.codigo} foi passado pra outro entregador pelo admin.`,
+        tag:   "corrida-reatribuida",
+        url:   "/motoboy",
+      })
+      await Promise.allSettled(subs.map(sub => webpush.sendNotification(sub, payload).catch(() => {})))
+    }
+  }
 
   // Broadcast: limpa motoboy_id e sinaliza para todos os motoboys disponíveis
   await supabase.from("pedidos").update({

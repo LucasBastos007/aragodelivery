@@ -153,9 +153,10 @@ function ConfirmarCartaoBtn({ pedidoId, onConfirmado }: { pedidoId: string; onCo
 }
 
 const STATUSES_FORCAVEIS: readonly string[] = ["pronto", "aguardando_aceite", "indo_para_loja", "na_loja", "em_rota", "coletado"]
-// /api/escalada só faz rebroadcast de verdade nessas duas — antes do motoboy aceitar. Depois
-// disso (indo_para_loja em diante) o backend não reatribui, só o "Forçar Avanço" se aplica.
-const STATUSES_REESCALAVEIS: readonly string[] = ["pronto", "aguardando_aceite"]
+// /api/escalada reatribui até "na_loja" (motoboy já aceitou mas ainda não coletou o pedido
+// fisicamente) — a partir de "coletado"/"em_rota" o pedido já está com o motoboy, não dá
+// mais pra trocar.
+const STATUSES_REESCALAVEIS: readonly string[] = ["pronto", "aguardando_aceite", "indo_para_loja", "na_loja"]
 
 function ForcarEntregaBtn({ pedidoId, onForcado }: { pedidoId: string; onForcado: () => void }) {
   const [confirmando, setConfirmando] = useState(false)
@@ -240,6 +241,7 @@ function AvancarPedidoBtn({ pedidoId, statusAtual, onAvancado }: { pedidoId: str
 function ChamarOutroMotoboyBtn({ pedidoId, motoboyAtualId, onChamado }: { pedidoId: string; motoboyAtualId?: string | null; onChamado: () => void }) {
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  const [confirmando, setConfirmando] = useState(false)
 
   async function chamar() {
     setLoading(true)
@@ -250,18 +252,44 @@ function ChamarOutroMotoboyBtn({ pedidoId, motoboyAtualId, onChamado }: { pedido
       body: JSON.stringify({ pedido_id: pedidoId, motoboy_recusou_id: motoboyAtualId ?? undefined }),
     }).then(r => r.json()).catch(() => ({}))
     setLoading(false)
+    setConfirmando(false)
     if (r.ok && r.broadcast) { setMsg(`Chamando ${r.broadcast} motoboy(s)…`); onChamado() }
     else if (r.ok) setMsg(r.msg ?? "Nada a fazer")
     else setMsg(r.error ?? "Erro")
   }
 
+  // Já tem motoboy aceito (a caminho da loja) — confirma antes de tirar dele, já que ele
+  // é avisado por push mas pode já estar chegando lá.
+  if (motoboyAtualId && confirmando) {
+    return (
+      <div style={{ display: "flex", gap: 3 }}>
+        <button onClick={chamar} disabled={loading} style={{
+          fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 5, border: "none",
+          background: "#f97316", color: "white", cursor: loading ? "not-allowed" : "pointer",
+        }}>
+          {loading ? "..." : "Tirar e chamar outro"}
+        </button>
+        <button onClick={() => setConfirmando(false)} style={{
+          fontSize: 10, padding: "2px 6px", borderRadius: 5, border: "1px solid #e2e8f0",
+          background: "#f8fafc", color: "#64748b", cursor: "pointer",
+        }}>
+          Cancelar
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      <button onClick={chamar} disabled={loading} title="Chamar outro motoboy (rebroadcast)" style={{
-        fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 6,
-        border: "1px solid rgba(249,115,22,0.35)", background: "rgba(249,115,22,0.07)",
-        color: "#c2410c", cursor: loading ? "not-allowed" : "pointer", whiteSpace: "nowrap",
-      }}>
+      <button
+        onClick={() => motoboyAtualId ? setConfirmando(true) : chamar()}
+        disabled={loading}
+        title={motoboyAtualId ? "Tirar do motoboy atual e chamar outro" : "Chamar outro motoboy (rebroadcast)"}
+        style={{
+          fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 6,
+          border: "1px solid rgba(249,115,22,0.35)", background: "rgba(249,115,22,0.07)",
+          color: "#c2410c", cursor: loading ? "not-allowed" : "pointer", whiteSpace: "nowrap",
+        }}>
         {loading ? "..." : "🛵 Chamar outro"}
       </button>
       {msg && <p style={{ fontSize: 9, color: "#94a3b8" }}>{msg}</p>}
