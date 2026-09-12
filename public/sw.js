@@ -1,5 +1,5 @@
 // sw.js — bump CACHE_NAME a cada deploy para forçar atualização
-const CACHE_NAME = "chego-v14"
+const CACHE_NAME = "chego-v15"
 
 // ─── Background Location ──────────────────────────────────────────────────────
 // Armazena última posição recebida da aba principal para envio em background
@@ -127,13 +127,12 @@ self.addEventListener("push", (event) => {
     icon:    "/logo-chego.png",
     badge:   "/logo-chego.png",
     tag,
-    data:    { url: data.url ?? (isMotoboy ? "/motoboy" : "/") },
     vibrate: isMotoboy
       ? [400, 150, 400, 150, 400, 150, 800]
       : isEntregue
         ? [300, 100, 300, 100, 300, 100, 600, 200, 600]
         : [200, 100, 200, 100, 200],
-    requireInteraction: data.requireInteraction ?? isMotoboy ?? isEntregue,
+    requireInteraction: data.requireInteraction ?? (isMotoboy || isEntregue),
     renotify: true,
     silent: false,
     data: {
