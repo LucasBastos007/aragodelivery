@@ -604,17 +604,20 @@ export default function MotoboyPage() {
   const [dispLoading,    setDispLoading]    = useState(true)
   const [togglingDisp,   setTogglingDisp]   = useState(false)
   const [pushStatus,     setPushStatus]     = useState<"granted"|"denied"|"default"|"unsupported">("default")
-  // Android entrega a notificação pro Chrome (confirmado — o FCM aceita e loga sucesso),
-  // mas o próprio sistema pode suprimir a notificação em segundo plano por otimização de
-  // bateria do fabricante (Xiaomi/Samsung/Motorola são os piores nisso). iOS não tem esse
-  // problema porque o Safari já roda o push com prioridade alta do sistema. Aviso avulso,
-  // fechável, só pra Android — não some sozinho porque o usuário precisa ir nas
-  // configurações do aparelho, não tem nada pra "ativar" aqui dentro do app.
+  // Android entrega a notificação pro Chrome (confirmado repetidas vezes — o FCM aceita e
+  // loga sucesso 201), mas o próprio sistema pode suprimir a notificação em segundo plano:
+  // (1) otimização de bateria do fabricante (Xiaomi/Samsung/Motorola são os piores nisso),
+  // e (2) rodar como aba solta do Chrome em vez de app instalado — instalado, o Android
+  // trata o processo como app próprio nas configurações de bateria, o que ajuda bastante.
+  // iOS não sofre disso porque o Safari roda push com prioridade de sistema. Aviso avulso,
+  // fechável, só pra Android — não some sozinho porque depende de ação fora do app.
   const [avisoBateriaFechado, setAvisoBateriaFechado] = useState(true)
+  const [appInstalado, setAppInstalado] = useState(true)
   useEffect(() => {
     const isAndroid = /Android/i.test(navigator.userAgent)
     const jaFechou = localStorage.getItem("arago_aviso_bateria_fechado") === "1"
     setAvisoBateriaFechado(!isAndroid || jaFechou)
+    setAppInstalado(window.matchMedia("(display-mode: standalone)").matches)
   }, [])
   function fecharAvisoBateria() {
     localStorage.setItem("arago_aviso_bateria_fechado", "1")
@@ -1957,8 +1960,9 @@ export default function MotoboyPage() {
           </svg>
           <div style={{ flex: 1 }}>
             <p style={{ color: "white", fontWeight: 800, fontSize: 12, lineHeight: 1.2 }}>Corrida pode não notificar com a tela bloqueada</p>
-            <p style={{ color: "rgba(255,255,255,0.8)", fontSize: 11, marginTop: 2 }}>
+            <p style={{ color: "rgba(255,255,255,0.8)", fontSize: 11, marginTop: 2, lineHeight: 1.5 }}>
               Vá em Configurações → Apps → Chrome → Bateria e escolha &quot;Sem restrições&quot;
+              {!appInstalado && <> · No Chrome, toque em ⋮ e escolha &quot;Instalar aplicativo&quot;</>}
             </p>
           </div>
           <button onClick={fecharAvisoBateria} style={{
