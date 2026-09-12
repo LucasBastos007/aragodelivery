@@ -1959,9 +1959,11 @@ export default function MotoboyPage() {
             <line x1="11" y1="6" x2="13" y2="6"/>
           </svg>
           <div style={{ flex: 1 }}>
-            <p style={{ color: "white", fontWeight: 800, fontSize: 12, lineHeight: 1.2 }}>Corrida pode não notificar com a tela bloqueada</p>
+            <p style={{ color: "white", fontWeight: 800, fontSize: 12, lineHeight: 1.2 }}>Corrida pode não notificar com o app fechado</p>
             <p style={{ color: "rgba(255,255,255,0.8)", fontSize: 11, marginTop: 2, lineHeight: 1.5 }}>
-              Vá em Configurações → Apps → Chrome → Bateria e escolha &quot;Sem restrições&quot;
+              Configurações → Apps → Chrome → Bateria: &quot;Sem restrições&quot;. Em celular Xiaomi/Redmi/Poco,
+              procure também &quot;Início automático&quot; (Autostart) e ative pro Chrome — sem isso o Android
+              não deixa a notificação chegar com o app fechado.
               {!appInstalado && <> · No Chrome, toque em ⋮ e escolha &quot;Instalar aplicativo&quot;</>}
             </p>
           </div>
