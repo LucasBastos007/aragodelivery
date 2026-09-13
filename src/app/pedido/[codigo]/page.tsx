@@ -915,12 +915,15 @@ export default function AcompanhamentoPedido() {
               </div>
             </div>
 
-            {/* Código p/ motoboy */}
+            {/* Código p/ motoboy — os 4 últimos dígitos do telefone do cliente, não o
+                código do pedido (esse é só pro lojista) — mais fácil de lembrar/falar. */}
             {coletado && (
               <div style={{ background: "#ffffff", border: "2px solid rgba(220,38,38,0.35)", borderRadius: 20, padding: "24px 16px", marginBottom: 16, textAlign: "center", boxShadow: "0 2px 12px rgba(0,0,0,0.06)", overflowX: "hidden" }}>
-                <p style={{ color: "#6B7280", fontSize: 13, marginBottom: 10 }}>Mostre este código ao entregador:</p>
-                <p style={{ color: "#DC2626", fontWeight: 900, fontSize: "clamp(36px, 14vw, 64px)", letterSpacing: "clamp(4px, 2vw, 12px)", lineHeight: 1, marginBottom: 8 }}>{pedido.codigo}</p>
-                <p style={{ color: "#9CA3AF", fontSize: 12 }}>O motoboy digita este código ao chegar para confirmar a entrega</p>
+                <p style={{ color: "#6B7280", fontSize: 13, marginBottom: 10 }}>Confirme com o entregador os 4 últimos números do seu telefone:</p>
+                <p style={{ color: "#DC2626", fontWeight: 900, fontSize: "clamp(36px, 14vw, 64px)", letterSpacing: "clamp(4px, 2vw, 12px)", lineHeight: 1, marginBottom: 8 }}>
+                  {((pedido as any).telefone_cliente ?? "").replace(/\D/g, "").slice(-4) || pedido.codigo}
+                </p>
+                <p style={{ color: "#9CA3AF", fontSize: 12 }}>O motoboy confirma esse número ao chegar para garantir que a entrega é pra você</p>
               </div>
             )}
 

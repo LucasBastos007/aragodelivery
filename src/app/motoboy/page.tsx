@@ -79,6 +79,15 @@ function mascaraTelefone(tel: string): string {
   return tel
 }
 
+// Código de entrega (o que o motoboy pede ao cliente pra confirmar a entrega) — os 4
+// últimos dígitos do telefone do cliente, não mais o código do pedido (esse continua sendo
+// só do lojista/pedido). Mais fácil do cliente lembrar/falar do que ler um código na tela.
+// Sem telefone cadastrado (pedido antigo, cadastro incompleto), cai pro código do pedido.
+function codigoEntregaCliente(pedido: Pedido): string {
+  const digitos = (pedido.telefone_cliente ?? "").replace(/\D/g, "")
+  return digitos.length >= 4 ? digitos.slice(-4) : pedido.codigo
+}
+
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4)
   const base64  = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/")
@@ -1622,8 +1631,8 @@ export default function MotoboyPage() {
   }
 
   function confirmarCodigo(pedido: Pedido) {
-    if (codigoInput.trim().toUpperCase() !== pedido.codigo.toUpperCase()) {
-      setErroConfirm("Código incorreto. Peça ao cliente para mostrar o código na tela.")
+    if (codigoInput.trim() !== codigoEntregaCliente(pedido)) {
+      setErroConfirm("Código incorreto. Peça os 4 últimos dígitos do telefone do cliente.")
       return
     }
     marcarEntregue(pedido)
@@ -2531,13 +2540,13 @@ export default function MotoboyPage() {
                     </div>
                     {confirmandoId === p.id ? (
                       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, fontWeight: 600 }}>Peça o código ao cliente:</p>
+                        <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, fontWeight: 600 }}>Peça os 4 últimos números do telefone do cliente:</p>
                         <div style={{ display: "flex", gap: 8 }}>
                           <input
                             value={codigoInput}
-                            onChange={e => { setCodigoInput(e.target.value.toUpperCase()); setErroConfirm("") }}
+                            onChange={e => { setCodigoInput(e.target.value.replace(/\D/g, "")); setErroConfirm("") }}
                             onKeyDown={e => e.key === "Enter" && confirmarCodigo(p)}
-                            placeholder="0000" maxLength={8} autoFocus
+                            placeholder="0000" maxLength={4} inputMode="numeric" autoFocus
                             style={{
                               flex: 1, padding: "12px 14px", borderRadius: 12, fontSize: 26,
                               fontWeight: 900, letterSpacing: 10, textAlign: "center",
@@ -2908,8 +2917,8 @@ function CorridaAtivaPanel({
 
   function confirmarEntrega() {
     if (!codigoInput.trim()) { setErroConfirm("Digite o código do cliente."); return }
-    if (codigoInput.trim().toUpperCase() !== (p?.codigo ?? "").toUpperCase()) {
-      setErroConfirm("Código incorreto. Peça ao cliente para mostrar novamente.")
+    if (!p || codigoInput.trim() !== codigoEntregaCliente(p)) {
+      setErroConfirm("Código incorreto. Peça os 4 últimos dígitos do telefone do cliente.")
       return
     }
     setErroConfirm("")
@@ -3096,15 +3105,15 @@ function CorridaAtivaPanel({
             {chegueiEnviado && (
               <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: "12px 14px", marginBottom: 8 }}>
                 <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, marginBottom: 8 }}>
-                  Peça o código ao cliente:
+                  Peça os 4 últimos números do telefone do cliente:
                 </p>
                 <input
                   value={codigoInput}
-                  onChange={e => { setCodigoInput(e.target.value.toUpperCase()); setErroConfirm("") }}
+                  onChange={e => { setCodigoInput(e.target.value.replace(/\D/g, "")); setErroConfirm("") }}
                   onKeyDown={e => { if (e.key === "Enter") confirmarEntrega() }}
-                  placeholder="Digite o código"
-                  maxLength={8}
-                  inputMode="text"
+                  placeholder="0000"
+                  maxLength={4}
+                  inputMode="numeric"
                   autoComplete="off"
                   autoFocus
                   style={{
