@@ -2,6 +2,14 @@
 // de entrega em vez de linha reta (haversine), que subestima rotas indiretas. Se a API
 // falhar por qualquer motivo (sem token, fora do ar, timeout), retorna null e quem chamou
 // deve cair pro cálculo de linha reta — nunca deve travar a criação do pedido.
+//
+// Pede alternatives=true e usa a rota MAIS LONGA entre as retornadas, não a "mais rápida"
+// (padrão da API) — caso real confirmado (pedidos ZHPVTV/MNRFMC, 2026-09-13): a rota padrão
+// da Mapbox pra um trajeto rural deu 12,04km, mas o Waze mostrava a viagem real em ~16km.
+// Pedindo alternativas, a Mapbox tinha uma segunda opção de 15,10km/28,3min — quase igual
+// ao Waze e só 2min mais lenta que a "mais rápida" — ou seja, a rota mais realista já
+// existia nos dados dela, só não estava sendo pedida. Mais preciso que aplicar uma margem
+// genérica em cima da distância, já que é uma rota real específica pra cada endereço.
 export async function distanciaRotaKm(
   origem: { lat: number; lng: number },
   destino: { lat: number; lng: number }
@@ -11,7 +19,7 @@ export async function distanciaRotaKm(
 
   try {
     const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${origem.lng},${origem.lat};${destino.lng},${destino.lat}` +
-      `?overview=false&access_token=${token}`
+      `?alternatives=true&overview=false&access_token=${token}`
 
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 4000)
@@ -20,9 +28,10 @@ export async function distanciaRotaKm(
 
     if (!res.ok) return null
     const data = await res.json()
-    if (data.code !== "Ok" || !data.routes?.[0]) return null
+    if (data.code !== "Ok" || !data.routes?.length) return null
 
-    return data.routes[0].distance / 1000 // metros → km
+    const distancias: number[] = data.routes.map((r: any) => r.distance)
+    return Math.max(...distancias) / 1000 // metros → km
   } catch {
     return null
   }

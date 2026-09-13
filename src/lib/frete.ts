@@ -9,23 +9,26 @@ export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: numb
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
-// Margem de segurança pra rotas longas (>10km): confirmado com um caso real (pedidos
-// ZHPVTV/MNRFMC, 2026-09-13) que a Mapbox pode subestimar a distância real em estradas
-// rurais — ela calculou 12,04km pra um trajeto que o Waze mostrava como ~16km (a base de
-// mapa da Mapbox tem menos detalhe de estrada rural que o Waze nessa região). Só acima de
-// 10km porque entregas curtas dentro da cidade a Mapbox costuma acertar bem, e aplicar a
-// margem nelas só encareceria à toa. Vale tanto pra distância de rota real quanto pro
-// fallback de linha reta (que já é uma subestimativa por natureza).
+// Margem de segurança só pro fallback de linha reta (>10km) — quando a Mapbox falha por
+// completo (fora do ar, sem token, timeout) e sobra só haversine, que subestima por
+// natureza. Quando a Mapbox responde, já usamos a rota mais longa entre as alternativas
+// (ver distanciaRotaKm em lib/rota.ts) — isso já é uma correção mais precisa e específica
+// pra cada endereço, então empilhar essa margem em cima dobraria a correção à toa.
 const RAIO_MARGEM_KM = 10
-const MARGEM_SEGURANCA = 1.20
+const MARGEM_SEGURANCA_FALLBACK = 1.20
 
 // Distância real de rota (Mapbox) sempre que disponível — cai pra linha reta se a API
 // falhar, não tiver token configurado, ou responder fora do tempo. Nunca bloqueia o pedido.
 async function calcularTaxaPorDistancia(latLoja: number | null, lngLoja: number | null, latCliente: number | null, lngCliente: number | null, base = 6.00): Promise<number> {
   if (!latLoja || !lngLoja || !latCliente || !lngCliente) return base
   const distRota = await distanciaRotaKm({ lat: latLoja, lng: lngLoja }, { lat: latCliente, lng: lngCliente })
-  let dist = distRota ?? haversineKm(latLoja, lngLoja, latCliente, lngCliente)
-  if (dist > RAIO_MARGEM_KM) dist *= MARGEM_SEGURANCA
+  let dist: number
+  if (distRota !== null) {
+    dist = distRota
+  } else {
+    dist = haversineKm(latLoja, lngLoja, latCliente, lngCliente)
+    if (dist > RAIO_MARGEM_KM) dist *= MARGEM_SEGURANCA_FALLBACK
+  }
   if (dist <= 6) return base
   return Math.round((base + (dist - 6) * 1.00) * 100) / 100
 }
