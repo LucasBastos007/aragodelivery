@@ -238,6 +238,39 @@ function AvancarPedidoBtn({ pedidoId, statusAtual, onAvancado }: { pedidoId: str
   )
 }
 
+const PROXIMO_LABEL_AVULSA: Record<string, string> = {
+  aceito:   "Coletei",
+  coletado: "Saiu p/ entrega",
+  em_rota:  "Entreguei",
+}
+
+function AvancarAvulsaBtn({ avulsaId, statusAtual, onAvancado }: { avulsaId: string; statusAtual: string; onAvancado: (novoStatus: string) => void }) {
+  const [loading, setLoading] = useState(false)
+
+  async function avancar() {
+    setLoading(true)
+    const r = await fetch("/api/admin/avancar-avulsa", {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ avulsa_id: avulsaId }),
+    }).then(r => r.json()).catch(() => ({}))
+    setLoading(false)
+    if (r.ok) onAvancado(r.avulsa.status)
+  }
+
+  if (!PROXIMO_LABEL_AVULSA[statusAtual]) return null
+
+  return (
+    <button onClick={avancar} disabled={loading} title="Avançar pra próxima etapa (no lugar do motoboy)" style={{
+      fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 6,
+      border: "1px solid rgba(34,197,94,0.35)", background: "rgba(34,197,94,0.07)",
+      color: "#16a34a", cursor: loading ? "not-allowed" : "pointer", whiteSpace: "nowrap",
+    }}>
+      {loading ? "..." : `✅ ${PROXIMO_LABEL_AVULSA[statusAtual]}`}
+    </button>
+  )
+}
+
 function ChamarOutroMotoboyBtn({ pedidoId, motoboyAtualId, onChamado }: { pedidoId: string; motoboyAtualId?: string | null; onChamado: () => void }) {
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -679,10 +712,15 @@ export default function PedidosPage() {
                         <span style={{ fontSize: 13, fontWeight: 900, color: "#8b5cf6" }}>R$ {(a.taxa_entrega ?? 0).toFixed(2)}</span>
                         <span style={{ fontSize: 10, color: "#94a3b8" }}>🕐 {fmt(a.criado_em)}</span>
                       </div>
-                      <div style={{ display: "flex", gap: 4, marginTop: 6 }} onClick={e => e.stopPropagation()}>
+                      <div style={{ display: "flex", gap: 4, marginTop: 6, flexWrap: "wrap" }} onClick={e => e.stopPropagation()}>
                         <BotaoWA telefone={lojaFone[a.loja_id]} label="Loja" msg={`Entrega avulsa *#${a.codigo}*`} />
                         <BotaoWA telefone={a.cliente_tel} label="Cliente" msg={`Entrega avulsa *#${a.codigo}*`} />
                         <BotaoWA telefone={motoboyFone[a.motoboy_id]} label="Motoboy" msg={`Entrega avulsa *#${a.codigo}*`} />
+                        {a.motoboy_id && (
+                          <AvancarAvulsaBtn avulsaId={a.id} statusAtual={a.status} onAvancado={novoStatus =>
+                            setAvulsas(prev => prev.map(x => x.id === a.id ? { ...x, status: novoStatus } : x))
+                          } />
+                        )}
                       </div>
                     </div>
                   ))}

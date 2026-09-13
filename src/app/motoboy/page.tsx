@@ -707,6 +707,11 @@ export default function MotoboyPage() {
   const maxPedidos = limitePedidosMotoboy ?? maxPedidosGlobal
   const [segundoAberto,    setSegundoAberto]    = useState(false)
   const [disponiveisAberto, setDisponiveisAberto] = useState(false)
+  // Antes, entregas avulsas em andamento só apareciam na gaveta de baixo — que fica
+  // completamente oculta enquanto existe uma corrida ativa (pedido normal). Resultado: o
+  // motoboy aceitava um pedido normal + uma avulsa e a avulsa "sumia" até ele terminar o
+  // pedido normal. Esse badge flutuante mostra a avulsa mesmo com corrida ativa.
+  const [avulsaFlutuanteAberta, setAvulsaFlutuanteAberta] = useState(false)
 
   // ── Carrega config de max pedidos (usada só se o motoboy não tiver limite próprio) ──
   useEffect(() => {
@@ -2156,6 +2161,110 @@ export default function MotoboyPage() {
           </span>
         </button>
       )}
+
+      {/* ── Badge de entrega avulsa em andamento (visível mesmo com corrida ativa) ── */}
+      {corridaAtiva && !corridaConcluida && !fullscreenMap && emAndamentoAvulsa.length > 0 && (
+        <button
+          onClick={() => setAvulsaFlutuanteAberta(o => !o)}
+          style={{
+            position: "absolute", top: 62, right: 12, zIndex: 36,
+            background: avulsaFlutuanteAberta ? "#a78bfa" : "rgba(10,10,10,0.85)",
+            backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
+            border: `1.5px solid ${avulsaFlutuanteAberta ? "transparent" : "rgba(167,139,250,0.6)"}`,
+            borderRadius: 999, padding: "7px 14px",
+            display: "flex", alignItems: "center", gap: 7,
+            color: "white", fontWeight: 800, fontSize: 12,
+            cursor: "pointer", boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
+          }}>
+          {emAndamentoAvulsa.length > 1 && (
+            <span style={{ background: "rgba(255,255,255,0.25)", borderRadius: 999, padding: "1px 7px", fontSize: 10, fontWeight: 900 }}>{emAndamentoAvulsa.length}</span>
+          )}
+          🛵 Avulsa #{emAndamentoAvulsa[0].codigo}
+        </button>
+      )}
+
+      {avulsaFlutuanteAberta && emAndamentoAvulsa.length > 0 && !corridaConcluida && (() => {
+        const a = emAndamentoAvulsa[0]
+        return (
+          <div style={{
+            position: "absolute", top: 100, left: 10, right: 10, zIndex: 37,
+            background: "rgba(10,10,10,0.96)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
+            borderRadius: 20, padding: "16px",
+            border: "1px solid rgba(167,139,250,0.4)",
+            boxShadow: "0 4px 32px rgba(0,0,0,0.6)",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <div>
+                <p style={{ color: "#a78bfa", fontWeight: 900, fontSize: 13 }}>
+                  Avulsa — #{a.codigo}
+                </p>
+                <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, marginTop: 2 }}>
+                  R$ {ganhoLiquido(a.taxa_entrega ?? 0, a.criado_em).toFixed(2)} {a.loja_nome ? `• ${a.loja_nome}` : ""}
+                </p>
+              </div>
+              <button onClick={() => setAvulsaFlutuanteAberta(false)} style={{ background: "transparent", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 20, cursor: "pointer" }}>×</button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+              <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>
+                <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 11 }}>Cliente: </span>
+                <strong style={{ color: "white" }}>{a.cliente_nome}</strong>
+              </p>
+              <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>
+                <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 11 }}>Entregar em </span>
+                {a.endereco}
+              </p>
+              {a.observacao && (
+                <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, fontStyle: "italic" }}>{a.observacao}</p>
+              )}
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+              {a.loja_lat && a.loja_lng && (
+                <a href={`https://waze.com/ul?ll=${a.loja_lat},${a.loja_lng}&navigate=yes`} target="_blank" rel="noreferrer" style={{
+                  flex: 1, padding: "9px 0", borderRadius: 10, textDecoration: "none",
+                  border: "1px solid rgba(0,170,255,0.3)", background: "rgba(0,170,255,0.07)",
+                  color: "#00aaff", fontWeight: 800, fontSize: 11, textAlign: "center",
+                }}>
+                  🗺 Ir à loja
+                </a>
+              )}
+              <a href={`https://waze.com/ul?q=${encodeURIComponent(a.endereco)}&navigate=yes`} target="_blank" rel="noreferrer" style={{
+                flex: 1, padding: "9px 0", borderRadius: 10, textDecoration: "none",
+                border: "1px solid rgba(0,170,255,0.3)", background: "rgba(0,170,255,0.07)",
+                color: "#00aaff", fontWeight: 800, fontSize: 11, textAlign: "center",
+              }}>
+                🗺 Ir ao cliente
+              </a>
+            </div>
+
+            {a.status === "aceito" && (
+              <button onClick={() => avancarAvulsa(a)} style={{
+                width: "100%", padding: "12px", borderRadius: 12, border: "none",
+                background: "#f97316", color: "white", fontWeight: 900, fontSize: 13, cursor: "pointer",
+              }}>
+                🏪 Cheguei na loja
+              </button>
+            )}
+            {a.status === "coletado" && (
+              <button onClick={() => avancarAvulsa(a)} style={{
+                width: "100%", padding: "12px", borderRadius: 12, border: "none",
+                background: "#f97316", color: "white", fontWeight: 900, fontSize: 13, cursor: "pointer",
+              }}>
+                🛵 Saindo para entrega
+              </button>
+            )}
+            {a.status === "em_rota" && (
+              <button onClick={() => avancarAvulsa(a)} style={{
+                width: "100%", padding: "12px", borderRadius: 12, border: "none",
+                background: "#22c55e", color: "white", fontWeight: 900, fontSize: 13, cursor: "pointer",
+              }}>
+                ✓ Confirmar entrega
+              </button>
+            )}
+          </div>
+        )
+      })()}
 
       {/* ── Botão aceitar pedido disponível (quando carregando 1 de max=2) ── */}
       {corridaAtiva && !corridaConcluida && !segundaEntrega && prontos.length > 0 && emAndamento.length < maxPedidos && (
