@@ -60,9 +60,11 @@ function MapaDespachoInner({
       markersRef.current.forEach(m => m.remove())
       markersRef.current = []
 
-      // Motoboys
+      // Motoboys — só os online no mapa (offline fica só na lista embaixo). Antes desenhava
+      // um marcador pra todo motoboy com última localização salva, mesmo offline há dias,
+      // lotando o mapa de pinos cinza.
       const mbComLoc = motoboys.filter(mb => mb.lat && mb.lng && mb.disponivel && mb.status === "ativo")
-      motoboys.forEach(mb => {
+      mbComLoc.forEach(mb => {
         if (!mb.lat || !mb.lng) return
         const isSOS = alertas.some(a => a.motoboy_id === mb.id && a.status === "pendente")
         const entrega = entregasAtivas.find(e => e.motoboy_id === mb.id)
