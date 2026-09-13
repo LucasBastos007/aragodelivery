@@ -176,7 +176,9 @@ export async function POST(req: NextRequest) {
         return haversineKm(cupom.centro_lat, cupom.centro_lng, lat_entrega, lng_entrega) <= cupom.raio_km
       })()
 
-      const expirado = cupom.validade && new Date(cupom.validade) < new Date()
+      // "validade" só tem data, sem hora — vale até o FIM do dia em horário de Brasília,
+      // não meia-noite UTC (mesma correção de /api/cupom/validar).
+      const expirado = cupom.validade && new Date(cupom.validade + "T23:59:59-03:00") < new Date()
       const lotado   = cupom.max_usos != null && (cupom.usos ?? 0) >= cupom.max_usos
       const minOk    = !cupom.pedido_minimo || subtotal >= cupom.pedido_minimo
 

@@ -59,7 +59,14 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  if (cupom.validade && new Date(cupom.validade) < new Date()) return NextResponse.json({ error: "Este cupom expirou." }, { status: 422 })
+  // "validade" é só a data (sem hora) — precisa valer até o FIM do dia em horário de
+  // Brasília, não meia-noite UTC. Sem o offset -03:00, o cupom "válido até 13/09" expirava
+  // às 21h de BRT do dia 12 (a Vercel roda em UTC, então "2026-09-13" virava meia-noite UTC
+  // = 21h de 12/09 em Brasília) — 3h antes do dia sequer começar aqui. Bug real: cupom
+  // SABADOU, válido até 13/09, dando "expirado" ainda na noite de 12/09.
+  if (cupom.validade && new Date(cupom.validade + "T23:59:59-03:00") < new Date()) {
+    return NextResponse.json({ error: "Este cupom expirou." }, { status: 422 })
+  }
   if (cupom.max_usos != null && (cupom.usos ?? 0) >= cupom.max_usos) {
     return NextResponse.json({ error: "Este cupom já atingiu o limite de usos." }, { status: 422 })
   }
