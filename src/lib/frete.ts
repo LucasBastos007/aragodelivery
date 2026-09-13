@@ -9,12 +9,23 @@ export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: numb
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
+// Margem de segurança pra rotas longas (>10km): confirmado com um caso real (pedidos
+// ZHPVTV/MNRFMC, 2026-09-13) que a Mapbox pode subestimar a distância real em estradas
+// rurais — ela calculou 12,04km pra um trajeto que o Waze mostrava como ~16km (a base de
+// mapa da Mapbox tem menos detalhe de estrada rural que o Waze nessa região). Só acima de
+// 10km porque entregas curtas dentro da cidade a Mapbox costuma acertar bem, e aplicar a
+// margem nelas só encareceria à toa. Vale tanto pra distância de rota real quanto pro
+// fallback de linha reta (que já é uma subestimativa por natureza).
+const RAIO_MARGEM_KM = 10
+const MARGEM_SEGURANCA = 1.20
+
 // Distância real de rota (Mapbox) sempre que disponível — cai pra linha reta se a API
 // falhar, não tiver token configurado, ou responder fora do tempo. Nunca bloqueia o pedido.
 async function calcularTaxaPorDistancia(latLoja: number | null, lngLoja: number | null, latCliente: number | null, lngCliente: number | null, base = 6.00): Promise<number> {
   if (!latLoja || !lngLoja || !latCliente || !lngCliente) return base
   const distRota = await distanciaRotaKm({ lat: latLoja, lng: lngLoja }, { lat: latCliente, lng: lngCliente })
-  const dist = distRota ?? haversineKm(latLoja, lngLoja, latCliente, lngCliente)
+  let dist = distRota ?? haversineKm(latLoja, lngLoja, latCliente, lngCliente)
+  if (dist > RAIO_MARGEM_KM) dist *= MARGEM_SEGURANCA
   if (dist <= 6) return base
   return Math.round((base + (dist - 6) * 1.00) * 100) / 100
 }
