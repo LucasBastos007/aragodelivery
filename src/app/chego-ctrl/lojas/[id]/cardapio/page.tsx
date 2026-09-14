@@ -242,12 +242,17 @@ export default function AdminCardapioPage() {
 
   async function deletarProduto(id: string) {
     if (!confirm("Deletar este produto?")) return
-    await fetch(`/api/admin/loja/${lojaId}/produtos`, {
+    const res = await fetch(`/api/admin/loja/${lojaId}/produtos`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({ id }),
     })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      alert("Erro ao deletar produto: " + (d.error ?? "desconhecido"))
+      return
+    }
     await carregarTudo()
   }
 

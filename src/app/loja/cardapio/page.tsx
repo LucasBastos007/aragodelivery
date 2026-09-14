@@ -308,12 +308,17 @@ export default function CardapioPage() {
 
   async function deletarProduto(id: string) {
     if (!confirm("Deletar este produto?")) return
-    await fetch("/api/loja/produtos", {
+    const res = await fetch("/api/loja/produtos", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({ id, loja_id: lojaId }),
     })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      alert("Erro ao deletar produto: " + (d.error ?? "desconhecido"))
+      return
+    }
     await carregarTudo()
   }
 
