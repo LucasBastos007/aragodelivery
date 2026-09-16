@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
 
   // 4. Taxa de entrega — mesma função usada na prévia do checkout (/api/frete/calcular),
   // pra nunca divergir entre o que o cliente vê antes de confirmar e o que é cobrado.
-  // (let, não const: cupom frete_gratis zera essa variável mais abaixo)
+  // (let, não const: cupom frete_gratis zera essa variável e frete_percentual reduz ela mais abaixo)
   let taxa_entrega: number
   try {
     taxa_entrega = await calcularTaxaEntregaCompleta(sb, {
@@ -186,6 +186,8 @@ export async function POST(req: NextRequest) {
         cupomId = cupom.id
         if (cupom.tipo === "frete_gratis") {
           taxa_entrega = 0
+        } else if (cupom.tipo === "frete_percentual") {
+          taxa_entrega = Math.round(taxa_entrega * (1 - cupom.valor / 100) * 100) / 100
         } else {
           desconto = cupom.tipo === "percentual"
             ? Math.round(subtotal * (cupom.valor / 100) * 100) / 100

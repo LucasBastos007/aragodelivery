@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 
-type Tipo = "percentual" | "fixo" | "frete_gratis"
+type Tipo = "percentual" | "fixo" | "frete_gratis" | "frete_percentual"
 
 interface Cupom {
   id: string; codigo: string; tipo: Tipo; valor: number
@@ -143,15 +143,15 @@ export default function AdminCuponsPage() {
             </div>
             <div>
               <label style={{ display: "block", color: "#64748B", fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: "uppercase" }}>Tipo</label>
-              <div style={{ display: "flex", gap: 8 }}>
-                {(["percentual", "fixo", "frete_gratis"] as Tipo[]).map(t => (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {(["percentual", "fixo", "frete_gratis", "frete_percentual"] as Tipo[]).map(t => (
                   <button key={t} onClick={() => setTipo(t)} style={{
-                    flex: 1, padding: "10px", borderRadius: 10, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13,
+                    flex: 1, minWidth: 90, padding: "10px", borderRadius: 10, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13,
                     background: tipo === t ? "rgba(249,115,22,0.15)" : "#F9FAFB",
                     color: tipo === t ? "#f97316" : "#64748B",
                     outline: tipo === t ? "1px solid rgba(249,115,22,0.4)" : "none",
                   }}>
-                    {t === "percentual" ? "%" : t === "fixo" ? "R$" : "🛵 Frete grátis"}
+                    {t === "percentual" ? "%" : t === "fixo" ? "R$" : t === "frete_gratis" ? "🛵 Frete grátis" : "🛵 % no frete"}
                   </button>
                 ))}
               </div>
@@ -159,9 +159,9 @@ export default function AdminCuponsPage() {
             {tipo !== "frete_gratis" && (
               <div>
                 <label style={{ display: "block", color: "#64748B", fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: "uppercase" }}>
-                  {tipo === "percentual" ? "Desconto (%)" : "Desconto (R$)"} *
+                  {tipo === "percentual" ? "Desconto (%)" : tipo === "frete_percentual" ? "Desconto no frete (%)" : "Desconto (R$)"} *
                 </label>
-                <input style={inp} type="number" min="0" value={valor} onChange={e => setValor(e.target.value)} placeholder={tipo === "percentual" ? "20" : "10.00"} />
+                <input style={inp} type="number" min="0" max={tipo === "frete_percentual" ? 100 : undefined} value={valor} onChange={e => setValor(e.target.value)} placeholder={tipo === "percentual" || tipo === "frete_percentual" ? "20" : "10.00"} />
               </div>
             )}
             <div>
@@ -257,7 +257,12 @@ export default function AdminCuponsPage() {
                   </span>
                 </div>
                 <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#64748B", flexWrap: "wrap" }}>
-                  <span>{c.tipo === "percentual" ? `${c.valor}% off` : c.tipo === "frete_gratis" ? "🛵 Frete grátis" : `R$ ${Number(c.valor).toFixed(2)} off`}</span>
+                  <span>
+                    {c.tipo === "percentual" ? `${c.valor}% off`
+                      : c.tipo === "frete_gratis" ? "🛵 Frete grátis"
+                      : c.tipo === "frete_percentual" ? `🛵 ${c.valor}% off no frete`
+                      : `R$ ${Number(c.valor).toFixed(2)} off`}
+                  </span>
                   {c.pedido_minimo > 0 && <span>· Mín. R$ {Number(c.pedido_minimo).toFixed(2)}</span>}
                   {c.validade && <span>· Até {new Date(c.validade + "T12:00:00").toLocaleDateString("pt-BR")}</span>}
                   <span>· {c.usos} usos</span>

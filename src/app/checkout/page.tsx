@@ -249,7 +249,7 @@ export default function CheckoutPage() {
   const [tipoEntrega, setTipoEntrega] = useState<"entrega" | "retirada">("entrega")
 
   const [cupomInput,   setCupomInput]   = useState("")
-  const [cupomValido,  setCupomValido]  = useState<{ id: string; codigo: string; tipo: "percentual" | "fixo" | "frete_gratis"; valor: number } | null>(null)
+  const [cupomValido,  setCupomValido]  = useState<{ id: string; codigo: string; tipo: "percentual" | "fixo" | "frete_gratis" | "frete_percentual"; valor: number } | null>(null)
   const [cupomErro,    setCupomErro]    = useState("")
   const [validandoCupom, setValidandoCupom] = useState(false)
   const [plataforma, setPlataforma]    = useState<"ios"|"android"|"other">("other")
@@ -428,11 +428,14 @@ export default function CheckoutPage() {
     return () => clearInterval(interval)
   }, [pixModal, pedidoId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const taxaBase    = taxaEntrega
-  const freteGratis = cupomValido?.tipo === "frete_gratis"
-  const taxa        = freteGratis ? 0 : taxaBase
+  const taxaBase       = taxaEntrega
+  const freteGratis    = cupomValido?.tipo === "frete_gratis"
+  const freteComDesconto = cupomValido?.tipo === "frete_percentual"
+  const taxa           = freteGratis ? 0
+    : freteComDesconto ? Math.round(taxaBase * (1 - cupomValido!.valor / 100) * 100) / 100
+    : taxaBase
   const subtotal    = total
-  const desconto    = cupomValido && !freteGratis
+  const desconto    = cupomValido && !freteGratis && !freteComDesconto
     ? cupomValido.tipo === "percentual"
       ? Math.round(subtotal * (cupomValido.valor / 100) * 100) / 100
       : Math.min(cupomValido.valor, subtotal)
@@ -1092,10 +1095,11 @@ export default function CheckoutPage() {
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#9CA3AF" }}>
               <span>Taxa de entrega</span>
-              <span style={{ color: taxa === 0 ? "#22c55e" : undefined }}>
+              <span style={{ color: taxa === 0 ? "#22c55e" : freteComDesconto ? "#22c55e" : undefined }}>
                 {tipoEntrega === "retirada" ? "🏪 Retirada · Grátis"
                   : freteGratis ? <>🎟️ Grátis <s style={{ opacity: 0.5 }}>R$ {taxaBase.toFixed(2)}</s></>
                   : taxaCalculando ? "Calculando..."
+                  : freteComDesconto ? <>🎟️ R$ {taxa.toFixed(2)} <s style={{ opacity: 0.5 }}>R$ {taxaBase.toFixed(2)}</s></>
                   : taxa === 0 ? "Grátis"
                   : `R$ ${taxa.toFixed(2)}`}
               </span>
@@ -1116,7 +1120,10 @@ export default function CheckoutPage() {
             {cupomValido ? (
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: 10, background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}>
                 <p style={{ color: "#22c55e", fontWeight: 700, fontSize: 13 }}>
-                  🎟️ {cupomValido.codigo} — {cupomValido.tipo === "percentual" ? `${cupomValido.valor}% de desconto` : cupomValido.tipo === "frete_gratis" ? "Frete grátis" : `R$ ${cupomValido.valor.toFixed(2)} de desconto`}
+                  🎟️ {cupomValido.codigo} — {cupomValido.tipo === "percentual" ? `${cupomValido.valor}% de desconto`
+                    : cupomValido.tipo === "frete_gratis" ? "Frete grátis"
+                    : cupomValido.tipo === "frete_percentual" ? `${cupomValido.valor}% de desconto no frete`
+                    : `R$ ${cupomValido.valor.toFixed(2)} de desconto`}
                 </p>
                 <button onClick={() => { setCupomValido(null); setCupomInput("") }} style={{ background: "none", border: "none", color: "#9CA3AF", cursor: "pointer", fontSize: 16 }}>✕</button>
               </div>
