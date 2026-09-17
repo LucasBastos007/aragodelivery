@@ -38,6 +38,7 @@ const NAV: NavItem[] = [
   { href: "/chego-ctrl/lojas",         label: "Lojas",        accent: "#10b981", section: "Operação",    icon: null },
   { href: "/chego-ctrl/motoboys",      label: "Motoboys",     accent: "#3b82f6", section: "Operação",    icon: null },
   { href: "/chego-ctrl/saques",        label: "Financeiro",   accent: "#22c55e", section: "Financeiro",  icon: null },
+  { href: "/chego-ctrl/caixa",         label: "Caixa",        accent: "#f97316", section: "Financeiro",  icon: null },
   { href: "/chego-ctrl/mensalidades",  label: "Mensalidades", accent: "#8b5cf6", section: "Financeiro",  icon: null },
   { href: "/chego-ctrl/reembolsos",    label: "Reembolsos",   accent: "#f43f5e", section: "Financeiro",  icon: null },
   { href: "/chego-ctrl/acessos",       label: "Acessos",      accent: "#06b6d4", section: "Análise",     icon: null },
