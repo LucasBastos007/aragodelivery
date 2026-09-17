@@ -937,63 +937,74 @@ export default function MotoboyPage() {
   }
 
   // ── Pedidos ────────────────────────────────────────────────────────────────
+  // try/finally em volta de tudo: sem isso, uma falha de rede em QUALQUER uma das 3
+  // queries (timeout, instabilidade) derrubava uma exceção não tratada no meio da
+  // função e isLoadingPedidosRef.current nunca voltava pra false — a guarda do topo
+  // então bloqueava silenciosamente TODO polling seguinte pro resto da sessão do app,
+  // travando o motoboy vendo só a corrida que já tinha aceito, sem nunca mais receber
+  // as próximas "pronto" (só resolvia fechando e reabrindo o app). Bug real reportado.
   async function loadPedidos() {
     if (!motoboy_id || isLoadingPedidosRef.current) return
     isLoadingPedidosRef.current = true
-    const [
-      { data: prontosData },
-      { data: andamentoData, error: andamentoError },
-      { data: ofertaData },
-    ] = await Promise.all([
-      supabase.from("pedidos")
-        .select("*, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng)")
-        .eq("status", "pronto").is("motoboy_id", null)
-        .not("endereco_entrega", "ilike", "%Retirada%") // retirada na loja nunca precisa de motoboy
-        .order("criado_em", { ascending: true }),
-      supabase.from("pedidos")
-        .select("*, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng)")
-        .in("status", ["indo_para_loja", "na_loja", "em_rota", "coletado"])
-        .eq("motoboy_id", motoboy_id)
-        .order("criado_em", { ascending: true }),
-      // Polling de fallback: busca oferta de corrida mesmo sem realtime ativo
-      supabase.from("pedidos")
-        .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
-        .eq("status", "aguardando_aceite").is("motoboy_id", null)
-        .limit(1),
-    ])
+    try {
+      const [
+        { data: prontosData },
+        { data: andamentoData, error: andamentoError },
+        { data: ofertaData },
+      ] = await Promise.all([
+        supabase.from("pedidos")
+          .select("*, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng)")
+          .eq("status", "pronto").is("motoboy_id", null)
+          .not("endereco_entrega", "ilike", "%Retirada%") // retirada na loja nunca precisa de motoboy
+          .order("criado_em", { ascending: true }),
+        supabase.from("pedidos")
+          .select("*, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng)")
+          .in("status", ["indo_para_loja", "na_loja", "em_rota", "coletado"])
+          .eq("motoboy_id", motoboy_id)
+          .order("criado_em", { ascending: true }),
+        // Polling de fallback: busca oferta de corrida mesmo sem realtime ativo
+        supabase.from("pedidos")
+          .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
+          .eq("status", "aguardando_aceite").is("motoboy_id", null)
+          .limit(1),
+      ])
 
-    const novosProntos = (prontosData as Pedido[]) ?? []
-    const novosIds = new Set(novosProntos.map(p => p.id))
-    if (!isFirstLoad.current) {
-      const chegaram = [...novosIds].filter(id => !prevProntosRef.current.has(id))
-      if (chegaram.length > 0) { playNotificationSound(); setSheetH(SHEET_MID) }
-    }
-    prevProntosRef.current = novosIds
-    isFirstLoad.current    = false
-    setProntos(novosProntos)
-    // Só atualiza emAndamento se não retornou erro E (tem dados OU não acabamos de aceitar)
-    if (!andamentoError) {
-      const dados = (andamentoData as Pedido[]) ?? []
-      if (dados.length > 0 || !justAcceptedRef.current) {
-        setEmAndamento(dados)
+      const novosProntos = (prontosData as Pedido[]) ?? []
+      const novosIds = new Set(novosProntos.map(p => p.id))
+      if (!isFirstLoad.current) {
+        const chegaram = [...novosIds].filter(id => !prevProntosRef.current.has(id))
+        if (chegaram.length > 0) { playNotificationSound(); setSheetH(SHEET_MID) }
       }
-    }
-    // Polling fallback: exibe oferta se realtime perdeu o evento — toca o mesmo
-    // som de alerta do caminho realtime, senão a corrida aparece muda quando o
-    // WebSocket cai (comum com o app em segundo plano ou rede instável).
-    if (!pedidoOfertaRef.current && ofertaData && ofertaData.length > 0) {
-      const oferta = ofertaData[0]
-      if (!dismissedIdsRef.current.has(oferta.id)) {
-        playNotificationSound()
-        setPedidoOferta(oferta); setTimerOferta(30); setDistKmOferta(null)
+      prevProntosRef.current = novosIds
+      isFirstLoad.current    = false
+      setProntos(novosProntos)
+      // Só atualiza emAndamento se não retornou erro E (tem dados OU não acabamos de aceitar)
+      if (!andamentoError) {
+        const dados = (andamentoData as Pedido[]) ?? []
+        if (dados.length > 0 || !justAcceptedRef.current) {
+          setEmAndamento(dados)
+        }
       }
+      // Polling fallback: exibe oferta se realtime perdeu o evento — toca o mesmo
+      // som de alerta do caminho realtime, senão a corrida aparece muda quando o
+      // WebSocket cai (comum com o app em segundo plano ou rede instável).
+      if (!pedidoOfertaRef.current && ofertaData && ofertaData.length > 0) {
+        const oferta = ofertaData[0]
+        if (!dismissedIdsRef.current.has(oferta.id)) {
+          playNotificationSound()
+          setPedidoOferta(oferta); setTimerOferta(30); setDistKmOferta(null)
+        }
+      }
+      setPedidosLoading(false)
+      // Auto-expande o sheet quando há pedidos
+      if (novosProntos.length > 0 || (andamentoData ?? []).length > 0) {
+        setSheetH(h => Math.max(h, SHEET_MID))
+      }
+    } catch (e) {
+      console.error("[loadPedidos] falhou, tentando de novo no próximo ciclo:", e)
+    } finally {
+      isLoadingPedidosRef.current = false
     }
-    setPedidosLoading(false)
-    // Auto-expande o sheet quando há pedidos
-    if (novosProntos.length > 0 || (andamentoData ?? []).length > 0) {
-      setSheetH(h => Math.max(h, SHEET_MID))
-    }
-    isLoadingPedidosRef.current = false
   }
 
   useEffect(() => {
