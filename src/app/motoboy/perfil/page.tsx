@@ -11,6 +11,7 @@ export default function MotoboyPerfilPage() {
   const [loading,   setLoading]   = useState(true)
   const [salvando,  setSalvando]  = useState(false)
   const [sucesso,   setSucesso]   = useState(false)
+  const [erro,      setErro]      = useState("")
   const [foto,      setFoto]      = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -41,30 +42,36 @@ export default function MotoboyPerfilPage() {
       })
   }, [motoboy_id])
 
+  // Pedido explícito do usuário, 2026-09-17: "não salva nada, nem a foto" — o problema
+  // era escrever direto do navegador com a chave anon (esse app não usa Supabase Auth,
+  // então RLS na tabela motoboys/bucket rejeitava o update/upload silenciosamente, sem
+  // nem cair em erro visível). Agora passa pelas rotas server-side com admin client,
+  // mesmo padrão já usado em /api/motoboy/status.
   async function handleFoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file || !motoboy_id) return
     setUploading(true)
-    const ext  = file.name.split(".").pop() || "jpg"
-    const path = `motoboys/${motoboy_id}.${ext}`
-    const { data, error } = await supabase.storage.from("entregas").upload(path, file, { upsert: true, contentType: file.type })
-    if (!error && data) {
-      const { data: { publicUrl } } = supabase.storage.from("entregas").getPublicUrl(data.path)
-      await supabase.from("motoboys").update({ foto: publicUrl }).eq("id", motoboy_id)
-      setFoto(publicUrl)
-    }
+    setErro("")
+    const form = new FormData()
+    form.append("file", file)
+    const res = await fetch("/api/motoboy/foto", { method: "POST", body: form })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) { setErro(json.error ?? "Erro ao enviar a foto"); setUploading(false); return }
+    setFoto(json.url)
     setUploading(false)
   }
 
   async function salvar() {
     if (!motoboy_id) return
     setSalvando(true)
-    await supabase.from("motoboys").update({
-      nome:      form.nome.trim(),
-      telefone:  form.telefone.trim(),
-      pix_key: form.pix_key.trim(),
-    }).eq("id", motoboy_id)
+    setErro("")
+    const res = await fetch("/api/motoboy/perfil", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome: form.nome, telefone: form.telefone, pix_key: form.pix_key }),
+    })
+    const json = await res.json().catch(() => ({}))
     setSalvando(false)
+    if (!res.ok) { setErro(json.error ?? "Erro ao salvar"); return }
     setSucesso(true)
     setTimeout(() => setSucesso(false), 2500)
   }
@@ -147,6 +154,10 @@ export default function MotoboyPerfilPage() {
       }}>
         {salvando ? "Salvando..." : "Salvar alterações"}
       </button>
+
+      {erro && (
+        <p style={{ color: "#f87171", fontSize: 13, fontWeight: 600, marginTop: 12, textAlign: "center" }}>{erro}</p>
+      )}
 
       {sucesso && (
         <div style={{

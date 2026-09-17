@@ -679,6 +679,10 @@ export default function MotoboyPage() {
   const dismissedIdsRef  = useRef<Set<string>>(new Set())
   const isLoadingPedidosRef = useRef(false)
   const pedidoOfertaRef  = useRef<any>(null)
+  // Ordem manual escolhida em "Priorizar esta entrega" — sem isso, o polling de 15s
+  // (loadPedidos) reescrevia emAndamento sempre em ordem de criado_em, desfazendo a
+  // priorização escolhida assim que o próximo ciclo rodava. Bug real reportado, 2026-09-17.
+  const prioridadeManualRef = useRef<string[]>([])
 
   // ── Oferta de corrida (Tópico 02) ─────────────────────────────────────────
   const [pedidoOferta,    setPedidoOferta]    = useState<any | null>(null)
@@ -980,7 +984,18 @@ export default function MotoboyPage() {
       setProntos(novosProntos)
       // Só atualiza emAndamento se não retornou erro E (tem dados OU não acabamos de aceitar)
       if (!andamentoError) {
-        const dados = (andamentoData as Pedido[]) ?? []
+        let dados = (andamentoData as Pedido[]) ?? []
+        // Reaplica a ordem escolhida em "Priorizar esta entrega" — a query sempre volta
+        // ordenada por criado_em, então sem isso a próxima atualização (a cada 15s)
+        // desfazia a priorização manual do motoboy.
+        const ordem = prioridadeManualRef.current
+        if (ordem.length > 0) {
+          const porId = new Map(dados.map(p => [p.id, p]))
+          const ordenados = ordem.map(id => porId.get(id)).filter((p): p is Pedido => !!p)
+          const restantes = dados.filter(p => !ordem.includes(p.id))
+          dados = [...ordenados, ...restantes]
+          prioridadeManualRef.current = dados.map(p => p.id)
+        }
         if (dados.length > 0 || !justAcceptedRef.current) {
           setEmAndamento(dados)
         }
@@ -1588,6 +1603,7 @@ export default function MotoboyPage() {
       if (idx <= 0) return prev
       const arr = [...prev]
       ;[arr[0], arr[idx]] = [arr[idx], arr[0]]
+      prioridadeManualRef.current = arr.map(p => p.id)
       return arr
     })
     setSegundoAberto(false)

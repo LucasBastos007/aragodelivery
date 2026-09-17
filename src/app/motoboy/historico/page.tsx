@@ -8,7 +8,7 @@ import { ganhoMotoboy } from "@/lib/comissao"
 type Periodo = "hoje" | "semana" | "mes" | "total"
 
 const PGTO: Record<string, string> = {
-  pix: "PIX", cartao: "Cartão", dinheiro: "Dinheiro", maquininha: "Maquininha",
+  pix: "PIX", cartao: "Cartão", dinheiro: "Dinheiro", maquininha: "Maquininha", avulsa: "Entrega avulsa",
 }
 const PERIODOS: { key: Periodo; label: string }[] = [
   { key: "hoje",   label: "Hoje" },
@@ -47,42 +47,43 @@ export default function MotoboyHistoricoPage() {
 
   useEffect(() => { if (motoboy_id) { setPedidos([]); setPage(0); carregar(0) } }, [motoboy_id, periodo])
 
-  async function carregar(novaPagina: number) {
-    setLoading(true)
-    const inicio = dateInicio(periodo)
-    const fim    = new Date(); fim.setHours(23, 59, 59, 999)
-    const from   = novaPagina * PAGE_SIZE
-    const to     = from + PAGE_SIZE - 1
+  // Pedido explícito do usuário, 2026-09-17: (1) contabilizar também as entregas avulsas
+// junto dos pedidos normais, e (2) o filtro "Total" ficava vazio às vezes com o filtro de
+// data feito direto no Postgrest (.gte/.lte) — agora busca tudo (pedidos + avulsas) sem
+// filtro de data na query e filtra por período aqui em JS, igual o Dashboard já fazia
+// (mesma comparação, resultado sempre consistente entre as duas telas). Paginação também
+// virou client-side (slice do array já mesclado) já que agora são duas fontes.
+async function carregar(novaPagina: number) {
+  setLoading(true)
+  const inicio = dateInicio(periodo)
+  const fim    = new Date(); fim.setHours(23, 59, 59, 999)
 
-    const { data, count } = await supabase
-      .from("pedidos")
-      .select("id, codigo, taxa_entrega, ganho_motoboy, foto_entrega, criado_em, forma_pagamento, endereco_entrega, loja:lojas(nome)", { count: "exact" })
-      .eq("motoboy_id", motoboy_id)
-      .eq("status", "entregue")
-      .gte("criado_em", inicio.toISOString())
-      .lte("criado_em", fim.toISOString())
-      .order("criado_em", { ascending: false })
-      .range(from, to)
+  const [{ data: pedidosData }, { data: avulsasData }] = await Promise.all([
+    supabase.from("pedidos")
+      .select("id, codigo, taxa_entrega, foto_entrega, criado_em, forma_pagamento, endereco_entrega, loja:lojas(nome)")
+      .eq("motoboy_id", motoboy_id).eq("status", "entregue")
+      .order("criado_em", { ascending: false }),
+    supabase.from("entregas_avulsas")
+      .select("id, codigo, taxa_entrega, criado_em, endereco, loja_nome")
+      .eq("motoboy_id", motoboy_id).eq("status", "entregue")
+      .order("criado_em", { ascending: false }),
+  ])
 
-    const rows = (data ?? []) as any[]
-    setPedidos(novaPagina === 0 ? rows : prev => [...prev, ...rows])
-    if (count !== null) setTotal(count)
-    setHasMore(rows.length === PAGE_SIZE)
-    setPage(novaPagina)
+  const avulsasNormalizadas = ((avulsasData ?? []) as any[]).map(a => ({
+    ...a, loja: { nome: a.loja_nome }, endereco_entrega: a.endereco, forma_pagamento: "avulsa", foto_entrega: null,
+  }))
+  const todosMesclados = [...((pedidosData ?? []) as any[]), ...avulsasNormalizadas]
+    .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime())
+    .filter(p => { const d = new Date(p.criado_em); return d >= inicio && d <= fim })
 
-    // Calcular total de ganhos no período (sem paginação)
-    if (novaPagina === 0) {
-      const { data: todos } = await supabase
-        .from("pedidos")
-        .select("taxa_entrega, criado_em")
-        .eq("motoboy_id", motoboy_id)
-        .eq("status", "entregue")
-        .gte("criado_em", inicio.toISOString())
-        .lte("criado_em", fim.toISOString())
-      setTotalGanhos((todos ?? []).reduce((s, p) => s + ganhoReal(p), 0))
-    }
-    setLoading(false)
-  }
+  const ateAqui = (novaPagina + 1) * PAGE_SIZE
+  setPedidos(todosMesclados.slice(0, ateAqui))
+  setTotal(todosMesclados.length)
+  setHasMore(todosMesclados.length > ateAqui)
+  setPage(novaPagina)
+  setTotalGanhos(todosMesclados.reduce((s, p) => s + ganhoReal(p), 0))
+  setLoading(false)
+}
 
   return (
     <div style={{ maxWidth: 600, margin: "0 auto", padding: "20px 14px", overflowX: "hidden" }}>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
+import { ganhoMotoboy } from "@/lib/comissao"
 
 type Periodo = "hoje" | "semana" | "mes" | "total"
 
@@ -21,10 +22,11 @@ function dateInicio(periodo: Periodo): Date {
   return new Date(2020, 0, 1)
 }
 
-const MOTOBOY_PCT = 0.80
-
+// Fórmula canônica única (src/lib/comissao.ts) — antes esse dashboard usava um percentual
+// fixo (80% da taxa) totalmente desconectado da fórmula real usada no resto do app, o que
+// fazia os valores daqui divergirem de "Corridas"/"Histórico". Pedido explícito do usuário.
 function ganhoReal(p: any): number {
-  return (p.taxa_entrega ?? 0) * MOTOBOY_PCT
+  return ganhoMotoboy(p.taxa_entrega ?? 0, p.criado_em)
 }
 
 function StatCard({ icon, label, value, sub, color }: {
@@ -109,14 +111,23 @@ export default function MotoboyDashboardPage() {
     const inicio = dateInicio(periodo)
     const fim    = new Date(); fim.setHours(23, 59, 59, 999)
 
-    const { data: todos } = await supabase
-      .from("pedidos")
-      .select("id, codigo, taxa_entrega, criado_em, loja:lojas(nome)")
-      .eq("motoboy_id", motoboy_id)
-      .eq("status", "entregue")
-      .order("criado_em", { ascending: false })
+    // Pedido explícito do usuário, 2026-09-17: contabilizar também as entregas avulsas
+    // (tabela própria, entregas_avulsas — não passam pelo checkout de loja) nos ganhos e
+    // no histórico, senão o motoboy via só uma parte do que realmente ganhou.
+    const [{ data: todosPedidos }, { data: todasAvulsas }] = await Promise.all([
+      supabase.from("pedidos")
+        .select("id, codigo, taxa_entrega, criado_em, loja:lojas(nome)")
+        .eq("motoboy_id", motoboy_id).eq("status", "entregue")
+        .order("criado_em", { ascending: false }),
+      supabase.from("entregas_avulsas")
+        .select("id, codigo, taxa_entrega, criado_em, loja_nome")
+        .eq("motoboy_id", motoboy_id).eq("status", "entregue")
+        .order("criado_em", { ascending: false }),
+    ])
 
-    const allData  = (todos ?? []) as any[]
+    const avulsasNormalizadas = ((todasAvulsas ?? []) as any[]).map(a => ({ ...a, loja: { nome: a.loja_nome } }))
+    const allData = [...((todosPedidos ?? []) as any[]), ...avulsasNormalizadas]
+      .sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime())
     const filtered = allData.filter(p => { const d = new Date(p.criado_em); return d >= inicio && d <= fim })
 
     const sumGanhos = (arr: any[]) => arr.reduce((s, p) => s + ganhoReal(p), 0)
@@ -126,7 +137,8 @@ export default function MotoboyDashboardPage() {
     setTicketMedio(filtered.length > 0 ? sumGanhos(filtered) / filtered.length : 0)
     setCorridasTotal(allData.length)
     setGanhoTotal(sumGanhos(allData))
-    setUltimos(allData.slice(0, 5))
+    // Pedido explícito do usuário: mostrar mais que só 5 entregas aqui.
+    setUltimos(allData.slice(0, 15))
     setAll(allData)
 
     const freq: Record<string, number> = {}
