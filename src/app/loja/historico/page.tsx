@@ -1,10 +1,12 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
 
 type Periodo = "hoje" | "semana" | "mes" | "total"
+const PERIODOS_VALIDOS = new Set<Periodo>(["hoje", "semana", "mes", "total"])
 
 const PERIODOS: { key: Periodo; label: string }[] = [
   { key: "hoje",   label: "Hoje" },
@@ -30,6 +32,21 @@ const PGTO: Record<string, string> = {
   apple_pay: "Apple Pay", google_pay: "Google Pay",
 }
 
+const CANCELADO_POR_LABEL: Record<string, string> = {
+  loja: "Loja", pagamento: "Pagamento", cliente: "Cliente", sistema: "Sistema",
+}
+
+const MOTIVO_CANCELAMENTO_LABEL: Record<string, string> = {
+  produto_esgotado: "Produto indisponível",
+  loja_ocupada: "Loja ocupada",
+  timeout_aceite: "Tempo de aceite esgotado",
+  cliente_cancelou: "Cliente cancelou",
+  sem_entregador: "Sem entregador disponível",
+  problema_pagamento: "Problema no pagamento",
+  gateway_cancelado: "Pagamento não confirmado",
+  outro: "Outro motivo",
+}
+
 const PAGE_SIZE = 20
 
 function dateInicio(periodo: Periodo): Date {
@@ -44,7 +61,14 @@ export default function LojaHistoricoPage() {
   const { sessao } = useAuth()
   const loja_id = sessao?.role === "lojista" ? sessao.loja_id : null
 
-  const [periodo,  setPeriodo]  = useState<Periodo>("mes")
+  // Deep-link vindo dos cliques de drill-down do Dashboard (?periodo=hoje|semana|mes|total)
+  // — ignora silenciosamente qualquer valor fora do conjunto conhecido, mantendo o
+  // default "mes" de sempre (nunca confiar cegamente em query param externo).
+  const searchParams = useSearchParams()
+  const periodoUrl = searchParams.get("periodo")
+  const periodoInicial: Periodo = PERIODOS_VALIDOS.has(periodoUrl as Periodo) ? (periodoUrl as Periodo) : "mes"
+
+  const [periodo,  setPeriodo]  = useState<Periodo>(periodoInicial)
   const [pedidos,  setPedidos]  = useState<any[]>([])
   const [loading,  setLoading]  = useState(true)
   const [page,     setPage]     = useState(0)
@@ -67,7 +91,7 @@ export default function LojaHistoricoPage() {
 
     const { data, count } = await supabase
       .from("pedidos")
-      .select("id, codigo, total, subtotal, taxa_entrega, forma_pagamento, status, endereco_entrega, observacao, criado_em, itens:itens_pedido(nome, quantidade, preco)", { count: "exact" })
+      .select("id, codigo, total, subtotal, taxa_entrega, forma_pagamento, status, endereco_entrega, observacao, criado_em, cancelado_em, cancelado_por, motivo_cancelamento, motivo_outro, itens:itens_pedido(nome, quantidade, preco)", { count: "exact" })
       .eq("loja_id", loja_id)
       .in("status", ["coletado", "entregue", "cancelado"])
       .gte("criado_em", inicio.toISOString())
@@ -197,6 +221,30 @@ export default function LojaHistoricoPage() {
                               <span style={{ color: "#9CA3AF" }}>R$ {(item.preco * item.quantidade).toFixed(2)}</span>
                             </div>
                           ))}
+                        </div>
+                      )}
+
+                      {/* Cancelamento — só aparece se o pedido foi cancelado E os dados existirem
+                          (pedidos antigos podem ter cancelado_por/motivo sem cancelado_em, ou nada
+                          disso — nunca inventamos o que falta). */}
+                      {p.status === "cancelado" && (p.cancelado_em || p.cancelado_por || p.motivo_cancelamento) && (
+                        <div style={{ padding: "8px 12px", borderRadius: 10, background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.15)" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                            <p style={{ color: "#dc2626", fontSize: 12, fontWeight: 700 }}>Pedido cancelado</p>
+                            {p.cancelado_em && (
+                              <span style={{ color: "#9CA3AF", fontSize: 11 }}>
+                                {new Date(p.cancelado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            )}
+                          </div>
+                          {p.cancelado_por && (
+                            <p style={{ color: "#6B7280", fontSize: 12 }}>Por: {CANCELADO_POR_LABEL[p.cancelado_por] ?? p.cancelado_por}</p>
+                          )}
+                          {p.motivo_cancelamento && (
+                            <p style={{ color: "#6B7280", fontSize: 12 }}>
+                              Motivo: {p.motivo_cancelamento === "outro" && p.motivo_outro ? p.motivo_outro : (MOTIVO_CANCELAMENTO_LABEL[p.motivo_cancelamento] ?? p.motivo_cancelamento)}
+                            </p>
+                          )}
                         </div>
                       )}
 

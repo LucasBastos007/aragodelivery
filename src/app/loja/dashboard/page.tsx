@@ -1,164 +1,245 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { supabase } from "@/lib/supabase"
+import { useEffect, useState, useCallback } from "react"
+import Link from "next/link"
 import { useAuth } from "@/lib/auth"
+import { hojeYmdBrt, type ChavePeriodo, labelComparacao } from "@/lib/periodoBrt"
+import { OPERACIONAL_LABEL, type StatusOperacional } from "@/lib/statusPedido"
+import GraficoVendas from "./GraficoVendas"
 
-type Periodo = "hoje" | "semana" | "mes" | "custom"
+const PERIODOS: { key: ChavePeriodo; label: string }[] = [
+  { key: "hoje", label: "Hoje" },
+  { key: "semana", label: "Semana" },
+  { key: "mes", label: "Mês" },
+  { key: "custom", label: "Personalizado" },
+]
 
-const PGTO: Record<string, string> = {
-  pix: "PIX", cartao: "Cartão", dinheiro: "Dinheiro", maquininha: "Maquininha",
+const OPERACAO_ICONE: Record<StatusOperacional, React.ReactNode> = {
+  novo: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" /><line x1="12" y1="8" x2="12" y2="12" /><circle cx="12" cy="16" r="0.5" fill="currentColor" />
+    </svg>
+  ),
+  preparo: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15.5 14" />
+    </svg>
+  ),
+  pronto: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  ),
+  aguardando_motoboy: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="6" cy="18" r="3" /><circle cx="18" cy="18" r="3" /><path d="M9 18h5l-2-7h-4l-1 3" /><path d="M11 11l2-4h3" />
+    </svg>
+  ),
+  em_entrega: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 12h13l-3-4M16 16l3-4" /><circle cx="6" cy="18" r="2.5" /><circle cx="18" cy="18" r="2.5" />
+    </svg>
+  ),
 }
 
-function StatCard({ label, value, sub, icon, color }: {
-  label: string; value: string; sub: string; icon: React.ReactNode; color: string
-}) {
+function fmtMoeda(v: number) {
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+}
+
+// Drill-down dos KPIs (spec seção 11) — Vendas/Pedidos/Taxa de conclusão navegam pro
+// Histórico (única tela que já lista entregue+coletado+cancelado com filtro de
+// período). "custom" (Personalizado) do Dashboard não tem equivalente exato no
+// Histórico (que só tem hoje/semana/mês/total) — cai em "total" como aproximação mais
+// ampla, nunca inventando um recorte de data que o Histórico não sabe fazer.
+function periodoParaHistorico(chave: ChavePeriodo): "hoje" | "semana" | "mes" | "total" {
+  if (chave === "hoje") return "hoje"
+  if (chave === "semana") return "semana"
+  if (chave === "mes") return "mes"
+  return "total"
+}
+
+function dataHojeLabel(): string {
+  const texto = new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Sao_Paulo" }).format(new Date())
+  return texto.charAt(0).toUpperCase() + texto.slice(1)
+}
+
+function Variacao({ pct }: { pct: number | null }) {
+  if (pct == null) return <span style={{ color: "#9CA3AF", fontSize: 12 }}>—</span>
+  const positivo = pct >= 0
   return (
-    <div className="card" style={{ padding: "16px 18px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-        <span style={{ color }}>{icon}</span>
-        <p style={{ color: "#6B7280", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{label}</p>
-      </div>
-      <p style={{ color, fontWeight: 900, fontSize: 22, lineHeight: 1, marginBottom: 5 }}>{value}</p>
-      <p style={{ color: "#9CA3AF", fontSize: 12 }}>{sub}</p>
-    </div>
+    <span style={{ color: positivo ? "#22c55e" : "#ef4444", fontSize: 12, fontWeight: 700 }}>
+      {positivo ? "↑" : "↓"} {Math.abs(pct).toFixed(1)}%
+    </span>
   )
 }
 
-function dateInicio(periodo: Periodo, customInicio: string): Date {
-  const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
-  if (periodo === "hoje") return hoje
-  if (periodo === "semana") {
-    const d = new Date(hoje)
-    d.setDate(d.getDate() - 6)
-    return d
+// KPIs viram drill-down: Vendas/Pedidos/Taxa navegam pro Histórico filtrado pelo mesmo
+// período (spec seção 11); Ticket médio não navega — só revela o cálculo por cima do
+// próprio card (onClick em vez de href), porque não é uma lista, é uma conta.
+function KpiCard({ label, valor, sub, variacaoPct, cor, destaque, area, href, onClick }: {
+  label: string; valor: string; sub?: string; variacaoPct?: number | null; cor?: string; destaque?: boolean; area: string
+  href?: string; onClick?: () => void
+}) {
+  const clicavel = !!href || !!onClick
+  const conteudo = (
+    <>
+      <p style={{ color: destaque ? "#c2410c" : "#6B7280", fontSize: destaque ? 12 : 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 }}>{label}</p>
+      <p style={{ color: cor ?? "#111827", fontWeight: 900, fontSize: destaque ? 30 : 21, lineHeight: 1.1, marginBottom: 6, wordBreak: "break-word" }}>{valor}</p>
+      {variacaoPct !== undefined ? <Variacao pct={variacaoPct} /> : sub ? <p style={{ color: "#9CA3AF", fontSize: 12 }}>{sub}</p> : null}
+    </>
+  )
+  const style: React.CSSProperties = {
+    padding: destaque ? "18px 18px" : "14px 16px",
+    background: destaque ? "linear-gradient(155deg, #fff7ed, #ffffff 60%)" : "#ffffff",
+    borderColor: destaque ? "rgba(249,115,22,0.25)" : undefined,
+    gridArea: area,
+    textAlign: "left", textDecoration: "none", display: "block", width: "100%",
+    cursor: clicavel ? "pointer" : "default",
   }
-  if (periodo === "mes") return new Date(hoje.getFullYear(), hoje.getMonth(), 1)
-  return customInicio ? new Date(customInicio + "T00:00:00") : hoje
+  if (href) return <Link href={href} className="card" style={style}>{conteudo}</Link>
+  if (onClick) return <button type="button" className="card" onClick={onClick} style={{ ...style, margin: 0, font: "inherit" }}>{conteudo}</button>
+  return <div className="card" style={style}>{conteudo}</div>
 }
 
-function dateFim(periodo: Periodo, customFim: string): Date {
-  if (periodo !== "custom" || !customFim) {
-    const d = new Date(); d.setHours(23, 59, 59, 999); return d
-  }
-  const d = new Date(customFim + "T23:59:59"); return d
+// Identidade suave por status operacional — cores servem pra reconhecimento rápido, não
+// pra deixar o Dashboard colorido demais (spec: backgrounds MUITO leves, ícone com
+// contraste melhor que o cinza neutro do round 1).
+const OPERACAO_ESTILO: Record<StatusOperacional, { bg: string; fg: string; border: string }> = {
+  novo: { bg: "#FFF7ED", fg: "#EA580C", border: "#FFEDD5" },
+  preparo: { bg: "#FFFBEB", fg: "#B45309", border: "#FEF3C7" },
+  pronto: { bg: "#F5F3FF", fg: "#6D28D9", border: "#EDE9FE" },
+  aguardando_motoboy: { bg: "#EFF6FF", fg: "#1D4ED8", border: "#DBEAFE" },
+  em_entrega: { bg: "#F0FDF4", fg: "#15803D", border: "#DCFCE7" },
 }
 
-export default function DashboardPage() {
+function CardOperacional({ tipo, qtd }: { tipo: StatusOperacional; qtd: number }) {
+  const estilo = OPERACAO_ESTILO[tipo]
+  const temQtd = qtd > 0
+  const precisaAtencao = tipo === "novo" && temQtd
+  return (
+    <Link href={`/loja?foco=${tipo}`} className="card" style={{
+      padding: "15px 14px", textDecoration: "none", display: "flex", flexDirection: "column", gap: 8,
+      transition: "transform 0.12s, box-shadow 0.12s", cursor: "pointer", position: "relative",
+      background: temQtd ? estilo.bg : "#ffffff",
+      borderColor: temQtd ? estilo.border : undefined,
+    }}>
+      {precisaAtencao && (
+        <span style={{
+          position: "absolute", top: 10, right: 10, width: 9, height: 9, borderRadius: "50%",
+          background: "#ef4444", border: "2px solid #FFF7ED",
+        }} title="Precisa de atenção" />
+      )}
+      <span style={{ color: temQtd ? estilo.fg : "#D1D5DB" }}>{OPERACAO_ICONE[tipo]}</span>
+      <p style={{ color: temQtd ? estilo.fg : "#111827", fontWeight: 900, fontSize: 28, lineHeight: 1 }}>{qtd}</p>
+      <p style={{ color: temQtd ? estilo.fg : "#6B7280", fontSize: 12, fontWeight: 700, opacity: temQtd ? 0.85 : 1 }}>{OPERACIONAL_LABEL[tipo]}</p>
+    </Link>
+  )
+}
+
+// Mesma paleta de OPERACAO_ESTILO (identidade única por status em todo o Dashboard) —
+// pendente/aceito/etc mapeiam pro grupo operacional; entregue/cancelado têm cor própria.
+const STATUS_COR: Record<string, string> = {
+  pendente: "#EA580C", aceito: "#B45309", preparando: "#B45309",
+  pronto: "#1D4ED8", aguardando_aceite: "#1D4ED8",
+  indo_para_loja: "#15803D", na_loja: "#15803D", em_rota: "#15803D", coletado: "#15803D",
+  entregue: "#16a34a", cancelado: "#ef4444", aguardando_pagamento: "#9CA3AF",
+}
+// Pra onde levar ao clicar num pedido específico: ativos aparecem em /loja (fila do
+// dia), entregue/cancelado só aparecem em /loja/historico (não existe tela de detalhe
+// por id — leva pra tela certa em vez de linkar pra um lugar onde o pedido não aparece).
+function rotaDoPedido(status: string): string {
+  return status === "entregue" || status === "cancelado" ? "/loja/historico" : "/loja"
+}
+
+interface DadosDashboard {
+  lojaNome: string | null
+  aberto: boolean
+  kpis: {
+    vendas: number; vendasVariacaoPct: number | null
+    pedidos: number; pedidosVariacaoPct: number | null
+    ticketMedio: number; ticketMedioVariacaoPct: number | null
+    taxaConclusao: number | null; cancelados: number
+  }
+  operacaoAgora: Record<StatusOperacional, number>
+  serie: { rotulo: string; vendas: number; pedidos: number }[]
+  maisVendidos: { produto_id: string | null; nome: string; qtd: number; valorTotal: number; foto_url: string | null }[]
+  ultimosPedidos: { id: string; codigo: string; cliente: string; status: string; statusLabel: string; valor: number; tempoLabel: string; tempoTipo: "decorrido" | "duracao" | "indisponivel" }[]
+  horarioPico: { faixa: string; participacaoPct: number } | null
+  desempenho: { tempoPreparoMin: number | null; amostraPreparo: number; tempoEntregaMin: number | null; amostraEntrega: number; taxaCancelamento: number | null }
+}
+
+export default function VisaoGeralPage() {
   const { sessao } = useAuth()
   const loja_id = sessao?.role === "lojista" ? sessao.loja_id : null
 
-  const [periodo, setPeriodo]       = useState<Periodo>("mes")
-  const [customInicio, setCustomInicio] = useState("")
-  const [customFim, setCustomFim]   = useState("")
-  const [loading, setLoading]       = useState(true)
+  const [periodo, setPeriodo] = useState<ChavePeriodo>("hoje")
+  const [customInicio, setCustomInicio] = useState(hojeYmdBrt())
+  const [customFim, setCustomFim] = useState(hojeYmdBrt())
+  const [erroCustom, setErroCustom] = useState("")
 
-  const [vendas, setVendas]         = useState(0)
-  const [numPedidos, setNumPedidos] = useState(0)
-  const [ticketMedio, setTicketMedio] = useState(0)
-  const [vendasTotal, setVendasTotal] = useState(0)
-  const [pedidosTotal, setPedidosTotal] = useState(0)
-  const [topProds, setTopProds]     = useState<{ nome: string; qtd: number; total: number }[]>([])
-  const [ultimos, setUltimos]       = useState<any[]>([])
-  const [pgtoDist, setPgtoDist]     = useState<{ label: string; count: number; valor: number }[]>([])
+  const [dados, setDados] = useState<DadosDashboard | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState("")
+  const [verTodosVendidos, setVerTodosVendidos] = useState(false)
+  const [mostrarCalculoTicket, setMostrarCalculoTicket] = useState(false)
 
-  useEffect(() => {
+  const carregar = useCallback(async () => {
     if (!loja_id) return
-    if (periodo === "custom" && (!customInicio || !customFim)) return
-    carregar()
+    if (periodo === "custom") {
+      if (!customInicio || !customFim) return
+      if (customInicio > customFim) { setErroCustom("Data final não pode ser anterior à inicial"); return }
+    }
+    setErroCustom("")
+    setLoading(true)
+    setErro("")
+    const params = new URLSearchParams({ periodo })
+    if (periodo === "custom") { params.set("inicio", customInicio); params.set("fim", customFim) }
+    try {
+      const res = await fetch(`/api/loja/dashboard?${params.toString()}`, { credentials: "include" })
+      if (!res.ok) { setErro("Não foi possível carregar os dados agora."); setLoading(false); return }
+      const json = await res.json()
+      setDados(json)
+    } catch {
+      setErro("Não foi possível carregar os dados agora.")
+    }
+    setLoading(false)
   }, [loja_id, periodo, customInicio, customFim])
 
-  async function carregar() {
-    setLoading(true)
-    const inicio = dateInicio(periodo, customInicio)
-    const fim    = dateFim(periodo, customFim)
+  useEffect(() => { carregar() }, [carregar])
 
-    const { data: todos } = await supabase
-      .from("pedidos")
-      .select("*, itens:itens_pedido(*)")
-      .eq("loja_id", loja_id)
-      .eq("status", "entregue")
-      .order("criado_em", { ascending: false })
-
-    const all = (todos ?? []) as any[]
-    const filtered = all.filter(p => {
-      const d = new Date(p.criado_em)
-      return d >= inicio && d <= fim
-    })
-
-    const sum = (arr: any[]) => arr.reduce((s, p) => s + p.total, 0)
-    setVendas(sum(filtered))
-    setNumPedidos(filtered.length)
-    setTicketMedio(filtered.length > 0 ? sum(filtered) / filtered.length : 0)
-    setVendasTotal(sum(all))
-    setPedidosTotal(all.length)
-
-    const contagem: Record<string, { qtd: number; total: number }> = {}
-    filtered.forEach(p => {
-      ;(p.itens ?? []).forEach((i: any) => {
-        if (!contagem[i.nome]) contagem[i.nome] = { qtd: 0, total: 0 }
-        contagem[i.nome].qtd   += i.quantidade
-        contagem[i.nome].total += i.preco * i.quantidade
-      })
-    })
-    setTopProds(
-      Object.entries(contagem)
-        .map(([nome, v]) => ({ nome, qtd: v.qtd, total: v.total }))
-        .sort((a, b) => b.qtd - a.qtd)
-        .slice(0, 6)
-    )
-
-    const pgDist: Record<string, { count: number; valor: number }> = {}
-    filtered.forEach(p => {
-      if (!pgDist[p.forma_pagamento]) pgDist[p.forma_pagamento] = { count: 0, valor: 0 }
-      pgDist[p.forma_pagamento].count++
-      pgDist[p.forma_pagamento].valor += p.total
-    })
-    setPgtoDist(
-      Object.entries(pgDist)
-        .map(([k, v]) => ({ label: PGTO[k] ?? k, count: v.count, valor: v.valor }))
-        .sort((a, b) => b.count - a.count)
-    )
-
-    setUltimos(all.slice(0, 8))
-    setLoading(false)
-  }
-
-  const maxQtd = topProds[0]?.qtd ?? 1
-
-  const PERIODOS: { key: Periodo; label: string }[] = [
-    { key: "hoje",   label: "Hoje" },
-    { key: "semana", label: "7 dias" },
-    { key: "mes",    label: "Este mês" },
-    { key: "custom", label: "Personalizado" },
-  ]
-
-  const periodoLabel = periodo === "hoje" ? "Hoje" : periodo === "semana" ? "Últimos 7 dias" : periodo === "mes" ? "Este mês" : `${customInicio} → ${customFim}`
+  const listaVendidos = dados ? (verTodosVendidos ? dados.maisVendidos : dados.maisVendidos.slice(0, 5)) : []
 
   return (
-    <div style={{ padding: "24px 16px", maxWidth: 900, margin: "0 auto" }}>
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 2 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, #f97316, #ea580c)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 10px rgba(249,115,22,0.35)", flexShrink: 0 }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="4" y="10" width="4" height="10" rx="1"/>
-              <rect x="10" y="6" width="4" height="14" rx="1"/>
-              <rect x="16" y="2" width="4" height="18" rx="1"/>
-              <line x1="2" y1="21" x2="22" y2="21" strokeWidth="1.5"/>
-            </svg>
-          </div>
-          <h1 style={{ color: "#111827", fontWeight: 900, fontSize: 20 }}>Dashboard</h1>
+    <div style={{ padding: "20px 16px 32px", maxWidth: 1180, margin: "0 auto" }}>
+      {/* Cabeçalho */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 18 }}>
+        <div>
+          <h1 style={{ color: "#111827", fontWeight: 900, fontSize: 20 }}>Visão Geral</h1>
+          <p style={{ color: "#9CA3AF", fontSize: 13, marginTop: 2 }}>Acompanhe o desempenho da sua loja em tempo real.</p>
         </div>
-        <p style={{ color: "#9CA3AF", fontSize: 13, marginTop: 4 }}>Somente pedidos entregues</p>
+        {dados && (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0 }}>
+            <p style={{ color: "#9CA3AF", fontSize: 12, fontWeight: 600 }}>{dataHojeLabel()}</p>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 999,
+              background: dados.aberto ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
+            }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: dados.aberto ? "#22c55e" : "#ef4444" }} />
+              <span style={{ fontSize: 12.5, fontWeight: 800, color: dados.aberto ? "#16a34a" : "#dc2626" }}>
+                {dados.aberto ? "Loja aberta" : "Loja fechada"}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Filtro de período */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: periodo === "custom" ? 12 : 0 }}>
+      {/* Filtros de período */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
           {PERIODOS.map(p => (
             <button key={p.key} onClick={() => setPeriodo(p.key)} style={{
-              padding: "8px 18px", borderRadius: 999, fontSize: 13, fontWeight: 700,
-              cursor: "pointer", border: "1px solid #e5e7eb", transition: "all 0.15s",
+              padding: "8px 16px", borderRadius: 999, fontSize: 13, fontWeight: 700, whiteSpace: "nowrap",
+              cursor: "pointer", border: "1px solid #e5e7eb", flexShrink: 0,
               background: periodo === p.key ? "#f97316" : "#ffffff",
               color: periodo === p.key ? "white" : "#6B7280",
             }}>
@@ -168,171 +249,242 @@ export default function DashboardPage() {
         </div>
         {periodo === "custom" && (
           <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10, flexWrap: "wrap" }}>
-            <input
-              type="date"
-              value={customInicio}
-              onChange={e => setCustomInicio(e.target.value)}
-              style={{ padding: "8px 12px", borderRadius: 10, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", fontSize: 13, flex: 1, minWidth: 130 }}
-            />
+            <input type="date" value={customInicio} max={customFim} onChange={e => setCustomInicio(e.target.value)}
+              style={{ padding: "8px 12px", borderRadius: 10, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", fontSize: 13, flex: 1, minWidth: 130 }} />
             <span style={{ color: "#9CA3AF" }}>até</span>
-            <input
-              type="date"
-              value={customFim}
-              onChange={e => setCustomFim(e.target.value)}
-              style={{ padding: "8px 12px", borderRadius: 10, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", fontSize: 13, flex: 1, minWidth: 130 }}
-            />
+            <input type="date" value={customFim} min={customInicio} max={hojeYmdBrt()} onChange={e => setCustomFim(e.target.value)}
+              style={{ padding: "8px 12px", borderRadius: 10, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", fontSize: 13, flex: 1, minWidth: 130 }} />
           </div>
         )}
+        {erroCustom && <p style={{ color: "#ef4444", fontSize: 12.5, marginTop: 6, fontWeight: 600 }}>{erroCustom}</p>}
       </div>
 
-      {loading ? (
-        <p style={{ color: "#9CA3AF" }}>Carregando dados...</p>
-      ) : (
+      {loading && !dados ? (
+        <SkeletonDashboard />
+      ) : erro ? (
+        <div className="card" style={{ padding: "24px 18px", textAlign: "center" }}>
+          <p style={{ color: "#ef4444", fontSize: 13, fontWeight: 600, marginBottom: 10 }}>{erro}</p>
+          <button onClick={carregar} style={{ padding: "8px 18px", borderRadius: 10, border: "1px solid #E5E7EB", background: "white", color: "#374151", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+            Tentar de novo
+          </button>
+        </div>
+      ) : dados ? (
         <>
-          {/* Stat cards do período */}
-          <p style={{ color: "#9CA3AF", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>
-            {periodoLabel}
-          </p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 14, marginBottom: 24 }}>
-            <StatCard color="#22c55e" label="Vendas" value={`R$ ${vendas.toFixed(2)}`} sub={`${numPedidos} pedido${numPedidos !== 1 ? "s" : ""}`} icon={
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                {/* Coin circle */}
-                <circle cx="12" cy="12" r="9"/>
-                <circle cx="12" cy="12" r="6.5" strokeWidth="1" strokeOpacity="0.4"/>
-                {/* Dollar vertical bar */}
-                <line x1="12" y1="7.5" x2="12" y2="16.5" strokeWidth="1.8"/>
-                {/* Dollar S curves */}
-                <path d="M14.5 9.2 Q14.5 7.5 12 7.5 Q9.5 7.5 9.5 9.8 Q9.5 12 12 12 Q14.5 12 14.5 14.2 Q14.5 16.5 12 16.5 Q9.5 16.5 9.5 14.8" strokeWidth="1.8"/>
-              </svg>
-            } />
-            <StatCard color="#60a5fa" label="Ticket médio" value={`R$ ${ticketMedio.toFixed(2)}`} sub="por pedido" icon={
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                {/* Card body */}
-                <rect x="2" y="5" width="20" height="14" rx="2"/>
-                {/* Magnetic stripe */}
-                <line x1="2" y1="10" x2="22" y2="10" strokeWidth="3"/>
-                {/* EMV chip */}
-                <rect x="5" y="13" width="5" height="3.5" rx="0.8" strokeWidth="1.5"/>
-                {/* Chip inner lines */}
-                <line x1="7.5" y1="13" x2="7.5" y2="16.5" strokeWidth="1"/>
-                <line x1="5" y1="14.8" x2="10" y2="14.8" strokeWidth="1"/>
-                {/* Contactless dots */}
-                <path d="M14 13.5 Q15.5 14.7 14 15.9" strokeWidth="1.5"/>
-                <path d="M16 12.5 Q18.5 14.7 16 16.9" strokeWidth="1.5"/>
-              </svg>
-            } />
-            <StatCard color="#a78bfa" label="Total histórico" value={`R$ ${vendasTotal.toFixed(2)}`} sub={`${pedidosTotal} pedidos`} icon={
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                {/* Grid dots below */}
-                <circle cx="4" cy="18" r="0.8" fill="currentColor" stroke="none"/>
-                <circle cx="4" cy="14" r="0.8" fill="currentColor" stroke="none"/>
-                <circle cx="4" cy="10" r="0.8" fill="currentColor" stroke="none"/>
-                <circle cx="9" cy="18" r="0.8" fill="currentColor" stroke="none"/>
-                <circle cx="9" cy="14" r="0.8" fill="currentColor" stroke="none"/>
-                <circle cx="14" cy="18" r="0.8" fill="currentColor" stroke="none"/>
-                {/* Rising trend line */}
-                <polyline points="3 19 8 13 13 15 20 6" strokeWidth="2.2"/>
-                {/* Arrow head */}
-                <polyline points="16 5 20 6 19 10"/>
-              </svg>
-            } />
-            <StatCard color="#f97316" label="Pedidos no período" value={String(numPedidos)} sub="entregues" icon={
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                {/* 3D box top face */}
-                <path d="M12 2 L20 6 L12 10 L4 6 Z"/>
-                {/* Front face */}
-                <path d="M4 6 L4 16 L12 20 L12 10 Z"/>
-                {/* Right face (lighter by using lower opacity) */}
-                <path d="M20 6 L20 16 L12 20 L12 10 Z" strokeOpacity="0.6"/>
-                {/* Depth highlight on top edge */}
-                <line x1="12" y1="10" x2="12" y2="20" strokeOpacity="0.4"/>
-              </svg>
-            } />
+          {/* KPIs — Vendas em destaque (KPI principal). No mobile: Vendas ocupa a linha
+              inteira, Pedidos+Ticket dividem uma linha, Taxa de conclusão fica sozinha
+              embaixo (spec seção 11). No desktop os 4 ficam lado a lado. */}
+          <div className="kpi-grid" style={{ marginBottom: mostrarCalculoTicket ? 10 : 20 }}>
+            <KpiCard area="vendas" destaque label="Vendas" valor={fmtMoeda(dados.kpis.vendas)} variacaoPct={periodo !== "custom" ? dados.kpis.vendasVariacaoPct : undefined}
+              sub={periodo === "custom" ? undefined : labelComparacao(periodo)} cor="#111827" href={`/loja/historico?periodo=${periodoParaHistorico(periodo)}`} />
+            <KpiCard area="pedidos" label="Pedidos" valor={String(dados.kpis.pedidos)} variacaoPct={periodo !== "custom" ? dados.kpis.pedidosVariacaoPct : undefined}
+              sub={periodo === "custom" ? undefined : labelComparacao(periodo)} href={`/loja/historico?periodo=${periodoParaHistorico(periodo)}`} />
+            <KpiCard area="ticket" label="Ticket médio" valor={fmtMoeda(dados.kpis.ticketMedio)} variacaoPct={periodo !== "custom" ? dados.kpis.ticketMedioVariacaoPct : undefined}
+              sub={periodo === "custom" ? undefined : labelComparacao(periodo)} onClick={() => setMostrarCalculoTicket(v => !v)} />
+            <KpiCard
+              area="taxa"
+              label="Taxa de conclusão"
+              valor={dados.kpis.taxaConclusao != null ? `${dados.kpis.taxaConclusao.toFixed(0)}%` : "—"}
+              sub={`${dados.kpis.cancelados} cancelado${dados.kpis.cancelados !== 1 ? "s" : ""}`}
+              cor={dados.kpis.taxaConclusao != null && dados.kpis.taxaConclusao < 80 ? "#ef4444" : "#111827"}
+              href={`/loja/historico?periodo=${periodoParaHistorico(periodo)}`}
+            />
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16, marginBottom: 16 }}>
-            {/* Top produtos */}
-            <div className="card" style={{ padding: "20px 22px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
-                <div style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg, #f97316, #dc2626)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 22c5 0 8-3.5 8-8 0-3-1.5-5.5-3-7.5-1 2.5-2 3.5-3.5 3.5C14.5 6.5 12 3 10 2c0 3-2 5-4 7-1 1.5-2 3-2 5 0 4.5 3.5 8 8 8z"/>
-                  </svg>
-                </div>
-                <p style={{ color: "#111827", fontWeight: 900, fontSize: 14 }}>Mais pedidos no período</p>
-              </div>
-              {topProds.length === 0 ? (
-                <p style={{ color: "#9CA3AF", fontSize: 13 }}>Sem dados para o período</p>
-              ) : topProds.map((p, i) => (
-                <div key={p.nome} style={{ marginBottom: 12 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5, fontSize: 13 }}>
-                    <span style={{ color: "#374151", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: 10, fontWeight: 900, minWidth: 18, color: i === 0 ? "#f59e0b" : i === 1 ? "#9CA3AF" : "#D1D5DB" }}>{i + 1}º</span>
-                      {p.nome}
-                    </span>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-                      <span style={{ color: "#f97316", fontWeight: 700 }}>{p.qtd}×</span>
-                      <span style={{ color: "#9CA3AF", fontSize: 11 }}>R$ {p.total.toFixed(0)}</span>
-                    </div>
-                  </div>
-                  <div style={{ height: 5, borderRadius: 3, background: "#F3F4F6" }}>
-                    <div style={{ height: "100%", borderRadius: 3, background: i === 0 ? "linear-gradient(90deg,#f97316,#fb923c)" : "rgba(249,115,22,0.4)", width: `${(p.qtd / maxQtd) * 100}%`, transition: "width 0.6s" }} />
-                  </div>
-                </div>
-              ))}
+          {/* Ticket médio não navega (não é lista, é conta) — clicar no card revela o
+              cálculo por extenso, spec seção 11. */}
+          {mostrarCalculoTicket && (
+            <div className="card" style={{ padding: "12px 16px", marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <p style={{ color: "#374151", fontSize: 13 }}>
+                <strong style={{ color: "#111827" }}>Ticket médio</strong> = vendas ÷ pedidos válidos no período · {fmtMoeda(dados.kpis.vendas)} ÷ {dados.kpis.pedidos || 1} = <strong style={{ color: "#f97316" }}>{fmtMoeda(dados.kpis.ticketMedio)}</strong>
+              </p>
+              <button type="button" onClick={() => setMostrarCalculoTicket(false)} style={{ background: "none", border: "none", color: "#9CA3AF", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>Fechar</button>
             </div>
+          )}
 
-            {/* Últimas entregas */}
-            <div className="card" style={{ padding: "20px 22px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 18 }}>
-                <div style={{ width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg, #22c55e, #16a34a)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12"/>
-                  </svg>
+          {/* Operação agora */}
+          <div style={{ marginBottom: 22 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <p style={{ color: "#111827", fontWeight: 900, fontSize: 15 }}>Operação agora</p>
+              <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "#22c55e", fontWeight: 700 }}>
+                <span className="pulse-dot" style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
+                Em tempo real
+              </span>
+            </div>
+            <div className="dash-grid-4">
+              <CardOperacional tipo="novo" qtd={dados.operacaoAgora.novo} />
+              <CardOperacional tipo="preparo" qtd={dados.operacaoAgora.preparo} />
+              <CardOperacional tipo="pronto" qtd={dados.operacaoAgora.pronto} />
+              <CardOperacional tipo="aguardando_motoboy" qtd={dados.operacaoAgora.aguardando_motoboy} />
+              <CardOperacional tipo="em_entrega" qtd={dados.operacaoAgora.em_entrega} />
+            </div>
+          </div>
+
+          {/* Gráfico + Mais vendidos — stretch pra acompanhar a altura um do outro */}
+          <div className="dash-grid-2" style={{ marginBottom: 20, alignItems: "stretch" }}>
+            <GraficoVendas serie={dados.serie} />
+
+            <div className="card" style={{ padding: "18px 16px", display: "flex", flexDirection: "column" }}>
+              <p style={{ color: "#111827", fontWeight: 900, fontSize: 15, marginBottom: 14 }}>Mais vendidos</p>
+              {dados.maisVendidos.length === 0 ? (
+                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <p style={{ color: "#9CA3AF", fontSize: 13 }}>Sem vendas neste período</p>
                 </div>
-                <p style={{ color: "#111827", fontWeight: 900, fontSize: 14 }}>Últimas entregas</p>
-              </div>
-              {ultimos.length === 0 ? (
-                <p style={{ color: "#9CA3AF", fontSize: 13 }}>Nenhuma entrega ainda</p>
               ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {ultimos.map((p, i) => (
-                    <div key={p.codigo + i} style={{
-                      display: "flex", justifyContent: "space-between", alignItems: "center",
-                      padding: "8px 10px", borderRadius: 10,
-                      background: "#F9FAFB", border: "1px solid #e5e7eb",
-                    }}>
-                      <div>
-                        <p style={{ color: "#111827", fontSize: 13, fontWeight: 700 }}>#{p.codigo}</p>
-                        <p style={{ color: "#9CA3AF", fontSize: 11 }}>
-                          {new Date(p.criado_em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} · {PGTO[p.forma_pagamento] ?? p.forma_pagamento}
-                        </p>
+                <>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 13, flex: 1 }}>
+                    {listaVendidos.map((p, i) => (
+                      <div key={p.produto_id ?? p.nome} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <span style={{ fontSize: 11, fontWeight: 900, minWidth: 16, color: i === 0 ? "#f59e0b" : i === 1 ? "#9CA3AF" : "#D1D5DB" }}>{i + 1}º</span>
+                        {p.foto_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={p.foto_url} alt="" style={{ width: 38, height: 38, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+                        ) : (
+                          <div style={{ width: 38, height: 38, borderRadius: 8, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 15 }}>🍽️</div>
+                        )}
+                        <span style={{ color: "#374151", fontWeight: 600, fontSize: 13, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nome}</span>
+                        <div style={{ textAlign: "right", flexShrink: 0 }}>
+                          <p style={{ color: "#f97316", fontWeight: 800, fontSize: 13 }}>{p.qtd}×</p>
+                          {p.valorTotal > 0 && <p style={{ color: "#9CA3AF", fontSize: 10.5 }}>{fmtMoeda(p.valorTotal)}</p>}
+                        </div>
                       </div>
-                      <p style={{ color: "#22c55e", fontWeight: 800, fontSize: 14 }}>R$ {p.total.toFixed(2)}</p>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                  {dados.maisVendidos.length > 5 && (
+                    <button onClick={() => setVerTodosVendidos(v => !v)} style={{ marginTop: 14, background: "none", border: "none", color: "#f97316", fontWeight: 700, fontSize: 12.5, cursor: "pointer", padding: 0, textAlign: "left" }}>
+                      {verTodosVendidos ? "Ver menos" : "Ver todos"}
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>
 
-          {/* Formas de pagamento */}
-          {pgtoDist.length > 0 && (
-            <div className="card" style={{ padding: "20px 22px" }}>
-              <p style={{ color: "#111827", fontWeight: 900, fontSize: 14, marginBottom: 18 }}>Formas de pagamento no período</p>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10 }}>
-                {pgtoDist.map(p => (
-                  <div key={p.label} style={{ padding: "12px 14px", borderRadius: 12, background: "#F9FAFB", border: "1px solid #e5e7eb" }}>
-                    <p style={{ color: "#374151", fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{p.label}</p>
-                    <p style={{ color: "#f97316", fontWeight: 900, fontSize: 18 }}>{p.count} pedido{p.count !== 1 ? "s" : ""}</p>
-                    <p style={{ color: "#9CA3AF", fontSize: 12, marginTop: 2 }}>R$ {p.valor.toFixed(2)}</p>
-                  </div>
-                ))}
+          {/* Últimos pedidos + Insights operacionais */}
+          <div className="dash-grid-2" style={{ alignItems: "start" }}>
+            <div className="card" style={{ padding: "18px 16px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <p style={{ color: "#111827", fontWeight: 900, fontSize: 15 }}>Últimos pedidos</p>
+                <Link href="/loja" style={{ color: "#f97316", fontWeight: 700, fontSize: 12.5, textDecoration: "none" }}>Ver todos</Link>
+              </div>
+              {dados.ultimosPedidos.length === 0 ? (
+                <p style={{ color: "#9CA3AF", fontSize: 13 }}>Nenhum pedido ainda</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {dados.ultimosPedidos.map(p => (
+                    <Link key={p.id} href={rotaDoPedido(p.status)} style={{
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                      padding: "11px 12px", borderRadius: 10, background: "#F9FAFB", border: "1px solid #e5e7eb", textDecoration: "none",
+                    }}>
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ color: "#111827", fontSize: 13, fontWeight: 700 }}>#{p.codigo} · {p.cliente}</p>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                          <span style={{
+                            fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 999,
+                            background: `${STATUS_COR[p.status] ?? "#9CA3AF"}1A`, color: STATUS_COR[p.status] ?? "#9CA3AF",
+                          }}>
+                            {p.statusLabel}
+                          </span>
+                          <span style={{ color: "#9CA3AF", fontSize: 11 }}>{p.tempoLabel}</span>
+                        </div>
+                      </div>
+                      <p style={{ color: "#111827", fontWeight: 800, fontSize: 14, flexShrink: 0, marginLeft: 8 }}>R$ {p.valor.toFixed(2)}</p>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {/* Horários de pico */}
+              <div className="card" style={{ padding: "18px 16px" }}>
+                <p style={{ color: "#111827", fontWeight: 900, fontSize: 15, marginBottom: 10 }}>Horários de pico</p>
+                {dados.horarioPico ? (
+                  <>
+                    <p style={{ color: "#f97316", fontWeight: 900, fontSize: 22, marginBottom: 4 }}>{dados.horarioPico.faixa}</p>
+                    <p style={{ color: "#6B7280", fontSize: 12.5 }}>
+                      {periodo === "hoje" ? "Maior movimento hoje" : "Maior movimento no período"} · {dados.horarioPico.participacaoPct}% das vendas
+                    </p>
+                  </>
+                ) : (
+                  <p style={{ color: "#9CA3AF", fontSize: 13 }}>Dados insuficientes para o período</p>
+                )}
+              </div>
+
+              {/* Desempenho operacional */}
+              <div className="card" style={{ padding: "18px 16px" }}>
+                <p style={{ color: "#111827", fontWeight: 900, fontSize: 15, marginBottom: 14 }}>Desempenho operacional</p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <LinhaDesempenho
+                    label="Tempo médio de preparo"
+                    valor={dados.desempenho.tempoPreparoMin != null ? `${Math.round(dados.desempenho.tempoPreparoMin)} min` : "—"}
+                    amostra={dados.desempenho.amostraPreparo}
+                  />
+                  <LinhaDesempenho
+                    label="Tempo médio de entrega"
+                    valor={dados.desempenho.tempoEntregaMin != null ? `${Math.round(dados.desempenho.tempoEntregaMin)} min` : "—"}
+                    amostra={dados.desempenho.amostraEntrega}
+                  />
+                  <LinhaDesempenho
+                    label="Taxa de cancelamento"
+                    valor={dados.desempenho.taxaCancelamento != null ? `${dados.desempenho.taxaCancelamento.toFixed(1)}%` : "—"}
+                    cor={dados.desempenho.taxaCancelamento != null && dados.desempenho.taxaCancelamento > 10 ? "#ef4444" : undefined}
+                  />
+                </div>
               </div>
             </div>
-          )}
+          </div>
         </>
-      )}
+      ) : null}
+
+      <style>{`
+        .dash-grid-4 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+        .dash-grid-2 { display: grid; grid-template-columns: 1fr; gap: 16px; }
+        .kpi-grid {
+          display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+          grid-template-areas: "vendas vendas" "pedidos ticket" "taxa taxa";
+        }
+        @media (min-width: 640px) {
+          .dash-grid-4 { grid-template-columns: repeat(5, 1fr); }
+          .kpi-grid { grid-template-columns: repeat(4, 1fr); grid-template-areas: "vendas pedidos ticket taxa"; }
+        }
+        @media (min-width: 900px) {
+          .dash-grid-2 { grid-template-columns: 1fr 1fr; }
+        }
+        .pulse-dot { animation: dash-pulse 1.6s ease-in-out infinite; }
+        @keyframes dash-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+      `}</style>
     </div>
   )
 }
+
+function LinhaDesempenho({ label, valor, amostra, cor }: { label: string; valor: string; amostra?: number; cor?: string }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+      <div>
+        <p style={{ color: "#374151", fontSize: 13, fontWeight: 600 }}>{label}</p>
+        {amostra !== undefined && amostra > 0 && <p style={{ color: "#9CA3AF", fontSize: 10.5 }}>Baseado em {amostra} pedido{amostra !== 1 ? "s" : ""}</p>}
+      </div>
+      <p style={{ color: cor ?? "#111827", fontWeight: 800, fontSize: 14, flexShrink: 0 }}>{valor}</p>
+    </div>
+  )
+}
+
+function SkeletonDashboard() {
+  const bloco = (h: number) => <div className="card" style={{ height: h, background: "linear-gradient(90deg,#F3F4F6 25%,#F9FAFB 37%,#F3F4F6 63%)", backgroundSize: "400% 100%", animation: "skeleton 1.4s ease infinite" }} />
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div className="dash-grid-4">{[0, 1, 2, 3].map(i => <div key={i}>{bloco(90)}</div>)}</div>
+      <div className="dash-grid-5">{[0, 1, 2, 3, 4].map(i => <div key={i}>{bloco(100)}</div>)}</div>
+      {bloco(220)}
+      <style>{`
+        .dash-grid-4, .dash-grid-5 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+        @media (min-width: 640px) {
+          .dash-grid-4 { grid-template-columns: repeat(4, 1fr); }
+          .dash-grid-5 { grid-template-columns: repeat(5, 1fr); }
+        }
+        @keyframes skeleton { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+      `}</style>
+    </div>
+  )
+}
+

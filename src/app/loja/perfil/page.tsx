@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
+import { diaEMinutosAgoraBrt } from "@/lib/periodoBrt"
 
 type DiaSemana = "dom" | "seg" | "ter" | "qua" | "qui" | "sex" | "sab"
 type DiaConfig = { aberto: boolean; inicio: string; fim: string }
@@ -96,14 +97,13 @@ async function buscarCep(cep: string) {
 
 function horariosEstaAberto(horarios: Horarios): boolean {
   if (horarios.tipo === "sempre_aberto") return true
-  const agora = new Date()
   const diasSemana: DiaSemana[] = ["dom", "seg", "ter", "qua", "qui", "sex", "sab"]
-  const diaAtual = diasSemana[agora.getDay()]
+  const { diaSemana, minutos } = diaEMinutosAgoraBrt()
+  const diaAtual = diasSemana[diaSemana]
   const config = horarios.dias[diaAtual]
   if (!config.aberto) return false
   const [hIni, mIni] = config.inicio.split(":").map(Number)
   const [hFim, mFim] = config.fim.split(":").map(Number)
-  const minutos = agora.getHours() * 60 + agora.getMinutes()
   return minutos >= hIni * 60 + mIni && minutos < hFim * 60 + mFim
 }
 

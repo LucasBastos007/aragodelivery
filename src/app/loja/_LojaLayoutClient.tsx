@@ -5,8 +5,16 @@ import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { useAuth } from "@/lib/auth"
+import { supabase } from "@/lib/supabase"
 
 const NAV: { href: string; icon: React.ReactNode; label: string }[] = [
+  { href: "/loja/dashboard", label: "Início", icon: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 11.5 12 4l9 7.5" />
+      <path d="M5.5 10v9a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-9" />
+      <path d="M9.5 20v-6h5v6" />
+    </svg>
+  )},
   { href: "/loja", label: "Pedidos", icon: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       {/* Clipboard board */}
@@ -36,18 +44,6 @@ const NAV: { href: string; icon: React.ReactNode; label: string }[] = [
       <line x1="21" y1="12" x2="19.5" y2="12" strokeWidth="1.5"/>
       <line x1="12" y1="21" x2="12" y2="19.5" strokeWidth="1.5"/>
       <line x1="3" y1="12" x2="4.5" y2="12" strokeWidth="1.5"/>
-    </svg>
-  )},
-  { href: "/loja/dashboard", label: "Dashboard", icon: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      {/* Thin frame */}
-      <rect x="2" y="2" width="20" height="20" rx="2" strokeWidth="1.5" strokeOpacity="0.4"/>
-      {/* 3 vertical bars - short, medium, tall */}
-      <rect x="4" y="13" width="4" height="7" rx="1"/>
-      <rect x="10" y="8" width="4" height="12" rx="1"/>
-      <rect x="16" y="4" width="4" height="16" rx="1"/>
-      {/* Baseline */}
-      <line x1="2" y1="20" x2="22" y2="20" strokeWidth="1.5"/>
     </svg>
   )},
   { href: "/loja/cardapio", label: "Cardápio", icon: (
@@ -92,7 +88,7 @@ const NAV: { href: string; icon: React.ReactNode; label: string }[] = [
       <path d="M14.5 9.5 Q14.5 8 12 8 Q9.5 8 9.5 10 Q9.5 12 12 12 Q14.5 12 14.5 14 Q14.5 16 12 16 Q9.5 16 9.5 14.5" strokeWidth="1.8"/>
     </svg>
   )},
-  { href: "/loja/entrega-avulsa", label: "Motoboy", icon: (
+  { href: "/loja/entrega-avulsa", label: "Motoboys", icon: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="8" r="3"/>
       <path d="M6 20v-2a6 6 0 0 1 12 0v2"/>
@@ -108,6 +104,19 @@ const NAV: { href: string; icon: React.ReactNode; label: string }[] = [
       <polyline points="14 2 14 8 20 8"/>
       <line x1="8" y1="13" x2="16" y2="13"/>
       <line x1="8" y1="17" x2="13" y2="17"/>
+    </svg>
+  )},
+  { href: "/loja/relatorio", label: "Relatórios", icon: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {/* Calendar/report page */}
+      <rect x="3" y="4" width="18" height="18" rx="2"/>
+      <line x1="3" y1="10" x2="21" y2="10"/>
+      <line x1="8" y1="2" x2="8" y2="6"/>
+      <line x1="16" y1="2" x2="16" y2="6"/>
+      {/* Small bar chart inside */}
+      <rect x="7" y="13" width="2.5" height="5" rx="0.5"/>
+      <rect x="10.75" y="14.5" width="2.5" height="3.5" rx="0.5"/>
+      <rect x="14.5" y="12" width="2.5" height="6" rx="0.5"/>
     </svg>
   )},
   { href: "/loja/perfil", label: "Minha loja", icon: (
@@ -128,12 +137,47 @@ const NAV: { href: string; icon: React.ReactNode; label: string }[] = [
   )},
 ]
 
+// Sidebar desktop agrupada (spec "Evolução Completa V1" seções 3/6/7/8/9) — referencia
+// os itens de NAV por href em vez de duplicar os SVGs, pra nunca dessincronizar ícone
+// de um item entre o grupo e a lista flat usada pela bottom nav/isActive.
+const GRUPOS_SIDEBAR: { titulo: string; hrefs: string[] }[] = [
+  { titulo: "Operação", hrefs: ["/loja/dashboard", "/loja", "/loja/cardapio"] },
+  { titulo: "Gestão", hrefs: ["/loja/financeiro", "/loja/relatorio", "/loja/historico", "/loja/cupons"] },
+  { titulo: "Operação e configurações", hrefs: ["/loja/entrega-avulsa", "/loja/fiscal", "/loja/perfil"] },
+]
+
+// Itens da bottom nav mobile — usado tanto pra montar a bottom nav quanto pra filtrar o
+// que aparece dentro de "Mais" (não faz sentido listar de novo o que já tem ícone fixo
+// embaixo).
+const BOTTOM_NAV_HREFS = ["/loja/dashboard", "/loja", "/loja/cardapio", "/loja/financeiro"]
+const ITENS_RESTANTES = NAV.filter(n => !BOTTOM_NAV_HREFS.includes(n.href))
+
+const WHATSAPP_SUPORTE = "https://wa.me/5562993910717"
+
 export default function LojaLayoutClient({ children }: { children: React.ReactNode }) {
   const path = usePathname()
   const router = useRouter()
   const { sessao, authLoading, logout } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
   const [lojaStatus, setLojaStatus] = useState<string | null>(null)
+  const [pedidosPendentes, setPedidosPendentes] = useState(0)
+
+  // Badge de "Pedidos" na bottom nav mobile (spec do redesign do Dashboard, seção 17) —
+  // só conta novos pedidos (status pendente), que é o que realmente exige atenção
+  // imediata da loja. Leve o bastante pra rodar em paralelo ao polling da própria tela
+  // de Pedidos (que já existe e não foi alterado).
+  useEffect(() => {
+    if (sessao?.role !== "lojista") return
+    const loja_id = sessao.loja_id
+    async function contarPendentes() {
+      const { count } = await supabase.from("pedidos").select("id", { count: "exact", head: true })
+        .eq("loja_id", loja_id).eq("status", "pendente")
+      setPedidosPendentes(count ?? 0)
+    }
+    contarPendentes()
+    const iv = setInterval(contarPendentes, 20_000)
+    return () => clearInterval(iv)
+  }, [sessao])
 
   useEffect(() => {
     if (!authLoading && (!sessao || sessao.role !== "lojista")) {
@@ -298,27 +342,42 @@ export default function LojaLayoutClient({ children }: { children: React.ReactNo
           </div>
         </div>
 
-        <nav style={{ display: "flex", flexDirection: "column", gap: 4, padding: 12, flex: 1 }}>
-          {NAV.map(n => {
-            const active = isActive(n.href)
-            return (
-              <Link key={n.href} href={n.href} style={{
-                display: "flex", alignItems: "center", gap: 10,
-                padding: "10px 12px", borderRadius: 12, fontSize: 13, fontWeight: 600,
-                textDecoration: "none", transition: "all 0.15s",
-                background: active ? "rgba(249,115,22,0.08)" : "transparent",
-                color: active ? "#f97316" : "#6B7280",
-                border: active ? "1px solid rgba(249,115,22,0.2)" : "1px solid transparent",
-              }}>
-                <span style={{ flexShrink: 0 }}>{n.icon}</span>
-                {n.label}
-              </Link>
-            )
-          })}
+        <nav style={{ display: "flex", flexDirection: "column", gap: 14, padding: 12, flex: 1, overflowY: "auto" }}>
+          {GRUPOS_SIDEBAR.map(grupo => (
+            <div key={grupo.titulo}>
+              <p style={{ color: "#9CA3AF", fontSize: 10.5, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.5, padding: "0 12px", marginBottom: 6 }}>
+                {grupo.titulo}
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {grupo.hrefs.map(href => {
+                  const n = NAV.find(x => x.href === href)
+                  if (!n) return null
+                  const active = isActive(n.href)
+                  return (
+                    <Link key={n.href} href={n.href} style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      padding: "10px 12px", borderRadius: 12, fontSize: 13, fontWeight: 600,
+                      textDecoration: "none", transition: "all 0.15s",
+                      background: active ? "rgba(249,115,22,0.08)" : "transparent",
+                      color: active ? "#f97316" : "#6B7280",
+                      border: active ? "1px solid rgba(249,115,22,0.2)" : "1px solid transparent",
+                    }}>
+                      <span style={{ flexShrink: 0 }}>{n.icon}</span>
+                      {n.label}
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
+        {/* Rodapé — Ajuda/Configurações/Sair (spec "Evolução Completa V1"). "Configurações"
+            aponta pra Minha loja (/loja/perfil) por ora — não existe uma tela de
+            configurações de conta separada ainda (ver checkpoint). */}
         <div style={{ padding: "14px 16px", borderTop: "1px solid #e5e7eb", display: "flex", flexDirection: "column", gap: 8 }}>
-          <Link href="/" style={{ color: "#9CA3AF", fontSize: 12, fontWeight: 600, textDecoration: "none" }}>← Voltar ao site</Link>
+          <a href={WHATSAPP_SUPORTE} target="_blank" rel="noreferrer" style={{ color: "#9CA3AF", fontSize: 12, fontWeight: 600, textDecoration: "none" }}>Ajuda</a>
+          <Link href="/loja/perfil" style={{ color: "#9CA3AF", fontSize: 12, fontWeight: 600, textDecoration: "none" }}>Configurações</Link>
           <button onClick={handleLogout} style={{ background: "none", border: "none", color: "#9CA3AF", cursor: "pointer", padding: 0, fontSize: 12, fontWeight: 600, textAlign: "left" }}>
             Sair da conta
           </button>
@@ -360,8 +419,10 @@ export default function LojaLayoutClient({ children }: { children: React.ReactNo
                 <p style={{ color: "#111827", fontWeight: 900, fontSize: 15 }}>{sessao.loja_nome}</p>
                 <p style={{ color: "#9CA3AF", fontSize: 12, marginTop: 2 }}>Painel do lojista</p>
               </div>
+              {/* Só os itens que não têm ícone fixo na bottom nav (Início/Pedidos/Cardápio/
+                  Financeiro já estão sempre visíveis embaixo) — "Mais" mostra o restante. */}
               <nav style={{ flex: 1, padding: "12px 10px", display: "flex", flexDirection: "column", gap: 4, overflowY: "auto" }}>
-                {NAV.map(n => {
+                {ITENS_RESTANTES.map(n => {
                   const active = isActive(n.href)
                   return (
                     <Link key={n.href} href={n.href} onClick={() => setMenuOpen(false)} style={{
@@ -378,7 +439,8 @@ export default function LojaLayoutClient({ children }: { children: React.ReactNo
                 })}
               </nav>
               <div style={{ padding: "14px 16px", borderTop: "1px solid #e5e7eb", display: "flex", flexDirection: "column", gap: 10 }}>
-                <Link href="/" style={{ color: "#9CA3AF", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>← Voltar ao site</Link>
+                <a href={WHATSAPP_SUPORTE} target="_blank" rel="noreferrer" style={{ color: "#9CA3AF", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>Ajuda</a>
+                <Link href="/loja/perfil" onClick={() => setMenuOpen(false)} style={{ color: "#9CA3AF", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>Configurações</Link>
                 <button onClick={handleLogout} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", padding: 0, fontSize: 13, fontWeight: 700, textAlign: "left" }}>
                   Sair da conta
                 </button>
@@ -393,26 +455,59 @@ export default function LojaLayoutClient({ children }: { children: React.ReactNo
       </div>
 
       {/* ── Bottom nav mobile (≤767px) ── */}
+      {/* Início / Pedidos / Cardápio / Financeiro / Mais — dedicada (não é mais um slice
+          genérico do NAV da sidebar), spec do redesign do Dashboard seção 17. "Mais" abre
+          o drawer já existente com o restante das opções (Cupons, Motoboy, Fiscal, Minha
+          loja, Relatório). Badge em Pedidos = pedidos "pendente" aguardando aceite. */}
       <nav style={{
         display: "none", position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 40,
         background: "#ffffff", borderTop: "1px solid #e5e7eb",
         paddingBottom: "env(safe-area-inset-bottom, 0px)",
       }} className="show-mobile-flex">
-        {NAV.slice(0, 5).map(n => {
-          const active = isActive(n.href)
+        {([
+          { href: "/loja/dashboard", label: "Início" },
+          { href: "/loja", label: "Pedidos", badge: pedidosPendentes },
+          { href: "/loja/cardapio", label: "Cardápio" },
+          { href: "/loja/financeiro", label: "Financeiro" },
+        ] as const).map(item => {
+          const n = NAV.find(x => x.href === item.href)!
+          const active = isActive(item.href)
           return (
-            <Link key={n.href} href={n.href} style={{
+            <Link key={item.href} href={item.href} style={{
               flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
               justifyContent: "center", gap: 3, textDecoration: "none",
-              padding: "8px 2px", minHeight: 56,
+              padding: "8px 2px", minHeight: 56, position: "relative",
             }}>
-              <span style={{ color: active ? "#f97316" : "#9CA3AF", transition: "color 0.15s" }}>{n.icon}</span>
+              <span style={{ position: "relative", color: active ? "#f97316" : "#9CA3AF", transition: "color 0.15s" }}>
+                {n.icon}
+                {"badge" in item && item.badge > 0 && (
+                  <span style={{
+                    position: "absolute", top: -5, right: -7, minWidth: 15, height: 15, borderRadius: 999,
+                    background: "#ef4444", color: "white", fontSize: 9, fontWeight: 800,
+                    display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px",
+                  }}>
+                    {item.badge > 9 ? "9+" : item.badge}
+                  </span>
+                )}
+              </span>
               <span style={{ fontSize: 9, fontWeight: active ? 800 : 500, color: active ? "#f97316" : "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.2 }}>
-                {n.label}
+                {item.label}
               </span>
             </Link>
           )
         })}
+        <button onClick={() => setMenuOpen(true)} style={{
+          flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
+          justifyContent: "center", gap: 3, padding: "8px 2px", minHeight: 56,
+          background: "none", border: "none", cursor: "pointer",
+        }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={menuOpen ? "#f97316" : "#9CA3AF"} strokeWidth="2" strokeLinecap="round">
+            <circle cx="5" cy="12" r="1.5" fill={menuOpen ? "#f97316" : "#9CA3AF"} stroke="none" />
+            <circle cx="12" cy="12" r="1.5" fill={menuOpen ? "#f97316" : "#9CA3AF"} stroke="none" />
+            <circle cx="19" cy="12" r="1.5" fill={menuOpen ? "#f97316" : "#9CA3AF"} stroke="none" />
+          </svg>
+          <span style={{ fontSize: 9, fontWeight: 500, color: menuOpen ? "#f97316" : "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.2 }}>Mais</span>
+        </button>
       </nav>
 
       <style>{`
