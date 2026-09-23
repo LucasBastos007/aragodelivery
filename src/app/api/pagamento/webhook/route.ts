@@ -109,12 +109,21 @@ export async function POST(req: NextRequest) {
       }
     }
   } else if (CANCELADOS.has(event) || CANCELADOS.has(status)) {
-    await sb.from("pedidos").update({ status: "cancelado" }).eq("id", pedidoId)
+    // Guarda atômica: só cancela (e só grava cancelado_em) se o pedido ainda não
+    // estiver num status final — evita sobrescrever um cancelamento/entrega já
+    // registrado por outro caminho (ex: loja já cancelou manualmente antes).
+    await sb.from("pedidos")
+      .update({ status: "cancelado", cancelado_em: new Date().toISOString() })
+      .eq("id", pedidoId)
+      .not("status", "in", '("cancelado","entregue")')
 
   } else if (REEMBOLSADOS.has(event) || REEMBOLSADOS.has(status)) {
     // Marca o pedido como cancelado e o reembolso como concluído
     const paymentId = payment.id
-    await sb.from("pedidos").update({ status: "cancelado" }).eq("id", pedidoId)
+    await sb.from("pedidos")
+      .update({ status: "cancelado", cancelado_em: new Date().toISOString() })
+      .eq("id", pedidoId)
+      .not("status", "in", '("cancelado","entregue")')
 
     if (paymentId) {
       // Atualiza reembolso associado (pelo asaas_refund_id ou pedido_id)

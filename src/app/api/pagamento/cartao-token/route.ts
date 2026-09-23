@@ -60,12 +60,18 @@ export async function POST(req: NextRequest) {
     }
 
     console.error("[CartãoToken] Status inesperado:", cobranca.status, "id:", cobranca.id)
-    await sb.from("pedidos").update({ asaas_payment_id: cobranca.id, status: "cancelado" }).eq("id", pedido_id)
+    await sb.from("pedidos")
+      .update({ asaas_payment_id: cobranca.id, status: "cancelado", cancelado_em: new Date().toISOString() })
+      .eq("id", pedido_id)
+      .not("status", "in", '("cancelado","entregue")')
     return NextResponse.json({ error: `Cartão recusado (${cobranca.status})` }, { status: 422 })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Erro ao processar cartão"
     console.error("[CartãoToken]", msg)
-    await sb.from("pedidos").update({ status: "cancelado" }).eq("id", pedido_id)
+    await sb.from("pedidos")
+      .update({ status: "cancelado", cancelado_em: new Date().toISOString() })
+      .eq("id", pedido_id)
+      .not("status", "in", '("cancelado","entregue")')
     return NextResponse.json({ error: msg }, { status: 500 })
   }
 }

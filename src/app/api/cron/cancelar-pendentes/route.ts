@@ -31,7 +31,17 @@ export async function GET(req: NextRequest) {
 
   let cancelados = 0
   for (const p of pendentes) {
-    await sb.from("pedidos").update({ status: "cancelado" }).eq("id", p.id)
+    // Guarda atômica: só cancela (e só estorna) se o pedido ainda estiver "pendente"
+    // no momento do UPDATE — evita cancelar/estornar em dobro se a loja aceitou o
+    // pedido bem nesse intervalo, ou se o cron rodar em paralelo consigo mesmo.
+    const { data: atualizado } = await sb.from("pedidos")
+      .update({ status: "cancelado", cancelado_em: new Date().toISOString() })
+      .eq("id", p.id)
+      .eq("status", "pendente")
+      .select("id")
+      .maybeSingle()
+
+    if (!atualizado) continue
     cancelados++
 
     // Estorna pagamentos feitos via PIX/cartão

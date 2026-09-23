@@ -38,7 +38,10 @@ export async function POST(req: NextRequest) {
 
   if (!pedido.asaas_payment_id) {
     // Nenhum pagamento foi iniciado — cancela o pedido para liberar o cliente
-    await sb.from("pedidos").update({ status: "cancelado" }).eq("id", pedido_id)
+    await sb.from("pedidos")
+      .update({ status: "cancelado", cancelado_em: new Date().toISOString() })
+      .eq("id", pedido_id)
+      .eq("status", "aguardando_pagamento")
     return NextResponse.json({ status: "cancelado", confirmado: false, sem_pagamento: true })
   }
 
@@ -90,7 +93,10 @@ export async function POST(req: NextRequest) {
   }
 
   if (RECUSADOS.has(asaasStatus)) {
-    await sb.from("pedidos").update({ status: "cancelado" }).eq("id", pedido_id)
+    await sb.from("pedidos")
+      .update({ status: "cancelado", cancelado_em: new Date().toISOString() })
+      .eq("id", pedido_id)
+      .eq("status", "aguardando_pagamento")
     return NextResponse.json({ status: "cancelado", confirmado: false })
   }
 

@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
   // Cancela o pedido atomicamente (só se ainda cancelável)
   const { data: updated } = await sb
     .from("pedidos")
-    .update({ status: "cancelado" })
+    .update({ status: "cancelado", cancelado_em: new Date().toISOString() })
     .eq("id", pedido_id)
     .in("status", [...CANCELAVEIS])
     .select("id, status")
