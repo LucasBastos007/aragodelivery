@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/monitorar-saude",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/fechamento-diario",
+      "schedule": "0 13 * * *"
     }
   ]
 }

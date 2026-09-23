@@ -19,6 +19,21 @@ const nextConfig: NextConfig = {
   // Esconde o header X-Powered-By: Next.js para não vazar tecnologia
   poweredByHeader: false,
 
+  // puppeteer-core/@sparticuz/chromium não podem ser empacotados pelo bundler do
+  // Next.js — eles carregam arquivos não-JS (o binário do Chromium) via require
+  // dinâmico, que o bundler não rastreia. Sem isso, a função de
+  // /api/cron/fechamento-diario falha em produção com "Cannot find module" mesmo com o
+  // pacote instalado (achado real, 2026-09-18 — tentei antes com playwright-core, que
+  // carregava mas dava "spawn ETXTBSY" ao lançar o Chromium do sparticuz; puppeteer-core
+  // é a combinação oficialmente documentada/testada pelo @sparticuz/chromium).
+  // serverExternalPackages faz o Next tratar como módulo Node nativo em vez de
+  // bundlar, e outputFileTracingIncludes força a inclusão completa dos pacotes na
+  // função dessa rota (o file tracing sozinho não detectava tudo).
+  serverExternalPackages: ["puppeteer-core", "@sparticuz/chromium"],
+  outputFileTracingIncludes: {
+    "/api/cron/fechamento-diario/route": ["./node_modules/puppeteer-core/**", "./node_modules/@sparticuz/chromium/**"],
+  },
+
   async headers() {
     return [
       {
