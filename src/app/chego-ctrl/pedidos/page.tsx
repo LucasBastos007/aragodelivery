@@ -152,6 +152,66 @@ function ConfirmarCartaoBtn({ pedidoId, onConfirmado }: { pedidoId: string; onCo
   )
 }
 
+// Confirmação manual de pagamento (pedido do usuário, 2026-09-19, caso real: pedido
+// BB7X82 — cliente mandou comprovante, admin verificou que o dinheiro caiu, mas a Asaas
+// ainda mostrava PENDING e nenhum webhook tinha chegado pra esse pagamento específico).
+// Diferente do ConfirmarCartaoBtn (que consulta a Asaas de novo e não ajuda quando ELA
+// está atrasada), esse botão confia no admin e dispara o fluxo real de "pagamento
+// confirmado" (muda status + notifica a loja + manda recibo) direto — por isso o
+// confirm-antes-de-fato, mesmo padrão do ForcarEntregaBtn (ação com dinheiro real,
+// não pode ser 1 clique só).
+function ConfirmarPagamentoManualBtn({ pedidoId, onConfirmado }: { pedidoId: string; onConfirmado: () => void }) {
+  const [confirmando, setConfirmando] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [erro, setErro] = useState("")
+
+  async function confirmar() {
+    setLoading(true)
+    setErro("")
+    const r = await fetch("/api/admin/confirmar-pagamento-manual", {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pedido_id: pedidoId }),
+    }).then(r => r.json()).catch(() => ({}))
+    setLoading(false)
+    if (r.ok) { setConfirmando(false); onConfirmado() }
+    else setErro(r.error ?? "Erro ao confirmar")
+  }
+
+  if (confirmando) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 4 }}>
+        <p style={{ fontSize: 9.5, color: "#92400E", margin: 0 }}>Confirma que o pagamento realmente caiu? Isso libera o pedido pra loja sem checar a Asaas de novo.</p>
+        <div style={{ display: "flex", gap: 3 }}>
+          <button onClick={confirmar} disabled={loading} style={{
+            fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 5, border: "none",
+            background: "#22c55e", color: "white", cursor: loading ? "not-allowed" : "pointer",
+          }}>
+            {loading ? "..." : "Sim, caiu"}
+          </button>
+          <button onClick={() => setConfirmando(false)} style={{
+            fontSize: 10, padding: "2px 6px", borderRadius: 5, border: "1px solid #e2e8f0",
+            background: "#f8fafc", color: "#64748b", cursor: "pointer",
+          }}>
+            Cancelar
+          </button>
+        </div>
+        {erro && <p style={{ fontSize: 9, color: "#DC2626", margin: 0 }}>{erro}</p>}
+      </div>
+    )
+  }
+
+  return (
+    <button onClick={() => setConfirmando(true)} title="Confirmar manualmente que o pagamento caiu (sem checar a Asaas)" style={{
+      fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 6,
+      border: "1px solid rgba(249,115,22,0.35)", background: "rgba(249,115,22,0.07)",
+      color: "#f97316", cursor: "pointer", whiteSpace: "nowrap",
+    }}>
+      💰 Já recebi, confirmar
+    </button>
+  )
+}
+
 const STATUSES_FORCAVEIS: readonly string[] = ["pronto", "aguardando_aceite", "indo_para_loja", "na_loja", "em_rota", "coletado"]
 // /api/escalada reatribui até "na_loja" (motoboy já aceitou mas ainda não coletou o pedido
 // fisicamente) — a partir de "coletado"/"em_rota" o pedido já está com o motoboy, não dá
@@ -868,9 +928,14 @@ export default function PedidosPage() {
                             </div>
                           )}
 
-                          {p.status === "aguardando_pagamento" && p.forma_pagamento === "cartao" && (
-                            <div onClick={e => e.stopPropagation()}>
-                              <ConfirmarCartaoBtn pedidoId={p.id} onConfirmado={() => setPedidos(prev =>
+                          {p.status === "aguardando_pagamento" && (
+                            <div onClick={e => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
+                              {p.forma_pagamento === "cartao" && (
+                                <ConfirmarCartaoBtn pedidoId={p.id} onConfirmado={() => setPedidos(prev =>
+                                  prev.map(x => x.id === p.id ? { ...x, status: "pendente" as StatusPedido } : x)
+                                )} />
+                              )}
+                              <ConfirmarPagamentoManualBtn pedidoId={p.id} onConfirmado={() => setPedidos(prev =>
                                 prev.map(x => x.id === p.id ? { ...x, status: "pendente" as StatusPedido } : x)
                               )} />
                             </div>

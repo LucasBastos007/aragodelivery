@@ -65,8 +65,8 @@ export default function ConfiguracoesPage() {
               <label style={{ fontSize: 13, fontWeight: 700, color: "#374151", display: "block", marginBottom: 8 }}>
                 Máximo de pedidos simultâneos por motoboy
               </label>
-              <div style={{ display: "flex", gap: 10 }}>
-                {["1", "2", "3"].map(v => (
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {["1", "2", "3", "4", "5", "6", "7"].map(v => (
                   <button key={v} onClick={() => setCfg(c => ({ ...c, max_pedidos_motoboy: v }))} style={{
                     width: 56, height: 56, borderRadius: 14, border: "2px solid",
                     borderColor: cfg.max_pedidos_motoboy === v ? "#f97316" : "#E2E8F0",
@@ -78,7 +78,7 @@ export default function ConfiguracoesPage() {
                 ))}
               </div>
               <p style={{ fontSize: 11, color: "#94a3b8", marginTop: 8 }}>
-                Máximo recomendado: 2. Com 3, o motoboy pode se sobrecarregar.
+                Valores altos liberam mais corridas ao mesmo tempo por motoboy — ajuste conforme a demanda real da região, pra não sobrecarregar quem está na rua.
               </p>
             </div>
 

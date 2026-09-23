@@ -147,7 +147,10 @@ export default function LojasPage() {
 
   async function ativarLoja(loja: Loja) {
     setSalvando(true)
-    await fetch("/api/chego-ctrl/ativar-loja", {
+    // Rota correta é /api/admin/ativar-loja — a antiga (/api/chego-ctrl/ativar-loja)
+    // nunca existiu como arquivo, então o botão "Ativar" sempre bateu 404 silenciosamente
+    // (fetch não tratava erro) e só atualizava o estado local sem persistir no banco.
+    await fetch("/api/admin/ativar-loja", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ loja_id: loja.id }),
