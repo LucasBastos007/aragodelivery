@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import type React from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -33,6 +33,22 @@ const CAT_COLORS: Record<string, { bg: string; text: string; accent: string }> =
   Outros:      { bg: "#f5f3ff", text: "#6d28d9", accent: "#8b5cf6" },
 }
 const CATEGORIAS: CategoriaLoja[] = ["Restaurante", "Mercadinho", "Farmácia", "Outros"]
+
+// lojas.categoria guarda um valor bem mais específico do que os 4 baldes dos filtros
+// (ex: "Pizza", "Hambúrguer", "Japonês", "Mercado") — comparar direto com "===" deixava
+// essas lojas de fora do filtro "Restaurantes"/"Mercados" mesmo sendo desse tipo. Bug
+// real reportado (ícones de categoria não mostravam as lojas), corrigido em 2026-09-23.
+const CATEGORIA_BALDES: Record<string, CategoriaLoja[]> = {
+  Restaurante: ["Restaurante", "Hambúrguer", "Pizza", "Italiana", "Japonês", "Lanches"],
+  Mercadinho:  ["Mercadinho", "Mercado"],
+  "Farmácia":  ["Farmácia"],
+  Outros:      ["Outros", "Doces e Bolos", "Bebidas"],
+  // Ícones de subcategoria (Massas/Lanches/Pizzarias) filtram só pelo tipo específico
+  // deles, não pelo balde genérico "Restaurante" — senão "Pizzarias" mostrava padaria,
+  // hambúrgueria etc. junto. "Pizza" e "Italiana" não precisam de entrada aqui: sem
+  // balde definido, o filtro cai no fallback (usa o próprio valor como categoria exata).
+  Lanches: ["Lanches", "Hambúrguer"],
+}
 
 type HomeCatAction = "filter" | "busca" | "breve"
 const CATS_HOME: { label: string; icon: React.ReactNode; img?: string; bg: string; cat: CategoriaLoja | null; badge: string | null; action: HomeCatAction }[] = [
@@ -238,7 +254,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; img?: string; bg: strin
     label: "Massas",
     bg: "linear-gradient(145deg,#F57F17,#E65100)",
     img: "/icons/massas.svg",
-    cat: "Restaurante", badge: null, action: "filter",
+    cat: "Italiana", badge: null, action: "filter",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
         {/* Bowl shadow */}
@@ -270,7 +286,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; img?: string; bg: strin
     label: "Lanches",
     bg: "linear-gradient(145deg,#6D4C41,#4E342E)",
     img: "/icons/lanches.svg",
-    cat: "Restaurante", badge: null, action: "filter",
+    cat: "Lanches", badge: null, action: "filter",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
         {/* Bun top */}
@@ -303,7 +319,7 @@ const CATS_HOME: { label: string; icon: React.ReactNode; img?: string; bg: strin
     label: "Pizzarias",
     bg: "linear-gradient(145deg,#C62828,#B71C1C)",
     img: "/icons/pizzarias.svg",
-    cat: "Restaurante", badge: null, action: "filter",
+    cat: "Pizza", badge: null, action: "filter",
     icon: (
       <svg width="34" height="34" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
         {/* Pizza slice — triangle pointing down */}
@@ -369,7 +385,22 @@ function playSound() {
   } catch {}
 }
 
-const BANNERS = [
+const BANNERS: {
+  photo: string; overlay: string; shadow: string; cta_bg: string
+  eyebrow: string; title: string; sub: string; cta: string
+  href?: string // se definido, clicar no banner navega pra cá em vez de avançar o slide
+}[] = [
+  {
+    photo: "https://images.unsplash.com/photo-1616757957712-6c8874a8c82b?auto=format&fit=crop&w=800&h=400&q=82",
+    overlay: "linear-gradient(100deg,rgba(140,10,10,0.90) 0%,rgba(160,20,20,0.65) 50%,rgba(0,0,0,0.08) 100%)",
+    shadow: "rgba(160,20,20,0.40)",
+    cta_bg: "#DC2626",
+    eyebrow: "Novidade",
+    title: "Chegô chegou em Guapó!",
+    sub: "confira as lojas disponíveis na sua cidade",
+    cta: "Ver lojas de Guapó →",
+    href: "/busca?cidade=Guap%C3%B3",
+  },
   {
     photo: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=800&h=400&q=82",
     overlay: "linear-gradient(100deg,rgba(140,10,10,0.90) 0%,rgba(160,20,20,0.65) 50%,rgba(0,0,0,0.08) 100%)",
@@ -554,12 +585,29 @@ export default function Home() {
   }
 
   const filtradas = lojas.filter(l => {
-    const matchCat   = !filtro || l.categoria === filtro
+    const matchCat   = !filtro || (CATEGORIA_BALDES[filtro] ?? [filtro]).includes(l.categoria)
     const matchBusca = l.nome.toLowerCase().includes(busca.toLowerCase())
     return matchCat && matchBusca
   })
   const abertas  = filtradas.filter(l => l.aberto)
   const fechadas = filtradas.filter(l => !l.aberto)
+
+  // Agrupa as lojas abertas por cidade (só usado na home "limpa", sem busca/filtro
+  // ativo) — cada grupo vira sua própria seção "Lojas Abertas {Cidade}". Uma loja pode
+  // aparecer em mais de uma seção se atender mais de uma cidade (cidades_atendidas) —
+  // ex: loja de Aragoiânia que também entrega em Guapó.
+  const abertasPorCidade = useMemo(() => {
+    const grupos = new Map<string, Loja[]>()
+    for (const l of abertas) {
+      const lista = l.cidades_atendidas?.length ? l.cidades_atendidas : [l.cidade]
+      const cidades = [...new Set(lista.map(c => (c ?? "").trim()).filter(Boolean))]
+      for (const cidade of cidades.length ? cidades : ["Outras cidades"]) {
+        if (!grupos.has(cidade)) grupos.set(cidade, [])
+        grupos.get(cidade)!.push(l)
+      }
+    }
+    return [...grupos.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
+  }, [abertas])
 
   return (
     <div style={{ minHeight: "100vh", background: "#F9FAFB", overflowX: "hidden" }}>
@@ -1110,7 +1158,7 @@ export default function Home() {
           return (
             <div style={{ padding: "10px 16px 6px" }}>
               <div
-                onClick={() => setBannerIdx(i => (i + 1) % BANNERS.length)}
+                onClick={() => b.href ? router.push(b.href) : setBannerIdx(i => (i + 1) % BANNERS.length)}
                 onTouchStart={e => { touchStartX.current = e.touches[0].clientX }}
                 onTouchEnd={e => {
                   const dx = e.changedTouches[0].clientX - touchStartX.current
@@ -1141,9 +1189,9 @@ export default function Home() {
 
                 {/* Conteúdo */}
                 <div style={{ position: "relative", zIndex: 1, padding: "18px 20px", height: "100%", display: "flex", flexDirection: "column", justifyContent: "center" }}>
-                  <p style={{ color: "rgba(255,255,255,0.78)", fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 1.3, marginBottom: 4 }}>
-                    {b.eyebrow}
-                  </p>
+                  <div style={{ marginBottom: 8 }}>
+                    <LogoClean height={18} />
+                  </div>
                   <p style={{ color: "white", fontSize: 26, fontWeight: 900, lineHeight: 1.1, marginBottom: 4, textShadow: "0 2px 8px rgba(0,0,0,0.3)" }}>
                     {b.title}
                   </p>
@@ -1309,25 +1357,11 @@ export default function Home() {
           {(filtro || busca) && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20, padding: isMobile ? "12px 16px 0" : "0" }}>
               <h2 style={{ color: "#1a1a1a", fontWeight: 800, fontSize: 20 }}>
-                {busca ? `Resultados para "${busca}"` : `${{ Restaurante:"🍔", Mercadinho:"🛒", "Farmácia":"💊", Outros:"🍝" }[filtro!] ?? "📦"} ${filtro}`}
+                {busca ? `Resultados para "${busca}"` : `${{ Restaurante:"🍔", Mercadinho:"🛒", "Farmácia":"💊", Outros:"🍝", Pizza:"🍕", Italiana:"🍝", Lanches:"🌭", "Hambúrguer":"🍔", "Japonês":"🍣" }[filtro!] ?? "📦"} ${filtro}`}
               </h2>
               {filtro && (
                 <button onClick={() => setFiltro(null)} style={{ background: "none", border: "none", color: "#9ca3af", fontSize: 13, cursor: "pointer", fontWeight: 600 }}>
                   Limpar ✕
-                </button>
-              )}
-            </div>
-          )}
-
-          {!filtro && !busca && (
-            <div style={{ marginBottom: 8, padding: isMobile ? "12px 16px 4px" : "0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <h2 style={{ color: "#111827", fontWeight: 900, fontSize: 20, display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#22C55E", display: "inline-block", boxShadow: "0 0 0 3px rgba(34,197,94,0.25)" }} />
-                Lojas abertas
-              </h2>
-              {isMobile && (
-                <button onClick={() => router.push("/busca")} style={{ background: "none", border: "none", color: "#EA1B2D", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>
-                  Ver mais
                 </button>
               )}
             </div>
@@ -1347,9 +1381,47 @@ export default function Home() {
             </div>
           ) : (
             <>
-              {abertas.length > 0 && (
+              {!filtro && !busca ? (
+                // Home "limpa": uma seção por cidade, com só uma prévia de lojas (não a
+                // lista inteira) — senão uma cidade com muitas lojas abertas empurra a
+                // seção da próxima cidade pra muito longe do topo, "escondendo" ela atrás
+                // de scroll. "Ver mais" leva pra lista completa daquela cidade em /busca.
+                abertasPorCidade.map(([cidade, lojasCidade]) => {
+                  const PREVIEW = 4
+                  const temMais = lojasCidade.length > PREVIEW
+                  const lojasPreview = temMais ? lojasCidade.slice(0, PREVIEW) : lojasCidade
+                  return (
+                  <div key={cidade} style={{ marginBottom: isMobile ? 24 : 40 }}>
+                    <div style={{ marginBottom: 8, padding: isMobile ? "12px 16px 4px" : "0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <h2 style={{ color: "#111827", fontWeight: 900, fontSize: 20, display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#22C55E", display: "inline-block", boxShadow: "0 0 0 3px rgba(34,197,94,0.25)" }} />
+                        Lojas Abertas {cidade}
+                      </h2>
+                      {temMais && (
+                        <button
+                          onClick={() => router.push(`/busca?cidade=${encodeURIComponent(cidade)}`)}
+                          style={{ background: "none", border: "none", color: "#EA1B2D", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>
+                          Ver mais
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))", gap: isMobile ? 0 : 20 }}>
+                      {lojasPreview.map(loja => <LojaCard key={loja.id} loja={loja} isMobile={isMobile} userCoords={userCoords} />)}
+                      {temMais && (
+                        <VerMaisCard
+                          cidade={cidade}
+                          quantidade={lojasCidade.length - PREVIEW}
+                          isMobile={isMobile}
+                          onClick={() => router.push(`/busca?cidade=${encodeURIComponent(cidade)}`)}
+                        />
+                      )}
+                    </div>
+                  </div>
+                  )
+                })
+              ) : abertas.length > 0 && (
                 <div style={{ marginBottom: isMobile ? 0 : 40 }}>
-                  {(filtro || busca) && !isMobile && (
+                  {!isMobile && (
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
                       <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22C55E" }} />
                       <p style={{ color: "#9ca3af", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>
@@ -1505,6 +1577,53 @@ function haversineKmCard(lat1: number, lng1: number, lat2: number, lng2: number)
   const dLng = (lng2 - lng1) * Math.PI / 180
   const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+// Card "Ver mais N lojas" — some estilo visual dos LojaCard, no fim da prévia de cada
+// cidade. Existe porque um link pequeno "Ver mais" no cabeçalho é fácil de não notar
+// (quem não tem o hábito de clicar acha que só essas lojas da prévia estão abertas) —
+// um card do mesmo tamanho/estilo dos outros, na sequência natural da rolagem, deixa
+// claro que tem mais loja aberta ali, não que a lista acabou.
+function VerMaisCard({ cidade, quantidade, isMobile, onClick }: { cidade: string; quantidade: number; isMobile: boolean; onClick: () => void }) {
+  if (isMobile) {
+    return (
+      <button onClick={onClick} style={{
+        all: "unset", cursor: "pointer", width: "100%", boxSizing: "border-box",
+        display: "flex", alignItems: "center", gap: 14,
+        padding: "14px 16px", borderBottom: "1px solid #f0f0f0", background: "white",
+      }}>
+        <div style={{
+          width: 76, height: 76, borderRadius: 18, flexShrink: 0,
+          background: "rgba(220,38,38,0.08)", display: "flex", alignItems: "center", justifyContent: "center",
+          color: "#DC2626", fontWeight: 900, fontSize: 20,
+        }}>
+          +{quantidade}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ color: "#111827", fontWeight: 800, fontSize: 15, marginBottom: 2 }}>Ver mais {quantidade} loja{quantidade !== 1 ? "s" : ""}</p>
+          <p style={{ color: "#6B7280", fontSize: 12 }}>Abertas em {cidade}</p>
+        </div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    )
+  }
+  return (
+    <button onClick={onClick} style={{
+      all: "unset", cursor: "pointer", boxSizing: "border-box",
+      background: "white", borderRadius: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.09)",
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      gap: 8, minHeight: 160, textAlign: "center", padding: 20,
+    }}>
+      <div style={{
+        width: 52, height: 52, borderRadius: "50%", background: "rgba(220,38,38,0.08)",
+        display: "flex", alignItems: "center", justifyContent: "center", color: "#DC2626", fontWeight: 900, fontSize: 16,
+      }}>
+        +{quantidade}
+      </div>
+      <p style={{ color: "#111827", fontWeight: 800, fontSize: 14 }}>Ver mais {quantidade} loja{quantidade !== 1 ? "s" : ""}</p>
+      <p style={{ color: "#6B7280", fontSize: 12 }}>Abertas em {cidade}</p>
+    </button>
+  )
 }
 
 function LojaCard({ loja, isMobile, userCoords }: { loja: Loja; isMobile: boolean; userCoords?: { lat: number; lng: number } | null }) {

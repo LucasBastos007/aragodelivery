@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
   // Busca motoboys disponíveis e ativos
   const { data: motoboyData } = await supabase
     .from("motoboys")
-    .select("id, lat, lng, push_subscription")
+    .select("id, lat, lng, push_subscription, raio_km")
     .eq("disponivel", true)
     .eq("status", "ativo")
 
@@ -115,11 +115,19 @@ export async function POST(req: NextRequest) {
   // Se o pedido já estava atribuído a alguém, ignora esse também
   if (pedido.motoboy_id) ignorar.add(pedido.motoboy_id)
 
-  // Candidatos com localização: ordenados por distância
-  // Candidatos sem localização: incluídos no final (não filtrados por lat/lng)
+  const RAIO_KM_DEFAULT = 12
+
+  // Candidatos com localização: ordenados por distância, e fora do raio configurado
+  // pelo próprio motoboy (raio_km) são excluídos — é isso que separa o despacho entre
+  // cidades próximas (ex: Guapó/Aragoiânia, ~13,5km entre si) sem precisar de "cidade do
+  // motoboy" fixa, já que usa a localização atual (GPS) dele. Só aplica o corte quando a
+  // loja tem coordenada real — sem isso não dá pra calcular distância com segurança, então
+  // mantém o comportamento antigo (inclui todo mundo) pra não travar o despacho.
+  // Candidatos sem localização: incluídos no final (não filtrados por lat/lng nem raio)
   const comLoc = motoboys
     .filter(m => m.id && !ignorar.has(m.id) && !ocupados.has(m.id) && m.lat && m.lng)
     .map(m => ({ ...m, distLoja: lojaLat && lojaLng ? haversineKm(m.lat, m.lng, lojaLat, lojaLng) : 9999 }))
+    .filter(m => !(lojaLat && lojaLng) || m.distLoja <= (m.raio_km ?? RAIO_KM_DEFAULT))
     .sort((a, b) => a.distLoja - b.distLoja)
 
   const semLoc = motoboys

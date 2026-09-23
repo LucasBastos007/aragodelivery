@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { MobileBottomNav } from "@/components/MobileBottomNav"
@@ -33,6 +34,17 @@ const CATEGORIAS: { cat: CategoriaLoja; label: string; sub: string; overlay: str
   },
 ]
 
+// lojas.categoria guarda um valor bem mais específico do que os 4 baldes dos chips
+// (ex: "Pizza", "Hambúrguer", "Japonês", "Mercado") — filtrar com "===" deixava essas
+// lojas de fora mesmo sendo desse tipo. Mesmo mapeamento usado em src/app/page.tsx.
+const CATEGORIA_BALDES: Record<string, CategoriaLoja[]> = {
+  Restaurante: ["Restaurante", "Hambúrguer", "Pizza", "Italiana", "Japonês", "Lanches"],
+  Mercadinho:  ["Mercadinho", "Mercado"],
+  "Farmácia":  ["Farmácia"],
+  Outros:      ["Outros", "Doces e Bolos", "Bebidas"],
+  Lanches:     ["Lanches", "Hambúrguer"],
+}
+
 const STATUS_COLOR: Record<string, { bg: string; text: string }> = {
   Restaurante: { bg: "rgba(255,107,0,0.1)", text: "#E55A00" },
   Mercadinho:  { bg: "rgba(22,163,74,0.1)",  text: "#16a34a" },
@@ -40,10 +52,14 @@ const STATUS_COLOR: Record<string, { bg: string; text: string }> = {
   Outros:      { bg: "rgba(124,58,237,0.1)", text: "#7c3aed" },
 }
 
-export default function BuscaPage() {
+function BuscaContent() {
+  const searchParams = useSearchParams()
+  const cidadeInicial = searchParams.get("cidade") ?? null
+
   const inputRef = useRef<HTMLInputElement>(null)
   const [busca,   setBusca]   = useState("")
   const [filtro,  setFiltro]  = useState<string | null>(null)
+  const [cidade,  setCidade]  = useState<string | null>(cidadeInicial)
   const [lojas,   setLojas]   = useState<Loja[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -52,16 +68,19 @@ export default function BuscaPage() {
   }, [])
 
   useEffect(() => {
-    if (!busca && !filtro) { setLojas([]); return }
+    if (!busca && !filtro && !cidade) { setLojas([]); return }
     setLoading(true)
     let q = supabase.from("lojas").select("*").eq("status", "ativo")
-    if (filtro) q = q.eq("categoria", filtro)
+    if (filtro) q = q.in("categoria", CATEGORIA_BALDES[filtro] ?? [filtro])
     if (busca)  q = q.ilike("nome", `%${busca}%`)
+    // Loja pode atender uma cidade extra via cidades_atendidas (ex: loja de Aragoiânia
+    // que também entrega em Guapó), além da cidade principal cadastrada.
+    if (cidade) q = q.or(`cidade.eq.${cidade},cidades_atendidas.cs.{${cidade}}`)
     q.order("destaque", { ascending: false }).order("aberto", { ascending: false }).order("nome")
       .then(({ data }) => { setLojas((data as Loja[]) ?? []); setLoading(false) })
-  }, [busca, filtro])
+  }, [busca, filtro, cidade])
 
-  const mostraResultados = !!(busca || filtro)
+  const mostraResultados = !!(busca || filtro || cidade)
 
   return (
     <div style={{ minHeight: "100vh", background: "#f8fafc", paddingBottom: 80, overflowX: "hidden" }}>
@@ -94,6 +113,22 @@ export default function BuscaPage() {
             </button>
           )}
         </div>
+
+        {/* Chip de cidade (quando veio da home via "Ver mais" de uma cidade) */}
+        {cidade && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10 }}>
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 6,
+              padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 700,
+              background: "#DC2626", color: "white",
+            }}>
+              📍 {cidade}
+              <button onClick={() => setCidade(null)} style={{ background: "none", border: "none", color: "white", cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 0, opacity: 0.85 }}>
+                ✕
+              </button>
+            </span>
+          </div>
+        )}
 
         {/* Chips de categoria */}
         {(busca || filtro) && (
@@ -221,5 +256,13 @@ export default function BuscaPage() {
 
       <MobileBottomNav />
     </div>
+  )
+}
+
+export default function BuscaPage() {
+  return (
+    <Suspense>
+      <BuscaContent />
+    </Suspense>
   )
 }

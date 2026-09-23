@@ -6,6 +6,7 @@ import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { useCart } from "@/lib/cart"
 import { useClienteAuth } from "@/lib/auth-cliente"
+import { diaEMinutosAgoraBrt } from "@/lib/periodoBrt"
 import type { Loja, Produto, CategoriaProduto, AdicionalProduto, GrupoAdicional } from "@/types"
 
 const CAT_ICONS: Record<string, string> = {
@@ -23,6 +24,16 @@ function legendaGrupo(g: GrupoAdicional): string {
   if (minimo === 0 && maximo === 1) return "Escolha até 1 opção"
   if (minimo === 0) return `Escolha até ${maximo} opções`
   return `Escolha de ${minimo} a ${maximo} opções`
+}
+
+// Produtos com preço-base 0 (ex: espetinho com sabor obrigatório) mostram o
+// menor preço entre as opções do grupo, precedido de "A partir de".
+function precoExibicao(prod: Produto): { valor: number; aPartir: boolean } {
+  if (prod.preco > 0) return { valor: prod.preco, aPartir: false }
+  const grupos = (prod.adicionais ?? []).filter(isGrupo) as GrupoAdicional[]
+  const precos = grupos.flatMap(g => g.itens.map(i => i.preco)).filter(p => p > 0)
+  if (precos.length > 0) return { valor: Math.min(...precos), aPartir: true }
+  return { valor: 0, aPartir: false }
 }
 
 // ── Modal de produto ───────────────────────────────────────────────────────
@@ -146,7 +157,10 @@ function ProdutoModal({ prod, loja, onClose, onAdd }: {
               <p style={{ color: "#6B7280", fontSize: 14, lineHeight: 1.55, marginBottom: 10 }}>{prod.descricao}</p>
             )}
             <p style={{ color: "#DC2626", fontWeight: 800, fontSize: 18 }}>
-              {prod.preco === 0 ? "A partir de R$ 0,00" : `R$ ${prod.preco.toFixed(2)}`}
+              {(() => {
+                const { valor, aPartir } = precoExibicao(prod)
+                return `${aPartir ? "A partir de " : ""}R$ ${valor.toFixed(2)}`
+              })()}
             </p>
           </div>
 
@@ -348,9 +362,7 @@ export default function RestaurantePage() {
       ])
       setLoja(lojaData as Loja)
       setCategorias((catData as CategoriaProduto[]) ?? [])
-      const agora  = new Date()
-      const hoje   = agora.getDay()
-      const minutos = agora.getHours() * 60 + agora.getMinutes()
+      const { diaSemana: hoje, minutos } = diaEMinutosAgoraBrt()
       const todos  = (prodData as Produto[]) ?? []
       setProdutos(todos.filter(p => {
         if (p.dias_semana && p.dias_semana.length > 0 && !p.dias_semana.includes(hoje)) return false
@@ -412,15 +424,15 @@ export default function RestaurantePage() {
     if (!cat.cardapio_do_dia) return true
     // sem horário definido = bloqueado indefinidamente
     if (!cat.horario_inicio && !cat.horario_fim) return false
-    const agora = new Date()
-    const hh = agora.getHours().toString().padStart(2, "0")
-    const mm = agora.getMinutes().toString().padStart(2, "0")
+    const { diaSemana, minutos } = diaEMinutosAgoraBrt()
+    const hh = Math.floor(minutos / 60).toString().padStart(2, "0")
+    const mm = (minutos % 60).toString().padStart(2, "0")
     const horaAtual = `${hh}:${mm}`
     const inicio = cat.horario_inicio ?? "00:00"
     const fim = cat.horario_fim ?? "23:59"
     if (horaAtual < inicio || horaAtual > fim) return false
     const dias = cat.dias_semana ?? []
-    if (dias.length > 0 && !dias.includes(agora.getDay())) return false
+    if (dias.length > 0 && !dias.includes(diaSemana)) return false
     return true
   }
 
@@ -868,7 +880,12 @@ function DestaqueProdCard({ prod, loja, isMaisPedido, qtd, onOpen, onAdd }: {
           display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
         }}>{prod.nome}</p>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
-          <p style={{ color: "#DC2626", fontWeight: 800, fontSize: 12 }}>R$ {prod.preco.toFixed(2)}</p>
+          <p style={{ color: "#DC2626", fontWeight: 800, fontSize: 12 }}>
+            {(() => {
+              const { valor, aPartir } = precoExibicao(prod)
+              return `${aPartir ? "A partir de " : ""}R$ ${valor.toFixed(2)}`
+            })()}
+          </p>
           {loja.aberto && (
             <button
               onClick={e => { e.stopPropagation(); onAdd() }}
@@ -913,7 +930,12 @@ function ProdutoRow({ prod, loja, qtd, onOpen, onAdd, onRemove }: {
             display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
           }}>{prod.descricao}</p>
         )}
-        <p style={{ color: "#DC2626", fontWeight: 700, fontSize: 14 }}>R$ {prod.preco.toFixed(2)}</p>
+        <p style={{ color: "#DC2626", fontWeight: 700, fontSize: 14 }}>
+          {(() => {
+            const { valor, aPartir } = precoExibicao(prod)
+            return `${aPartir ? "A partir de " : ""}R$ ${valor.toFixed(2)}`
+          })()}
+        </p>
       </div>
 
       {loja.aberto ? (

@@ -27,11 +27,11 @@ export async function POST(req: NextRequest) {
   // Limite por motoboy (override individual) tem prioridade sobre o limite global
   const { data: motoboyRow } = await sb
     .from("motoboys")
-    .select("limite_pedidos")
+    .select("limite_pedidos_simultaneos")
     .eq("id", motoboy_id)
     .single()
 
-  let maxPedidos = motoboyRow?.limite_pedidos ?? null
+  let maxPedidos = motoboyRow?.limite_pedidos_simultaneos ?? null
   if (maxPedidos === null) {
     const { data: cfgRow } = await sb
       .from("configuracoes")

@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# relatórios/dumps gerados localmente — podem conter dado real de produção
+# (pagamento, avaliação nominal de entregador, schema completo do banco).
+# Nunca versionar; ficam só na máquina que os gerou.
+*.pdf
+*.xlsx
+schema_producao_dump.sql
+restaurar-pedido-*.mjs

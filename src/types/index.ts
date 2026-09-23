@@ -54,6 +54,10 @@ export interface Loja {
   complemento?: string | null
   bairro?: string | null
   cidade?: string | null
+  // Cidades extras que a loja atende além da "cidade" cadastrada (ex: loja de Aragoiânia
+  // que também entrega em Guapó) — usado só pra agrupamento/descoberta na home e busca,
+  // não afeta cálculo de frete (isso continua por distância real via tabela_frete/raio).
+  cidades_atendidas?: string[] | null
   estado?: string | null
   cep?: string | null
   // Credenciais e primeiro acesso
@@ -188,6 +192,10 @@ export interface Pedido {
   pronto_em?: string | null
   coletado_em?: string | null
   entregue_em?: string | null
+  cancelado_em?: string | null
+  cancelado_por?: string | null
+  motivo_cancelamento?: string | null
+  motivo_outro?: string | null
   nome_cliente?: string
   telefone_cliente?: string
   foto_entrega?: string

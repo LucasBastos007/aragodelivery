@@ -108,11 +108,23 @@ async function reverseGeocode(lat: number, lng: number): Promise<GeoResult> {
 
 // ── Componente de endereço com mapa ────────────────────────────────────────
 
-function EnderecoMapa({ onResult }: {
+// Sem GPS, o mapa precisa centralizar em algo — usar sempre as coordenadas da PRÓPRIA
+// loja (fallbackLat/Lng, vindas de `lojas.lat/lng`) em vez de uma cidade fixa. Antes disso
+// o fallback era hardcoded pro centro de Aragoiânia, que fazia sentido enquanto todas as
+// lojas eram de lá — mas quebraria silenciosamente pra qualquer loja de outra cidade (ex:
+// Guapó): sem GPS, o pino cairia em Aragoiânia e o cliente podia nem notar antes de
+// confirmar, gerando endereço/frete errados (mesma classe de risco do pedido JZ89NC, ver
+// LAT_DEFAULT abaixo, que fica só como fallback de último caso se a loja não tiver
+// lat/lng cadastrado).
+function EnderecoMapa({ onResult, fallbackLat, fallbackLng }: {
   onResult: (geo: GeoResult, numero: string, complemento: string) => void
+  fallbackLat?: number | null
+  fallbackLng?: number | null
 }) {
-  const [lat, setLat]             = useState(LAT_DEFAULT)
-  const [lng, setLng]             = useState(LNG_DEFAULT)
+  const latFallback = fallbackLat ?? LAT_DEFAULT
+  const lngFallback = fallbackLng ?? LNG_DEFAULT
+  const [lat, setLat]             = useState(latFallback)
+  const [lng, setLng]             = useState(lngFallback)
   const [geo, setGeo]             = useState<GeoResult | null>(null)
   const [gpsStatus, setGpsStatus] = useState<"loading" | "ok" | "denied">("loading")
   const [geocodando, setGeocodando] = useState(false)
@@ -132,7 +144,9 @@ function EnderecoMapa({ onResult }: {
       },
       () => {
         setGpsStatus("denied")
-        geocodePonto(LAT_DEFAULT, LNG_DEFAULT)
+        setLat(latFallback)
+        setLng(lngFallback)
+        geocodePonto(latFallback, lngFallback)
       },
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
     )
@@ -325,9 +339,13 @@ export default function CheckoutPage() {
     geoRef.current = { geo: { rua: addrBase.rua, bairro: addrBase.bairro, cidade: addrBase.cidade, lat: 0, lng: 0 }, numero: addrBase.numero, complemento: addrBase.complemento }
 
     // Geocodifica para obter coordenadas reais e permitir cálculo de frete — bias pela região
-    // atendida, senão um nome de rua comum pode resolver pra outra cidade bem mais populosa.
+    // atendida (coordenadas da própria loja, quando já carregadas; nunca uma cidade fixa —
+    // mesmo raciocínio do fallback de EnderecoMapa acima), senão um nome de rua comum pode
+    // resolver pra outra cidade bem mais populosa.
+    const biasLat = lojaData?.lat ?? LAT_DEFAULT
+    const biasLng = lojaData?.lng ?? LNG_DEFAULT
     const query = [perfil.endereco_rua, perfil.endereco_numero, perfil.endereco_bairro, perfil.endereco_cidade].filter(Boolean).join(", ")
-    fetch(`/api/geocode/search?q=${encodeURIComponent(query)}&lat=${LAT_DEFAULT}&lon=${LNG_DEFAULT}`)
+    fetch(`/api/geocode/search?q=${encodeURIComponent(query)}&lat=${biasLat}&lon=${biasLng}`)
       .then(r => r.json())
       .then(results => {
         if (!results[0]) return
@@ -340,6 +358,12 @@ export default function CheckoutPage() {
         geoRef.current = { geo: { rua: addrBase.rua, bairro: addrBase.bairro, cidade: addrBase.cidade, lat, lng }, numero: addrBase.numero, complemento: addrBase.complemento }
       })
       .catch(() => {/* geocoding opcional — sem coords usa taxa base */})
+    // `lojaData` de propósito fora das deps: `enderecoSalvo` já é setado (síncrono, linha
+    // acima) na primeira execução, então adicionar `lojaData` só faria o efeito rodar de
+    // novo e sair pelo early-return sem refazer o geocode — não corrige nada, só confunde.
+    // Esse bias é best-effort mesmo (evita não regredir o path principal, que é
+    // EnderecoMapa/fallbackLat abaixo); se `lojaData` ainda não carregou aqui, cai no
+    // fallback de Aragoiânia mesmo — aceitável pra esse caminho secundário.
   }, [perfil, enderecoSalvo])
 
   // Carrega cartão salvo — se tiver token, habilita pagamento sem re-digitar número
@@ -1279,6 +1303,8 @@ export default function CheckoutPage() {
                 /* Mapa completo */
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                   <EnderecoMapa
+                    fallbackLat={lojaData?.lat}
+                    fallbackLng={lojaData?.lng}
                     onResult={(geo, numero, complemento) => {
                       geoRef.current = { geo, numero, complemento }
                       if (geo.lat && geo.lng) setClienteCoords({ lat: geo.lat, lng: geo.lng })

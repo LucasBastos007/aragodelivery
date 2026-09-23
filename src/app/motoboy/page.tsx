@@ -709,6 +709,15 @@ export default function MotoboyPage() {
   const [maxPedidosGlobal, setMaxPedidosGlobal] = useState(2)
   const [limitePedidosMotoboy, setLimitePedidosMotoboy] = useState<number | null>(null)
   const maxPedidos = limitePedidosMotoboy ?? maxPedidosGlobal
+
+  // loadPedidos é criada uma vez e reusada pelo setInterval de 15s (efeito só depende de
+  // motoboy_id) — sem refs, ela ficaria presa nos valores de myLat/myLng/raioKm do
+  // primeiro render pra sempre. Mesmo padrão já usado pra myLatRef no mapa.
+  const myLatPedidosRef = useRef(myLat)
+  const myLngPedidosRef = useRef(myLng)
+  const raioKmRef       = useRef(raioKm)
+  useEffect(() => { myLatPedidosRef.current = myLat; myLngPedidosRef.current = myLng }, [myLat, myLng])
+  useEffect(() => { raioKmRef.current = raioKm }, [raioKm])
   const [segundoAberto,    setSegundoAberto]    = useState(false)
   const [disponiveisAberto, setDisponiveisAberto] = useState(false)
   // Antes, entregas avulsas em andamento só apareciam na gaveta de baixo — que fica
@@ -729,10 +738,13 @@ export default function MotoboyPage() {
   // ── Carrega motoboy ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!motoboy_id) return
-    supabase.from("motoboys").select("disponivel, lat, lng, raio_km, foto, limite_pedidos").eq("id", motoboy_id).single()
+    // "foto" ainda não existe na tabela motoboys (coluna nunca migrada — ver AGENTS.md);
+    // incluí-la aqui faz o select inteiro falhar. "raio_km" já existe (migration rodada
+    // em 2026-09-23).
+    supabase.from("motoboys").select("disponivel, lat, lng, limite_pedidos_simultaneos, raio_km").eq("id", motoboy_id).single()
       .then(({ data }) => {
         if (data) {
-          setLimitePedidosMotoboy(data.limite_pedidos ?? null)
+          setLimitePedidosMotoboy(data.limite_pedidos_simultaneos ?? null)
           // Só sincroniza o estado do DB se não houver preferência local salva
           // (garante que a preferência do usuário não seja sobrescrita ao trocar de aba)
           const localPref = localStorage.getItem("motoboy_online")
@@ -741,7 +753,6 @@ export default function MotoboyPage() {
           if (data.lat)     setMyLat(data.lat)
           if (data.lng)     setMyLng(data.lng)
           if (data.raio_km) { setRaioKm(data.raio_km); setRaioDisplay(data.raio_km) }
-          if (data.foto)    setFotoMotoboy(data.foto)
         }
         setDispLoading(false)
       })
@@ -841,12 +852,12 @@ export default function MotoboyPage() {
     const desde = hoje.toISOString()
     Promise.all([
       supabase.from("pedidos")
-        .select("taxa_entrega")
+        .select("taxa_entrega, criado_em")
         .eq("motoboy_id", motoboy_id)
         .eq("status", "entregue")
         .gte("criado_em", desde),
       supabase.from("entregas_avulsas")
-        .select("taxa_entrega")
+        .select("taxa_entrega, criado_em")
         .eq("motoboy_id", motoboy_id)
         .eq("status", "entregue")
         .gte("criado_em", desde),
@@ -973,7 +984,21 @@ export default function MotoboyPage() {
           .limit(1),
       ])
 
-      const novosProntos = (prontosData as Pedido[]) ?? []
+      // Filtra pela distância até o raio configurado pelo motoboy — mesma regra do
+      // despacho ativo (escalada), só que aplicada no lado do cliente aqui porque é uma
+      // lista que o motoboy vê e aceita sozinho (sem escalada envolvida). Só filtra
+      // quando já temos GPS real do motoboy e coordenada real da loja; sem isso, mostra
+      // tudo (mesmo fallback seguro usado em escalada/route.ts).
+      const temGpsReal = myLatPedidosRef.current !== DEFAULT_LAT || myLngPedidosRef.current !== DEFAULT_LNG
+      const todosProntos = (prontosData as Pedido[]) ?? []
+      const novosProntos = temGpsReal
+        ? todosProntos.filter(p => {
+            const ll = (p as any).loja
+            if (!ll?.lat || !ll?.lng) return true
+            const dist = haversineKm(myLatPedidosRef.current, myLngPedidosRef.current, ll.lat, ll.lng)
+            return dist <= (raioKmRef.current || 20)
+          })
+        : todosProntos
       const novosIds = new Set(novosProntos.map(p => p.id))
       if (!isFirstLoad.current) {
         const chegaram = [...novosIds].filter(id => !prevProntosRef.current.has(id))
@@ -1005,7 +1030,10 @@ export default function MotoboyPage() {
       // WebSocket cai (comum com o app em segundo plano ou rede instável).
       if (!pedidoOfertaRef.current && ofertaData && ofertaData.length > 0) {
         const oferta = ofertaData[0]
-        if (!dismissedIdsRef.current.has(oferta.id)) {
+        const ofertaLl = (oferta as any).loja
+        const ofertaDentroDoRaio = !temGpsReal || !ofertaLl?.lat || !ofertaLl?.lng
+          || haversineKm(myLatPedidosRef.current, myLngPedidosRef.current, ofertaLl.lat, ofertaLl.lng) <= (raioKmRef.current || 20)
+        if (!dismissedIdsRef.current.has(oferta.id) && ofertaDentroDoRaio) {
           playNotificationSound()
           setPedidoOferta(oferta); setTimerOferta(30); setDistKmOferta(null)
         }
@@ -1033,6 +1061,16 @@ export default function MotoboyPage() {
   useEffect(() => {
     if (!motoboy_id || !disponivel) return
 
+    // Fora do raio configurado pelo motoboy, ignora a oferta — mesma regra do despacho
+    // ativo (escalada) e da lista passiva de "pronto", aplicada aqui pro caminho de
+    // realtime/broadcast, que é o principal (loadPedidos é só o fallback de polling).
+    function dentroDoRaio(pedido: any): boolean {
+      const temGpsReal = myLatPedidosRef.current !== DEFAULT_LAT || myLngPedidosRef.current !== DEFAULT_LNG
+      const ll = pedido?.loja
+      if (!temGpsReal || !ll?.lat || !ll?.lng) return true
+      return haversineKm(myLatPedidosRef.current, myLngPedidosRef.current, ll.lat, ll.lng) <= (raioKmRef.current || 20)
+    }
+
     // Verifica oferta pendente já existente ao entrar (broadcast: motoboy_id null)
     supabase.from("pedidos")
       .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
@@ -1040,7 +1078,7 @@ export default function MotoboyPage() {
       .eq("status", "aguardando_aceite")
       .limit(1)
       .then(({ data }) => {
-        if (data && data.length > 0 && !dismissedIdsRef.current.has(data[0].id)) {
+        if (data && data.length > 0 && !dismissedIdsRef.current.has(data[0].id) && dentroDoRaio(data[0])) {
           playNotificationSound()
           setPedidoOferta(data[0]); setTimerOferta(30); setDistKmOferta(null)
         }
@@ -1059,7 +1097,7 @@ export default function MotoboyPage() {
           .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
           .eq("id", novo.id).single()
           .then(({ data }) => {
-            if (data && !dismissedIdsRef.current.has(data.id)) {
+            if (data && !dismissedIdsRef.current.has(data.id) && dentroDoRaio(data)) {
               playNotificationSound(); setPedidoOferta(data); setTimerOferta(30); setDistKmOferta(null)
             }
           })

@@ -61,6 +61,17 @@ function buscarTabelaFrete(tabela: { municipio: string; taxa: number }[], nome: 
   return null
 }
 
+// tabela_frete guarda linhas de dois tipos na mesma tabela: "municipio" (cidades vizinhas
+// inteiras, comum a todas as lojas hoje) e "bairro" (setores dentro da própria cidade da
+// loja, com taxa própria — ex: Guapó). Nunca misturar os dois na mesma busca fuzzy: vários
+// nomes de bairro contêm o nome da cidade como substring (ex: "Ciplan guapo", "Cidade de
+// guapó" dentro de "Guapó") — buscar cidade_entrega="Guapó" numa tabela com bairro e
+// município juntos casaria com qualquer linha de bairro que contenha "guapo" no nome,
+// cobrando o valor errado pra quase todo cliente da cidade. Ver AGENTS.md.
+function filtrarPorTipo<T extends { tipo?: string }>(tabela: T[], tipo: "municipio" | "bairro"): T[] {
+  return tabela.filter(e => (e.tipo ?? "municipio") === tipo)
+}
+
 /**
  * Calcula a taxa de entrega final — mesma fórmula usada tanto na prévia do checkout
  * (/api/frete/calcular) quanto na criação real do pedido (/api/pedido/criar), pra nunca
@@ -87,11 +98,14 @@ export async function calcularTaxaEntregaCompleta(
 
   const { data: tabelaFrete } = await sb
     .from("tabela_frete")
-    .select("municipio, taxa")
+    .select("municipio, taxa, tipo")
     .eq("loja_id", params.loja_id)
 
-  const taxaFixa = buscarTabelaFrete(tabelaFrete ?? [], params.cidade_entrega ?? "")
-    ?? buscarTabelaFrete(tabelaFrete ?? [], params.bairro_entrega ?? "")
+  // Bairro primeiro (mais específico — setor dentro da própria cidade da loja), depois
+  // município (cidade vizinha inteira) — cada um buscado só dentro do seu próprio tipo,
+  // nunca misturados (ver comentário em filtrarPorTipo).
+  const taxaFixa = buscarTabelaFrete(filtrarPorTipo(tabelaFrete ?? [], "bairro"), params.bairro_entrega ?? "")
+    ?? buscarTabelaFrete(filtrarPorTipo(tabelaFrete ?? [], "municipio"), params.cidade_entrega ?? "")
 
   if (taxaFixa === null && params.loja_lat && params.loja_lng && params.lat_entrega && params.lng_entrega) {
     const distKm = haversineKm(params.loja_lat, params.loja_lng, params.lat_entrega, params.lng_entrega)
