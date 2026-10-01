@@ -36,18 +36,23 @@ function initVapid(): boolean {
 // na aba Pedidos do app não ser pego de surpresa quando a corrida abrir de verdade.
 async function avisarMotoboysPedidoAceito(sb: ReturnType<typeof adminClient>, pedido_id: string, codigo: string, loja_id: string) {
   const [{ data: loja }, { data: motoboys }] = await Promise.all([
-    sb.from("lojas").select("nome, lat, lng").eq("id", loja_id).single(),
-    sb.from("motoboys").select("id, push_subscription, lat, lng, raio_km").eq("disponivel", true).eq("status", "ativo"),
+    sb.from("lojas").select("nome, lat, lng, cidade").eq("id", loja_id).single(),
+    sb.from("motoboys").select("id, push_subscription, lat, lng, raio_km, cidade_fixa").eq("disponivel", true).eq("status", "ativo"),
   ])
   if (!motoboys || motoboys.length === 0 || !initVapid()) return
 
   // Mesmo corte de raio do despacho ativo (escalada) — sem isso, um motoboy fora do
   // alcance recebe o "fique de olho" mas nunca é oferecida a corrida de verdade depois,
   // o que é confuso. Sem coordenada real da loja ou do motoboy, não filtra (mostra a todos).
+  // cidade_fixa (2026-09-26): mesmo bypass do escalada/route.ts — ignora o raio quando a
+  // cidade fixa do motoboy bate com a da loja.
   const RAIO_KM_DEFAULT = 12
   const lojaLat = loja?.lat, lojaLng = loja?.lng
+  const lojaCidade = loja?.cidade ?? null
   const candidatos = (lojaLat && lojaLng)
-    ? motoboys.filter((m: any) => !m.lat || !m.lng || haversineKm(m.lat, m.lng, lojaLat, lojaLng) <= (m.raio_km ?? RAIO_KM_DEFAULT))
+    ? motoboys.filter((m: any) =>
+        (lojaCidade && m.cidade_fixa && m.cidade_fixa === lojaCidade) ||
+        !m.lat || !m.lng || haversineKm(m.lat, m.lng, lojaLat, lojaLng) <= (m.raio_km ?? RAIO_KM_DEFAULT))
     : motoboys
 
   if (candidatos.length === 0) return
@@ -66,6 +71,60 @@ async function avisarMotoboysPedidoAceito(sb: ReturnType<typeof adminClient>, pe
       return subs.map(async sub => {
         try {
           await webpush.sendNotification(sub, payload, { urgency: "normal" })
+        } catch (e: any) {
+          if (e.statusCode === 410) (expiredPorMotoboy[m.id] ??= []).push(sub.endpoint)
+        }
+      })
+    })
+  )
+  for (const [motoboy_id, expiredEndpoints] of Object.entries(expiredPorMotoboy)) {
+    const m = motoboys.find((x: any) => x.id === motoboy_id)
+    if (!m) continue
+    const subs: any[] = Array.isArray(m.push_subscription) ? m.push_subscription : m.push_subscription ? [m.push_subscription] : []
+    const filtradas = subs.filter((s: any) => !expiredEndpoints.includes(s?.endpoint))
+    await sb.from("motoboys").update({ push_subscription: filtradas.length ? filtradas : null }).eq("id", motoboy_id)
+  }
+}
+
+// Aviso REAL de despacho quando o pedido vira "pronto" — até 2026-09-27 isso nunca
+// disparava nenhum push, então um motoboy com o app minimizado/tela apagada só ficava
+// sabendo de uma corrida nova quando o polling de 15s rodasse com o app aberto em
+// primeiro plano. Bug real reportado: corrida "pronto" não aparecia num aparelho
+// específico mesmo com a tela ligada — sem push, não existia nenhum caminho pra
+// acordar o app caso o polling/realtime travasse naquele device. Mesmo filtro de
+// raio/cidade_fixa do "fique de olho" acima e do despacho ativo (escalada).
+async function avisarMotoboysPedidoPronto(sb: ReturnType<typeof adminClient>, pedido_id: string, codigo: string, loja_id: string) {
+  const [{ data: loja }, { data: motoboys }] = await Promise.all([
+    sb.from("lojas").select("nome, lat, lng, cidade").eq("id", loja_id).single(),
+    sb.from("motoboys").select("id, push_subscription, lat, lng, raio_km, cidade_fixa").eq("disponivel", true).eq("status", "ativo"),
+  ])
+  if (!motoboys || motoboys.length === 0 || !initVapid()) return
+
+  const RAIO_KM_DEFAULT = 12
+  const lojaLat = loja?.lat, lojaLng = loja?.lng
+  const lojaCidade = loja?.cidade ?? null
+  const candidatos = (lojaLat && lojaLng)
+    ? motoboys.filter((m: any) =>
+        (lojaCidade && m.cidade_fixa && m.cidade_fixa === lojaCidade) ||
+        !m.lat || !m.lng || haversineKm(m.lat, m.lng, lojaLat, lojaLng) <= (m.raio_km ?? RAIO_KM_DEFAULT))
+    : motoboys
+
+  if (candidatos.length === 0) return
+
+  const payload = JSON.stringify({
+    title: "🛵 Nova corrida disponível!",
+    body:  `${loja?.nome ?? "Uma loja"} — pedido #${codigo} pronto pra retirada.`,
+    tag:   `pedido-pronto-${pedido_id}`,
+    url:   "/motoboy",
+  })
+
+  const expiredPorMotoboy: Record<string, string[]> = {}
+  await Promise.allSettled(
+    candidatos.flatMap((m: any) => {
+      const subs: any[] = Array.isArray(m.push_subscription) ? m.push_subscription : m.push_subscription ? [m.push_subscription] : []
+      return subs.map(async sub => {
+        try {
+          await webpush.sendNotification(sub, payload, { urgency: "high" })
         } catch (e: any) {
           if (e.statusCode === 410) (expiredPorMotoboy[m.id] ??= []).push(sub.endpoint)
         }
@@ -190,6 +249,11 @@ export async function POST(req: NextRequest) {
     // Avisa motoboys disponíveis assim que a loja aceita — não trava a resposta pro lojista
     if (status === "aceito" && !pedidoAtual.endereco_entrega?.includes("Retirada")) {
       avisarMotoboysPedidoAceito(sb, pedido_id, pedidoAtual.codigo, loja_id).catch(() => {})
+    }
+
+    // Aviso REAL de despacho — corrida entra na lista passiva "pronto" agora
+    if (status === "pronto" && !pedidoAtual.endereco_entrega?.includes("Retirada")) {
+      avisarMotoboysPedidoPronto(sb, pedido_id, pedidoAtual.codigo, loja_id).catch(() => {})
     }
 
     // Estorno automático ao cancelar pedidos pagos via PIX ou cartão — nunca pode

@@ -486,6 +486,13 @@ export default function CardapioPage() {
                 <label className="label">Preço (R$) *</label>
                 <input className="input" type="number" step="0.50" min="0" placeholder="0,00" value={formProd.preco}
                   onChange={e => setFormProd(f => ({ ...f, preco: e.target.value }))} />
+                {grupos.length > 0 && (
+                  <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>
+                    Pode deixar 0,00 aqui se o preço real vem das opções da categoria de
+                    escolha abaixo (ex: "Escolha o sabor") — o cliente vê "A partir de R$
+                    [menor opção]".
+                  </p>
+                )}
               </div>
               <div>
                 <label className="label">Categoria</label>
@@ -849,7 +856,7 @@ function ProdutoCard({ p, onEdit, onToggle, onDelete }: {
             )}
           </div>
           <p style={{ fontSize: 15, fontWeight: 900, color: "#f97316", flexShrink: 0 }}>
-            R$ {p.preco.toFixed(2).replace(".", ",")}
+            R$ {(p.preco ?? 0).toFixed(2).replace(".", ",")}
           </p>
         </div>
 

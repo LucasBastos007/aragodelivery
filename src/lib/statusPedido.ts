@@ -65,3 +65,15 @@ export function pedidoValido(status: StatusPedido): boolean {
 export function pedidoConcluidoOuCancelado(status: StatusPedido): boolean {
   return status === "entregue" || status === "cancelado"
 }
+
+// Fonte única pra "isso é Histórico" (Fase 4, 2026-09-23). Deliberadamente EXPLÍCITA —
+// nunca "statusOperacional(status) === null", porque isso incluiria "aguardando_pagamento"
+// (pedido que nem chegou a existir de verdade pra loja) como se fosse um pedido encerrado.
+// Só existem dois status verdadeiramente finais hoje: entregue e cancelado. "coletado" NÃO
+// entra aqui — é operação ativa (motoboy a caminho), classificado como "em_entrega" acima;
+// um pedido não pode estar em "Em entrega" e no Histórico ao mesmo tempo.
+export const STATUS_FINAIS = ["entregue", "cancelado"] as const satisfies readonly StatusPedido[]
+
+export function ehStatusFinal(status: StatusPedido): boolean {
+  return (STATUS_FINAIS as readonly StatusPedido[]).includes(status)
+}

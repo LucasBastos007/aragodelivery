@@ -184,6 +184,8 @@ export interface Pedido {
   troco_para?: number | null
   subtotal: number
   taxa_entrega: number
+  desconto?: number | null
+  cupom_codigo?: string | null
   total: number
   endereco_entrega: string
   observacao: string

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
 
 const inp: React.CSSProperties = {
@@ -35,40 +34,23 @@ export default function LojaFinanceiroPage() {
   async function load() {
     if (!loja_id) return
 
-    const { data: lojaData } = await supabase.from("lojas").select("*").eq("id", loja_id).single()
-    setLoja(lojaData)
-    const comissao_pct = lojaData?.comissao ?? 0
+    // Migrado pra API protegida por sessão (requireLoja) — nunca mais Supabase direto do
+    // navegador aqui, porque essa tela lida com chave PIX e dados bancários (ver
+    // src/app/api/loja/financeiro/route.ts). O loja_id do useAuth() só dispara o load,
+    // quem decide de qual loja são os dados é o cookie de sessão no servidor.
+    const res = await fetch("/api/loja/financeiro", { credentials: "include" })
+    if (!res.ok) { setLoading(false); return }
+    const data = await res.json()
 
-    const { data: ped } = await supabase
-      .from("pedidos").select("id, codigo, subtotal, criado_em")
-      .eq("loja_id", loja_id).eq("status", "entregue")
-      .order("criado_em", { ascending: false })
-    const pedidosList = ped ?? []
-    setPedidos(pedidosList.slice(0, 30))
-
-    const bruta       = pedidosList.reduce((s, p) => s + (p.subtotal ?? 0), 0)
-    const comissaoTot = bruta * comissao_pct / 100
-    setReceitaBruta(bruta)
-    setTotalComissao(comissaoTot)
-
-    const { data: mens } = await supabase
-      .from("mensalidades").select("*").eq("loja_id", loja_id)
-      .order("criado_em", { ascending: false })
-    setMensalidades(mens ?? [])
-    const mensTot = (mens ?? []).filter(m => m.status === "descontado").reduce((s, m) => s + m.valor, 0)
-    setTotalMensalidades(mensTot)
-
-    const { data: saq } = await supabase
-      .from("saques").select("*").eq("loja_id", loja_id).eq("tipo", "lojista")
-      .order("criado_em", { ascending: false })
-    setSaques(saq ?? [])
-
-    const pagosTot      = (saq ?? []).filter(s => s.status === "pago").reduce((s, x) => s + x.valor, 0)
-    const solicitadoTot = (saq ?? []).filter(s => s.status === "solicitado").reduce((s, x) => s + x.valor, 0)
-    setTotalSaquesPagos(pagosTot)
-
-    const liquida = bruta - comissaoTot
-    setSaldo(Math.max(0, liquida - mensTot - pagosTot - solicitadoTot))
+    setLoja(data.loja)
+    setPedidos(data.pedidos ?? [])
+    setMensalidades(data.mensalidades ?? [])
+    setSaques(data.saques ?? [])
+    setReceitaBruta(data.receitaBruta ?? 0)
+    setTotalComissao(data.totalComissao ?? 0)
+    setTotalMensalidades(data.totalMensalidades ?? 0)
+    setTotalSaquesPagos(data.totalSaquesPagos ?? 0)
+    setSaldo(data.saldo ?? 0)
     setLoading(false)
   }
 

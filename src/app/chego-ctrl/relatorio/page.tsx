@@ -20,6 +20,7 @@ type LojaStat = {
   taxa_chego: number
   taxa_asaas: number
   valor_a_repassar: number
+  soma_descontos_cupom: number
 }
 
 type MotoboyStats = {
@@ -108,7 +109,12 @@ export default function RelatorioPage() {
       const comissao_val = total_vendas * comissao_pct
       const taxa_asaas   = peds.length > 0 ? TAXA_ASAAS_PIX : 0
       const valor_a_repassar = total_vendas - taxa_chego - comissao_val - taxa_asaas
-      return { loja, pedidos: peds, total_vendas, taxa_chego, taxa_asaas, valor_a_repassar }
+      // Cupom de desconto reduz o total do pedido (e por tabela o valor_a_repassar), mas
+      // quem dá o desconto é a Chegô, não a loja — esse valor não sai automático do
+      // cálculo acima de propósito (AGENTS.md pede não duplicar a fórmula de repasse em
+      // lugar nenhum); fica só como informação de quanto ADICIONAR na hora de pagar.
+      const soma_descontos_cupom = peds.reduce((s, p) => s + (p.cupom_codigo ? Number(p.desconto ?? 0) : 0), 0)
+      return { loja, pedidos: peds, total_vendas, taxa_chego, taxa_asaas, valor_a_repassar, soma_descontos_cupom }
     })
     .filter(s => s.pedidos.length > 0)
     .sort((a, b) => b.total_vendas - a.total_vendas)
@@ -141,6 +147,7 @@ export default function RelatorioPage() {
     chego:    stats.reduce((s, x) => s + x.taxa_chego, 0),
     asaas:    stats.reduce((s, x) => s + x.taxa_asaas, 0),
     repasse:  stats.reduce((s, x) => s + x.valor_a_repassar, 0),
+    descontos_cupom: stats.reduce((s, x) => s + x.soma_descontos_cupom, 0),
   }
 
   // Agrupamento por motoboy — inclui motoboys não cadastrados como "ativo"
@@ -241,6 +248,7 @@ export default function RelatorioPage() {
           { label: "Taxa Chegô (R$1/pedido)", value: fmtR(totais.chego),   color: "#f97316", sub: "receita da plataforma" },
           { label: "Taxa Asaas (estimada)",  value: fmtR(totais.asaas),   color: "#f59e0b", sub: "custo por PIX enviado" },
           { label: "Total a repassar",       value: fmtR(totais.repasse), color: "#22c55e", sub: "para todas as lojas" },
+          { label: "Descontos de cupom",     value: fmtR(totais.descontos_cupom), color: "#DC2626", sub: "adicionar ao repasse — custo é da Chegô" },
         ].map(c => (
           <div key={c.label} style={{ background: "white", borderRadius: 14, padding: "16px", border: "1.5px solid #F1F5F9", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
             <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>{c.label}</p>
@@ -378,6 +386,11 @@ export default function RelatorioPage() {
                               .map(it => `${it.quantidade}x ${it.nome}`).join(", ")}
                           </p>
                         )}
+                        {p.cupom_codigo && (
+                          <p style={{ fontSize: 11, color: "#DC2626", fontWeight: 700, marginTop: 3 }}>
+                            🎟️ Cupom {p.cupom_codigo}: -{fmtR(Number(p.desconto ?? 0))} (adicionar ao repasse)
+                          </p>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -410,6 +423,7 @@ export default function RelatorioPage() {
                       { label: "Taxa Chegô",    value: `−${fmtR(s.taxa_chego)}`, color: "#f97316" },
                       { label: "Taxa Asaas",    value: `−${fmtR(s.taxa_asaas)}`, color: "#f59e0b" },
                       { label: "Repasse líquido", value: fmtR(s.valor_a_repassar), color: "#22c55e" },
+                      ...(s.soma_descontos_cupom > 0 ? [{ label: "Desconto de cupom (adicionar)", value: `+${fmtR(s.soma_descontos_cupom)}`, color: "#DC2626" }] : []),
                     ].map(r => (
                       <div key={r.label}>
                         <p style={{ fontSize: 9, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>{r.label}</p>

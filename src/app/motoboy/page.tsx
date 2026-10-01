@@ -606,6 +606,14 @@ export default function MotoboyPage() {
   const { sessao, logout } = useAuth()
   const motoboy_id = sessao?.role === "motoboy" ? sessao.motoboy_id : null
 
+  // Destrava o áudio de notificação no primeiro toque na tela — ver comentário em
+  // desbloquearAudioNotificacao() mais abaixo no arquivo.
+  useEffect(() => {
+    const destravar = () => { desbloquearAudioNotificacao(); document.removeEventListener("pointerdown", destravar) }
+    document.addEventListener("pointerdown", destravar, { once: true })
+    return () => document.removeEventListener("pointerdown", destravar)
+  }, [])
+
   const [disponivel,     setDisponivel]     = useState(() => {
     if (typeof window !== "undefined") return localStorage.getItem("motoboy_online") === "1"
     return false
@@ -700,10 +708,10 @@ export default function MotoboyPage() {
   const [toastMsg,        setToastMsg]        = useState<string | null>(null)
   const [corridaConcluida, setCorridaConcluida] = useState<any | null>(null)
   const [avancandoEtapa,   setAvancandoEtapa]   = useState(false)
-  const [raioKm,           setRaioKm]           = useState<number>(20)
+  const [raioKm,           setRaioKm]           = useState<number>(12)
   const [salvandoRaio,     setSalvandoRaio]     = useState(false)
   const [raioOpen,         setRaioOpen]         = useState(false)
-  const [raioDisplay,      setRaioDisplay]      = useState<number>(20)
+  const [raioDisplay,      setRaioDisplay]      = useState<number>(12)
   const [fotoMotoboy,      setFotoMotoboy]      = useState<string | null>(null)
   const [sosModal,         setSosModal]         = useState(false)
   const [maxPedidosGlobal, setMaxPedidosGlobal] = useState(2)
@@ -716,6 +724,11 @@ export default function MotoboyPage() {
   const myLatPedidosRef = useRef(myLat)
   const myLngPedidosRef = useRef(myLng)
   const raioKmRef       = useRef(raioKm)
+  // cidade_fixa (2026-09-26): motoboy que sempre atende uma cidade específica, mesmo
+  // fisicamente fora dela no momento (ex: Amanda Bastos ↔ Aragoiânia) — ver
+  // migration-motoboy-cidade-fixa.sql e a mesma regra em escalada/route.ts e
+  // loja/status-pedido/route.ts.
+  const cidadeFixaRef   = useRef<string | null>(null)
   useEffect(() => { myLatPedidosRef.current = myLat; myLngPedidosRef.current = myLng }, [myLat, myLng])
   useEffect(() => { raioKmRef.current = raioKm }, [raioKm])
   const [segundoAberto,    setSegundoAberto]    = useState(false)
@@ -741,7 +754,7 @@ export default function MotoboyPage() {
     // "foto" ainda não existe na tabela motoboys (coluna nunca migrada — ver AGENTS.md);
     // incluí-la aqui faz o select inteiro falhar. "raio_km" já existe (migration rodada
     // em 2026-09-23).
-    supabase.from("motoboys").select("disponivel, lat, lng, limite_pedidos_simultaneos, raio_km").eq("id", motoboy_id).single()
+    supabase.from("motoboys").select("disponivel, lat, lng, limite_pedidos_simultaneos, raio_km, cidade_fixa").eq("id", motoboy_id).single()
       .then(({ data }) => {
         if (data) {
           setLimitePedidosMotoboy(data.limite_pedidos_simultaneos ?? null)
@@ -753,6 +766,7 @@ export default function MotoboyPage() {
           if (data.lat)     setMyLat(data.lat)
           if (data.lng)     setMyLng(data.lng)
           if (data.raio_km) { setRaioKm(data.raio_km); setRaioDisplay(data.raio_km) }
+          cidadeFixaRef.current = (data as any).cidade_fixa ?? null
         }
         setDispLoading(false)
       })
@@ -925,30 +939,60 @@ export default function MotoboyPage() {
   }, [motoboy_id])
 
   // ── Raio de atuação ────────────────────────────────────────────────────────
+  // Mesmo cuidado do toggleDisponivel logo abaixo: se essa gravação falhar, o raio_km
+  // usado pelo despacho ativo (escalada) e pelo push continua sendo o ANTIGO no banco,
+  // divergindo do que o app mostra/usa localmente pro filtro da lista passiva.
   async function salvarRaio(km: number) {
     if (!motoboy_id) return
+    const anterior = raioKm
     setSalvandoRaio(true)
     setRaioKm(km)
-    await fetch("/api/motoboy/status", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ motoboy_id, raio_km: km }),
-    })
-    setSalvandoRaio(false)
+    try {
+      const res = await fetch("/api/motoboy/status", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ motoboy_id, raio_km: km }),
+      })
+      if (!res.ok) throw new Error("status " + res.status)
+    } catch {
+      setRaioKm(anterior)
+      setToastMsg("Não foi possível salvar o raio. Verifique sua conexão e tente de novo.")
+      setTimeout(() => setToastMsg(null), 3500)
+    } finally {
+      setSalvandoRaio(false)
+    }
   }
 
   // ── Toggle disponível ──────────────────────────────────────────────────────
+  // O request pra API é o que persiste "disponivel" no banco — e é esse campo que
+  // escalada/route.ts e os avisos de push (avisarMotoboysPedidoAceito/Pronto) usam pra
+  // decidir quem é candidato a receber uma corrida. Antes, o código atualizava o
+  // estado local (e a UI mostrava "online") mesmo se essa requisição falhasse — bug
+  // real encontrado, 2026-09-27: uma falha de rede nesse exato momento deixava o
+  // motoboy com o toggle mostrando "disponível" no aparelho dele, mas "indisponível"
+  // no banco, invisível pra escalada ativa e pra push, mesmo abrindo o app numa
+  // conexão melhor depois (a lista passiva de "pronto" continuava funcionando
+  // normalmente pra ele, então nada parecia errado — só ele nunca era chamado/avisado).
   async function toggleDisponivel() {
     if (!motoboy_id) return
     setTogglingDisp(true)
     const novo = !disponivel
-    await fetch("/api/motoboy/status", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ motoboy_id, disponivel: novo }),
-    })
-    setDisponivel(novo)
-    localStorage.setItem("motoboy_online", novo ? "1" : "0")
-    setTogglingDisp(false)
-    if (novo) setSheetH(SHEET_PEEK)
+    try {
+      const res = await fetch("/api/motoboy/status", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ motoboy_id, disponivel: novo }),
+      })
+      if (!res.ok) throw new Error("status " + res.status)
+      setDisponivel(novo)
+      localStorage.setItem("motoboy_online", novo ? "1" : "0")
+      if (novo) setSheetH(SHEET_PEEK)
+    } catch {
+      // Não confirma a mudança — mantém o estado (local e no banco) como estava antes,
+      // e avisa: sem isso, o toggle "mentiria" mostrando um estado que o banco não tem.
+      setToastMsg("Não foi possível atualizar. Verifique sua conexão e tente de novo.")
+      setTimeout(() => setToastMsg(null), 3500)
+    } finally {
+      setTogglingDisp(false)
+    }
   }
 
   // ── Pedidos ────────────────────────────────────────────────────────────────
@@ -968,18 +1012,18 @@ export default function MotoboyPage() {
         { data: ofertaData },
       ] = await Promise.all([
         supabase.from("pedidos")
-          .select("*, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng)")
+          .select("*, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng, cidade)")
           .eq("status", "pronto").is("motoboy_id", null)
           .not("endereco_entrega", "ilike", "%Retirada%") // retirada na loja nunca precisa de motoboy
           .order("criado_em", { ascending: true }),
         supabase.from("pedidos")
-          .select("*, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng)")
+          .select("*, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng, cidade)")
           .in("status", ["indo_para_loja", "na_loja", "em_rota", "coletado"])
           .eq("motoboy_id", motoboy_id)
           .order("criado_em", { ascending: true }),
         // Polling de fallback: busca oferta de corrida mesmo sem realtime ativo
         supabase.from("pedidos")
-          .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
+          .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng, cidade), itens:itens_pedido(*)")
           .eq("status", "aguardando_aceite").is("motoboy_id", null)
           .limit(1),
       ])
@@ -994,9 +1038,10 @@ export default function MotoboyPage() {
       const novosProntos = temGpsReal
         ? todosProntos.filter(p => {
             const ll = (p as any).loja
+            if (cidadeFixaRef.current && ll?.cidade && ll.cidade === cidadeFixaRef.current) return true
             if (!ll?.lat || !ll?.lng) return true
             const dist = haversineKm(myLatPedidosRef.current, myLngPedidosRef.current, ll.lat, ll.lng)
-            return dist <= (raioKmRef.current || 20)
+            return dist <= (raioKmRef.current || 12)
           })
         : todosProntos
       const novosIds = new Set(novosProntos.map(p => p.id))
@@ -1031,8 +1076,9 @@ export default function MotoboyPage() {
       if (!pedidoOfertaRef.current && ofertaData && ofertaData.length > 0) {
         const oferta = ofertaData[0]
         const ofertaLl = (oferta as any).loja
-        const ofertaDentroDoRaio = !temGpsReal || !ofertaLl?.lat || !ofertaLl?.lng
-          || haversineKm(myLatPedidosRef.current, myLngPedidosRef.current, ofertaLl.lat, ofertaLl.lng) <= (raioKmRef.current || 20)
+        const ofertaDentroDoRaio = (cidadeFixaRef.current && ofertaLl?.cidade && ofertaLl.cidade === cidadeFixaRef.current)
+          || !temGpsReal || !ofertaLl?.lat || !ofertaLl?.lng
+          || haversineKm(myLatPedidosRef.current, myLngPedidosRef.current, ofertaLl.lat, ofertaLl.lng) <= (raioKmRef.current || 12)
         if (!dismissedIdsRef.current.has(oferta.id) && ofertaDentroDoRaio) {
           playNotificationSound()
           setPedidoOferta(oferta); setTimerOferta(30); setDistKmOferta(null)
@@ -1057,6 +1103,32 @@ export default function MotoboyPage() {
     return () => clearInterval(iv)
   }, [motoboy_id])
 
+  // Ref sempre atualizado pra loadPedidos — os dois handlers abaixo (visibilitychange e
+  // online) rodam num efeito de montagem única (sem depender de motoboy_id), então
+  // chamar a função direto pegaria uma closure presa no motoboy_id da primeira renderização.
+  const loadPedidosRef = useRef(loadPedidos)
+  useEffect(() => { loadPedidosRef.current = loadPedidos })
+
+  // "Catch-up" ao voltar de segundo plano ou reconectar a rede — sem isso, se o socket
+  // do Realtime ou o polling de 15s morrerem silenciosamente enquanto o app fica em
+  // segundo plano (o navegador pode suspender timers/rede nesse estado), o motoboy só
+  // recuperava a lista certa no próximo ciclo de 15s (se o polling tivesse sobrevivido)
+  // ou nunca (se o Realtime não reconectasse sozinho). Isso busca o estado real assim
+  // que há qualquer sinal de que a conexão pode ter voltado — não substitui o polling
+  // nem o Realtime, só fecha o intervalo entre "voltou" e "o próximo ciclo agendado".
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState === "visible") loadPedidosRef.current()
+    }
+    function onOnline() { loadPedidosRef.current() }
+    document.addEventListener("visibilitychange", onVisible)
+    window.addEventListener("online", onOnline)
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible)
+      window.removeEventListener("online", onOnline)
+    }
+  }, [])
+
   // ── Supabase Realtime — escuta oferta de corrida (broadcast) ──────────────
   useEffect(() => {
     if (!motoboy_id || !disponivel) return
@@ -1065,15 +1137,16 @@ export default function MotoboyPage() {
     // ativo (escalada) e da lista passiva de "pronto", aplicada aqui pro caminho de
     // realtime/broadcast, que é o principal (loadPedidos é só o fallback de polling).
     function dentroDoRaio(pedido: any): boolean {
-      const temGpsReal = myLatPedidosRef.current !== DEFAULT_LAT || myLngPedidosRef.current !== DEFAULT_LNG
       const ll = pedido?.loja
+      if (cidadeFixaRef.current && ll?.cidade && ll.cidade === cidadeFixaRef.current) return true
+      const temGpsReal = myLatPedidosRef.current !== DEFAULT_LAT || myLngPedidosRef.current !== DEFAULT_LNG
       if (!temGpsReal || !ll?.lat || !ll?.lng) return true
-      return haversineKm(myLatPedidosRef.current, myLngPedidosRef.current, ll.lat, ll.lng) <= (raioKmRef.current || 20)
+      return haversineKm(myLatPedidosRef.current, myLngPedidosRef.current, ll.lat, ll.lng) <= (raioKmRef.current || 12)
     }
 
     // Verifica oferta pendente já existente ao entrar (broadcast: motoboy_id null)
     supabase.from("pedidos")
-      .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
+      .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng, cidade), itens:itens_pedido(*)")
       .is("motoboy_id", null)
       .eq("status", "aguardando_aceite")
       .limit(1)
@@ -1094,7 +1167,7 @@ export default function MotoboyPage() {
         if (novo?.motoboy_id !== null) return
         if (dismissedIdsRef.current.has(novo.id)) return
         supabase.from("pedidos")
-          .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
+          .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng, cidade), itens:itens_pedido(*)")
           .eq("id", novo.id).single()
           .then(({ data }) => {
             if (data && !dismissedIdsRef.current.has(data.id) && dentroDoRaio(data)) {
@@ -1106,6 +1179,77 @@ export default function MotoboyPage() {
 
     return () => { supabase.removeChannel(ch) }
   }, [motoboy_id, disponivel])
+
+  // ── Realtime: nova corrida "pronto" (lista passiva) ────────────────────────
+  // Até 2026-09-27 essa lista só era atualizada pelo polling de 15s (loadPedidos) —
+  // sem nenhum caminho em tempo real. Bug real reportado: corrida apareceu num
+  // celular e não em outro, mesmo com a tela aberta esperando — se o polling travar
+  // (rede instável, throttling do browser em segundo plano) num aparelho específico,
+  // não existia nenhum outro sinal pra corrigir isso. loadPedidos() continua rodando
+  // como fallback (mesmo princípio já usado no caminho de oferta/aguardando_aceite).
+  useEffect(() => {
+    if (!motoboy_id || !disponivel) return
+
+    function dentroDoRaio(loja: any): boolean {
+      if (cidadeFixaRef.current && loja?.cidade && loja.cidade === cidadeFixaRef.current) return true
+      const temGpsReal = myLatPedidosRef.current !== DEFAULT_LAT || myLngPedidosRef.current !== DEFAULT_LNG
+      if (!temGpsReal || !loja?.lat || !loja?.lng) return true
+      return haversineKm(myLatPedidosRef.current, myLngPedidosRef.current, loja.lat, loja.lng) <= (raioKmRef.current || 12)
+    }
+
+    const ch = supabase.channel(`pronto-broadcast-${motoboy_id}`)
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "pedidos",
+        filter: `status=eq.pronto`,
+      }, payload => {
+        const novo = payload.new as any
+        if (novo?.motoboy_id !== null) return
+        if (novo?.endereco_entrega?.toLowerCase?.().includes("retirada")) return
+        supabase.from("pedidos")
+          .select("*, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng, cidade)")
+          .eq("id", novo.id).single()
+          .then(({ data }) => {
+            // Reconfirma no momento da busca — pode ter mudado de novo enquanto buscava
+            if (!data || data.status !== "pronto" || data.motoboy_id) return
+            if (!dentroDoRaio((data as any).loja)) return
+            setProntos(prev => {
+              if (prev.some(p => p.id === data.id)) return prev
+              return [...prev, data as Pedido]
+            })
+            // Sincroniza com o rastreador do polling — senão o próximo ciclo de loadPedidos
+            // acha que essa corrida "acabou de chegar" de novo e toca o som duplicado.
+            prevProntosRef.current = new Set([...prevProntosRef.current, data.id])
+            playNotificationSound()
+            setSheetH(h => Math.max(h, SHEET_MID))
+          })
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(ch) }
+  }, [motoboy_id, disponivel])
+
+  // ── Realtime: remove da lista "pronto" assim que outro motoboy aceita ──────
+  // Um canal por corrida atualmente exibida (mesmo padrão de "oferta-aceita" abaixo,
+  // aplicado por item) — sincroniza a remoção pros demais motoboys quase instantaneamente,
+  // em vez de esperar até 15s pro próximo polling perceber que ela sumiu.
+  const prontosIdsKey = prontos.map(p => p.id).join(",")
+  useEffect(() => {
+    if (!disponivel || prontos.length === 0) return
+    const canais = prontos.map(p => supabase.channel(`pronto-sai-${p.id}`)
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "pedidos",
+        filter: `id=eq.${p.id}`,
+      }, payload => {
+        const novo = payload.new as any
+        if (novo.status !== "pronto" || novo.motoboy_id) {
+          setProntos(prev => prev.filter(x => x.id !== novo.id))
+        }
+      })
+      .subscribe()
+    )
+    return () => { canais.forEach(ch => supabase.removeChannel(ch)) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- prontosIdsKey já resume os ids presentes; usar `prontos` na lista causaria recriar os canais a cada poll (mesmo conteúdo, array novo) sem mudar o resultado.
+  }, [disponivel, prontosIdsKey])
 
   // ── Detecta quando outro motoboy aceita a oferta exibida ──────────────────
   useEffect(() => {
@@ -1248,14 +1392,20 @@ export default function MotoboyPage() {
     }
     const p = emAndamento[0]
 
-    // Destino do cliente: usa coords salvas no pedido, senão geocoda o endereço
+    // Destino do cliente: usa SEMPRE as coords salvas no pedido — nunca um re-geocode
+    // independente aqui. Antes, sem lat_entrega/lng_entrega, o app geocodificava o texto
+    // do endereço sozinho (com viés fixo pro centro de Aragoiânia, ver GEOCODE_BIAS_LAT/LNG
+    // acima) — pra endereço de Guapó (ou qualquer imprecisão de geocode) isso podia
+    // colocar o pino longe do endereço real, e ainda diferente da coordenada que o
+    // cliente efetivamente confirmou no checkout. Bug real reportado, 2026-09-27: pino
+    // no mapa do motoboy não correspondia ao endereço do cliente. Sem coordenada salva,
+    // o motoboy já cai automaticamente no fallback de busca por texto (ver modal de
+    // apps de navegação, `coords ? ... : q=endereço`) em vez de um pino inventado.
     if ((p as any).lat_entrega && (p as any).lng_entrega) {
       setDestinoLat((p as any).lat_entrega)
       setDestinoLng((p as any).lng_entrega)
-    } else if (p.endereco_entrega) {
-      geocodeAddress(p.endereco_entrega).then(ll => {
-        if (ll) { setDestinoLat(ll[0]); setDestinoLng(ll[1]) }
-      })
+    } else {
+      setDestinoLat(null); setDestinoLng(null)
     }
 
     // Localização da loja: usa loja_lat/loja_lng gravados no pedido pela escalada
@@ -1290,6 +1440,14 @@ export default function MotoboyPage() {
   }, [emAndamento[0]?.id])
 
   // ── GPS tracking ───────────────────────────────────────────────────────────
+  // Leituras de baixa precisão (comum logo ao abrir o app, antes do GPS "assentar" —
+  // o navegador pode devolver uma posição por triangulação de rede/wifi, com erro de
+  // centenas a milhares de metros) nunca substituem a última posição confiável, nem são
+  // enviadas ao servidor. Sem isso, uma leitura ruim podia derrubar o filtro de raio
+  // (12km) e o "disponivel"/lat/lng gravado no banco pro despacho ativo, excluindo o
+  // motoboy de corridas reais até o GPS acertar de verdade — o que pode nunca acontecer
+  // se o motoboy ficar parado num local com sinal ruim a sessão inteira.
+  const ACCURACY_MAX_M = 500
   const sendLocation = useCallback((lat: number, lng: number) => {
     fetch("/api/motoboy/update-location", {
       method: "POST", credentials: "include",
@@ -1323,13 +1481,17 @@ export default function MotoboyPage() {
     }
     watchIdRef.current = navigator.geolocation.watchPosition(
       ({ coords }) => {
+        setGpsReady(true)
+        // Descarta a leitura (não atualiza estado nem envia ao servidor) se a precisão
+        // for pior que ACCURACY_MAX_M — mantém a última posição confiável até chegar
+        // uma leitura melhor, em vez de confiar numa coordenada possivelmente errada.
+        if (coords.accuracy != null && coords.accuracy > ACCURACY_MAX_M) return
         const { latitude: lat, longitude: lng } = coords
         const prev = lastPosRef.current
         // Ignora jitter: só atualiza estado se moveu mais de 8 metros
         const movedM = prev ? haversineKm(prev.lat, prev.lng, lat, lng) * 1000 : 999
         lastPosRef.current = { lat, lng }
         sendLocation(lat, lng)
-        setGpsReady(true)
         if (movedM > 8) {
           setMyLat(lat); setMyLng(lng)
         }
@@ -1361,14 +1523,17 @@ export default function MotoboyPage() {
     if (motoboy_id) supabase.from("motoboys").update({ lat: null, lng: null }).eq("id", motoboy_id)
   }, [motoboy_id])
 
-  // Pede localização imediatamente ao carregar — centraliza o mapa na posição real
+  // Pede localização imediatamente ao carregar — centraliza o mapa na posição real.
+  // Mesma guarda de precisão do watchPosition acima: uma primeira leitura ruim (comum
+  // antes do GPS assentar) não deve virar a posição usada pro filtro de raio.
   useEffect(() => {
     if (!navigator.geolocation) return
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
+        setGpsReady(true)
+        if (coords.accuracy != null && coords.accuracy > ACCURACY_MAX_M) return
         setMyLat(coords.latitude)
         setMyLng(coords.longitude)
-        setGpsReady(true)
         reverseGeocode(coords.latitude, coords.longitude).then(c => { if (c) setCidadeAtual(c) })
       },
       () => {},
@@ -1644,7 +1809,8 @@ export default function MotoboyPage() {
       prioridadeManualRef.current = arr.map(p => p.id)
       return arr
     })
-    setSegundoAberto(false)
+    // Não fecha o painel — com mais de 2 corridas ativas, as outras extras continuam
+    // aparecendo depois que esta vira a principal.
   }
 
   // ── Avançar etapa da corrida ativa (Tópico 03) ────────────────────────────
@@ -1732,7 +1898,13 @@ export default function MotoboyPage() {
     ["indo_para_loja","na_loja","em_rota","coletado"].includes(p.status)
   )
   const corridaAtiva = corridasAtivas[0] ?? null
-  const segundaEntrega = corridasAtivas[1] ?? null
+  // Todas as corridas ativas além da 1ª (que ocupa o painel principal/mapa) — o
+  // motoboy pode ter mais de uma aceita ao mesmo tempo (limite configurável em
+  // "configuracoes.max_pedidos_motoboy" ou por motoboy em "limite_pedidos_simultaneos",
+  // hoje até 7) e todas precisam aparecer aqui, não só a 2ª (bug real: 2026-09-26,
+  // motoboy com 3+ corridas só via a 1ª e a 2ª, a 3ª ficava invisível no app).
+  const entregasExtras = corridasAtivas.slice(1)
+  const segundaEntrega = entregasExtras[0] ?? null
   const ETAPA_MAP: Record<string, number> = { "indo_para_loja": 0, "na_loja": 1, "em_rota": 2, "coletado": 2, "entregue": 3 }
   const etapaAtual = corridaConcluida ? 3 : (ETAPA_MAP[corridaAtiva?.status ?? ""] ?? 0)
   const ETAPAS_LABEL = ["Indo à loja", "Na loja", "Em rota", "Entregue!"]
@@ -1741,13 +1913,14 @@ export default function MotoboyPage() {
   const efetDestinoLat = corridaAtiva?.status === "indo_para_loja" ? (lojaLat ?? destinoLat) : destinoLat
   const efetDestinoLng = corridaAtiva?.status === "indo_para_loja" ? (lojaLng ?? destinoLng) : destinoLng
 
-  // Pins extras do 2º pedido para o mapa
-  const extrasLojaMap: PinExtra[] = segundaEntrega
-    ? [{ lat: (segundaEntrega as any).loja?.lat ?? (segundaEntrega as any).loja_lat, lng: (segundaEntrega as any).loja?.lng ?? (segundaEntrega as any).loja_lng, type: "loja" as const }].filter(p => p.lat && p.lng)
-    : []
-  const extrasDestinoMap: PinExtra[] = segundaEntrega && ["em_rota","coletado"].includes(segundaEntrega.status)
-    ? [{ lat: (segundaEntrega as any).lat_entrega, lng: (segundaEntrega as any).lng_entrega, type: "destino" as const }].filter(p => p.lat && p.lng)
-    : []
+  // Pins extras de TODAS as corridas além da 1ª para o mapa (não só a 2ª)
+  const extrasLojaMap: PinExtra[] = entregasExtras
+    .map(e => ({ lat: (e as any).loja?.lat ?? (e as any).loja_lat, lng: (e as any).loja?.lng ?? (e as any).loja_lng, type: "loja" as const }))
+    .filter(p => p.lat && p.lng)
+  const extrasDestinoMap: PinExtra[] = entregasExtras
+    .filter(e => ["em_rota","coletado"].includes(e.status))
+    .map(e => ({ lat: (e as any).lat_entrega, lng: (e as any).lng_entrega, type: "destino" as const }))
+    .filter(p => p.lat && p.lng)
 
   const temOferta = !!(pedidoOferta || avulsaOferta)
 
@@ -2205,8 +2378,8 @@ export default function MotoboyPage() {
         />
       )}
 
-      {/* ── Badge do 2º pedido ativo (botão flutuante) ── */}
-      {segundaEntrega && !corridaConcluida && !fullscreenMap && (
+      {/* ── Badge das entregas extras ativas (botão flutuante) — mostra TODAS, não só a 2ª ── */}
+      {entregasExtras.length > 0 && !corridaConcluida && !fullscreenMap && (
         <button
           onClick={() => setSegundoAberto(o => !o)}
           style={{
@@ -2219,11 +2392,15 @@ export default function MotoboyPage() {
             color: "white", fontWeight: 800, fontSize: 12,
             cursor: "pointer", boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
           }}>
-          <span style={{ background: "rgba(255,255,255,0.25)", borderRadius: 999, padding: "1px 7px", fontSize: 10, fontWeight: 900 }}>2</span>
-          2° pedido #{segundaEntrega.codigo}
-          <span style={{ fontSize: 10, opacity: 0.7 }}>
-            {segundaEntrega.status === "indo_para_loja" ? "• indo à loja" : segundaEntrega.status === "na_loja" ? "• na loja" : "• em rota"}
-          </span>
+          <span style={{ background: "rgba(255,255,255,0.25)", borderRadius: 999, padding: "1px 7px", fontSize: 10, fontWeight: 900 }}>{entregasExtras.length}</span>
+          {entregasExtras.length === 1
+            ? `2° pedido #${segundaEntrega!.codigo}`
+            : `${entregasExtras.length} outras entregas`}
+          {entregasExtras.length === 1 && (
+            <span style={{ fontSize: 10, opacity: 0.7 }}>
+              {segundaEntrega!.status === "indo_para_loja" ? "• indo à loja" : segundaEntrega!.status === "na_loja" ? "• na loja" : "• em rota"}
+            </span>
+          )}
         </button>
       )}
 
@@ -2331,8 +2508,8 @@ export default function MotoboyPage() {
         )
       })()}
 
-      {/* ── Botão aceitar pedido disponível (quando carregando 1 de max=2) ── */}
-      {corridaAtiva && !corridaConcluida && !segundaEntrega && prontos.length > 0 && emAndamento.length < maxPedidos && (
+      {/* ── Botão aceitar pedido disponível (só quando não há badge de extras ocupando o mesmo canto) ── */}
+      {corridaAtiva && !corridaConcluida && entregasExtras.length === 0 && prontos.length > 0 && emAndamento.length < maxPedidos && (
         <button
           onClick={() => setDisponiveisAberto(o => !o)}
           style={{
@@ -2350,75 +2527,84 @@ export default function MotoboyPage() {
         </button>
       )}
 
-      {/* ── Mini-sheet do 2º pedido ativo ── */}
-      {segundoAberto && segundaEntrega && !corridaConcluida && (
+      {/* ── Mini-sheet das entregas extras ativas — lista TODAS, não só a 2ª ── */}
+      {segundoAberto && entregasExtras.length > 0 && !corridaConcluida && (
         <div style={{
           position: "absolute", top: 100, left: 10, right: 10, zIndex: 37,
           background: "rgba(10,10,10,0.96)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
           borderRadius: 20, padding: "16px",
           border: "1px solid rgba(249,115,22,0.4)",
           boxShadow: "0 4px 32px rgba(0,0,0,0.6)",
+          maxHeight: "70vh", overflowY: "auto",
         }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <div>
-              <p style={{ color: "#f97316", fontWeight: 900, fontSize: 13 }}>
-                2° pedido — #{segundaEntrega.codigo}
-              </p>
-              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, marginTop: 2 }}>
-                R$ {ganhoLiquido(segundaEntrega.taxa_entrega ?? 0, segundaEntrega.criado_em).toFixed(2)} • {(segundaEntrega as any).loja?.nome ?? "—"}
-              </p>
-            </div>
+            <p style={{ color: "#f97316", fontWeight: 900, fontSize: 13 }}>
+              {entregasExtras.length === 1 ? "2° pedido" : `${entregasExtras.length} entregas extras`}
+            </p>
             <button onClick={() => setSegundoAberto(false)} style={{ background: "transparent", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 20, cursor: "pointer" }}>×</button>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
-            <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>
-              {segundaEntrega.status === "indo_para_loja" && `🏪 Indo buscar em ${(segundaEntrega as any).loja?.nome}`}
-              {segundaEntrega.status === "na_loja" && "📦 Aguardando coleta na loja"}
-              {["em_rota","coletado"].includes(segundaEntrega.status) && `🏠 Entregando em ${segundaEntrega.endereco_entrega}`}
-            </p>
-          </div>
+          {entregasExtras.map((entrega, idx) => (
+            <div key={entrega.id} style={{
+              marginBottom: idx < entregasExtras.length - 1 ? 16 : 0,
+              paddingBottom: idx < entregasExtras.length - 1 ? 16 : 0,
+              borderBottom: idx < entregasExtras.length - 1 ? "1px solid rgba(255,255,255,0.08)" : "none",
+            }}>
+              <p style={{ color: "#f97316", fontWeight: 900, fontSize: 13 }}>
+                #{entrega.codigo}
+              </p>
+              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, marginTop: 2, marginBottom: 8 }}>
+                R$ {ganhoLiquido(entrega.taxa_entrega ?? 0, entrega.criado_em).toFixed(2)} • {(entrega as any).loja?.nome ?? "—"}
+              </p>
 
-          {/* Priorizar: troca a ordem — o mapa passa a rotear para este primeiro */}
-          <button
-            onClick={() => priorizarSegundaEntrega(segundaEntrega.id)}
-            style={{
-              width: "100%", padding: "11px", borderRadius: 12, border: "1.5px solid rgba(249,115,22,0.6)",
-              background: "transparent", color: "#f97316", fontWeight: 900, fontSize: 13, cursor: "pointer",
-              marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="17 11 21 7 17 3"/><line x1="21" y1="7" x2="9" y2="7"/>
-              <polyline points="7 21 3 17 7 13"/><line x1="15" y1="17" x2="3" y2="17"/>
-            </svg>
-            Priorizar esta entrega
-          </button>
+              <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginBottom: 10 }}>
+                {entrega.status === "indo_para_loja" && `🏪 Indo buscar em ${(entrega as any).loja?.nome}`}
+                {entrega.status === "na_loja" && "📦 Aguardando coleta na loja"}
+                {["em_rota","coletado"].includes(entrega.status) && `🏠 Entregando em ${entrega.endereco_entrega}`}
+              </p>
 
-          {segundaEntrega.status === "indo_para_loja" && (
-            <button onClick={() => { avancarEtapa(segundaEntrega); setSegundoAberto(false) }} disabled={avancandoEtapa} style={{
-              width: "100%", padding: "12px", borderRadius: 12, border: "none",
-              background: "#f97316", color: "white", fontWeight: 900, fontSize: 13, cursor: "pointer",
-            }}>
-              {avancandoEtapa ? "..." : "Cheguei na loja"}
-            </button>
-          )}
-          {segundaEntrega.status === "na_loja" && (
-            <button onClick={() => { avancarEtapa(segundaEntrega); setSegundoAberto(false) }} disabled={avancandoEtapa} style={{
-              width: "100%", padding: "12px", borderRadius: 12, border: "none",
-              background: "#22c55e", color: "white", fontWeight: 900, fontSize: 13, cursor: "pointer",
-            }}>
-              {avancandoEtapa ? "..." : "Coletei o pedido"}
-            </button>
-          )}
-          {["em_rota","coletado"].includes(segundaEntrega.status) && (
-            <button onClick={() => { avancarEtapa(segundaEntrega); setSegundoAberto(false) }} disabled={avancandoEtapa} style={{
-              width: "100%", padding: "12px", borderRadius: 12, border: "none",
-              background: "#818cf8", color: "white", fontWeight: 900, fontSize: 13, cursor: "pointer",
-            }}>
-              {avancandoEtapa ? "..." : "Confirmar entrega"}
-            </button>
-          )}
+              {/* Priorizar: troca a ordem — o mapa passa a rotear para este primeiro */}
+              <button
+                onClick={() => priorizarSegundaEntrega(entrega.id)}
+                style={{
+                  width: "100%", padding: "11px", borderRadius: 12, border: "1.5px solid rgba(249,115,22,0.6)",
+                  background: "transparent", color: "#f97316", fontWeight: 900, fontSize: 13, cursor: "pointer",
+                  marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="17 11 21 7 17 3"/><line x1="21" y1="7" x2="9" y2="7"/>
+                  <polyline points="7 21 3 17 7 13"/><line x1="15" y1="17" x2="3" y2="17"/>
+                </svg>
+                Priorizar esta entrega
+              </button>
+
+              {entrega.status === "indo_para_loja" && (
+                <button onClick={() => avancarEtapa(entrega)} disabled={avancandoEtapa} style={{
+                  width: "100%", padding: "12px", borderRadius: 12, border: "none",
+                  background: "#f97316", color: "white", fontWeight: 900, fontSize: 13, cursor: "pointer",
+                }}>
+                  {avancandoEtapa ? "..." : "Cheguei na loja"}
+                </button>
+              )}
+              {entrega.status === "na_loja" && (
+                <button onClick={() => avancarEtapa(entrega)} disabled={avancandoEtapa} style={{
+                  width: "100%", padding: "12px", borderRadius: 12, border: "none",
+                  background: "#22c55e", color: "white", fontWeight: 900, fontSize: 13, cursor: "pointer",
+                }}>
+                  {avancandoEtapa ? "..." : "Coletei o pedido"}
+                </button>
+              )}
+              {["em_rota","coletado"].includes(entrega.status) && (
+                <button onClick={() => avancarEtapa(entrega)} disabled={avancandoEtapa} style={{
+                  width: "100%", padding: "12px", borderRadius: 12, border: "none",
+                  background: "#818cf8", color: "white", fontWeight: 900, fontSize: 13, cursor: "pointer",
+                }}>
+                  {avancandoEtapa ? "..." : "Confirmar entrega"}
+                </button>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
@@ -2463,6 +2649,11 @@ export default function MotoboyPage() {
       {/* ── Painel de corrida ativa (Tópico 03) ── */}
       {(corridaAtiva || corridaConcluida) && !fullscreenMap && (
         <CorridaAtivaPanel
+          // key força remontar o painel ao trocar de pedido (concluída -> próxima já
+          // aceita) — sem isso, estado interno (código digitado, "cheguei" enviado,
+          // colapsado) ficava herdado da corrida anterior porque o componente só
+          // recebe props novas, não remonta. Bug real reportado, 2026-09-23.
+          key={(corridaConcluida?.id ?? corridaAtiva?.id) ?? "none"}
           pedido={corridaAtiva}
           corridaConcluida={corridaConcluida}
           avancando={avancandoEtapa}
@@ -3936,11 +4127,37 @@ function NavModal({ destino, onClose, onNavApp }: { destino: { texto: string; la
   )
 }
 
+// Instâncias reutilizadas (módulo, não por chamada) — navegadores bloqueiam play() de
+// Audio/AudioContext fora de um gesto direto do usuário, e o alerta de nova corrida
+// sempre dispara de um callback assíncrono (polling, WebSocket, push), nunca de um
+// clique. Criar um Audio/AudioContext NOVO a cada notificação (como era antes) nunca
+// tinha chance de ser "destravado" — ficava sujeito ao autoplay bloqueado toda vez.
+// `desbloquearAudioNotificacao()` é chamada uma vez no primeiro toque na tela (ver
+// efeito de mount abaixo) tocando/pausando essa MESMA instância, que os navegadores
+// então deixam tocar de novo depois via chamada assíncrona. Bug real reportado,
+// 2026-09-27: som de nova corrida não tocava de forma consistente.
+let audioNotificacao: HTMLAudioElement | null = null
+let audioCtxNotificacao: AudioContext | null = null
+
+function desbloquearAudioNotificacao() {
+  try {
+    if (!audioNotificacao) { audioNotificacao = new Audio("/splash.mp3"); audioNotificacao.volume = 1 }
+    audioNotificacao.play().then(() => {
+      audioNotificacao!.pause()
+      audioNotificacao!.currentTime = 0
+    }).catch(() => {})
+  } catch {}
+  try {
+    if (!audioCtxNotificacao) audioCtxNotificacao = new (window.AudioContext || (window as any).webkitAudioContext)()
+    if (audioCtxNotificacao.state === "suspended") audioCtxNotificacao.resume().catch(() => {})
+  } catch {}
+}
+
 function playNotificationSound() {
   try {
-    const audio = new Audio("/splash.mp3")
-    audio.volume = 1
-    audio.play().catch(() => beep())
+    if (!audioNotificacao) { audioNotificacao = new Audio("/splash.mp3"); audioNotificacao.volume = 1 }
+    audioNotificacao.currentTime = 0
+    audioNotificacao.play().catch(() => beep())
   } catch { beep() }
   // Vibração longa + pausa + duas curtas (padrão "atenção")
   try { navigator.vibrate?.([600, 200, 300, 200, 300]) } catch {}
@@ -3948,7 +4165,9 @@ function playNotificationSound() {
 
 function beep() {
   try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
+    if (!audioCtxNotificacao) audioCtxNotificacao = new (window.AudioContext || (window as any).webkitAudioContext)()
+    const ctx = audioCtxNotificacao
+    if (ctx.state === "suspended") ctx.resume().catch(() => {})
     const play = (freq: number, start: number, dur: number) => {
       const o = ctx.createOscillator(); const g = ctx.createGain()
       o.connect(g); g.connect(ctx.destination)

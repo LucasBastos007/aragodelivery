@@ -13,6 +13,11 @@ const CAT_ICONS: Record<string, string> = {
   Restaurante: "🍽️", Mercadinho: "🛒", "Farmácia": "💊", Outros: "📦",
 }
 
+interface AvaliacaoPublica {
+  id: string; pedido_id: string; nota_loja: number | null; comentario: string | null
+  resposta_loja: string | null; criado_em: string; clienteNome?: string
+}
+
 function isGrupo(a: AdicionalProduto | GrupoAdicional): a is GrupoAdicional {
   return "itens" in a
 }
@@ -96,16 +101,20 @@ function ProdutoModal({ prod, loja, onClose, onAdd }: {
     grupos.every(g => !g.obrigatorio || (selGrupos[g.id]?.length ?? 0) >= (g.minimo || 1)),
     [grupos, selGrupos])
 
+  // Grupos (ex: "Sabor") e adicionais avulsos (ex: "Mandioca") podem coexistir no mesmo
+  // produto — soma os dois, nunca um OU outro. Um produto pode ter um grupo obrigatório
+  // de sabor e, junto, extras opcionais soltos.
   const totalAdicionais = useMemo(() => {
-    if (temGrupos) return Object.values(selGrupos).flat().reduce((s, a) => s + a.preco, 0)
-    return selFlat.reduce((s, a) => s + a.preco, 0)
-  }, [temGrupos, selGrupos, selFlat])
+    const doGrupo = Object.values(selGrupos).flat().reduce((s, a) => s + a.preco, 0)
+    const doFlat = selFlat.reduce((s, a) => s + a.preco, 0)
+    return doGrupo + doFlat
+  }, [selGrupos, selFlat])
 
   const totalItem = (prod.preco + totalAdicionais) * qty
 
   function handleConfirm() {
     if (!gruposValidos) return
-    onAdd(qty, temGrupos ? Object.values(selGrupos).flat() : selFlat, obs)
+    onAdd(qty, [...Object.values(selGrupos).flat(), ...selFlat], obs)
     onClose()
   }
 
@@ -229,7 +238,7 @@ function ProdutoModal({ prod, loja, onClose, onAdd }: {
                 )
               })}
 
-              {!temGrupos && adicionaisFlat.length > 0 && (
+              {adicionaisFlat.length > 0 && (
                 <div style={{ borderTop: "8px solid #F3F4F6" }}>
                   <div style={{ padding: "14px 20px 10px" }}>
                     <p style={{ color: "#111827", fontWeight: 800, fontSize: 15, marginBottom: 2 }}>Adicionais</p>
@@ -352,16 +361,36 @@ export default function RestaurantePage() {
   const [modalProd,     setModalProd]     = useState<Produto | null>(null)
   const [loginRequired, setLoginRequired] = useState(false)
   const [busca,         setBusca]         = useState("")
+  const [avaliacoes,    setAvaliacoes]    = useState<AvaliacaoPublica[]>([])
+  const [verTodasAvaliacoes, setVerTodasAvaliacoes] = useState(false)
 
   useEffect(() => {
     async function load() {
-      const [{ data: lojaData }, { data: catData }, { data: prodData }] = await Promise.all([
+      const [{ data: lojaData }, { data: catData }, { data: prodData }, { data: avalData }] = await Promise.all([
         supabase.from("lojas").select("*").eq("id", id).single(),
         supabase.from("categorias_produto").select("*").eq("loja_id", id).order("ordem"),
         supabase.from("produtos").select("*").eq("loja_id", id).eq("disponivel", true).order("preco").order("nome"),
+        supabase.from("avaliacoes").select("id, pedido_id, nota_loja, comentario, resposta_loja, criado_em")
+          .eq("loja_id", id).not("comentario", "eq", "").order("criado_em", { ascending: false }).limit(15),
       ])
       setLoja(lojaData as Loja)
       setCategorias((catData as CategoriaProduto[]) ?? [])
+      const listaAval = (avalData as AvaliacaoPublica[]) ?? []
+      const pedidoIds = [...new Set(listaAval.map(a => a.pedido_id))]
+      if (pedidoIds.length > 0) {
+        const { data: pedidos } = await supabase.from("pedidos").select("id, cliente_id").in("id", pedidoIds)
+        const clienteIds = [...new Set((pedidos ?? []).map((p: any) => p.cliente_id).filter(Boolean))]
+        const { data: clientes } = clienteIds.length > 0
+          ? await supabase.from("clientes").select("id, nome").in("id", clienteIds)
+          : { data: [] as any[] }
+        const pedidoPorId = new Map((pedidos ?? []).map((p: any) => [p.id, p]))
+        const nomePorClienteId = new Map((clientes ?? []).map((c: any) => [c.id, c.nome]))
+        for (const a of listaAval) {
+          const clienteId = pedidoPorId.get(a.pedido_id)?.cliente_id
+          a.clienteNome = clienteId ? (nomePorClienteId.get(clienteId)?.split(" ")[0] ?? "Cliente") : "Cliente"
+        }
+      }
+      setAvaliacoes(listaAval)
       const { diaSemana: hoje, minutos } = diaEMinutosAgoraBrt()
       const todos  = (prodData as Produto[]) ?? []
       setProdutos(todos.filter(p => {
@@ -616,7 +645,13 @@ export default function RestaurantePage() {
                 </svg>
                 <span style={{ color: "#111827", fontWeight: 800, fontSize: 15 }}>{Number(loja.nota_media).toFixed(1)}</span>
                 {loja.total_avaliacoes != null && loja.total_avaliacoes > 0 && (
-                  <span style={{ color: "#6B7280", fontSize: 13 }}>({loja.total_avaliacoes} avaliações)</span>
+                  avaliacoes.length > 0 ? (
+                    <button onClick={() => setVerTodasAvaliacoes(v => !v)} style={{ color: "#DC2626", fontSize: 13, fontWeight: 700, background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}>
+                      ({loja.total_avaliacoes} avaliações)
+                    </button>
+                  ) : (
+                    <span style={{ color: "#6B7280", fontSize: 13 }}>({loja.total_avaliacoes} avaliações)</span>
+                  )
                 )}
               </div>
             )}
@@ -629,6 +664,36 @@ export default function RestaurantePage() {
             </div>
           </div>
         </div>
+
+        {verTodasAvaliacoes && avaliacoes.length > 0 && (
+          <div style={{ background: "white", borderRadius: 16, padding: "16px 18px", border: "1px solid #E5E7EB", marginBottom: 20, boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
+            <p style={{ color: "#111827", fontWeight: 800, fontSize: 14, marginBottom: 12 }}>Avaliações dos clientes</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {avaliacoes.map(a => (
+                <div key={a.id} style={{ borderBottom: "1px solid #F3F4F6", paddingBottom: 14 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <div style={{ display: "flex", gap: 1 }}>
+                      {[1, 2, 3, 4, 5].map(i => (
+                        <svg key={i} width="12" height="12" viewBox="0 0 24 24" fill={i <= (a.nota_loja ?? 0) ? "#f59e0b" : "#E5E7EB"} stroke="none">
+                          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                        </svg>
+                      ))}
+                    </div>
+                    <span style={{ color: "#111827", fontWeight: 700, fontSize: 12.5 }}>{a.clienteNome ?? "Cliente"}</span>
+                    <span style={{ color: "#9CA3AF", fontSize: 11.5 }}>{new Date(a.criado_em).toLocaleDateString("pt-BR")}</span>
+                  </div>
+                  {a.comentario && <p style={{ color: "#374151", fontSize: 13, lineHeight: 1.5 }}>{a.comentario}</p>}
+                  {a.resposta_loja && (
+                    <div style={{ background: "#F9FAFB", borderRadius: 8, padding: "8px 10px", marginTop: 8, borderLeft: "3px solid #DC2626" }}>
+                      <p style={{ color: "#DC2626", fontWeight: 700, fontSize: 11, marginBottom: 2 }}>Resposta da loja</p>
+                      <p style={{ color: "#374151", fontSize: 12.5 }}>{a.resposta_loja}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {!loja.aberto && (
           <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 12, padding: "12px 16px", marginBottom: 20 }}>

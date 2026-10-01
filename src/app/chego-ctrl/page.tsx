@@ -113,7 +113,7 @@ export default function AdminDashboard() {
       ? new Date(Date.now() - 7  * 86400000).toISOString().slice(0, 10)
       : new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
 
-    const [lojasRes, motoboyRes, pedidosRes, pedHojeRes, todosPedRes] = await Promise.all([
+    const [lojasRes, motoboyRes, pedidosRes, pedHojeRes, todosPedRes, avulsasRes] = await Promise.all([
       supabase.from("lojas").select("id, nome, status, categoria"),
       supabase.from("motoboys").select("id, nome, status"),
       supabase.from("pedidos")
@@ -124,12 +124,18 @@ export default function AdminDashboard() {
       supabase.from("pedidos").select("total, status, criado_em").gte("criado_em", hoje),
       supabase.from("pedidos").select("id, codigo, total, status, criado_em, loja:lojas(nome)")
         .order("criado_em", { ascending: false }).limit(8),
+      supabase.from("entregas_avulsas")
+        .select("motoboy_id, motoboy_nome, taxa_entrega, status, criado_em")
+        .eq("status", "entregue")
+        .not("motoboy_id", "is", null)
+        .gte("criado_em", cutoff),
     ])
 
     const lojasData   = lojasRes.data   ?? []
     const motoboyData = motoboyRes.data ?? []
     const pedData     = (pedidosRes.data ?? []) as any[]
     const pedHoje     = (pedHojeRes.data ?? []) as any[]
+    const avulsasData = (avulsasRes.data ?? []) as any[]
 
     // Stats hoje
     const validos = pedHoje.filter((p: any) => p.status !== "cancelado")
@@ -178,12 +184,16 @@ export default function AdminDashboard() {
       .slice(0, 5)
     setLojasBaixa(baixaDemanda)
 
-    // Ranking motoboys por entregas
+    // Ranking motoboys por entregas — soma corridas aceitas pelo app (pedidos) + avulsas
     const mobMap = new Map<string, { nome: string; entregas: number; faturamento: number }>()
     for (const ped of pedData) {
       if (ped.status !== "entregue" || !ped.motoboy_id) continue
       const prev = mobMap.get(ped.motoboy_id) ?? { nome: (ped.motoboy as any)?.nome ?? "—", entregas: 0, faturamento: 0 }
       mobMap.set(ped.motoboy_id, { ...prev, entregas: prev.entregas + 1, faturamento: prev.faturamento + (ped.taxa_entrega ?? 0) })
+    }
+    for (const av of avulsasData) {
+      const prev = mobMap.get(av.motoboy_id) ?? { nome: av.motoboy_nome ?? "—", entregas: 0, faturamento: 0 }
+      mobMap.set(av.motoboy_id, { ...prev, entregas: prev.entregas + 1, faturamento: prev.faturamento + (av.taxa_entrega ?? 0) })
     }
     const mobSorted = Array.from(mobMap.entries())
       .map(([id, v]) => ({ id, ...v }))

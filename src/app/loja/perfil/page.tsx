@@ -127,7 +127,7 @@ export default function PerfilPage() {
   const [form, setForm] = useState<Form>({
     nome: "", descricao: "", categoria: "Restaurante",
     cep: "", logradouro: "", numero: "", complemento: "",
-    bairro: "", cidade: "Aragoiânia", estado: "GO",
+    bairro: "", cidade: "", estado: "GO",
     telefone: "", taxa_entrega: "", tempo_min: "", tempo_max: "",
     nome_responsavel: "", email: "", logo_url: "", pix_key: "",
     banco: "", banco_agencia: "", banco_conta: "", banco_tipo_conta: "Corrente",
@@ -153,7 +153,7 @@ export default function PerfilPage() {
         numero: data.numero ?? "",
         complemento: data.complemento ?? "",
         bairro: data.bairro ?? "",
-        cidade: data.cidade ?? "Aragoiânia",
+        cidade: data.cidade ?? "",
         estado: data.estado ?? "GO",
         telefone: data.telefone ?? "",
         taxa_entrega: String(data.taxa_entrega ?? "6"),
@@ -183,11 +183,16 @@ export default function PerfilPage() {
     setBuscandoCep(true)
     const d = await buscarCep(cep)
     if (d) {
+      // "cidade" NUNCA vem do CEP — Guapó não tem CEP próprio por rua em boa parte das
+      // vezes (só o genérico 75350-000), e um CEP inválido/inexistente faz o ViaCEP
+      // retornar nada, deixando o valor anterior no campo sem o lojista perceber. Bug
+      // real (2026-09-26): várias lojas de Guapó ficaram salvas com cidade="Aragoiânia"
+      // porque o campo começava com esse valor e nunca era corrigido. Cidade agora é
+      // sempre escolha explícita do lojista (dropdown abaixo).
       setForm(f => ({
         ...f,
         logradouro: d.logradouro ?? f.logradouro,
         bairro: d.bairro ?? f.bairro,
-        cidade: d.localidade ?? f.cidade,
         estado: d.uf ?? f.estado,
       }))
     }
@@ -251,7 +256,7 @@ export default function PerfilPage() {
       numero: form.numero.trim() || null,
       complemento: form.complemento.trim() || null,
       bairro: form.bairro.trim() || null,
-      cidade: form.cidade.trim() || "Aragoiânia",
+      cidade: form.cidade.trim() || null,
       estado: form.estado.trim() || "GO",
       endereco: enderecoCompleto || null,
       telefone: form.telefone.trim(),
@@ -417,7 +422,11 @@ export default function PerfilPage() {
             </div>
             <div>
               <label className="label">Cidade</label>
-              <input className="input" value={form.cidade} onChange={e => set("cidade", e.target.value)} />
+              <select className="input" value={form.cidade} onChange={e => set("cidade", e.target.value)}>
+                <option value="">Selecione...</option>
+                <option value="Aragoiânia">Aragoiânia</option>
+                <option value="Guapó">Guapó</option>
+              </select>
             </div>
             <div>
               <label className="label">UF</label>

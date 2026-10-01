@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
-import type { Produto, CategoriaProduto, AdicionalProduto } from "@/types"
+import type { Produto, CategoriaProduto, AdicionalProduto, GrupoAdicional } from "@/types"
 
 const DIAS = [
   { v: 1, l: "Seg" }, { v: 2, l: "Ter" }, { v: 3, l: "Qua" },
@@ -61,6 +61,10 @@ export default function AdminCardapioPage() {
   const [adicionais, setAdicionais] = useState<AdicionalProduto[]>([])
   const [novoAdicNome, setNovoAdicNome] = useState("")
   const [novoAdicPreco, setNovoAdicPreco] = useState("")
+  const [grupos, setGrupos] = useState<GrupoAdicional[]>([])
+  const [novoGrupo, setNovoGrupo] = useState({ nome: "", obrigatorio: true, maximo: "1" })
+  const [itemGrupoNome, setItemGrupoNome] = useState<Record<string, string>>({})
+  const [itemGrupoPreco, setItemGrupoPreco] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (!lojaId) return
@@ -136,6 +140,37 @@ export default function AdminCardapioPage() {
     setNovoAdicPreco("")
   }
 
+  function criarGrupo() {
+    if (!novoGrupo.nome.trim()) return
+    const maximo = parseInt(novoGrupo.maximo) || 1
+    setGrupos(prev => [...prev, {
+      id: uid(),
+      nome: novoGrupo.nome.trim(),
+      obrigatorio: novoGrupo.obrigatorio,
+      minimo: novoGrupo.obrigatorio ? 1 : 0,
+      maximo,
+      itens: [],
+    }])
+    setNovoGrupo({ nome: "", obrigatorio: true, maximo: "1" })
+  }
+
+  function deletarGrupo(id: string) {
+    setGrupos(prev => prev.filter(g => g.id !== id))
+  }
+
+  function adicionarItemGrupo(grupoId: string) {
+    const nome = (itemGrupoNome[grupoId] ?? "").trim()
+    if (!nome) return
+    const preco = parseFloat(itemGrupoPreco[grupoId] ?? "") || 0
+    setGrupos(prev => prev.map(g => g.id === grupoId ? { ...g, itens: [...g.itens, { id: uid(), nome, preco }] } : g))
+    setItemGrupoNome(prev => ({ ...prev, [grupoId]: "" }))
+    setItemGrupoPreco(prev => ({ ...prev, [grupoId]: "" }))
+  }
+
+  function removerItemGrupo(grupoId: string, itemId: string) {
+    setGrupos(prev => prev.map(g => g.id === grupoId ? { ...g, itens: g.itens.filter(i => i.id !== itemId) } : g))
+  }
+
   function abrirNovoProduto() {
     setEditando(null)
     setFormProd(FORM_VAZIO)
@@ -145,6 +180,10 @@ export default function AdminCardapioPage() {
     setAdicionais([])
     setNovoAdicNome("")
     setNovoAdicPreco("")
+    setGrupos([])
+    setNovoGrupo({ nome: "", obrigatorio: true, maximo: "1" })
+    setItemGrupoNome({})
+    setItemGrupoPreco({})
     setModalProd(true)
   }
 
@@ -162,9 +201,14 @@ export default function AdminCardapioPage() {
     setFotoFile(null)
     setFotoPreview(p.foto_url ?? "")
     setErroSalvar("")
-    setAdicionais((p.adicionais ?? []).filter((a): a is AdicionalProduto => !("itens" in a)))
+    const todosAdicionais = p.adicionais ?? []
+    setAdicionais(todosAdicionais.filter((a): a is AdicionalProduto => !("itens" in a)))
+    setGrupos(todosAdicionais.filter((a): a is GrupoAdicional => "itens" in a))
     setNovoAdicNome("")
     setNovoAdicPreco("")
+    setNovoGrupo({ nome: "", obrigatorio: true, maximo: "1" })
+    setItemGrupoNome({})
+    setItemGrupoPreco({})
     setModalProd(true)
   }
 
@@ -174,6 +218,7 @@ export default function AdminCardapioPage() {
     setFotoPreview("")
     setErroSalvar("")
     setAdicionais([])
+    setGrupos([])
   }
 
   async function salvarProduto() {
@@ -202,7 +247,7 @@ export default function AdminCardapioPage() {
       categoria_id: formProd.categoria_id || null,
       disponivel: formProd.disponivel,
       foto_url: fotoUrlFinal || null,
-      adicionais: adicionais,
+      adicionais: [...adicionais, ...grupos],
       dias_semana: formProd.dias_semana,
       ncm: formProd.ncm.replace(/\D/g, "") || null,
     }
@@ -409,6 +454,13 @@ export default function AdminCardapioPage() {
                 <label className="label">Preço (R$) *</label>
                 <input className="input" type="number" step="0.50" min="0" placeholder="0,00" value={formProd.preco}
                   onChange={e => setFormProd(f => ({ ...f, preco: e.target.value }))} />
+                {grupos.length > 0 && (
+                  <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>
+                    Pode deixar 0,00 aqui se o preço real vem das opções da categoria de
+                    escolha abaixo (ex: "Escolha o sabor") — o cliente vê "A partir de R$
+                    [menor opção]".
+                  </p>
+                )}
               </div>
               <div>
                 <label className="label">Categoria</label>
@@ -524,6 +576,111 @@ export default function AdminCardapioPage() {
                   className="btn-primary"
                   style={{ fontSize: 13, padding: "0 12px", flexShrink: 0 }}>
                   +
+                </button>
+              </div>
+            </div>
+
+            {/* Categorias de escolha (grupos de adicionais) */}
+            <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16 }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 4 }}>Categorias de escolha (opcional)</p>
+              <p style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 10 }}>
+                Ex: "Escolha o tamanho do copo" (300ml/400ml/500ml) ou "Escolha seus acompanhamentos"
+              </p>
+
+              {grupos.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
+                  {grupos.map(g => (
+                    <div key={g.id} style={{ border: "1px solid #E5E7EB", borderRadius: 10, padding: 10 }}>
+                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8, gap: 8 }}>
+                        <div>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{g.nome}</span>
+                          <span style={{ fontSize: 11, color: "#9CA3AF", marginLeft: 6 }}>
+                            {g.obrigatorio ? "Obrigatório" : "Opcional"} · máx. {g.maximo}
+                          </span>
+                        </div>
+                        <button type="button" onClick={() => deletarGrupo(g.id)}
+                          style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 0, flexShrink: 0 }}>
+                          ✕
+                        </button>
+                      </div>
+
+                      {g.itens.length > 0 && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
+                          {g.itens.map(it => (
+                            <div key={it.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", borderRadius: 8, background: "#F9FAFB" }}>
+                              <span style={{ fontSize: 13, color: "#374151" }}>{it.nome}</span>
+                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                <span style={{ fontSize: 12, color: "#f97316", fontWeight: 700 }}>
+                                  {it.preco > 0 ? `+ R$ ${it.preco.toFixed(2)}` : "grátis"}
+                                </span>
+                                <button type="button" onClick={() => removerItemGrupo(g.id, it.id)}
+                                  style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 0 }}>
+                                  ✕
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <input
+                          className="input"
+                          placeholder="Ex: 300ml"
+                          value={itemGrupoNome[g.id] ?? ""}
+                          onChange={e => setItemGrupoNome(prev => ({ ...prev, [g.id]: e.target.value }))}
+                          onKeyDown={e => e.key === "Enter" && adicionarItemGrupo(g.id)}
+                          style={{ flex: 2, fontSize: 13 }}
+                        />
+                        <input
+                          className="input"
+                          type="number"
+                          step="0.50"
+                          min="0"
+                          placeholder="R$ (opcional)"
+                          value={itemGrupoPreco[g.id] ?? ""}
+                          onChange={e => setItemGrupoPreco(prev => ({ ...prev, [g.id]: e.target.value }))}
+                          onKeyDown={e => e.key === "Enter" && adicionarItemGrupo(g.id)}
+                          style={{ flex: 1, fontSize: 13 }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => adicionarItemGrupo(g.id)}
+                          disabled={!(itemGrupoNome[g.id] ?? "").trim()}
+                          className="btn-primary"
+                          style={{ fontSize: 13, padding: "0 12px", flexShrink: 0 }}>
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ border: "1px dashed #D1D5DB", borderRadius: 10, padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                <input
+                  className="input"
+                  placeholder='Nome da categoria (ex: "Escolha o tamanho")'
+                  value={novoGrupo.nome}
+                  onChange={e => setNovoGrupo(f => ({ ...f, nome: e.target.value }))}
+                  style={{ fontSize: 13 }}
+                />
+                <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                    <input type="checkbox" checked={novoGrupo.obrigatorio}
+                      onChange={e => setNovoGrupo(f => ({ ...f, obrigatorio: e.target.checked }))} />
+                    <span style={{ fontSize: 12, color: "#374151" }}>Obrigatório escolher</span>
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 12, color: "#6B7280" }}>Máx. opções</span>
+                    <input className="input" type="number" min="1" value={novoGrupo.maximo}
+                      onChange={e => setNovoGrupo(f => ({ ...f, maximo: e.target.value }))}
+                      style={{ width: 56, fontSize: 12, padding: "4px 6px" }} />
+                  </label>
+                </div>
+                <button type="button" onClick={criarGrupo} disabled={!novoGrupo.nome.trim()}
+                  className="btn-ghost" style={{ fontSize: 12, justifyContent: "center" }}>
+                  + Criar categoria de escolha
                 </button>
               </div>
             </div>

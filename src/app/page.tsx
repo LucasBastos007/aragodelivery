@@ -546,6 +546,7 @@ export default function Home() {
       router.replace("/onboarding"); return
     }
     supabase.from("lojas").select("*").eq("status", "ativo")
+      .order("ordem_home", { ascending: true, nullsFirst: false })
       .order("destaque", { ascending: false }).order("aberto", { ascending: false }).order("nome")
       .then(({ data }) => { setLojas((data as Loja[]) ?? []); setLoading(false) })
 
@@ -606,7 +607,11 @@ export default function Home() {
         grupos.get(cidade)!.push(l)
       }
     }
-    return [...grupos.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
+    // Cidade com MENOS lojas abertas primeiro — pedido explícito do usuário, 2026-09-23:
+    // com só 1 loja aberta em Guapó, ela ficava enterrada embaixo de 10 lojas de
+    // Aragoiânia (ordenação antiga era decrescente); invertido, a cidade "pequena"
+    // aparece logo no topo, sem precisar rolar a lista longa da cidade "grande".
+    return [...grupos.entries()].sort((a, b) => a[1].length - b[1].length || a[0].localeCompare(b[0]))
   }, [abertas])
 
   return (
@@ -1382,43 +1387,22 @@ export default function Home() {
           ) : (
             <>
               {!filtro && !busca ? (
-                // Home "limpa": uma seção por cidade, com só uma prévia de lojas (não a
-                // lista inteira) — senão uma cidade com muitas lojas abertas empurra a
-                // seção da próxima cidade pra muito longe do topo, "escondendo" ela atrás
-                // de scroll. "Ver mais" leva pra lista completa daquela cidade em /busca.
-                abertasPorCidade.map(([cidade, lojasCidade]) => {
-                  const PREVIEW = 4
-                  const temMais = lojasCidade.length > PREVIEW
-                  const lojasPreview = temMais ? lojasCidade.slice(0, PREVIEW) : lojasCidade
-                  return (
+                // Home "limpa": uma seção por cidade, com TODAS as lojas abertas visíveis
+                // (sem corte/"ver mais") — pedido explícito do usuário, 2026-09-23: toda
+                // loja aberta precisa aparecer direto na home, sem esconder atrás de clique.
+                abertasPorCidade.map(([cidade, lojasCidade]) => (
                   <div key={cidade} style={{ marginBottom: isMobile ? 24 : 40 }}>
-                    <div style={{ marginBottom: 8, padding: isMobile ? "12px 16px 4px" : "0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div style={{ marginBottom: 8, padding: isMobile ? "12px 16px 4px" : "0" }}>
                       <h2 style={{ color: "#111827", fontWeight: 900, fontSize: 20, display: "flex", alignItems: "center", gap: 8 }}>
                         <span style={{ width: 9, height: 9, borderRadius: "50%", background: "#22C55E", display: "inline-block", boxShadow: "0 0 0 3px rgba(34,197,94,0.25)" }} />
                         Lojas Abertas {cidade}
                       </h2>
-                      {temMais && (
-                        <button
-                          onClick={() => router.push(`/busca?cidade=${encodeURIComponent(cidade)}`)}
-                          style={{ background: "none", border: "none", color: "#EA1B2D", fontSize: 13, fontWeight: 800, cursor: "pointer" }}>
-                          Ver mais
-                        </button>
-                      )}
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(280px, 1fr))", gap: isMobile ? 0 : 20 }}>
-                      {lojasPreview.map(loja => <LojaCard key={loja.id} loja={loja} isMobile={isMobile} userCoords={userCoords} />)}
-                      {temMais && (
-                        <VerMaisCard
-                          cidade={cidade}
-                          quantidade={lojasCidade.length - PREVIEW}
-                          isMobile={isMobile}
-                          onClick={() => router.push(`/busca?cidade=${encodeURIComponent(cidade)}`)}
-                        />
-                      )}
+                      {lojasCidade.map(loja => <LojaCard key={loja.id} loja={loja} isMobile={isMobile} userCoords={userCoords} compact />)}
                     </div>
                   </div>
-                  )
-                })
+                ))
               ) : abertas.length > 0 && (
                 <div style={{ marginBottom: isMobile ? 0 : 40 }}>
                   {!isMobile && (
@@ -1579,54 +1563,7 @@ function haversineKmCard(lat1: number, lng1: number, lat2: number, lng2: number)
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
-// Card "Ver mais N lojas" — some estilo visual dos LojaCard, no fim da prévia de cada
-// cidade. Existe porque um link pequeno "Ver mais" no cabeçalho é fácil de não notar
-// (quem não tem o hábito de clicar acha que só essas lojas da prévia estão abertas) —
-// um card do mesmo tamanho/estilo dos outros, na sequência natural da rolagem, deixa
-// claro que tem mais loja aberta ali, não que a lista acabou.
-function VerMaisCard({ cidade, quantidade, isMobile, onClick }: { cidade: string; quantidade: number; isMobile: boolean; onClick: () => void }) {
-  if (isMobile) {
-    return (
-      <button onClick={onClick} style={{
-        all: "unset", cursor: "pointer", width: "100%", boxSizing: "border-box",
-        display: "flex", alignItems: "center", gap: 14,
-        padding: "14px 16px", borderBottom: "1px solid #f0f0f0", background: "white",
-      }}>
-        <div style={{
-          width: 76, height: 76, borderRadius: 18, flexShrink: 0,
-          background: "rgba(220,38,38,0.08)", display: "flex", alignItems: "center", justifyContent: "center",
-          color: "#DC2626", fontWeight: 900, fontSize: 20,
-        }}>
-          +{quantidade}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ color: "#111827", fontWeight: 800, fontSize: 15, marginBottom: 2 }}>Ver mais {quantidade} loja{quantidade !== 1 ? "s" : ""}</p>
-          <p style={{ color: "#6B7280", fontSize: 12 }}>Abertas em {cidade}</p>
-        </div>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="2.5" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
-      </button>
-    )
-  }
-  return (
-    <button onClick={onClick} style={{
-      all: "unset", cursor: "pointer", boxSizing: "border-box",
-      background: "white", borderRadius: 16, boxShadow: "0 4px 20px rgba(0,0,0,0.09)",
-      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-      gap: 8, minHeight: 160, textAlign: "center", padding: 20,
-    }}>
-      <div style={{
-        width: 52, height: 52, borderRadius: "50%", background: "rgba(220,38,38,0.08)",
-        display: "flex", alignItems: "center", justifyContent: "center", color: "#DC2626", fontWeight: 900, fontSize: 16,
-      }}>
-        +{quantidade}
-      </div>
-      <p style={{ color: "#111827", fontWeight: 800, fontSize: 14 }}>Ver mais {quantidade} loja{quantidade !== 1 ? "s" : ""}</p>
-      <p style={{ color: "#6B7280", fontSize: 12 }}>Abertas em {cidade}</p>
-    </button>
-  )
-}
-
-function LojaCard({ loja, isMobile, userCoords }: { loja: Loja; isMobile: boolean; userCoords?: { lat: number; lng: number } | null }) {
+function LojaCard({ loja, isMobile, userCoords, compact }: { loja: Loja; isMobile: boolean; userCoords?: { lat: number; lng: number } | null; compact?: boolean }) {
   const c = CAT_COLORS[loja.categoria] ?? CAT_COLORS["Outros"]
   const CAT_ICONS_LOCAL: Record<string, string> = {
     Restaurante: "🍔", Mercadinho: "🛒", "Farmácia": "💊", Outros: "📦",
@@ -1642,21 +1579,25 @@ function LojaCard({ loja, isMobile, userCoords }: { loja: Loja; isMobile: boolea
     : null
 
   if (isMobile) {
+    // Modo compacto: ícone menor e linha mais baixa — usado na home "limpa" agora que
+    // toda loja aberta aparece sem corte, pra caber mais lojas na tela antes de precisar
+    // rolar até a próxima cidade. Pedido explícito do usuário, 2026-09-23.
+    const thumbSize = compact ? 56 : 76
     return (
       <Link href={`/restaurante/${loja.id}`} style={{ textDecoration: "none" }}>
         <div style={{
-          background: "white", display: "flex", alignItems: "center", gap: 14,
-          padding: "14px 16px", borderBottom: "1px solid #f0f0f0",
+          background: "white", display: "flex", alignItems: "center", gap: compact ? 12 : 14,
+          padding: compact ? "10px 16px" : "14px 16px", borderBottom: "1px solid #f0f0f0",
           opacity: loja.aberto ? 1 : 0.55,
         }}>
           {/* Thumb */}
           <div style={{
-            width: 76, height: 76, borderRadius: 18, overflow: "hidden",
+            width: thumbSize, height: thumbSize, borderRadius: compact ? 14 : 18, overflow: "hidden",
             flexShrink: 0, boxShadow: "0 3px 12px rgba(0,0,0,0.12)",
           }}>
             {loja.logo_url
               ? <img src={loja.logo_url} alt={loja.nome} style={{ width: "100%", height: "100%", objectFit: "contain", background: "white" }} />
-              : <div style={{ width: "100%", height: "100%", background: loja.aberto ? `linear-gradient(135deg, ${c.accent}, ${c.accent}bb)` : "linear-gradient(135deg,#d1d5db,#9ca3af)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32 }}>
+              : <div style={{ width: "100%", height: "100%", background: loja.aberto ? `linear-gradient(135deg, ${c.accent}, ${c.accent}bb)` : "linear-gradient(135deg,#d1d5db,#9ca3af)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: compact ? 24 : 32 }}>
                   {CAT_ICONS_LOCAL[loja.categoria]}
                 </div>}
           </div>
@@ -1686,7 +1627,7 @@ function LojaCard({ loja, isMobile, userCoords }: { loja: Loja; isMobile: boolea
                 <span style={{ color: "#9CA3AF", fontSize: 11, marginLeft: 2 }}>Sem avaliações</span>
               )}
             </div>
-            {loja.descricao && (
+            {loja.descricao && !compact && (
               <p style={{ color: "#6B7280", fontSize: 12, marginBottom: 5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{loja.descricao}</p>
             )}
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>

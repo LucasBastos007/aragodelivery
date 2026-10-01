@@ -7,6 +7,11 @@ import { useAuth } from "@/lib/auth"
 import type { Pedido, StatusPedido, ItemPedido } from "@/types"
 import { statusOperacional, type StatusOperacional } from "@/lib/statusPedido"
 import { diaEMinutosAgoraBrt, hojeYmdBrt, limitesDoDiaBrt } from "@/lib/periodoBrt"
+import { STATUS_LABEL } from "@/lib/pedidoLabels"
+import { imprimirPedido, imprimirComProtecao as imprimirComProtecaoShared } from "@/lib/impressao"
+import { BotaoImprimir } from "@/components/BotaoImprimir"
+import { ClienteInfo } from "@/components/ClienteInfo"
+import { TimelinePedido as Timeline } from "@/components/TimelinePedido"
 
 // AudioContext persistente e desbloqueado pelo primeiro toque do usuário
 let _audioCtx: AudioContext | null = null
@@ -79,126 +84,6 @@ function deveEstarAberto(horarios: Horarios | null): boolean | null {
   return minutos >= hIni * 60 + mIni && minutos < hFim * 60 + mFim
 }
 
-function imprimirPedido(pedido: Pedido, largura: "80mm" | "58mm" = "80mm", reimpressao = false) {
-  const now  = new Date(pedido.criado_em)
-  const data = now.toLocaleDateString("pt-BR")
-  const hora = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-
-  const PGTO: Record<string, string> = {
-    pix: "PIX", cartao: "Cartão", dinheiro: "Dinheiro",
-    maquininha: "Maquininha", apple_pay: "Apple Pay", google_pay: "Google Pay",
-  }
-
-  const itensHtml = (pedido.itens ?? []).map((i: any) => {
-    const adicionaisHtml = (i.adicionais ?? []).map((a: any) =>
-      `<tr><td colspan="2" class="obs">  + ${a.nome}${a.preco > 0 ? ` R$ ${a.preco.toFixed(2).replace(".", ",")}` : ""}</td></tr>`
-    ).join("")
-    return `
-    <tr>
-      <td>${i.quantidade}x ${i.nome}</td>
-      <td class="r">R$ ${(i.preco * i.quantidade).toFixed(2).replace(".", ",")}</td>
-    </tr>
-    ${adicionaisHtml}
-    ${i.observacao ? `<tr><td colspan="2" class="obs">  obs: ${i.observacao}</td></tr>` : ""}
-  `
-  }).join("")
-
-  const bodyW  = largura === "58mm" ? "54mm" : "76mm"
-  const pageW  = largura
-  const fsBase = largura === "58mm" ? "11px" : "12px"
-  const fsBig  = largura === "58mm" ? "13px" : "14px"
-
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Pedido #${pedido.codigo}</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: 'Courier New', Courier, monospace;
-      font-size: ${fsBase};
-      font-weight: 700;
-      width: ${bodyW};
-      padding: 3mm 3mm;
-      color: #000;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-    .center { text-align: center; }
-    .r { text-align: right; white-space: nowrap; }
-    .dash { border-top: 2px solid #000; margin: 5px 0; }
-    table { width: 100%; border-collapse: collapse; }
-    td { padding: 2px 0; vertical-align: top; }
-    .obs { font-size: 10px; padding-left: 8px; }
-    .total-row td { font-size: ${fsBig}; padding-top: 5px; border-top: 2px solid #000; }
-    .section { margin: 5px 0 3px; font-size: ${fsBig}; text-transform: uppercase; letter-spacing: 0.5px; }
-    .codigo { font-size: 16px; letter-spacing: 1px; }
-    @media print {
-      body { margin: 0; }
-      @page { margin: 2mm; size: ${pageW} auto; }
-    }
-  </style>
-</head>
-<body>
-  <div class="center" style="margin-bottom:6px;">
-    <img src="https://chegodelivery.com/logo-chego.jpg" alt="Chegô" style="width:64px;height:64px;object-fit:contain;border-radius:8px;" />
-  </div>
-  ${reimpressao ? `<div class="center" style="border:2px solid #000; padding:3px 0; margin-bottom:6px;"><p style="font-size:${fsBig}; letter-spacing:1px;">⚠ REIMPRESSÃO</p></div>` : ""}
-  <div class="dash"></div>
-  <p class="codigo">PEDIDO #${pedido.codigo}</p>
-  <p>${data} às ${hora}</p>
-  <div class="dash"></div>
-  <p class="section">ITENS</p>
-  <table>${itensHtml}</table>
-  <div class="dash"></div>
-  <table>
-    <tr><td>Subtotal</td><td class="r">R$ ${(pedido.subtotal ?? 0).toFixed(2).replace(".", ",")}</td></tr>
-    <tr><td>Taxa de entrega</td><td class="r">R$ ${(pedido.taxa_entrega ?? 0).toFixed(2).replace(".", ",")}</td></tr>
-    <tr class="total-row"><td>TOTAL</td><td class="r">R$ ${pedido.total.toFixed(2).replace(".", ",")}</td></tr>
-  </table>
-  <div class="dash"></div>
-  <p>PAGAMENTO: ${PGTO[pedido.forma_pagamento] ?? pedido.forma_pagamento}</p>
-  ${pedido.forma_pagamento === "dinheiro" ? `<p>${(pedido as any).troco_para ? `TROCO PARA: R$ ${Number((pedido as any).troco_para).toFixed(2).replace(".", ",")}` : "SEM TROCO"}</p>` : ""}
-  ${pedido.nome_cliente ? `<div class="dash"></div><p class="section">CLIENTE</p><p>${pedido.nome_cliente}</p>${pedido.telefone_cliente ? `<p>Tel: ${pedido.telefone_cliente}</p>` : ""}` : ""}
-  ${pedido.endereco_entrega ? `<div class="dash"></div><p class="section">ENDEREÇO DE ENTREGA</p><p>${pedido.endereco_entrega}</p>` : ""}
-  ${pedido.observacao ? `<div class="dash"></div><p class="section">OBSERVAÇÃO</p><p>${pedido.observacao}</p>` : ""}
-  <div class="dash"></div>
-  <p class="center" style="font-size:13px;">*** CHEGÔ DELIVERY ***</p>
-  <br><br>
-</body>
-</html>`
-
-  const win = window.open("", "_blank", "width=420,height=600,menubar=no,toolbar=no")
-  if (win) {
-    win.document.write(html)
-    win.document.close()
-    win.focus()
-    const img = win.document.querySelector("img")
-    if (img && !img.complete) {
-      img.onload = () => { win.print(); win.close() }
-      img.onerror = () => { win.print(); win.close() }
-      setTimeout(() => { win.print(); win.close() }, 3000)
-    } else {
-      setTimeout(() => { win.print(); win.close() }, 400)
-    }
-  }
-}
-
-const STATUS_LABEL: Record<StatusPedido, string> = {
-  aguardando_pagamento: "Aguard. pagamento",
-  pendente:          "Novo pedido",
-  aceito:            "Aceito",
-  preparando:        "Preparando",
-  pronto:            "Pronto para entrega",
-  aguardando_aceite: "Aguardando motoboy",
-  indo_para_loja:    "Motoboy a caminho",
-  na_loja:           "Motoboy na loja",
-  em_rota:           "Em rota de entrega",
-  coletado:          "Coletado",
-  entregue:          "Entregue",
-  cancelado:         "Cancelado",
-}
 const PROXIMO_STATUS: Partial<Record<StatusPedido, StatusPedido>> = {
   pendente:   "aceito",
   aceito:     "preparando",
@@ -219,127 +104,6 @@ const PAGAMENTO_ICON: Record<string, string> = {
 // sempre que LojaDashboard re-renderiza — e isso acontece a cada 15s (polling de
 // load()). Tudo que antes vinha por closure agora entra explícito via props.
 
-function ClienteInfo({ pedido, contadorClientes }: { pedido: Pedido; contadorClientes: Record<string, number> }) {
-  if (!pedido.nome_cliente && !pedido.endereco_entrega) return null
-  const totalPedidos = pedido.telefone_cliente ? (contadorClientes[pedido.telefone_cliente] ?? 0) : 0
-  const isPrimeiro = totalPedidos === 0
-  return (
-    <div style={{
-      background: "#F8FAFC", borderRadius: 12, padding: "10px 13px", marginBottom: 12,
-      border: "1px solid #E5E7EB", display: "flex", flexDirection: "column", gap: 5,
-    }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-          <span style={{ fontSize: 14 }}>👤</span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
-            {pedido.nome_cliente ?? "—"}
-          </span>
-          {pedido.telefone_cliente && (
-            <span style={{ fontSize: 12, color: "#6B7280" }}>{pedido.telefone_cliente}</span>
-          )}
-        </div>
-        <span style={{
-          fontSize: 10, fontWeight: 800, padding: "2px 8px", borderRadius: 999, whiteSpace: "nowrap",
-          background: isPrimeiro ? "rgba(249,115,22,0.12)" : "rgba(34,197,94,0.1)",
-          color: isPrimeiro ? "#ea580c" : "#15803d",
-        }}>
-          {isPrimeiro ? "1º pedido" : `${totalPedidos + 1}º pedido`}
-        </span>
-      </div>
-      {pedido.endereco_entrega && (
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
-          <span style={{ fontSize: 12, flexShrink: 0, marginTop: 1 }}>📍</span>
-          <span style={{ fontSize: 12, color: "#374151", lineHeight: 1.4 }}>{pedido.endereco_entrega}</span>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// "Vias" (cozinha/balcão/entrega), quantidade de cópias e impressoras diferentes por
-// destino ficam pra uma rodada futura — não implementados agora, de propósito (spec).
-// Esse componente só recebe "pedido" inteiro (não campos soltos) e um único
-// larguraPapel/onImprimir já parametrizados, então adicionar essas opções depois é só
-// estender esses props — não precisa refatorar quem já chama BotaoImprimir hoje.
-function BotaoImprimir({ pedido, larguraPapel, ultimaImpressao, onImprimir, onToggleLargura }: {
-  pedido: Pedido; larguraPapel: "80mm" | "58mm"; ultimaImpressao?: string
-  onImprimir: (p: Pedido) => void; onToggleLargura: () => void
-}) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-        <button
-          onClick={() => onImprimir(pedido)}
-          title={ultimaImpressao ? `Reimprimir comanda (${larguraPapel})` : `Imprimir comanda (${larguraPapel})`}
-          style={{
-            padding: "8px 12px", borderRadius: 10, border: "1px solid #e5e7eb",
-            background: "#fff", cursor: "pointer", display: "flex", alignItems: "center", gap: 5,
-            color: "#6B7280", fontSize: 12, fontWeight: 600,
-          }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
-            <rect x="6" y="14" width="12" height="8"/>
-          </svg>
-          {ultimaImpressao ? "Reimprimir" : "Imprimir"}
-        </button>
-        <button
-          onClick={onToggleLargura}
-          title="Alternar tamanho do papel"
-          style={{
-            padding: "6px 8px", borderRadius: 8, border: "1px solid #e5e7eb",
-            background: "#f9fafb", cursor: "pointer", fontSize: 10, fontWeight: 700,
-            color: "#6B7280", lineHeight: 1,
-          }}
-        >
-          {larguraPapel}
-        </button>
-      </div>
-      {ultimaImpressao && (
-        <span style={{ fontSize: 10.5, color: "#9CA3AF", display: "flex", alignItems: "center", gap: 4 }}>
-          🖨 Impresso às {new Date(ultimaImpressao).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-        </span>
-      )}
-    </div>
-  )
-}
-
-// Timeline com timestamps REAIS do pedido — nunca estimar/inventar uma etapa que não
-// tem timestamp gravado (mesma disciplina de src/lib/tempoPedido.ts). Cada etapa só
-// aparece se o campo correspondente existir no banco.
-function timelineDoPedido(p: Pedido): { label: string; timestamp: string }[] {
-  const entradas: { label: string; timestamp: string }[] = [
-    { label: "Pedido recebido", timestamp: p.criado_em },
-  ]
-  if (p.aceito_em) entradas.push({ label: "Aceito pela loja", timestamp: p.aceito_em })
-  if (p.pronto_em) entradas.push({ label: "Pronto", timestamp: p.pronto_em })
-  if (p.coletado_em) entradas.push({ label: "Coletado pelo motoboy", timestamp: p.coletado_em })
-  if (p.entregue_em) entradas.push({ label: "Entregue", timestamp: p.entregue_em })
-  if (p.cancelado_em) entradas.push({ label: "Cancelado", timestamp: p.cancelado_em })
-  return entradas
-}
-
-function Timeline({ pedido }: { pedido: Pedido }) {
-  const entradas = timelineDoPedido(pedido)
-  return (
-    <div style={{ display: "flex", flexDirection: "column" }}>
-      {entradas.map((e, i) => (
-        <div key={i} style={{ display: "flex", gap: 10 }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 16, flexShrink: 0 }}>
-            <div style={{ width: 9, height: 9, borderRadius: "50%", background: i === entradas.length - 1 ? "#f97316" : "#D1D5DB", marginTop: 3, flexShrink: 0 }} />
-            {i < entradas.length - 1 && <div style={{ width: 2, flex: 1, background: "#E5E7EB", minHeight: 18 }} />}
-          </div>
-          <div style={{ paddingBottom: 14 }}>
-            <p style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{e.label}</p>
-            <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 1 }}>
-              {new Date(e.timestamp).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
-            </p>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
 
 // Handlers que Ações/Cards precisam mas não fazem parte dos dados do próprio pedido —
 // agrupados num objeto só pra não ficar passando 8 props soltas em cada componente.
@@ -376,7 +140,10 @@ function AcoesNovo({ p, ctx }: { p: Pedido; ctx: AcoesCtx }) {
 
 // Ações do pedido em andamento (aceito/preparando/pronto/aguardando_aceite/em rota) —
 // idem: única fonte, usada pelo card e pelo drawer.
-function AcoesEmAndamento({ p, ctx }: { p: Pedido; ctx: AcoesCtx }) {
+// `compact`: usado só pelo card do board de Pedidos (CardAndamento) — mesmos botões e
+// mesma lógica, só padding/fonte menores pra caber mais informação num card menor. O
+// drawer de detalhe (mais espaço disponível) continua chamando sem essa prop.
+function AcoesEmAndamento({ p, ctx, compact }: { p: Pedido; ctx: AcoesCtx; compact?: boolean }) {
   const isRetirada = p.endereco_entrega?.includes("Retirada") ?? false
   const labelAvanco = isRetirada && p.status === "preparando" ? "Pronto p/ Retirada" : PROXIMO_LABEL[p.status]
   const mostraAvanco = PROXIMO_STATUS[p.status] && !(isRetirada && p.status === "pronto")
@@ -384,20 +151,23 @@ function AcoesEmAndamento({ p, ctx }: { p: Pedido; ctx: AcoesCtx }) {
     ? `https://wa.me/55${p.telefone_cliente.replace(/\D/g,"")}?text=${encodeURIComponent(`Olá! Seu pedido #${p.codigo} está pronto para retirada 🛍️ Pode vir buscar na loja!`)}`
     : null
   return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", gap: compact ? 6 : 8, flexWrap: "wrap" }}>
       {mostraAvanco && (
+        // Empilha 100% de largura quando compact — lado a lado (flex:1) o texto do botão
+        // espremia em 2-3 linhas feias em colunas mais estreitas (bug real reportado,
+        // 2026-09-27: "Marcar / como / pronto" quebrado em 3 linhas).
         <button onClick={() => ctx.onAvancar(p.id, p.status)} disabled={!!ctx.atualizando}
-          className="btn-ghost" style={{ flex: 1, justifyContent: "center", fontSize: 12 }}>
+          className="btn-ghost" style={{ flex: compact ? "1 1 100%" : 1, justifyContent: "center", fontSize: compact ? 11.5 : 12, padding: compact ? "8px 10px" : undefined, whiteSpace: "nowrap" }}>
           {ctx.atualizando === p.id ? "..." : labelAvanco}
         </button>
       )}
 
       {(p.status === "pronto" || p.status === "preparando" || p.status === "aceito") && !p.motoboy_id && !isRetirada && (
         <button onClick={() => ctx.onChamarMotoboy(p.id)} disabled={!!ctx.atualizando}
-          className="btn-primary" style={{ flex: 1, justifyContent: "center", fontSize: 13, display: "flex", alignItems: "center", gap: 7 }}>
+          className="btn-primary" style={{ flex: compact ? "1 1 100%" : 1, justifyContent: "center", fontSize: compact ? 12 : 13, padding: compact ? "8px 10px" : undefined, display: "flex", alignItems: "center", gap: compact ? 5 : 7, whiteSpace: "nowrap" }}>
           {ctx.atualizando === p.id ? "Chamando..." : (
             <>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width={compact ? 12 : 14} height={compact ? 12 : 14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M5 17H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v9a2 2 0 0 1-2 2h-3"/>
                 <circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>
               </svg>
@@ -411,37 +181,37 @@ function AcoesEmAndamento({ p, ctx }: { p: Pedido; ctx: AcoesCtx }) {
         <>
           {waLink && (
             <a href={waLink} target="_blank" rel="noreferrer"
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "11px 14px", borderRadius: 12, background: "#25D366", color: "#fff", fontWeight: 700, fontSize: 12, textDecoration: "none", flexShrink: 0 }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: compact ? "8px 11px" : "11px 14px", borderRadius: 12, background: "#25D366", color: "#fff", fontWeight: 700, fontSize: compact ? 11 : 12, textDecoration: "none", flexShrink: 0 }}>
+              <svg width={compact ? 14 : 16} height={compact ? 14 : 16} viewBox="0 0 24 24" fill="currentColor">
                 <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
               </svg>
               Avisar cliente
             </a>
           )}
           <button onClick={() => ctx.onConfirmarRetirada(p.id)} disabled={!!ctx.atualizando}
-            className="btn-primary" style={{ flex: 1, justifyContent: "center", fontSize: 12 }}>
+            className="btn-primary" style={{ flex: 1, justifyContent: "center", fontSize: compact ? 11 : 12, padding: compact ? "8px 10px" : undefined }}>
             {ctx.atualizando === p.id ? "..." : "✓ Confirmar Retirada"}
           </button>
         </>
       )}
 
       {p.status === "aguardando_aceite" && (
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={{ padding: "12px 16px", borderRadius: 12, background: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.25)", display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ position: "relative", width: 36, height: 36, flexShrink: 0 }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: compact ? 6 : 8 }}>
+          <div style={{ padding: compact ? "8px 10px" : "12px 16px", borderRadius: 12, background: "rgba(234,179,8,0.08)", border: "1px solid rgba(234,179,8,0.25)", display: "flex", alignItems: "center", gap: compact ? 8 : 12 }}>
+            <div style={{ position: "relative", width: compact ? 28 : 36, height: compact ? 28 : 36, flexShrink: 0 }}>
               <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "rgba(234,179,8,0.25)", animation: "pulse 1.2s ease-out infinite" }} />
               <div style={{ position: "absolute", inset: 4, borderRadius: "50%", background: "rgba(234,179,8,0.4)", animation: "pulse 1.2s ease-out infinite", animationDelay: "0.3s" }} />
               <div style={{ position: "absolute", inset: 8, borderRadius: "50%", background: "#eab308" }} />
-              <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🛵</span>
+              <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: compact ? 13 : 16 }}>🛵</span>
             </div>
-            <div>
-              <p style={{ color: "#ca8a04", fontSize: 13, fontWeight: 800 }}>Buscando motoboy...</p>
-              <p style={{ color: "#a16207", fontSize: 11, marginTop: 2 }}>Aguardando um entregador aceitar</p>
+            <div style={{ minWidth: 0 }}>
+              <p style={{ color: "#ca8a04", fontSize: compact ? 12 : 13, fontWeight: 800 }}>Buscando motoboy...</p>
+              {!compact && <p style={{ color: "#a16207", fontSize: 11, marginTop: 2 }}>Aguardando um entregador aceitar</p>}
             </div>
           </div>
           <button onClick={() => ctx.onChamarMotoboy(p.id)} disabled={!!ctx.atualizando} style={{
-            padding: "9px 12px", borderRadius: 10, border: "1px solid rgba(234,179,8,0.4)",
-            background: "transparent", color: "#ca8a04", fontWeight: 700, fontSize: 12,
+            padding: compact ? "7px 10px" : "9px 12px", borderRadius: 10, border: "1px solid rgba(234,179,8,0.4)",
+            background: "transparent", color: "#ca8a04", fontWeight: 700, fontSize: compact ? 11 : 12,
             cursor: ctx.atualizando ? "not-allowed" : "pointer",
           }}>
             {ctx.atualizando === p.id ? "Chamando..." : "🔄 Chamar novamente"}
@@ -451,12 +221,12 @@ function AcoesEmAndamento({ p, ctx }: { p: Pedido; ctx: AcoesCtx }) {
 
       {(p.status === "indo_para_loja" || p.status === "na_loja" || p.status === "em_rota") && (
         <button onClick={() => ctx.onTrack(p)} style={{
-          flex: 1, padding: "10px 14px", borderRadius: 12, border: "1.5px solid rgba(249,115,22,0.4)",
-          background: "rgba(249,115,22,0.08)", cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
+          flex: 1, padding: compact ? "8px 10px" : "10px 14px", borderRadius: 12, border: "1.5px solid rgba(249,115,22,0.4)",
+          background: "rgba(249,115,22,0.08)", cursor: "pointer", display: "flex", alignItems: "center", gap: compact ? 6 : 8,
         }}>
-          <span style={{ fontSize: 18 }}>📍</span>
-          <div style={{ textAlign: "left" }}>
-            <p style={{ color: "#ea580c", fontSize: 13, fontWeight: 800 }}>
+          <span style={{ fontSize: compact ? 15 : 18 }}>📍</span>
+          <div style={{ textAlign: "left", minWidth: 0 }}>
+            <p style={{ color: "#ea580c", fontSize: compact ? 12 : 13, fontWeight: 800 }}>
               {p.status === "indo_para_loja" ? "Motoboy a caminho" : p.status === "na_loja" ? "Motoboy na loja" : "Em rota de entrega"}
             </p>
             {p.motoboy?.nome
@@ -464,7 +234,7 @@ function AcoesEmAndamento({ p, ctx }: { p: Pedido; ctx: AcoesCtx }) {
               : <p style={{ color: "#9a3412", fontSize: 11, marginTop: 1 }}>Toque para ver no mapa</p>
             }
           </div>
-          <div style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 6px #22c55e" }} />
+          <div style={{ marginLeft: "auto", width: 8, height: 8, borderRadius: "50%", background: "#22c55e", boxShadow: "0 0 6px #22c55e", flexShrink: 0 }} />
         </button>
       )}
 
@@ -479,7 +249,7 @@ function CardNovo({ p, contadorClientes, onAbrirDetalhe, ctx }: {
   p: Pedido; contadorClientes: Record<string, number>; onAbrirDetalhe: (p: Pedido) => void; ctx: AcoesCtx
 }) {
   return (
-    <div className="card" style={{ padding: "18px 16px", border: "1px solid rgba(249,115,22,0.5)", background: "rgba(249,115,22,0.05)", animation: "pulse 2s infinite", cursor: "pointer" }}
+    <div className="card card-kanban" style={{ padding: "18px 16px", border: "1px solid rgba(249,115,22,0.5)", background: "rgba(249,115,22,0.05)", animation: "pulse 2s infinite", cursor: "pointer" }}
       onClick={() => onAbrirDetalhe(p)}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12, gap: 8 }}>
         <div style={{ minWidth: 0 }}>
@@ -488,7 +258,7 @@ function CardNovo({ p, contadorClientes, onAbrirDetalhe, ctx }: {
             #{p.codigo} · {new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
           </p>
         </div>
-        <p style={{ fontSize: 20, fontWeight: 900, color: "#111827", flexShrink: 0 }}>R$ {p.total.toFixed(2)}</p>
+        <p style={{ fontSize: 20, fontWeight: 900, color: "#111827", flexShrink: 0, whiteSpace: "nowrap" }}>R$ {p.total.toFixed(2)}</p>
       </div>
 
       {p.itens && p.itens.length > 0 && (
@@ -526,30 +296,50 @@ function CardNovo({ p, contadorClientes, onAbrirDetalhe, ctx }: {
   )
 }
 
+// Cor do badge por status — antes era sempre azul pra qualquer status; agora reflete
+// a urgência/estado real de relance no board (amarelo = em preparo, verde = pronto,
+// laranja = esperando motoboy, azul = a caminho/informativo). Reaproveita as classes
+// .badge-* que já existiam em globals.css, só não eram usadas pra essa distinção.
+const STATUS_BADGE_CLASS: Partial<Record<StatusPedido, string>> = {
+  aceito: "badge-blue",
+  preparando: "badge-yellow",
+  pronto: "badge-green",
+  aguardando_aceite: "badge-orange",
+  indo_para_loja: "badge-blue",
+  na_loja: "badge-blue",
+  em_rota: "badge-blue",
+  coletado: "badge-blue",
+  entregue: "badge-gray",
+}
+
 // Card das colunas "Em preparo" / "Aguardando motoboy" / "Em entrega".
 function CardAndamento({ p, contadorClientes, onAbrirDetalhe, ctx }: {
   p: Pedido; contadorClientes: Record<string, number>; onAbrirDetalhe: (p: Pedido) => void; ctx: AcoesCtx
 }) {
   return (
-    <div className="card" style={{ padding: "14px 16px", cursor: "pointer" }} onClick={() => onAbrirDetalhe(p)}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span className="badge badge-blue">{STATUS_LABEL[p.status]}</span>
-          <span style={{ fontSize: 12, color: "#9CA3AF" }}>#{p.codigo}</span>
+    <div className="card card-kanban" style={{ padding: "10px 12px", cursor: "pointer" }} onClick={() => onAbrirDetalhe(p)}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+          <span className={`badge ${STATUS_BADGE_CLASS[p.status] ?? "badge-blue"}`} style={{ flexShrink: 0, fontSize: 9.5, padding: "2px 7px" }}>{STATUS_LABEL[p.status]}</span>
+          <span style={{ fontSize: 11, color: "#9CA3AF", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>#{p.codigo}</span>
         </div>
-        <p style={{ fontWeight: 700, color: "#111827" }}>R$ {p.total.toFixed(2)}</p>
+        <p style={{ fontWeight: 800, fontSize: 14, color: "#111827", flexShrink: 0, whiteSpace: "nowrap" }}>R$ {p.total.toFixed(2)}</p>
       </div>
 
-      {p.itens && (
-        <p style={{ fontSize: 13, color: "#111827", fontWeight: 700, marginBottom: 8 }}>
-          {p.itens.map((i: any) => `${i.quantidade}x ${i.nome}`).join(", ")}
-        </p>
+      {p.itens && p.itens.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 1, marginBottom: 6 }}>
+          {p.itens.map((i: any, idx: number) => (
+            <p key={i.id ?? idx} style={{ fontSize: 12, color: "#374151", lineHeight: 1.35 }}>
+              <span style={{ fontWeight: 800, color: "#111827" }}>{i.quantidade}x</span> {i.nome}
+            </p>
+          ))}
+        </div>
       )}
 
-      <ClienteInfo pedido={p} contadorClientes={contadorClientes} />
+      <ClienteInfo pedido={p} contadorClientes={contadorClientes} compact />
 
-      <div onClick={e => e.stopPropagation()}>
-        <AcoesEmAndamento p={p} ctx={ctx} />
+      <div onClick={e => e.stopPropagation()} style={{ marginTop: 8 }}>
+        <AcoesEmAndamento p={p} ctx={ctx} compact />
       </div>
     </div>
   )
@@ -564,10 +354,18 @@ export default function LojaDashboard() {
   // "Operação agora" na Visão Geral (redesign do Dashboard, 2026-09-22). Só filtra a
   // exibição da lista já carregada, não muda nenhuma query/lógica de pedidos existente.
   // Deriva direto do searchParams (reativo por natureza) — sem estado/efeito paralelo.
+  //
+  // "entregue" é um valor A MAIS aqui, só pra essa tela — de propósito NÃO faz parte de
+  // StatusOperacional/statusOperacional() (lib/statusPedido.ts), que é a fonte
+  // compartilhada com o Dashboard e continua representando só a operação ATIVA. A
+  // coluna "Entregue" abaixo é lida de uma query separada (pedidosEntregues), pra nunca
+  // arriscar fazer pedido entregue aparecer em "Operação Agora" por engano.
+  type AbaPedidos = StatusOperacional | "entregue"
   const searchParams = useSearchParams()
-  const focoAtivo = searchParams.get("foco") as StatusOperacional | null
+  const focoAtivo = searchParams.get("foco") as AbaPedidos | null
 
   const [pedidos, setPedidos] = useState<Pedido[]>([])
+  const [pedidosEntregues, setPedidosEntregues] = useState<Pedido[]>([])
   const [contadorClientes, setContadorClientes] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [atualizando, setAtualizando] = useState<string | null>(null)
@@ -661,12 +459,12 @@ export default function LojaDashboard() {
   async function load() {
     if (!loja_id) return
     const [inicioHojeBrt] = limitesDoDiaBrt(hojeYmdBrt())
-    const [{ data }, { data: historico }] = await Promise.all([
+    const [{ data }, { data: historico }, { data: entregues }] = await Promise.all([
       supabase
         .from("pedidos")
         .select("*, itens:itens_pedido(*), motoboy:motoboys(nome,telefone)")
         .eq("loja_id", loja_id)
-        .not("status", "in", '("aguardando_pagamento","coletado","entregue","cancelado")')
+        .not("status", "in", '("aguardando_pagamento","entregue","cancelado")')
         .gte("criado_em", inicioHojeBrt)
         .order("criado_em", { ascending: false }),
       supabase
@@ -675,6 +473,15 @@ export default function LojaDashboard() {
         .eq("loja_id", loja_id)
         .eq("status", "entregue")
         .not("telefone_cliente", "is", null),
+      // Coluna "Entregue" do kanban — só pedidos entregues HOJE, separado da query
+      // principal de propósito (ver comentário de AbaPedidos acima).
+      supabase
+        .from("pedidos")
+        .select("*, itens:itens_pedido(*), motoboy:motoboys(nome,telefone)")
+        .eq("loja_id", loja_id)
+        .eq("status", "entregue")
+        .gte("criado_em", inicioHojeBrt)
+        .order("entregue_em", { ascending: false }),
     ])
 
     const resultado = (data as Pedido[]) ?? []
@@ -695,6 +502,7 @@ export default function LojaDashboard() {
     prevPendentesRef.current = novosPendentes
     isFirstLoad.current = false
     setPedidos(resultado)
+    setPedidosEntregues((entregues as Pedido[]) ?? [])
     setContadorClientes(contador)
     setLoading(false)
 
@@ -974,7 +782,9 @@ export default function LojaDashboard() {
   // Aba mobile ativa: derivada direto de "?foco=" (nunca um state próprio) — assim
   // clicar num pill (que só troca a URL) ou chegar de um link do Dashboard com
   // ?foco=X reflete na hora, sem precisar sincronizar um state secundário em effect.
-  const abaAtiva: StatusOperacional = (focoAtivo && COLUNAS.some(c => c.chave === focoAtivo)) ? focoAtivo : "novo"
+  const abaAtiva: AbaPedidos = focoAtivo === "entregue"
+    ? "entregue"
+    : (focoAtivo && COLUNAS.some(c => c.chave === focoAtivo)) ? focoAtivo : "novo"
 
   useEffect(() => {
     if (pendentes.length === 0) return
@@ -1035,20 +845,11 @@ export default function LojaDashboard() {
     localStorage.setItem("print_largura", nova)
   }
 
-  // Proteção contra impressão duplicada: se o pedido já foi impresso nesta sessão,
-  // confirma antes de mandar pra impressora de novo — clique duplo ou reimpressão por
-  // engano não gera uma segunda via sem o lojista perceber. Na reimpressão consciente,
-  // a comanda sai com um aviso "REIMPRESSÃO" impresso (não só uma confirmação na tela).
+  // Proteção contra impressão duplicada — implementação compartilhada com o Histórico
+  // (src/lib/impressao.ts), comportamento idêntico ao de antes (forcarReimpressao
+  // omitido = false, igual sempre foi aqui em Pedidos).
   function imprimirComProtecao(pedido: Pedido) {
-    const ultimaImpressao = impressos[pedido.id]
-    let ehReimpressao = false
-    if (ultimaImpressao) {
-      const hora = new Date(ultimaImpressao).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-      if (!confirm(`Pedido #${pedido.codigo} já foi impresso às ${hora}. Imprimir de novo?`)) return
-      ehReimpressao = true
-    }
-    imprimirPedido(pedido, larguraPapel, ehReimpressao)
-    setImpressos(prev => ({ ...prev, [pedido.id]: new Date().toISOString() }))
+    imprimirComProtecaoShared({ pedido, larguraPapel, impressos, setImpressos })
   }
 
   // Handlers agrupados pra passar de uma vez pros componentes de ação (hoisted fora
@@ -1327,11 +1128,30 @@ export default function LojaDashboard() {
             </button>
           )
         })}
+        {/* "Entregue" — pill extra, fora de COLUNAS/porColuna de propósito (ver comentário
+            de AbaPedidos acima); mesmo estilo, só lida de pedidosEntregues. */}
+        <button
+          onClick={() => router.replace(`/loja?foco=entregue`)}
+          style={{
+            display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 999,
+            border: `1.5px solid ${abaAtiva === "entregue" ? "#f97316" : "#E5E7EB"}`,
+            background: abaAtiva === "entregue" ? "rgba(249,115,22,0.08)" : "white",
+            color: abaAtiva === "entregue" ? "#ea580c" : "#6B7280",
+            fontWeight: 700, fontSize: 12.5, whiteSpace: "nowrap", cursor: "pointer", flexShrink: 0,
+          }}>
+          Entregue
+          <span style={{
+            minWidth: 18, height: 18, borderRadius: 999, padding: "0 5px",
+            background: pedidosEntregues.length > 0 ? (abaAtiva === "entregue" ? "#f97316" : "#9CA3AF") : "transparent",
+            color: pedidosEntregues.length > 0 ? "white" : "#9CA3AF",
+            fontSize: 10.5, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center",
+          }}>{pedidosEntregues.length}</span>
+        </button>
       </div>
 
       {loading ? (
         <p style={{ textAlign: "center", marginTop: 48, color: "#9CA3AF" }}>Carregando pedidos...</p>
-      ) : pedidos.length === 0 ? (
+      ) : pedidos.length === 0 && pedidosEntregues.length === 0 ? (
         <div style={{ textAlign: "center", marginTop: 64 }}>
           <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ margin: "0 auto 16px" }}><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>
           <p style={{ fontWeight: 700, color: "#111827" }}>Nenhum pedido hoje</p>
@@ -1396,6 +1216,23 @@ export default function LojaDashboard() {
                 </div>
               </div>
             ))}
+            {/* "Entregue" — mesma estrutura visual das colunas de COLUNAS, mas lida de
+                pedidosEntregues (query separada, ver comentário de AbaPedidos acima). */}
+            <div className="kanban-coluna" data-ativa={abaAtiva === "entregue"}>
+              <div className="kanban-coluna-header">
+                <span>Entregue</span>
+                <span className="kanban-coluna-contador">{pedidosEntregues.length}</span>
+              </div>
+              <div className="kanban-coluna-lista">
+                {pedidosEntregues.length === 0 ? (
+                  <p style={{ color: "#9CA3AF", fontSize: 12.5, textAlign: "center", padding: "24px 8px" }}>Nenhum pedido</p>
+                ) : (
+                  pedidosEntregues.map(p =>
+                    <CardAndamento key={p.id} p={p} contadorClientes={contadorClientes} onAbrirDetalhe={setDetalhePedido} ctx={acoesCtx} />
+                  )
+                )}
+              </div>
+            </div>
           </div>
         </>
       )}
@@ -1458,8 +1295,10 @@ export default function LojaDashboard() {
       )}
 
       <style>{`
+        .card-kanban { box-shadow: 0 1px 2px rgba(15,23,42,0.05); transition: box-shadow 0.15s ease, transform 0.15s ease; }
+        .card-kanban:hover { box-shadow: 0 6px 18px rgba(15,23,42,0.10); transform: translateY(-2px); }
         .kanban-grid { display: flex; flex-direction: column; gap: 14px; }
-        .kanban-coluna { display: none; flex-direction: column; gap: 10px; }
+        .kanban-coluna { display: none; flex-direction: column; gap: 8px; }
         .kanban-coluna[data-ativa="true"] { display: flex; }
         .kanban-coluna-header {
           display: flex; align-items: center; justify-content: space-between;
@@ -1470,11 +1309,18 @@ export default function LojaDashboard() {
           background: #F3F4F6; color: #6B7280; border-radius: 999px;
           padding: 1px 8px; font-size: 11px;
         }
-        .kanban-coluna-lista { display: flex; flex-direction: column; gap: 10px; }
+        .kanban-coluna-lista { display: flex; flex-direction: column; gap: 8px; }
         @media (min-width: 1024px) {
           .pedidos-container { max-width: 1240px !important; }
-          .kanban-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; align-items: start; }
-          .kanban-coluna { display: flex !important; }
+          /* minmax(190px, 1fr) em vez de minmax(0, 1fr): cada coluna nunca fica mais
+             estreita que 190px (o que espremia o cabeçalho do card — preço quebrando
+             em duas linhas, código cortado — e os botões "Marcar como pronto"/"Chamar
+             motoboy" lado a lado quebravam em 2-3 linhas cada). Se a janela não couber
+             as 6 colunas nessa largura mínima, o board rola na horizontal em vez de
+             espremer o conteúdo — 190px é o mínimo real pra caber os botões (agora
+             empilhados 100% de largura em vez de lado a lado) numa linha só. */
+          .kanban-grid { display: grid; grid-template-columns: repeat(6, minmax(190px, 1fr)); gap: 10px; align-items: start; overflow-x: auto; padding-bottom: 4px; }
+          .kanban-coluna { display: flex !important; min-width: 190px; }
           .kanban-coluna-lista { max-height: calc(100vh - 260px); overflow-y: auto; padding-right: 4px; }
         }
       `}</style>

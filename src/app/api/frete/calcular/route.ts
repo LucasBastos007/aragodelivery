@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
   const lng = searchParams.get("lng") ? parseFloat(searchParams.get("lng")!) : null
   const cidade = searchParams.get("cidade")
   const bairro = searchParams.get("bairro")
+  const cliente_id = searchParams.get("cliente_id")
 
   if (!loja_id) return NextResponse.json({ error: "loja_id obrigatório" }, { status: 400 })
 
@@ -42,6 +43,7 @@ export async function GET(req: NextRequest) {
       lng_entrega: lng,
       cidade_entrega: cidade,
       bairro_entrega: bairro,
+      cliente_id,
     })
     return NextResponse.json({ taxa_entrega: taxa })
   } catch (e) {

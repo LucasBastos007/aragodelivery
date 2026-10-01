@@ -103,6 +103,49 @@ export async function POST(req: NextRequest) {
     if (!item.quantidade || item.quantidade < 1) return NextResponse.json({ error: "Quantidade inválida." }, { status: 422 })
   }
 
+  // Limite de unidades por cliente cadastrado, pra produtos promocionais (2026-09-26:
+  // "Combo lendário" da categoria "Lord's + Chegô" da Lord's Burguer, máx. 2 por
+  // cadastro). Soma o que o cliente já tem em pedidos não cancelados + o que está
+  // pedindo agora — sem cliente_id (convidado/pedido manual sem conta) não dá pra
+  // identificar "o mesmo cadastro", então não há como aplicar o limite.
+  const LIMITE_POR_CLIENTE: Record<string, number> = {
+    "37c4f5af-87c9-472e-a958-a7e718761739": 2, // Combo lendário — Lord's Burguer
+  }
+  if (cliente_id) {
+    for (const [produtoLimitadoId, limite] of Object.entries(LIMITE_POR_CLIENTE)) {
+      const quantidadeSolicitada = items
+        .filter((i: any) => i.produto_id === produtoLimitadoId)
+        .reduce((s: number, i: any) => s + Number(i.quantidade), 0)
+      if (quantidadeSolicitada === 0) continue
+
+      const { data: pedidosCliente } = await sb
+        .from("pedidos")
+        .select("id")
+        .eq("cliente_id", cliente_id)
+        .neq("status", "cancelado")
+      const pedidoIds = (pedidosCliente ?? []).map((p: any) => p.id)
+
+      let jaComprado = 0
+      if (pedidoIds.length > 0) {
+        const { data: itensAnteriores } = await sb
+          .from("itens_pedido")
+          .select("quantidade")
+          .eq("produto_id", produtoLimitadoId)
+          .in("pedido_id", pedidoIds)
+        jaComprado = (itensAnteriores ?? []).reduce((s: number, i: any) => s + Number(i.quantidade), 0)
+      }
+
+      if (jaComprado + quantidadeSolicitada > limite) {
+        const produtoNome = produtos.find((p: any) => p.id === produtoLimitadoId)?.nome ?? "este item"
+        return NextResponse.json({
+          error: jaComprado > 0
+            ? `Limite de ${limite} unidades por cliente para "${produtoNome}" — você já pediu ${jaComprado}.`
+            : `Limite de ${limite} unidades por cliente para "${produtoNome}".`,
+        }, { status: 422 })
+      }
+    }
+  }
+
   // 3. Calcula subtotal com preços reais do banco — inclusive dos adicionais, nunca
   // confiando no "preco"/"nome" que vêm no body (cliente pode mandar qualquer valor).
   // Preço do adicional é por unidade do item, igual ao que o carrinho já mostra pro
@@ -144,6 +187,7 @@ export async function POST(req: NextRequest) {
       lng_entrega,
       cidade_entrega,
       bairro_entrega,
+      cliente_id,
     })
   } catch (e) {
     if (e instanceof EnderecoForaDoRaioError) {

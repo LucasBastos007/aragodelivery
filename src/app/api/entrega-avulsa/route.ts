@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { requireLoja, unauthorized } from "@/lib/session"
-import webpush from "web-push"
+import { notificarMotoboysDisponiveisAvulsa } from "@/lib/notificacoesMotoboy"
 
 const admin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,71 +10,6 @@ const admin = createClient(
 
 function gerarCodigo() {
   return `AV${Math.floor(1000 + Math.random() * 9000)}`
-}
-
-function initVapid(): boolean {
-  try {
-    if (process.env.VAPID_EMAIL && process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
-      webpush.setVapidDetails(
-        process.env.VAPID_EMAIL,
-        process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
-        process.env.VAPID_PRIVATE_KEY
-      )
-      return true
-    }
-  } catch {}
-  return false
-}
-
-async function notificarTodosMotoboys(avulsa_id: string, codigo: string, taxa_entrega: number) {
-  const { data: motoboys } = await admin
-    .from("motoboys")
-    .select("id, push_subscription")
-    .eq("disponivel", true)
-    .eq("status", "ativo")
-
-  if (!motoboys || motoboys.length === 0 || !initVapid()) return
-
-  const payload = JSON.stringify({
-    title:      "Nova entrega avulsa!",
-    body:       `${codigo} — R$ ${taxa_entrega.toFixed(2)}`,
-    tag:        `avulsa-${avulsa_id}`,
-    url:        "/motoboy",
-    avulsa_id,
-    requireInteraction: true,
-  })
-
-  const expiredByMotoboy: Record<string, string[]> = {}
-
-  await Promise.allSettled(
-    motoboys.flatMap((m: any) => {
-      const subs: any[] = Array.isArray(m.push_subscription)
-        ? m.push_subscription
-        : m.push_subscription ? [m.push_subscription] : []
-      return subs.map(async sub => {
-        try {
-          await webpush.sendNotification(sub, payload)
-        } catch (e: any) {
-          if (e.statusCode === 410) {
-            ;(expiredByMotoboy[m.id] ??= []).push(sub.endpoint)
-          }
-        }
-      })
-    })
-  )
-
-  // Limpa subscriptions expiradas
-  for (const [motoboy_id, expiredEndpoints] of Object.entries(expiredByMotoboy)) {
-    const m = motoboys.find((x: any) => x.id === motoboy_id)
-    if (!m) continue
-    const subs: any[] = Array.isArray(m.push_subscription)
-      ? m.push_subscription
-      : m.push_subscription ? [m.push_subscription] : []
-    const filtradas = subs.filter((s: any) => !expiredEndpoints.includes(s?.endpoint))
-    await admin.from("motoboys")
-      .update({ push_subscription: filtradas.length ? filtradas : null })
-      .eq("id", motoboy_id)
-  }
 }
 
 export async function POST(req: NextRequest) {
@@ -127,11 +62,11 @@ export async function POST(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     // Notifica TODOS os motoboys disponíveis simultaneamente
-    notificarTodosMotoboys(
-      entrega.id,
-      entrega.codigo,
-      taxa_entrega || 0
-    ).catch(() => {})
+    notificarMotoboysDisponiveisAvulsa(admin, {
+      avulsa_id: entrega.id,
+      codigo: entrega.codigo,
+      taxa_entrega: taxa_entrega || 0,
+    }).catch(() => {})
 
     return NextResponse.json({ ok: true, entrega })
   } catch (e: any) {

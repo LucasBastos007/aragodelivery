@@ -390,6 +390,66 @@ function ChamarOutroMotoboyBtn({ pedidoId, motoboyAtualId, onChamado }: { pedido
   )
 }
 
+// Mesmo componente/UX de ChamarOutroMotoboyBtn, só que pra entrega avulsa
+// (/api/escalada-avulsa em vez de /api/escalada) — tabela e status diferentes
+// (entregas_avulsas: aguardando/aceito/coletado/em_rota/entregue), então não dá pra
+// reaproveitar a mesma chamada de API, mas o comportamento visual é idêntico.
+function ChamarOutroMotoboyAvulsaBtn({ avulsaId, motoboyAtualId, onChamado }: { avulsaId: string; motoboyAtualId?: string | null; onChamado: () => void }) {
+  const [loading, setLoading] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+  const [confirmando, setConfirmando] = useState(false)
+
+  async function chamar() {
+    setLoading(true)
+    setMsg(null)
+    const r = await fetch("/api/escalada-avulsa", {
+      method: "POST", credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ avulsa_id: avulsaId }),
+    }).then(r => r.json()).catch(() => ({}))
+    setLoading(false)
+    setConfirmando(false)
+    if (r.ok) { setMsg(r.msg ?? "Chamando outros motoboys…"); onChamado() }
+    else setMsg(r.error ?? "Erro")
+  }
+
+  if (motoboyAtualId && confirmando) {
+    return (
+      <div style={{ display: "flex", gap: 3 }}>
+        <button onClick={chamar} disabled={loading} style={{
+          fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 5, border: "none",
+          background: "#f97316", color: "white", cursor: loading ? "not-allowed" : "pointer",
+        }}>
+          {loading ? "..." : "Tirar e chamar outro"}
+        </button>
+        <button onClick={() => setConfirmando(false)} style={{
+          fontSize: 10, padding: "2px 6px", borderRadius: 5, border: "1px solid #e2e8f0",
+          background: "#f8fafc", color: "#64748b", cursor: "pointer",
+        }}>
+          Cancelar
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <button
+        onClick={() => motoboyAtualId ? setConfirmando(true) : chamar()}
+        disabled={loading}
+        title={motoboyAtualId ? "Tirar do motoboy atual e chamar outro" : "Chamar outro motoboy (rebroadcast)"}
+        style={{
+          fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 6,
+          border: "1px solid rgba(249,115,22,0.35)", background: "rgba(249,115,22,0.07)",
+          color: "#c2410c", cursor: loading ? "not-allowed" : "pointer", whiteSpace: "nowrap",
+        }}>
+        {loading ? "..." : "🛵 Chamar outro"}
+      </button>
+      {msg && <p style={{ fontSize: 9, color: "#94a3b8" }}>{msg}</p>}
+    </div>
+  )
+}
+
 const STATUS_LABEL: Record<StatusPedido, string> = {
   aguardando_pagamento: "Aguard. pagamento",
   pendente:          "Pendente",
@@ -780,6 +840,9 @@ export default function PedidosPage() {
                           <AvancarAvulsaBtn avulsaId={a.id} statusAtual={a.status} onAvancado={novoStatus =>
                             setAvulsas(prev => prev.map(x => x.id === a.id ? { ...x, status: novoStatus } : x))
                           } />
+                        )}
+                        {["aguardando", "aceito"].includes(a.status) && (
+                          <ChamarOutroMotoboyAvulsaBtn avulsaId={a.id} motoboyAtualId={a.motoboy_id} onChamado={() => load()} />
                         )}
                       </div>
                     </div>

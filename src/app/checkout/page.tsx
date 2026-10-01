@@ -306,21 +306,45 @@ export default function CheckoutPage() {
     else if (/Android/.test(ua))     setPlataforma("android")
   }, [])
 
-  // Carrega endereço salvo — localStorage primeiro, depois perfil do cadastro
+  // Carrega endereço salvo — localStorage primeiro, depois perfil do cadastro.
+  // Se o perfil já tem um endereço cadastrado E ele diverge do que está em cache
+  // (rua/número/bairro diferentes), o cache é descartado — sem essa checagem, um
+  // cliente que atualizasse o endereço no cadastro continuava tendo pedidos criados
+  // com as coordenadas do endereço ANTIGO, porque nada aqui comparava um com o outro.
+  // Bug real reportado, 2026-09-27: pino no mapa do motoboy não batia com o endereço
+  // do pedido. Roda de novo quando `perfil` carrega (pode vir depois do mount).
   useEffect(() => {
+    let cache: EnderecoSalvo | null = null
     try {
       const raw = localStorage.getItem("arago_endereco_salvo")
-      if (raw) {
-        const addr: EnderecoSalvo = JSON.parse(raw)
-        setEnderecoSalvo(addr)
-        geoRef.current = {
-          geo: { rua: addr.rua, bairro: addr.bairro, cidade: addr.cidade, lat: addr.lat, lng: addr.lng },
-          numero: addr.numero,
-          complemento: addr.complemento,
-        }
-      }
+      if (raw) cache = JSON.parse(raw)
     } catch {}
-  }, [])
+    if (!cache) return
+
+    const norm = (s?: string) => (s ?? "").trim().toLowerCase()
+    const perfilTemEndereco = !!perfil?.endereco_rua
+    const bateComPerfil = !perfilTemEndereco || (
+      norm(cache.rua)    === norm(perfil?.endereco_rua) &&
+      norm(cache.numero) === norm(perfil?.endereco_numero) &&
+      norm(cache.bairro) === norm(perfil?.endereco_bairro)
+    )
+
+    if (!bateComPerfil) {
+      // Cache de um endereço diferente do cadastrado agora — descarta e deixa o efeito
+      // abaixo (que depende de `perfil`/`enderecoSalvo`) geocodificar o endereço atual.
+      try { localStorage.removeItem("arago_endereco_salvo") } catch {}
+      setEnderecoSalvo(null)
+      geoRef.current = null
+      return
+    }
+
+    setEnderecoSalvo(cache)
+    geoRef.current = {
+      geo: { rua: cache.rua, bairro: cache.bairro, cidade: cache.cidade, lat: cache.lat, lng: cache.lng },
+      numero: cache.numero,
+      complemento: cache.complemento,
+    }
+  }, [perfil])
 
   // Se não há endereço salvo mas o perfil tem endereço cadastrado, geocodifica para obter lat/lng
   useEffect(() => {
@@ -429,12 +453,13 @@ export default function CheckoutPage() {
     }
     if (clienteCidadeAtual) params.set("cidade", clienteCidadeAtual)
     if (clienteBairroAtual) params.set("bairro", clienteBairroAtual)
+    if (user?.id) params.set("cliente_id", user.id)
     fetch(`/api/frete/calcular?${params}`)
       .then(r => r.ok ? r.json() : null)
       .then(json => { if (json && typeof json.taxa_entrega === "number") setTaxaEntrega(json.taxa_entrega) })
       .catch(() => {})
       .finally(() => setTaxaCalculando(false))
-  }, [loja_id, tipoEntrega, clienteLatAtual, clienteLngAtual, clienteCidadeAtual, clienteBairroAtual])
+  }, [loja_id, tipoEntrega, clienteLatAtual, clienteLngAtual, clienteCidadeAtual, clienteBairroAtual, user?.id])
 
   // Polling PIX — verifica a cada 4s se o pagamento foi confirmado
   useEffect(() => {

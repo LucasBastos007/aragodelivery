@@ -72,13 +72,26 @@ function filtrarPorTipo<T extends { tipo?: string }>(tabela: T[], tipo: "municip
   return tabela.filter(e => (e.tipo ?? "municipio") === tipo)
 }
 
+// Nomes de bairro costumam ser genéricos e repetidos entre cidades diferentes (ex:
+// "Centro", "Jardim Imperial", "Vila Boa" existem tanto em Guapó quanto em Aragoiânia,
+// Abadia de Goiás, Trindade...). Incidente real, 2026-09-23: endereço em "Jardim Imperial
+// — Aragoiânia" casou com o bairro de Guapó de mesmo nome e cobrou R$4 de uma entrega que
+// devia ser ~R$26 por distância real. A tabela de bairro só pode valer quando o cliente
+// está mesmo na cidade da loja — nunca aplicar preço de bairro de Guapó pra endereço fora
+// de Guapó só porque o nome do setor bate.
+function mesmaCidade(a: string, b: string): boolean {
+  const na = normalizar(a), nb = normalizar(b)
+  return !!na && !!nb && (na.includes(nb) || nb.includes(na))
+}
+
 /**
  * Calcula a taxa de entrega final — mesma fórmula usada tanto na prévia do checkout
  * (/api/frete/calcular) quanto na criação real do pedido (/api/pedido/criar), pra nunca
  * divergir entre o que o cliente vê antes de confirmar e o que é cobrado de fato.
  *
- * Prioridade: retirada (R$0) > tabela fixa por município > distância de rota real
- * (com fallback pra linha reta) > nunca negativa.
+ * Prioridade: retirada (R$0) > frete fixo por CLIENTE (override manual, ver
+ * clientes.frete_fixo) > tabela fixa por município > distância de rota real (com
+ * fallback pra linha reta) > nunca negativa.
  */
 export async function calcularTaxaEntregaCompleta(
   sb: SupabaseClient,
@@ -92,19 +105,43 @@ export async function calcularTaxaEntregaCompleta(
     lng_entrega: number | null
     cidade_entrega?: string | null
     bairro_entrega?: string | null
+    cliente_id?: string | null
   }
 ): Promise<number> {
   if (params.tipo_entrega === "retirada") return 0
 
-  const { data: tabelaFrete } = await sb
-    .from("tabela_frete")
-    .select("municipio, taxa, tipo")
-    .eq("loja_id", params.loja_id)
+  // Frete fixo por cliente — override manual acima de qualquer cálculo por distância ou
+  // tabela de município/bairro (pedido do usuário, 2026-09-25: casos pontuais em que o
+  // frete calculado não reflete o combinado com a cliente, ex: Vitória Santos R$10,
+  // Livia Jesus R$18). Só se aplica quando explicitamente cadastrado — null/ausente cai
+  // no cálculo normal de sempre, comportamento 100% preservado pros demais clientes.
+  if (params.cliente_id) {
+    const { data: clienteRow } = await sb.from("clientes").select("frete_fixo").eq("id", params.cliente_id).maybeSingle()
+    if (clienteRow?.frete_fixo != null) return Math.max(0, Number(clienteRow.frete_fixo))
+  }
 
-  // Bairro primeiro (mais específico — setor dentro da própria cidade da loja), depois
-  // município (cidade vizinha inteira) — cada um buscado só dentro do seu próprio tipo,
-  // nunca misturados (ver comentário em filtrarPorTipo).
-  const taxaFixa = buscarTabelaFrete(filtrarPorTipo(tabelaFrete ?? [], "bairro"), params.bairro_entrega ?? "")
+  const [{ data: tabelaFrete }, { data: lojaRow }] = await Promise.all([
+    sb.from("tabela_frete").select("municipio, taxa, tipo").eq("loja_id", params.loja_id),
+    sb.from("lojas").select("cidade, cidades_atendidas").eq("id", params.loja_id).single(),
+  ])
+
+  // Bairro primeiro (mais específico), depois município (cidade vizinha inteira) — cada um
+  // buscado só dentro do seu próprio tipo, nunca misturados (ver filtrarPorTipo). A tabela
+  // de bairro representa UMA cidade só por vez — nunca a cidade principal da loja E uma
+  // cidade extra ao mesmo tempo, senão um nome de bairro genérico (ex: "Centro") existente
+  // nas duas colide (incidente real, 2026-09-23: loja de Aragoiânia com cidades_atendidas
+  // incluindo Guapó — bairro "Centro" de Aragoiânia batia sem querer no "Centro" de Guapó
+  // copiado de outra loja, quando deveria cair na taxa fixa de Aragoiânia).
+  // Loja com cidade(s) extra(s) além da própria (`cidades_atendidas` diferente de `cidade`):
+  // a tabela de bairro é tratada como pertencente só à(s) cidade(s) extra(s) — é pra isso
+  // que ela existe (estender pra outra cidade usando a tabela de bairro de lá), a cidade
+  // principal continua servida pelo mecanismo de sempre (distância real ou município).
+  // Loja de cidade única (sem extra distinta): comportamento antigo, bairro = própria cidade.
+  const cidadesAtendidas: string[] = lojaRow?.cidades_atendidas ?? []
+  const cidadesExtras = cidadesAtendidas.filter((c: string) => !!c && !mesmaCidade(c, lojaRow?.cidade ?? ""))
+  const cidadesBairroElegiveis: string[] = cidadesExtras.length > 0 ? cidadesExtras : [lojaRow?.cidade].filter((c): c is string => !!c)
+  const clienteNaCidadeDaLoja = cidadesBairroElegiveis.some(c => mesmaCidade(params.cidade_entrega ?? "", c))
+  const taxaFixa = (clienteNaCidadeDaLoja ? buscarTabelaFrete(filtrarPorTipo(tabelaFrete ?? [], "bairro"), params.bairro_entrega ?? "") : null)
     ?? buscarTabelaFrete(filtrarPorTipo(tabelaFrete ?? [], "municipio"), params.cidade_entrega ?? "")
 
   if (taxaFixa === null && params.loja_lat && params.loja_lng && params.lat_entrega && params.lng_entrega) {

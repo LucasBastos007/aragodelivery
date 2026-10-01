@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
   // Busca o pedido — sem colunas opcionais que podem não existir
   const { data: pedido, error: pedidoErr } = await supabase
     .from("pedidos")
-    .select("id, codigo, motoboy_id, status, loja_id, taxa_entrega, loja_lat, loja_lng, endereco_entrega, loja:lojas(lat, lng, endereco)")
+    .select("id, codigo, motoboy_id, status, loja_id, taxa_entrega, loja_lat, loja_lng, endereco_entrega, loja:lojas(lat, lng, endereco, cidade)")
     .eq("id", pedido_id)
     .single()
 
@@ -77,17 +77,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, msg: "pedido de retirada — sem motoboy necessário" })
   }
 
-  // Coordenada default usada em cadastros sem localização real — tratar como nula
+  // Coordenada default usada em cadastros sem localização real — tratar como nula só pro
+  // pino salvo no mapa do motoboy (abaixo). NÃO usar essa versão anulada pro filtro de raio:
+  // incidente real, 2026-09-23 — BISCOITO DURO CAFE (Aragoiânia) tem coordenada real de
+  // endereço que bate com esse valor "default" por coincidência (Centro, Aragoiânia), então
+  // isDefaultCoord zerava lojaLat/lojaLng e o filtro de raio via "sem coordenada confiável"
+  // e pulava a checagem inteira — corrida de Aragoiânia tocando pra motoboy em Guapó. Pra
+  // separação de cidade (~13km de granularidade) a coordenada bruta já é precisa o
+  // suficiente mesmo quando é essa "default" — na pior hipótese ela ainda representa o
+  // centro de Aragoiânia de verdade, nunca aponta pra cidade errada.
   const isDefaultCoord = (lat: number | null) => lat != null && Math.abs(lat - (-16.9146388)) < 0.0001
   const rawLat = (pedido as any).loja_lat ?? (pedido.loja as any)?.lat ?? null
   const rawLng = (pedido as any).loja_lng ?? (pedido.loja as any)?.lng ?? null
   const lojaLat = isDefaultCoord(rawLat) ? null : rawLat
   const lojaLng = isDefaultCoord(rawLat) ? null : rawLng
+  const lojaLatRaio = rawLat
+  const lojaLngRaio = rawLng
+  const lojaCidade = (pedido.loja as any)?.cidade ?? null
 
   // Busca motoboys disponíveis e ativos
   const { data: motoboyData } = await supabase
     .from("motoboys")
-    .select("id, lat, lng, push_subscription, raio_km")
+    .select("id, lat, lng, push_subscription, raio_km, cidade_fixa")
     .eq("disponivel", true)
     .eq("status", "ativo")
 
@@ -124,10 +135,18 @@ export async function POST(req: NextRequest) {
   // loja tem coordenada real — sem isso não dá pra calcular distância com segurança, então
   // mantém o comportamento antigo (inclui todo mundo) pra não travar o despacho.
   // Candidatos sem localização: incluídos no final (não filtrados por lat/lng nem raio)
+  //
+  // cidade_fixa (pedido do usuário, 2026-09-26): motoboy com esse campo preenchido
+  // ignora completamente o corte de raio quando a cidade bate com a da loja — pensado
+  // pra alguém que sempre atende uma cidade específica mesmo estando fisicamente fora
+  // dela no momento (ex: Amanda Bastos ↔ Aragoiânia).
   const comLoc = motoboys
     .filter(m => m.id && !ignorar.has(m.id) && !ocupados.has(m.id) && m.lat && m.lng)
-    .map(m => ({ ...m, distLoja: lojaLat && lojaLng ? haversineKm(m.lat, m.lng, lojaLat, lojaLng) : 9999 }))
-    .filter(m => !(lojaLat && lojaLng) || m.distLoja <= (m.raio_km ?? RAIO_KM_DEFAULT))
+    .map(m => ({ ...m, distLoja: lojaLatRaio && lojaLngRaio ? haversineKm(m.lat, m.lng, lojaLatRaio, lojaLngRaio) : 9999 }))
+    .filter(m => {
+      if (lojaCidade && m.cidade_fixa && m.cidade_fixa === lojaCidade) return true
+      return !(lojaLatRaio && lojaLngRaio) || m.distLoja <= (m.raio_km ?? RAIO_KM_DEFAULT)
+    })
     .sort((a, b) => a.distLoja - b.distLoja)
 
   const semLoc = motoboys

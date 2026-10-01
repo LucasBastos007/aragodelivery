@@ -119,6 +119,11 @@ const NAV: { href: string; icon: React.ReactNode; label: string }[] = [
       <rect x="14.5" y="12" width="2.5" height="6" rx="0.5"/>
     </svg>
   )},
+  { href: "/loja/avaliacoes", label: "Avaliações", icon: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+    </svg>
+  )},
   { href: "/loja/perfil", label: "Minha loja", icon: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       {/* Roof triangle */}
@@ -142,7 +147,7 @@ const NAV: { href: string; icon: React.ReactNode; label: string }[] = [
 // de um item entre o grupo e a lista flat usada pela bottom nav/isActive.
 const GRUPOS_SIDEBAR: { titulo: string; hrefs: string[] }[] = [
   { titulo: "Operação", hrefs: ["/loja/dashboard", "/loja", "/loja/cardapio"] },
-  { titulo: "Gestão", hrefs: ["/loja/financeiro", "/loja/relatorio", "/loja/historico", "/loja/cupons"] },
+  { titulo: "Gestão", hrefs: ["/loja/financeiro", "/loja/relatorio", "/loja/historico", "/loja/cupons", "/loja/avaliacoes"] },
   { titulo: "Operação e configurações", hrefs: ["/loja/entrega-avulsa", "/loja/fiscal", "/loja/perfil"] },
 ]
 

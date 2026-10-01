@@ -17,15 +17,24 @@ const CAMPOS_PERMITIDOS = [
   "disponivel", "adicionais", "dias_semana", "ncm",
 ] as const
 
+// "preco != null" deixava passar quando o cliente mandava preco:null de propósito —
+// que é exatamente o que JSON.stringify faz com NaN (campo de preço esvaziado no
+// formulário vira NaN no parseFloat, vira null no JSON). Isso gravava produto sem preço
+// no banco (incidente real, 2026-09-23 — "preço sumiu tudo" depois de editar o
+// Espetinho). "preco" in dados já garante que o campo foi realmente enviado (sanitizar()
+// só inclui campos presentes no body) — se veio, tem que ser um número válido, nunca null.
 function validarPrecos(dados: Record<string, any>): string | null {
-  if (dados.preco != null && (!Number.isFinite(dados.preco) || dados.preco < 0)) {
+  if ("preco" in dados && !Number.isFinite(dados.preco)) {
+    return "Preço do produto inválido — não pode ficar em branco."
+  }
+  if (dados.preco != null && dados.preco < 0) {
     return "Preço do produto inválido."
   }
   for (const entry of dados.adicionais ?? []) {
     const itens = Array.isArray(entry.itens) ? entry.itens : [entry]
     for (const it of itens) {
-      if (it.preco != null && (!Number.isFinite(it.preco) || it.preco < 0)) {
-        return "Preço de adicional inválido."
+      if (!Number.isFinite(it.preco) || it.preco < 0) {
+        return "Preço de adicional inválido — não pode ficar em branco."
       }
     }
   }
