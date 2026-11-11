@@ -24,18 +24,27 @@ export async function POST(req: NextRequest) {
     if (contas.length) return NextResponse.json({ error: "Este WhatsApp já tem conta." }, { status: 400 })
     const n = String(nome ?? "").trim()
     if (n.length < 2) return NextResponse.json({ error: "Informe seu nome." }, { status: 400 })
-    const mail = String(email ?? "").trim().toLowerCase()
-    const emailConta = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail) ? mail : `w${t.digitos}@cliente.chegodelivery.com`
+    // A conta fica presa ao telefone (o que o código do WhatsApp provou), nunca ao e-mail digitado:
+    // antes o e-mail virava o login já "confirmado" sem ninguém conferir, e dava pra ocupar o e-mail
+    // de outra pessoa antes dela se cadastrar (revisão de segurança, 11/11/2026). O e-mail informado
+    // fica só como contato (clientes.email), e o login por ele não existe nesse cadastro.
+    const raw = String(email ?? "").trim().toLowerCase()
+    const mail = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(raw) ? raw : null
+    if (mail) {
+      // Quem já tem conta com esse e-mail entra por ela (mesma mensagem de antes, sem criar outra)
+      const { data: dono } = await sb.from("clientes").select("id").eq("email", mail).limit(1)
+      if (dono?.length) return NextResponse.json({ error: "Esse e-mail já tem conta. Entre com e-mail e senha ou deixe o e-mail em branco." }, { status: 400 })
+    }
     const { data, error } = await sb.auth.admin.createUser({
-      email: emailConta, password: randomBytes(24).toString("base64url"), email_confirm: true,
-      user_metadata: { nome: n, telefone: t.digitos, origem: "whatsapp" },
+      email: `w${t.digitos}@cliente.chegodelivery.com`, password: randomBytes(24).toString("base64url"), email_confirm: true,
+      user_metadata: { nome: n, telefone: t.digitos, origem: "whatsapp", ...(mail ? { email_contato: mail } : {}) },
     })
     if (error || !data.user) {
-      const msg = error?.message?.includes("already") ? "Esse e-mail já tem conta. Entre com e-mail e senha ou deixe o e-mail em branco." : "Não foi possível criar a conta."
+      const msg = error?.message?.includes("already") ? "Este WhatsApp já tem conta." : "Não foi possível criar a conta."
       return NextResponse.json({ error: msg }, { status: 400 })
     }
     userId = data.user.id
-    await sb.from("clientes").upsert({ id: userId, nome: n, telefone: t.digitos, email: emailConta.endsWith("@cliente.chegodelivery.com") ? null : emailConta })
+    await sb.from("clientes").upsert({ id: userId, nome: n, telefone: t.digitos, email: mail })
     fetch(new URL("/api/tracking/evento", req.url), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tipo: "cadastro" }) }).catch(() => {})
   }
 
