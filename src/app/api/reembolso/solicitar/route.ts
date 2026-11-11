@@ -6,6 +6,7 @@
  * Cria registro na tabela reembolsos.
  */
 import { NextRequest, NextResponse } from "next/server"
+import { enviarPushAdmin } from "@/lib/pushAdmin"
 import { createClient } from "@supabase/supabase-js"
 
 function adminSb() {
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
   // Valida token do cliente
   const { data: pedido } = await sb
     .from("pedidos")
-    .select("id, status, total, forma_pagamento, asaas_payment_id, loja_id")
+    .select("id, codigo, status, total, forma_pagamento, forma_pagamento_2, asaas_payment_id, loja_id")
     .eq("id", pedido_id)
     .eq("cliente_push_token", cliente_push_token)
     .single()
@@ -38,7 +39,8 @@ export async function POST(req: NextRequest) {
   }
 
   // Só permite reembolso para pedidos que tiveram pagamento digital
-  if (!["pix", "cartao"].includes(pedido.forma_pagamento)) {
+  // (pagamento em 2 formas: vale se uma das partes foi pix ou cartão)
+  if (!["pix", "cartao"].includes(pedido.forma_pagamento) && !["pix", "cartao"].includes((pedido as any).forma_pagamento_2 ?? "")) {
     return NextResponse.json({ error: "Reembolso só disponível para pagamentos via PIX ou cartão" }, { status: 422 })
   }
 
@@ -70,31 +72,15 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Notifica a loja sobre a solicitação
-  const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://chegodelivery.com"
-  const { data: loja } = await sb.from("lojas").select("push_subscription").eq("id", pedido.loja_id).single()
-  if (loja?.push_subscription) {
-    fetch(`${SITE}/api/push`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "send-loja",
-        loja_id: pedido.loja_id,
-        pedido_id,
-        codigo: "",
-        nome_cliente: "Cliente",
-        total: 0,
-        qtd_itens: 0,
-        _override_payload: {
-          title: "Solicitação de reembolso",
-          body: `Um cliente solicitou reembolso para o pedido. Motivo: ${motivo}`,
-          tag: `reembolso-${reembolso!.id}`,
-          url: "/loja",
-          requireInteraction: true,
-        },
-      }),
-    }).catch(() => {})
-  }
+  // Quem decide reembolso é o admin (pedido do Lucas, 20/10/2026): o aviso vai pro celular do
+  // admin, não mais pra loja.
+  await enviarPushAdmin(sb, {
+    title: "Pedido de reembolso",
+    body: `Pedido #${(pedido as any).codigo ?? ""}: ${motivo}`,
+    tag: `reembolso-${reembolso!.id}`,
+    url: "/chego-ctrl?reembolsos=1",
+    requireInteraction: true,
+  })
 
   return NextResponse.json({ ok: true, reembolso_id: reembolso!.id })
 }

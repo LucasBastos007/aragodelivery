@@ -1,4 +1,5 @@
 // Lógica de emissão de NFC-e — chamada pelo avancar-etapa e pela rota manual
+import { PROMO_MARCA_ID } from "@/lib/promoChego"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { emitirNfce as focusEmitir, type FocusNfce } from "./focusnfe"
 
@@ -38,7 +39,7 @@ export async function emitirNfcePedido(
   const { data: pedido } = await sb
     .from("pedidos")
     .select(`
-      id, loja_id, forma_pagamento, total, subtotal, cpf_cliente, nome_cliente,
+      id, loja_id, forma_pagamento, forma_pagamento_2, valor_pagamento_1, valor_pagamento_2, total, subtotal, cpf_cliente, nome_cliente,
       itens_pedido ( id, produto_id, nome, preco, quantidade, adicionais ),
       lojas!inner (
         cnpj, nome, fiscal_ativo, focusnfe_cadastrado,
@@ -79,10 +80,13 @@ export async function emitirNfcePedido(
   const isSimples = mapRegime(loja.regime_tributario as string) === "1"
 
   const nfceItems = itens.map((item, idx) => {
-    const adics = (item.adicionais as { nome: string }[] | null)?.map(a => a.nome).join(", ")
+    // Marca da promoção Chegô (preço 0, só pra loja ver) não entra na descrição da nota
+    const adics = (item.adicionais as { id?: string; nome: string }[] | null)?.filter(a => a.id !== PROMO_MARCA_ID).map(a => a.nome).join(", ")
     const descricao = (adics ? `${item.nome} (${adics})` : String(item.nome)).slice(0, 120)
-    const ncmRaw = (ncmMap[(item.produto_id as string)] || "21069090") as string
-    const ncm = ncmRaw.replace(/\D/g, "").padStart(8, "0")
+    // produtos.ncm também guarda marcadores do cardápio ("destaque", "almoco") — sem dígito
+    // nenhum ali, vale o NCM padrão em vez de virar "00000000"
+    const ncmDigitos = String(ncmMap[(item.produto_id as string)] ?? "").replace(/\D/g, "")
+    const ncm = (ncmDigitos || "21069090").padStart(8, "0")
     const preco = Number(item.preco)
     const qty   = Number(item.quantidade)
 
@@ -118,11 +122,18 @@ export async function emitirNfcePedido(
     modalidade_frete:  9,
     local_destino:     1,
     items:             nfceItems as unknown as FocusNfce["items"],
-    forma_pagamento:   [{
-      forma_pagamento: PAGAMENTO_MAP[pedido.forma_pagamento] ?? "99",
-      // valor = subtotal dos produtos (sem taxa de entrega, que é serviço da Chegô)
-      valor_pagamento: Number(Number(pedido.subtotal ?? pedido.total).toFixed(2)),
-    }],
+    // valor = subtotal dos produtos (sem taxa de entrega, que é serviço da Chegô). Pagamento em
+    // 2 formas: o subtotal é dividido na proporção de cada parte (a soma fecha no centavo).
+    forma_pagamento:   (() => {
+      const sub = Number(Number(pedido.subtotal ?? pedido.total).toFixed(2))
+      if (!(pedido as any).forma_pagamento_2) return [{ forma_pagamento: PAGAMENTO_MAP[pedido.forma_pagamento] ?? "99", valor_pagamento: sub }]
+      const tot = Number(pedido.total) || 1
+      const v1 = Math.round(sub * Number((pedido as any).valor_pagamento_1) / tot * 100) / 100
+      return [
+        { forma_pagamento: PAGAMENTO_MAP[pedido.forma_pagamento] ?? "99", valor_pagamento: v1 },
+        { forma_pagamento: PAGAMENTO_MAP[(pedido as any).forma_pagamento_2] ?? "99", valor_pagamento: Math.round((sub - v1) * 100) / 100 },
+      ]
+    })(),
   }
 
   if (pedido.cpf_cliente) {

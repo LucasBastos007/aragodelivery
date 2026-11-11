@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
 import type { Produto, CategoriaProduto, AdicionalProduto, GrupoAdicional } from "@/types"
+import { ncmParaFormulario, ncmAoSalvar } from "@/lib/ncmProduto"
 
 const DIAS = [
   { v: 1, l: "Seg" }, { v: 2, l: "Ter" }, { v: 3, l: "Qua" },
@@ -20,6 +21,9 @@ type ProdutoForm = {
   dias_semana: number[]
   ncm: string
 }
+// Valores em reais com máscara ao digitar (20/10/2026): "2990" vira "29,90"
+const mascara = (v: string) => { const d = v.replace(/\D/g, "").slice(0, 8); if (!d) return ""; return (Number(d) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
+const reais = (v: string) => Number(String(v).replace(/\./g, "").replace(",", ".")) || 0
 const FORM_VAZIO: ProdutoForm = { nome: "", descricao: "", preco: "", categoria_id: "", disponivel: true, foto_url: "", dias_semana: [], ncm: "" }
 
 async function uploadFoto(file: File, path: string): Promise<{ url: string; erro?: string }> {
@@ -154,7 +158,7 @@ export default function CardapioPage() {
     setAdicionais(prev => [...prev, {
       id: uid(),
       nome: novoAdicNome.trim(),
-      preco: parseFloat(novoAdicPreco),
+      preco: reais(novoAdicPreco),
     }])
     setNovoAdicNome("")
     setNovoAdicPreco("")
@@ -181,7 +185,7 @@ export default function CardapioPage() {
   function adicionarItemGrupo(grupoId: string) {
     const nome = (itemGrupoNome[grupoId] ?? "").trim()
     if (!nome) return
-    const preco = parseFloat(itemGrupoPreco[grupoId] ?? "") || 0
+    const preco = reais(itemGrupoPreco[grupoId] ?? "")
     setGrupos(prev => prev.map(g => g.id === grupoId ? { ...g, itens: [...g.itens, { id: uid(), nome, preco }] } : g))
     setItemGrupoNome(prev => ({ ...prev, [grupoId]: "" }))
     setItemGrupoPreco(prev => ({ ...prev, [grupoId]: "" }))
@@ -211,12 +215,12 @@ export default function CardapioPage() {
     setEditando(p)
     setFormProd({
       nome: p.nome ?? "", descricao: p.descricao ?? "",
-      preco: p.preco.toFixed(2),
+      preco: mascara(String(Math.round(p.preco * 100))),
       categoria_id: p.categoria_id ?? "",
       disponivel: p.disponivel,
       foto_url: p.foto_url ?? "",
       dias_semana: p.dias_semana ?? [],
-      ncm: p.ncm ?? "",
+      ncm: ncmParaFormulario(p.ncm),
     })
     setFotoFile(null)
     setFotoPreview(p.foto_url ?? "")
@@ -264,13 +268,13 @@ export default function CardapioPage() {
       loja_id: lojaId,
       nome: formProd.nome.trim(),
       descricao: formProd.descricao.trim(),
-      preco: parseFloat(formProd.preco),
+      preco: reais(formProd.preco),
       categoria_id: formProd.categoria_id || null,
       disponivel: formProd.disponivel,
       foto_url: fotoUrlFinal || null,
       adicionais: [...adicionais, ...grupos],
       dias_semana: formProd.dias_semana,
-      ncm: formProd.ncm.replace(/\D/g, "") || null,
+      ncm: ncmAoSalvar(formProd.ncm, editando?.ncm),
     }
 
     const res = await fetch("/api/loja/produtos", {
@@ -322,6 +326,30 @@ export default function CardapioPage() {
     await carregarTudo()
   }
 
+  // "Mais pedidos no app" (20/10/2026): a loja escolhe até 6 produtos e a ordem. Marcador de
+  // sempre (ncm = "destaque") + posição em `ordem`, gravados por PUT /api/loja/produtos.
+  const idsDestaque = produtos.filter(p => (p as any).ncm === "destaque").sort((a, b) => Number((a as any).ordem ?? 99) - Number((b as any).ordem ?? 99)).map(p => p.id)
+  const [salvandoDest, setSalvandoDest] = useState(false)
+  async function salvarDestaques(ids: string[]) {
+    setSalvandoDest(true)
+    const r = await fetch("/api/loja/produtos", { method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids }) }).catch(() => null)
+    if (!r || !r.ok) { const j = await r?.json().catch(() => ({})); alert(j?.error ?? "Não foi possível salvar os Mais pedidos.") }
+    await carregarTudo()
+    setSalvandoDest(false)
+  }
+  function alternarDestaque(p: Produto) {
+    if (idsDestaque.includes(p.id)) return salvarDestaques(idsDestaque.filter(x => x !== p.id))
+    if (idsDestaque.length >= 6) { alert("Já tem 6 produtos nos Mais pedidos. Tire um pra colocar outro."); return }
+    if ((p as any).ncm && (p as any).ncm !== "destaque") { alert("Esse produto tem código fiscal (NCM) e não pode virar destaque por aqui. Fale com o suporte."); return }
+    salvarDestaques([...idsDestaque, p.id])
+  }
+  function moverDestaque(id: string, dir: -1 | 1) {
+    const l = [...idsDestaque], i = l.indexOf(id), j = i + dir
+    if (j < 0 || j >= l.length) return
+    ;[l[i], l[j]] = [l[j], l[i]]
+    salvarDestaques(l)
+  }
+
   const semCategoria = produtos.filter(p => !p.categoria_id)
   const porCategoria = categorias.map(c => ({
     cat: c,
@@ -331,12 +359,12 @@ export default function CardapioPage() {
   if (!lojaId) return null
 
   return (
-    <div style={{ padding: "20px 16px", maxWidth: 900, margin: "0 auto" }}>
+    <div style={{ padding: "4px 0 24px", maxWidth: 1180, margin: "0 auto" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20, gap: 12, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 900, color: "#111827", margin: 0 }}>Cardápio</h1>
-          <p style={{ fontSize: 13, color: "#6B7280", marginTop: 2 }}>
+          
+          <p style={{ fontSize: 13, color: "var(--suave)", marginTop: 2 }}>
             {produtos.length} produto{produtos.length !== 1 ? "s" : ""} · {categorias.length} categoria{categorias.length !== 1 ? "s" : ""}
           </p>
         </div>
@@ -351,12 +379,12 @@ export default function CardapioPage() {
       </div>
 
       {loading ? (
-        <p style={{ color: "#9CA3AF" }}>Carregando...</p>
+        <p style={{ color: "var(--suave)" }}>Carregando...</p>
       ) : produtos.length === 0 && categorias.length === 0 ? (
         <div className="card" style={{ padding: "40px 20px", textAlign: "center" }}>
           <p style={{ fontSize: 36, marginBottom: 12 }}>🍽️</p>
-          <p style={{ fontSize: 16, fontWeight: 900, color: "#111827", marginBottom: 8 }}>Cardápio vazio</p>
-          <p style={{ fontSize: 13, color: "#6B7280", marginBottom: 20 }}>
+          <p style={{ fontSize: 16, fontWeight: 900, color: "var(--grafite)", marginBottom: 8 }}>Cardápio vazio</p>
+          <p style={{ fontSize: 13, color: "var(--suave)", marginBottom: 20 }}>
             Crie categorias (ex: Lanches, Bebidas) e adicione seus produtos.
           </p>
           <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
@@ -366,15 +394,41 @@ export default function CardapioPage() {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+          <div className="card" style={{ padding: "16px 16px 12px" }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+              <h2 style={{ fontSize: 16, fontWeight: 900, color: "var(--grafite)", margin: 0 }}>Mais pedidos no app</h2>
+              <span style={{ fontSize: 13, color: "var(--suave)" }}>{idsDestaque.length} de 6{salvandoDest ? ", salvando…" : ""}</span>
+            </div>
+            <p style={{ fontSize: 13, color: "var(--suave)", margin: "4px 0 10px", lineHeight: 1.45 }}>
+              Aparecem no topo da sua loja no app, nessa ordem. Toque na estrela ☆ de um produto pra colocar ou tirar. Com menos de 2 escolhidos, o app escolhe sozinho.
+            </p>
+            {idsDestaque.length === 0 ? null : (
+              <ol style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+                {idsDestaque.map((id, i) => { const p = produtos.find(x => x.id === id)!; return (
+                  <li key={id} style={{ display: "flex", alignItems: "center", gap: 10, padding: 8, borderRadius: 12, background: "#F6F5F2" }}>
+                    <span style={{ width: 26, height: 26, borderRadius: "50%", background: "#22201C", color: "#fff", fontWeight: 800, fontSize: 13, display: "grid", placeItems: "center", flexShrink: 0 }}>{i + 1}</span>
+                    {p.foto_url ? <img src={p.foto_url} alt="" style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} /> : null}
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 700, color: "var(--grafite)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nome}</span>
+                    {([[-1, "↑", "Subir"], [1, "↓", "Descer"]] as const).map(([d, t, l]) => (
+                      <button key={t} aria-label={l} disabled={salvandoDest || (d === -1 ? i === 0 : i === idsDestaque.length - 1)} onClick={() => moverDestaque(id, d)}
+                        style={{ width: 36, height: 36, borderRadius: "50%", border: "1px solid #E6E5E1", background: "#fff", fontWeight: 800, fontSize: 16, cursor: "pointer", opacity: (d === -1 ? i === 0 : i === idsDestaque.length - 1) ? .3 : 1 }}>{t}</button>
+                    ))}
+                    <button aria-label="Tirar dos Mais pedidos" disabled={salvandoDest} onClick={() => salvarDestaques(idsDestaque.filter(x => x !== id))}
+                      style={{ width: 36, height: 36, borderRadius: "50%", border: "1px solid #E6E5E1", background: "#fff", fontWeight: 800, fontSize: 16, cursor: "pointer" }}>×</button>
+                  </li>
+                ) })}
+              </ol>
+            )}
+          </div>
           {porCategoria.map(({ cat, items }) => (
             <div key={cat.id}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
                 {cat.foto_url
                   ? <img src={cat.foto_url} alt="" style={{ width: 32, height: 32, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
-                  : <div style={{ width: 32, height: 32, borderRadius: 8, background: "#F3F4F6", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>🛍️</div>
+                  : <div style={{ width: 32, height: 32, borderRadius: 8, background: "var(--pedra)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>🛍️</div>
                 }
-                <h2 style={{ fontSize: 15, fontWeight: 900, color: "#111827", margin: 0 }}>{cat.nome}</h2>
-                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: "#F3F4F6", color: "#6B7280" }}>
+                <h2 style={{ fontSize: 15, fontWeight: 900, color: "var(--grafite)", margin: 0 }}>{cat.nome}</h2>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: "var(--pedra)", color: "var(--suave)" }}>
                   {items.length}
                 </span>
                 {cat.cardapio_do_dia && (
@@ -394,20 +448,20 @@ export default function CardapioPage() {
                   id={`cat-foto-${cat.id}`}
                 />
                 <label htmlFor={`cat-foto-${cat.id}`}
-                  style={{ fontSize: 12, color: "#6B7280", cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
-                    background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 8, padding: "4px 10px" }}>
+                  style={{ fontSize: 12, color: "var(--suave)", cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
+                    background: "var(--pedra)", border: "1px solid var(--linha)", borderRadius: 8, padding: "4px 10px" }}>
                   {uploadingCatId === cat.id ? "⏳" : "📷"} {cat.foto_url ? "Trocar foto" : "Adicionar foto"}
                 </label>
                 <button onClick={() => deletarCategoria(cat.id)}
-                  style={{ marginLeft: "auto", fontSize: 12, color: "#9CA3AF", background: "none", border: "none", cursor: "pointer" }}>
+                  style={{ marginLeft: "auto", fontSize: 12, color: "var(--suave)", background: "none", border: "none", cursor: "pointer" }}>
                   Deletar
                 </button>
               </div>
               {items.length === 0 ? (
-                <p style={{ fontSize: 13, color: "#9CA3AF" }}>Nenhum produto nesta categoria.</p>
+                <p style={{ fontSize: 13, color: "var(--suave)" }}>Nenhum produto nesta categoria.</p>
               ) : (
                 <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))" }}>
-                  {items.map(p => <ProdutoCard key={p.id} p={p} onEdit={abrirEditarProduto} onToggle={toggleDisponivel} onDelete={deletarProduto} />)}
+                  {items.map(p => <ProdutoCard key={p.id} p={p} onEdit={abrirEditarProduto} onToggle={toggleDisponivel} onDelete={deletarProduto} destaque={idsDestaque.includes(p.id)} onDestaque={alternarDestaque} />)}
                 </div>
               )}
             </div>
@@ -416,13 +470,13 @@ export default function CardapioPage() {
           {semCategoria.length > 0 && (
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                <h2 style={{ fontSize: 15, fontWeight: 900, color: "#111827", margin: 0 }}>Sem categoria</h2>
-                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: "#F3F4F6", color: "#6B7280" }}>
+                <h2 style={{ fontSize: 15, fontWeight: 900, color: "var(--grafite)", margin: 0 }}>Sem categoria</h2>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: "var(--pedra)", color: "var(--suave)" }}>
                   {semCategoria.length}
                 </span>
               </div>
               <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))" }}>
-                {semCategoria.map(p => <ProdutoCard key={p.id} p={p} onEdit={abrirEditarProduto} onToggle={toggleDisponivel} onDelete={deletarProduto} />)}
+                {semCategoria.map(p => <ProdutoCard key={p.id} p={p} onEdit={abrirEditarProduto} onToggle={toggleDisponivel} onDelete={deletarProduto} destaque={idsDestaque.includes(p.id)} onDestaque={alternarDestaque} />)}
               </div>
             </div>
           )}
@@ -439,12 +493,12 @@ export default function CardapioPage() {
               <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
                 <div style={{
                   width: 88, height: 88, borderRadius: 12, overflow: "hidden", flexShrink: 0,
-                  background: "#F3F4F6", border: "2px dashed #D1D5DB",
+                  background: "var(--pedra)", border: "2px dashed var(--linha)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                 }}>
                   {fotoPreview
                     ? <img src={fotoPreview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    : <span style={{ fontSize: 26, color: "#D1D5DB" }}>📷</span>}
+                    : <span style={{ fontSize: 26, color: "var(--linha)" }}>📷</span>}
                 </div>
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
                   <input ref={fotoInputRef} type="file" accept="image/*" style={{ display: "none" }}
@@ -462,11 +516,11 @@ export default function CardapioPage() {
                   {fotoPreview && (
                     <button type="button"
                       onClick={() => { setFotoFile(null); setFotoPreview(""); setFormProd(f => ({ ...f, foto_url: "" })); if (fotoInputRef.current) fotoInputRef.current.value = "" }}
-                      style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                      style={{ fontSize: 11, color: "var(--suave)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
                       Remover foto
                     </button>
                   )}
-                  <p style={{ fontSize: 11, color: "#D1D5DB" }}>JPG, PNG ou WEBP · máx. 5MB</p>
+                  <p style={{ fontSize: 11, color: "var(--linha)" }}>JPG, PNG ou WEBP · máx. 5MB</p>
                 </div>
               </div>
             </div>
@@ -484,10 +538,10 @@ export default function CardapioPage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div>
                 <label className="label">Preço (R$) *</label>
-                <input className="input" type="number" step="0.50" min="0" placeholder="0,00" value={formProd.preco}
-                  onChange={e => setFormProd(f => ({ ...f, preco: e.target.value }))} />
+                <input className="input" inputMode="numeric" placeholder="R$ 0,00" value={formProd.preco}
+                  onChange={e => setFormProd(f => ({ ...f, preco: mascara(e.target.value) }))} />
                 {grupos.length > 0 && (
-                  <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>
+                  <p style={{ fontSize: 11, color: "var(--suave)", marginTop: 4 }}>
                     Pode deixar 0,00 aqui se o preço real vem das opções da categoria de
                     escolha abaixo (ex: "Escolha o sabor") — o cliente vê "A partir de R$
                     [menor opção]".
@@ -505,18 +559,18 @@ export default function CardapioPage() {
             </div>
             <label style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
               <div onClick={() => setFormProd(f => ({ ...f, disponivel: !f.disponivel }))}
-                style={{ width: 40, height: 22, borderRadius: 11, transition: "background 0.2s", background: formProd.disponivel ? "#f97316" : "#E5E7EB", position: "relative", cursor: "pointer" }}>
+                style={{ width: 40, height: 22, borderRadius: 11, transition: "background 0.2s", background: formProd.disponivel ? "var(--pimenta)" : "var(--linha)", position: "relative", cursor: "pointer" }}>
                 <div style={{ width: 18, height: 18, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, transition: "left 0.2s", left: formProd.disponivel ? 20 : 2 }} />
               </div>
-              <span style={{ fontSize: 14, fontWeight: 600, color: "#374151" }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)" }}>
                 {formProd.disponivel ? "Disponível para pedidos" : "Indisponível (oculto no cardápio)"}
               </span>
             </label>
 
             {/* Dias da semana */}
-            <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16 }}>
-              <p style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 4 }}>Dias disponíveis</p>
-              <p style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 10 }}>Deixe todos desmarcados para aparecer em todos os dias</p>
+            <div style={{ borderTop: "1px solid var(--pedra)", paddingTop: 16 }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: "var(--grafite)", marginBottom: 4 }}>Dias disponíveis</p>
+              <p style={{ fontSize: 12, color: "var(--suave)", marginBottom: 10 }}>Deixe todos desmarcados para aparecer em todos os dias</p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {DIAS.map(d => {
                   const sel = formProd.dias_semana.includes(d.v)
@@ -528,9 +582,9 @@ export default function CardapioPage() {
                       }))}
                       style={{
                         padding: "6px 14px", borderRadius: 20, fontSize: 13, fontWeight: 700,
-                        border: sel ? "none" : "1.5px solid #E5E7EB",
-                        background: sel ? "#f97316" : "transparent",
-                        color: sel ? "#fff" : "#6B7280",
+                        border: sel ? "none" : "1.5px solid var(--linha)",
+                        background: sel ? "var(--pimenta)" : "transparent",
+                        color: sel ? "#fff" : "var(--suave)",
                         cursor: "pointer",
                       }}>
                       {d.l}
@@ -541,8 +595,8 @@ export default function CardapioPage() {
             </div>
 
             {/* NCM */}
-            <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16 }}>
-              <label className="label">Código NCM <span style={{ fontWeight: 400, color: "#9CA3AF" }}>(para nota fiscal)</span></label>
+            <div style={{ borderTop: "1px solid var(--pedra)", paddingTop: 16 }}>
+              <label className="label">Código NCM <span style={{ fontWeight: 400, color: "var(--suave)" }}>(para nota fiscal)</span></label>
               <input
                 className="input"
                 value={formProd.ncm}
@@ -552,28 +606,28 @@ export default function CardapioPage() {
                 inputMode="numeric"
                 style={{ fontSize: 14 }}
               />
-              <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>
+              <p style={{ fontSize: 11, color: "var(--suave)", marginTop: 4 }}>
                 Restaurantes: 21069090 · Bebidas: 22029000 · Deixe em branco se não souber
               </p>
             </div>
 
             {/* Adicionais */}
-            <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16 }}>
-              <p style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 10 }}>Adicionais (opcional)</p>
+            <div style={{ borderTop: "1px solid var(--pedra)", paddingTop: 16 }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: "var(--grafite)", marginBottom: 10 }}>Adicionais (opcional)</p>
               {adicionais.length > 0 && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
                   {adicionais.map(a => (
                     <div key={a.id} style={{
                       display: "flex", alignItems: "center", justifyContent: "space-between",
-                      padding: "8px 12px", borderRadius: 8, background: "#F9FAFB", border: "1px solid #E5E7EB",
+                      padding: "8px 12px", borderRadius: 8, background: "var(--pedra)", border: "1px solid var(--linha)",
                     }}>
-                      <span style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>{a.nome}</span>
+                      <span style={{ fontSize: 13, color: "var(--texto)", fontWeight: 500 }}>{a.nome}</span>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <span style={{ fontSize: 13, color: "#f97316", fontWeight: 700 }}>R$ {a.preco.toFixed(2)}</span>
+                        <span style={{ fontSize: 13, color: "var(--pimenta)", fontWeight: 700 }}>R$ {Number(a.preco).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         <button
                           type="button"
                           onClick={() => setAdicionais(prev => prev.filter(x => x.id !== a.id))}
-                          style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 0 }}>
+                          style={{ background: "none", border: "none", color: "var(--pimenta)", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 0 }}>
                           ✕
                         </button>
                       </div>
@@ -592,12 +646,10 @@ export default function CardapioPage() {
                 />
                 <input
                   className="input"
-                  type="number"
-                  step="0.50"
-                  min="0"
-                  placeholder="R$"
+                  inputMode="numeric"
+                  placeholder="R$ 0,00"
                   value={novoAdicPreco}
-                  onChange={e => setNovoAdicPreco(e.target.value)}
+                  onChange={e => setNovoAdicPreco(mascara(e.target.value))}
                   onKeyDown={e => e.key === "Enter" && adicionarAdicional()}
                   style={{ flex: 1, fontSize: 13 }}
                 />
@@ -613,25 +665,25 @@ export default function CardapioPage() {
             </div>
 
             {/* Categorias de escolha (grupos de adicionais) */}
-            <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16 }}>
-              <p style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 4 }}>Categorias de escolha (opcional)</p>
-              <p style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 10 }}>
+            <div style={{ borderTop: "1px solid var(--pedra)", paddingTop: 16 }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: "var(--grafite)", marginBottom: 4 }}>Categorias de escolha (opcional)</p>
+              <p style={{ fontSize: 12, color: "var(--suave)", marginBottom: 10 }}>
                 Ex: "Escolha o tamanho do copo" (300ml/400ml/500ml) ou "Escolha seus acompanhamentos"
               </p>
 
               {grupos.length > 0 && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 12 }}>
                   {grupos.map(g => (
-                    <div key={g.id} style={{ border: "1px solid #E5E7EB", borderRadius: 10, padding: 10 }}>
+                    <div key={g.id} style={{ border: "1px solid var(--linha)", borderRadius: 10, padding: 10 }}>
                       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8, gap: 8 }}>
                         <div>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{g.nome}</span>
-                          <span style={{ fontSize: 11, color: "#9CA3AF", marginLeft: 6 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--grafite)" }}>{g.nome}</span>
+                          <span style={{ fontSize: 11, color: "var(--suave)", marginLeft: 6 }}>
                             {g.obrigatorio ? "Obrigatório" : "Opcional"} · máx. {g.maximo}
                           </span>
                         </div>
                         <button type="button" onClick={() => deletarGrupo(g.id)}
-                          style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 0, flexShrink: 0 }}>
+                          style={{ background: "none", border: "none", color: "var(--pimenta)", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 0, flexShrink: 0 }}>
                           ✕
                         </button>
                       </div>
@@ -639,14 +691,14 @@ export default function CardapioPage() {
                       {g.itens.length > 0 && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
                           {g.itens.map(it => (
-                            <div key={it.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", borderRadius: 8, background: "#F9FAFB" }}>
-                              <span style={{ fontSize: 13, color: "#374151" }}>{it.nome}</span>
+                            <div key={it.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", borderRadius: 8, background: "var(--pedra)" }}>
+                              <span style={{ fontSize: 13, color: "var(--texto)" }}>{it.nome}</span>
                               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                <span style={{ fontSize: 12, color: "#f97316", fontWeight: 700 }}>
-                                  {it.preco > 0 ? `+ R$ ${it.preco.toFixed(2)}` : "grátis"}
+                                <span style={{ fontSize: 12, color: "var(--pimenta)", fontWeight: 700 }}>
+                                  {it.preco > 0 ? `+ R$ ${Number(it.preco).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "grátis"}
                                 </span>
                                 <button type="button" onClick={() => removerItemGrupo(g.id, it.id)}
-                                  style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 0 }}>
+                                  style={{ background: "none", border: "none", color: "var(--pimenta)", cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 0 }}>
                                   ✕
                                 </button>
                               </div>
@@ -666,12 +718,10 @@ export default function CardapioPage() {
                         />
                         <input
                           className="input"
-                          type="number"
-                          step="0.50"
-                          min="0"
-                          placeholder="R$ (opcional)"
+                          inputMode="numeric"
+                          placeholder="R$ 0,00 (opcional)"
                           value={itemGrupoPreco[g.id] ?? ""}
-                          onChange={e => setItemGrupoPreco(prev => ({ ...prev, [g.id]: e.target.value }))}
+                          onChange={e => setItemGrupoPreco(prev => ({ ...prev, [g.id]: mascara(e.target.value) }))}
                           onKeyDown={e => e.key === "Enter" && adicionarItemGrupo(g.id)}
                           style={{ flex: 1, fontSize: 13 }}
                         />
@@ -689,7 +739,7 @@ export default function CardapioPage() {
                 </div>
               )}
 
-              <div style={{ border: "1px dashed #D1D5DB", borderRadius: 10, padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ border: "1px dashed var(--linha)", borderRadius: 10, padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
                 <input
                   className="input"
                   placeholder='Nome da categoria (ex: "Escolha o tamanho")'
@@ -701,10 +751,10 @@ export default function CardapioPage() {
                   <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
                     <input type="checkbox" checked={novoGrupo.obrigatorio}
                       onChange={e => setNovoGrupo(f => ({ ...f, obrigatorio: e.target.checked }))} />
-                    <span style={{ fontSize: 12, color: "#374151" }}>Obrigatório escolher</span>
+                    <span style={{ fontSize: 12, color: "var(--texto)" }}>Obrigatório escolher</span>
                   </label>
                   <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 12, color: "#6B7280" }}>Máx. opções</span>
+                    <span style={{ fontSize: 12, color: "var(--suave)" }}>Máx. opções</span>
                     <input className="input" type="number" min="1" value={novoGrupo.maximo}
                       onChange={e => setNovoGrupo(f => ({ ...f, maximo: e.target.value }))}
                       style={{ width: 56, fontSize: 12, padding: "4px 6px" }} />
@@ -718,7 +768,7 @@ export default function CardapioPage() {
             </div>
 
             {erroSalvar && (
-              <p style={{ color: "#ef4444", fontSize: 13, fontWeight: 600, background: "rgba(239,68,68,0.08)", padding: "10px 14px", borderRadius: 10 }}>
+              <p style={{ color: "var(--pimenta)", fontSize: 13, fontWeight: 600, background: "rgba(239,68,68,0.08)", padding: "10px 14px", borderRadius: 10 }}>
                 ⚠️ {erroSalvar}
               </p>
             )}
@@ -745,16 +795,16 @@ export default function CardapioPage() {
             </div>
 
             {/* Cardápio do Dia toggle */}
-            <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16 }}>
+            <div style={{ borderTop: "1px solid var(--pedra)", paddingTop: 16 }}>
               <label style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
                 <div
                   onClick={() => setCatForm(f => ({ ...f, cardapio_do_dia: !f.cardapio_do_dia }))}
-                  style={{ width: 40, height: 22, borderRadius: 11, transition: "background 0.2s", background: catForm.cardapio_do_dia ? "#f97316" : "#E5E7EB", position: "relative", cursor: "pointer", flexShrink: 0 }}>
+                  style={{ width: 40, height: 22, borderRadius: 11, transition: "background 0.2s", background: catForm.cardapio_do_dia ? "var(--pimenta)" : "var(--linha)", position: "relative", cursor: "pointer", flexShrink: 0 }}>
                   <div style={{ width: 18, height: 18, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, transition: "left 0.2s", left: catForm.cardapio_do_dia ? 20 : 2 }} />
                 </div>
                 <div>
-                  <p style={{ fontSize: 14, fontWeight: 700, color: "#111827", margin: 0 }}>Cardápio do Dia</p>
-                  <p style={{ fontSize: 12, color: "#9CA3AF", margin: 0 }}>Define horário e dias em que esta categoria aparece</p>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: "var(--grafite)", margin: 0 }}>Cardápio do Dia</p>
+                  <p style={{ fontSize: 12, color: "var(--suave)", margin: 0 }}>Define horário e dias em que esta categoria aparece</p>
                 </div>
               </label>
 
@@ -776,7 +826,7 @@ export default function CardapioPage() {
 
                   {/* Dias da semana */}
                   <div>
-                    <label className="label">Dias da semana <span style={{ fontWeight: 400, color: "#9CA3AF" }}>(vazio = todos os dias)</span></label>
+                    <label className="label">Dias da semana <span style={{ fontWeight: 400, color: "var(--suave)" }}>(vazio = todos os dias)</span></label>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
                       {DIAS.map(d => {
                         const sel = catForm.dias_semana.includes(d.v)
@@ -788,9 +838,9 @@ export default function CardapioPage() {
                             }))}
                             style={{
                               padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 700,
-                              border: sel ? "none" : "1.5px solid #E5E7EB",
-                              background: sel ? "#f97316" : "transparent",
-                              color: sel ? "#fff" : "#6B7280",
+                              border: sel ? "none" : "1.5px solid var(--linha)",
+                              background: sel ? "var(--pimenta)" : "transparent",
+                              color: sel ? "#fff" : "var(--suave)",
                               cursor: "pointer",
                             }}>
                             {d.l}
@@ -804,7 +854,7 @@ export default function CardapioPage() {
             </div>
 
             {erroSalvar && (
-              <p style={{ color: "#ef4444", fontSize: 13, fontWeight: 600, background: "rgba(239,68,68,0.08)", padding: "10px 14px", borderRadius: 10 }}>
+              <p style={{ color: "var(--pimenta)", fontSize: 13, fontWeight: 600, background: "rgba(239,68,68,0.08)", padding: "10px 14px", borderRadius: 10 }}>
                 ⚠️ {erroSalvar}
               </p>
             )}
@@ -822,40 +872,48 @@ export default function CardapioPage() {
   )
 }
 
-function ProdutoCard({ p, onEdit, onToggle, onDelete }: {
+function ProdutoCard({ p, onEdit, onToggle, onDelete, destaque, onDestaque }: {
   p: Produto
   onEdit: (p: Produto) => void
   onToggle: (p: Produto) => void
   onDelete: (id: string) => void
+  destaque?: boolean
+  onDestaque?: (p: Produto) => void
 }) {
   return (
-    <div className="card" style={{ opacity: p.disponivel ? 1 : 0.58, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+    <div className="card" style={{ opacity: p.disponivel ? 1 : 0.58, overflow: "hidden", display: "flex", flexDirection: "column", position: "relative" }}>
+      {onDestaque && (
+        <button onClick={() => onDestaque(p)} aria-pressed={!!destaque} aria-label={destaque ? "Tirar dos Mais pedidos" : "Colocar nos Mais pedidos"} title="Mais pedidos no app"
+          style={{ position: "absolute", top: 8, right: 8, zIndex: 2, width: 36, height: 36, borderRadius: "50%", border: "none", cursor: "pointer", background: "rgba(255,255,255,.95)", boxShadow: "0 1px 4px rgba(0,0,0,.18)", fontSize: 20, lineHeight: 1, color: destaque ? "#E8A400" : "#B8B4AB" }}>
+          {destaque ? "★" : "☆"}
+        </button>
+      )}
       {p.foto_url ? (
         <div style={{ width: "100%", height: 120, overflow: "hidden" }}>
           <img src={p.foto_url} alt={p.nome} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         </div>
       ) : (
-        <div style={{ width: "100%", height: 70, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <span style={{ fontSize: 26, color: "#D1D5DB" }}>📷</span>
+        <div style={{ width: "100%", height: 70, background: "var(--pedra)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <span style={{ fontSize: 26, color: "var(--linha)" }}>📷</span>
         </div>
       )}
 
       <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontWeight: 700, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nome}</p>
+            <p style={{ fontWeight: 700, color: "var(--grafite)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nome}</p>
             {p.descricao && (
-              <p style={{ fontSize: 12, color: "#6B7280", marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const, overflow: "hidden" }}>
+              <p style={{ fontSize: 12, color: "var(--suave)", marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const, overflow: "hidden" }}>
                 {p.descricao}
               </p>
             )}
             {p.dias_semana && p.dias_semana.length > 0 && (
-              <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 3 }}>
+              <p style={{ fontSize: 11, color: "var(--suave)", marginTop: 3 }}>
                 📅 {DIAS.filter(d => p.dias_semana!.includes(d.v)).map(d => d.l).join(" · ")}
               </p>
             )}
           </div>
-          <p style={{ fontSize: 15, fontWeight: 900, color: "#f97316", flexShrink: 0 }}>
+          <p style={{ fontSize: 15, fontWeight: 900, color: "var(--pimenta)", flexShrink: 0 }}>
             R$ {(p.preco ?? 0).toFixed(2).replace(".", ",")}
           </p>
         </div>
@@ -863,15 +921,15 @@ function ProdutoCard({ p, onEdit, onToggle, onDelete }: {
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <button onClick={() => onToggle(p)} style={{
             flex: 1, fontSize: 11, fontWeight: 700, padding: "7px 0", borderRadius: 8, border: "none", cursor: "pointer",
-            background: p.disponivel ? "rgba(34,197,94,0.1)" : "#F3F4F6",
-            color: p.disponivel ? "#22c55e" : "#9CA3AF",
+            background: p.disponivel ? "rgba(34,197,94,0.1)" : "var(--pedra)",
+            color: p.disponivel ? "var(--folha)" : "var(--suave)",
           }}>
             {p.disponivel ? "✓ Disponível" : "✗ Indisponível"}
           </button>
           <button onClick={() => onEdit(p)} className="btn-ghost" style={{ fontSize: 12, padding: "7px 10px" }}>
             Editar
           </button>
-          <button onClick={() => onDelete(p.id)} style={{ padding: "7px 10px", borderRadius: 8, border: "none", background: "rgba(239,68,68,0.08)", color: "#ef4444", cursor: "pointer", fontSize: 13 }}>
+          <button onClick={() => onDelete(p.id)} style={{ padding: "7px 10px", borderRadius: 8, border: "none", background: "rgba(239,68,68,0.08)", color: "var(--pimenta)", cursor: "pointer", fontSize: 13 }}>
             ✕
           </button>
         </div>
@@ -886,8 +944,8 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="card" style={{ width: "100%", maxWidth: "min(520px, 100vw)", margin: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, padding: "20px 16px 32px", maxHeight: "90vh", overflowY: "auto", WebkitOverflowScrolling: "touch", boxSizing: "border-box" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-          <p style={{ fontWeight: 900, fontSize: 16, color: "#111827", margin: 0 }}>{title}</p>
-          <button onClick={onClose} style={{ color: "#9CA3AF", fontSize: 20, lineHeight: 1, background: "none", border: "none", cursor: "pointer" }}>✕</button>
+          <p style={{ fontWeight: 900, fontSize: 16, color: "var(--grafite)", margin: 0 }}>{title}</p>
+          <button onClick={onClose} style={{ color: "var(--suave)", fontSize: 20, lineHeight: 1, background: "none", border: "none", cursor: "pointer" }}>✕</button>
         </div>
         {children}
       </div>

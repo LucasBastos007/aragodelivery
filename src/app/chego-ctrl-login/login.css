@@ -1,0 +1,61 @@
+/* Login do admin 2.0: mapa vivo, logo e mascote. Tudo dentro de .lg */
+.lg{--pimenta:#E8352C;--mx:50%;--my:40%;--px:0px;--py:0px;position:relative;min-height:100vh;min-height:100dvh;overflow:hidden;background:#0C0B0A;color:#F5F3EF;font-family:var(--font-corpo),system-ui,sans-serif;display:flex;flex-direction:column}
+.lg *{box-sizing:border-box}
+.lg-mapa{position:absolute;inset:-30px;transform:translate(var(--px),var(--py));transition:transform .4s ease-out}
+.lg-mapa svg{width:100%;height:100%;display:block}
+.lg-rota{fill:none;stroke:rgba(232,53,44,.55);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1400;stroke-dashoffset:1400;animation:lgDesenha 2.4s cubic-bezier(.6,0,.2,1) forwards;filter:drop-shadow(0 0 6px rgba(232,53,44,.55))}
+@keyframes lgDesenha{to{stroke-dashoffset:0}}
+.lg-loja{opacity:0;animation:lgSurge .6s ease-out forwards}
+@keyframes lgSurge{from{opacity:0;transform-origin:center}to{opacity:1}}
+.lg-luz{position:absolute;inset:0;pointer-events:none;background:radial-gradient(420px circle at var(--mx) var(--my),rgba(232,53,44,.16),transparent 60%),radial-gradient(1200px 700px at 50% 120%,rgba(232,53,44,.18),transparent 60%),linear-gradient(180deg,rgba(12,11,10,.2),rgba(12,11,10,.75))}
+.lg-centro{position:relative;z-index:2;flex:1;display:grid;grid-template-columns:1.1fr minmax(340px,420px);align-items:center;gap:56px;width:min(1120px,100%);margin:0 auto;padding:40px 28px}
+.lg-marca{animation:lgSobe .8s .2s both}
+.lg-logo{width:min(380px,80%);height:auto;filter:drop-shadow(0 18px 40px rgba(0,0,0,.6));animation:lgFlutua 6s ease-in-out infinite}
+@keyframes lgFlutua{50%{transform:translateY(-8px) rotate(-.6deg)}}
+.lg-marca h1{font-family:var(--font-display),system-ui,sans-serif;font-weight:800;font-size:clamp(30px,4vw,48px);letter-spacing:-.03em;line-height:1.05;margin:18px 0 10px}
+.lg-frase{font-size:18px;color:rgba(245,243,239,.72);min-height:28px;margin:0}
+.lg-frase span{display:inline-block;animation:lgFrase 3.2s ease both}
+@keyframes lgFrase{0%{opacity:0;transform:translateY(8px)}12%,85%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-6px)}}
+.lg-cartao{position:relative;background:rgba(28,27,25,.72);backdrop-filter:blur(18px) saturate(1.2);-webkit-backdrop-filter:blur(18px) saturate(1.2);border:1px solid rgba(255,255,255,.09);border-radius:26px;padding:34px 28px 26px;box-shadow:0 30px 80px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.06);animation:lgSobe .7s .35s both}
+.lg-cartao.erro{animation:lgTreme .45s}
+@keyframes lgSobe{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+@keyframes lgTreme{20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+.lg-mascote{position:absolute;width:132px;right:-34px;top:-92px;filter:drop-shadow(0 14px 22px rgba(0,0,0,.5));animation:lgBalanca 2.8s ease-in-out infinite;transform-origin:50% 90%}
+@keyframes lgBalanca{50%{transform:translateY(-6px) rotate(-3deg)}}
+.lg.saindo .lg-mascote{animation:lgArranca .9s cubic-bezier(.5,0,.75,0) forwards}
+@keyframes lgArranca{20%{transform:translateX(-14px) rotate(4deg)}100%{transform:translateX(120vw) rotate(-6deg)}}
+.lg-cartao h2{font-family:var(--font-display),system-ui,sans-serif;font-weight:800;font-size:26px;letter-spacing:-.02em;margin:0}
+.lg-sub{font-size:14px;color:rgba(245,243,239,.6);margin:4px 0 22px}
+.lg-campo{position:relative;display:block;margin-bottom:14px}
+.lg-campo input{width:100%;height:58px;border-radius:16px;border:1.5px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:#F5F3EF;font:inherit;font-size:16px;padding:22px 16px 6px;outline:0;transition:border-color .2s,background .2s,box-shadow .2s}
+.lg-campo input:focus{border-color:var(--pimenta);background:rgba(255,255,255,.06);box-shadow:0 0 0 4px rgba(232,53,44,.18)}
+.lg-campo input:-webkit-autofill{-webkit-text-fill-color:#F5F3EF;-webkit-box-shadow:0 0 0 40px #24221F inset;caret-color:#F5F3EF}
+.lg-campo span{position:absolute;left:17px;top:19px;font-size:16px;color:rgba(245,243,239,.55);pointer-events:none;transition:all .18s ease}
+.lg-campo input:focus+span,.lg-campo input:not(:placeholder-shown)+span{top:9px;font-size:12px;font-weight:700;color:rgba(245,243,239,.75)}
+.lg-ver{position:absolute;right:10px;top:12px;height:34px;padding:0 12px;border-radius:10px;border:0;background:rgba(255,255,255,.07);color:rgba(245,243,239,.8);font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.lg-ver:hover{background:rgba(255,255,255,.12)}
+.lg-caps{font-size:13px;font-weight:700;color:#F7CE5B;margin:-6px 0 10px}
+.lg-erro{font-size:14px;color:#FF8079;background:rgba(232,53,44,.12);border:1px solid rgba(232,53,44,.3);border-radius:12px;padding:10px 12px;margin:0 0 12px}
+.lg-entrar{width:100%;height:56px;border:0;border-radius:16px;background:linear-gradient(135deg,#F0453B,#C81F17);color:#fff;font:inherit;font-size:17px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 12px 30px rgba(232,53,44,.35);transition:transform .15s,box-shadow .2s,filter .2s;margin-top:6px}
+.lg-entrar:hover{transform:translateY(-1px);box-shadow:0 16px 36px rgba(232,53,44,.45);filter:brightness(1.05)}
+.lg-entrar:active{transform:translateY(1px)}
+.lg-entrar:disabled{cursor:default}
+.lg.saindo .lg-entrar{background:linear-gradient(135deg,#34B86E,#1E8A4C);box-shadow:0 12px 30px rgba(52,184,110,.35)}
+.lg-gira{width:18px;height:18px;border-radius:50%;border:2.5px solid rgba(255,255,255,.35);border-top-color:#fff;animation:lgGira .7s linear infinite}
+@keyframes lgGira{to{transform:rotate(360deg)}}
+.lg-ok{width:18px;height:10px;border-left:3px solid #fff;border-bottom:3px solid #fff;transform:rotate(-45deg) translate(2px,-2px)}
+.lg-install:empty{display:none}.lg-install{margin-top:12px}
+.lg-pe{position:relative;z-index:2;text-align:center;font-size:12px;color:rgba(245,243,239,.4);padding:0 0 18px}
+.lg.saindo .lg-centro{animation:lgSai .9s .25s ease-in forwards}
+@keyframes lgSai{to{opacity:0;transform:scale(.98)}}
+@media (max-width:860px){
+  .lg-centro{grid-template-columns:1fr;gap:26px;padding:28px 16px;align-content:center}
+  .lg-marca{text-align:center}.lg-logo{width:min(250px,70%)}
+  .lg-marca h1{font-size:28px;margin:8px 0 4px}.lg-frase{font-size:15px}
+  .lg-mascote{width:78px;right:4px;top:-50px}
+  .lg-centro{gap:44px}
+  .lg-cartao{padding:28px 20px 22px}
+}
+@media (prefers-reduced-motion:reduce){.lg *{animation:none!important;transition:none!important}.lg-rota{stroke-dashoffset:0}.lg-loja{opacity:1}.lg-mapa{transform:none}.lg-mapa circle animateMotion{display:none}}
+.lg-extra{margin-top:12px;text-align:center}.lg-extra button,.lg-extra a{color:rgba(245,243,239,.75)!important}
+.lg-cadastro{text-align:center;margin:10px 0 0;font-size:14px;color:rgba(255,255,255,.7)}.lg-cadastro a{color:#ff6b5f;font-weight:800;text-decoration:none}

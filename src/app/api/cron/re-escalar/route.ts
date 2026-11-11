@@ -8,7 +8,7 @@ const supabase = createClient(
 const BASE = process.env.NEXT_PUBLIC_APP_URL ?? "https://chegodelivery.com"
 const INTERNAL = process.env.INTERNAL_API_SECRET ?? ""
 
-// Pedidos em aguardando_aceite há mais de 2 min → re-escalada
+// Pedidos em aguardando_aceite há mais de 45 s → re-escalada (único lugar que reescala; roda 1x/min pelo vercel.json)
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization")
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
     .eq("status", "aguardando_aceite")
     .lt("atualizado_em", doisMinAtras)
     .not("endereco_entrega", "ilike", "%Retirada%")
+    .limit(15)
 
   if (!travados || travados.length === 0) {
     return NextResponse.json({ ok: true, re_escalados: 0 })

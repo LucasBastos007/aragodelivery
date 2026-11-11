@@ -1,7 +1,9 @@
 export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { ehDividido, temForma, valorDaForma, colunaCobranca, confirmarCobranca } from "@/lib/pagamentoDividido"
 import { criarCliente, criarPix, getPixQrCode, type AsaasSplit } from "@/lib/asaas"
+import { pixNoMercadoPago, criarPixMp } from "@/lib/mercadopago"
 
 function adminSb() {
   return createClient(
@@ -22,9 +24,35 @@ export async function POST(req: NextRequest) {
 
   // Valor sempre vem do pedido já validado no servidor — nunca confiar no que o
   // cliente manda no body, senão dá pra gerar um PIX de qualquer valor.
-  const { data: pedidoDb } = await sb.from("pedidos").select("total").eq("id", pedido_id).single()
+  const { data: pedidoDb } = await sb.from("pedidos")
+    .select("total, forma_pagamento, forma_pagamento_2, valor_pagamento_1, valor_pagamento_2")
+    .eq("id", pedido_id).single()
   if (!pedidoDb) return NextResponse.json({ error: "Pedido não encontrado" }, { status: 404 })
-  const valor = pedidoDb.total
+  // Pagamento em 2 formas: cobra só a parte no Pix (ver lib/pagamentoDividido).
+  const dividido = ehDividido(pedidoDb)
+  if (dividido && !temForma(pedidoDb, "pix")) return NextResponse.json({ error: "Este pedido não tem parte no Pix." }, { status: 400 })
+  const valor = dividido ? valorDaForma(pedidoDb, "pix") : pedidoDb.total
+  const coluna = colunaCobranca(pedidoDb, "pix")
+
+  const emailFinal = email || `pedido_${pedido_id.replace(/-/g, "").slice(0, 12)}@chegodelivery.com`
+
+  // Pix pelo Mercado Pago (22/10/2026). Nenhuma loja usa subconta/split do Asaas, então não
+  // há split a repassar aqui.
+  if (pixNoMercadoPago()) {
+    try {
+      const pix = await criarPixMp(valor, pedido_id, { nome, email: emailFinal, cpf: cpf_cliente ?? undefined }, `pix-${pedido_id}-${coluna}-${valor}`)
+      await sb.from("pedidos").update({
+        [coluna]: pix.id,
+        pix_copia_cola: pix.copiaCola,
+        ...(cpf_cliente ? { cpf_cliente: cpf_cliente.replace(/\D/g, "") } : {}),
+      }).eq("id", pedido_id)
+      return NextResponse.json({ payment_id: pix.id, qrcode: pix.qrcode, copia_cola: pix.copiaCola, expira_em: pix.expiraEm })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erro ao gerar PIX"
+      console.error("[PIX MP]", msg)
+      return NextResponse.json({ error: msg }, { status: 500 })
+    }
+  }
 
   // Monta split se a loja tiver subconta Asaas
   let split: AsaasSplit | undefined
@@ -45,8 +73,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // Garante email válido para Asaas (exige CPF ou email)
-    const emailFinal = email || `pedido_${pedido_id.replace(/-/g, "").slice(0, 12)}@chegodelivery.com`
+    // Asaas exige CPF ou email: emailFinal garante um email válido
     // cpf_cliente é opcional
     const cliente  = await criarCliente(nome, { cpf: cpf_cliente ?? undefined, email: emailFinal, telefone })
     const cobranca = await criarPix(cliente.id, valor, pedido_id, split)
@@ -54,7 +81,7 @@ export async function POST(req: NextRequest) {
 
     // Salva payment_id, copia_cola e cpf_cliente no pedido para recuperação caso o usuário saia e volte
     await adminSb().from("pedidos").update({
-      asaas_payment_id: cobranca.id,
+      [coluna]: cobranca.id,
       pix_copia_cola:   qr.payload,
       ...(cpf_cliente ? { cpf_cliente: cpf_cliente.replace(/\D/g, "") } : {}),
     }).eq("id", pedido_id)

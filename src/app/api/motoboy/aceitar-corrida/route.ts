@@ -17,7 +17,9 @@ export async function POST(req: NextRequest) {
   if (!_sess) return unauthorized()
   const motoboy_id = _sess.motoboy_id
 
-  const { pedido_id } = await req.json()
+  // da_lista: corrida pega na lista "Rotas disponíveis" (pedido "pronto" sem motoboy). Antes o
+  // app gravava isso direto no banco pelo navegador (20/10/2026).
+  const { pedido_id, da_lista } = await req.json()
   if (!pedido_id) {
     return NextResponse.json({ error: "pedido_id obrigatório" }, { status: 400 })
   }
@@ -65,7 +67,7 @@ export async function POST(req: NextRequest) {
     .from("pedidos")
     .update({ status: "indo_para_loja", motoboy_id })
     .eq("id", pedido_id)
-    .eq("status", "aguardando_aceite")
+    .in("status", da_lista ? ["aguardando_aceite", "pronto"] : ["aguardando_aceite"])
     .or(`motoboy_id.is.null,motoboy_id.eq.${motoboy_id}`)
     .select("id, status")
 

@@ -11,7 +11,7 @@ function getSecret(): string {
 }
 
 export type SessionPayload =
-  | { role: "admin" }
+  | { role: "admin"; av?: string }
   | { role: "loja"; loja_id: string }
   | { role: "motoboy"; motoboy_id: string }
 
@@ -38,11 +38,26 @@ function decodeSession(token: string): SessionPayload | null {
   } catch { return null }
 }
 
+/** Marca da senha de admin atual. Vai dentro da sessão de admin: trocou a senha
+ *  (ADMIN_SENHA_HASH), todas as sessões de admin antigas deixam de valer. */
+export function versaoAdmin(): string {
+  return crypto.createHash("sha256").update(process.env.ADMIN_SENHA_HASH ?? "").digest("hex").slice(0, 16)
+}
+
+/** Motoboys com acesso cortado na hora (ids em MOTOBOYS_BLOQUEADOS, separados por vírgula).
+ *  Suspender no banco só barra o próximo login; isto derruba o celular que já estava logado. */
+function bloqueados(): Set<string> {
+  return new Set((process.env.MOTOBOYS_BLOQUEADOS ?? "").split(",").map(x => x.trim()).filter(Boolean))
+}
+
 /** Lê a sessão do cookie da requisição. */
 export function getSession(req: NextRequest): SessionPayload | null {
   const token = req.cookies.get(COOKIE)?.value
   if (!token) return null
-  return decodeSession(token)
+  const s = decodeSession(token)
+  if (s?.role === "admin" && s.av !== versaoAdmin()) return null
+  if (s?.role === "motoboy" && bloqueados().has(s.motoboy_id)) return null
+  return s
 }
 
 /** Gera uma NextResponse com o cookie de sessão setado (HttpOnly). */

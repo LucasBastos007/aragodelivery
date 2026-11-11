@@ -25,6 +25,7 @@ export const STATUS_LABEL: Record<StatusPedido, string> = {
 export const PGTO: Record<string, string> = {
   pix: "PIX", cartao: "Cartão", dinheiro: "Dinheiro",
   maquininha: "Maquininha", apple_pay: "Apple Pay", google_pay: "Google Pay",
+  pix_loja: "Pix (pago à loja)",
 }
 
 // Só existiam no Histórico até a Fase 4 (Pedidos não tem tela de detalhe de

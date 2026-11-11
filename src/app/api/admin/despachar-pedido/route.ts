@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     .eq("status", "pronto")
     .is("motoboy_id", null)
     .not("endereco_entrega", "ilike", "%Retirada%")
-    .select("id, codigo, taxa_entrega")
+    .select("id, codigo, taxa_entrega, taxa_dinamica")
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
 
       const payload = JSON.stringify({
         title: "Nova corrida disponível!",
-        body: `Pedido #${pedido.codigo} — R$ ${(pedido.taxa_entrega ?? 0).toFixed(2)}`,
+        body: `Pedido #${pedido.codigo} — R$ ${(Number(pedido.taxa_entrega ?? 0) + Number((pedido as any).taxa_dinamica ?? 0)).toFixed(2)}`,
         tag: "corrida-nova",
         url: `/motoboy?pedido_id=${pedido_id}`,
         pedido_id,

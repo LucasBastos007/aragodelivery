@@ -15,7 +15,13 @@ export async function POST(req: NextRequest) {
   if (!_sess) return unauthorized()
   const motoboy_id = _sess.motoboy_id
 
-  const { lat, lng } = await req.json()
+  const { lat, lng, limpar } = await req.json()
+  // Parou de compartilhar a localização: apaga o ponto (antes o app gravava isso direto no banco)
+  if (limpar === true) {
+    const { error } = await adminClient().from("motoboys").update({ lat: null, lng: null }).eq("id", motoboy_id)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ ok: true })
+  }
   if (lat == null || lng == null) {
     return NextResponse.json({ error: "lat e lng obrigatórios" }, { status: 400 })
   }

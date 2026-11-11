@@ -19,16 +19,16 @@ const MARGEM_SEGURANCA_FALLBACK = 1.20
 
 // Distância real de rota (Mapbox) sempre que disponível — cai pra linha reta se a API
 // falhar, não tiver token configurado, ou responder fora do tempo. Nunca bloqueia o pedido.
-async function calcularTaxaPorDistancia(latLoja: number | null, lngLoja: number | null, latCliente: number | null, lngCliente: number | null, base = 6.00): Promise<number> {
-  if (!latLoja || !lngLoja || !latCliente || !lngCliente) return base
+export async function distanciaEntregaKm(latLoja: number | null, lngLoja: number | null, latCliente: number | null, lngCliente: number | null): Promise<number | null> {
+  if (!latLoja || !lngLoja || !latCliente || !lngCliente) return null
   const distRota = await distanciaRotaKm({ lat: latLoja, lng: lngLoja }, { lat: latCliente, lng: lngCliente })
-  let dist: number
-  if (distRota !== null) {
-    dist = distRota
-  } else {
-    dist = haversineKm(latLoja, lngLoja, latCliente, lngCliente)
-    if (dist > RAIO_MARGEM_KM) dist *= MARGEM_SEGURANCA_FALLBACK
-  }
+  if (distRota !== null) return distRota
+  const dist = haversineKm(latLoja, lngLoja, latCliente, lngCliente)
+  return dist > RAIO_MARGEM_KM ? dist * MARGEM_SEGURANCA_FALLBACK : dist
+}
+
+function taxaPorDistancia(dist: number | null, base = 6.00): number {
+  if (dist === null) return base
   if (dist <= 6) return base
   return Math.round((base + (dist - 6) * 1.00) * 100) / 100
 }
@@ -41,14 +41,44 @@ async function calcularTaxaPorDistancia(latLoja: number | null, lngLoja: number 
 // geocodificação errada (ver LAT_DEFAULT em checkout/page.tsx). Acima desse raio sem tabela
 // fixa cadastrada, rejeita em vez de cobrar.
 export const RAIO_MAXIMO_KM = 30
+const ADICIONAL_ZONA_RURAL = 5.00
+const DIST_MINIMA_MUNICIPIO_KM = 8
 export class EnderecoForaDoRaioError extends Error {
   constructor(public distanciaKm: number) {
     super(`Endereço fora da área de entrega (${distanciaKm.toFixed(0)}km da loja). Confira se o endereço está correto.`)
   }
 }
 
+// Ponto de entrega incoerente com o endereço: o cliente diz que está na cidade da loja, mas a
+// coordenada caiu longe dela (geocoder mandou "Rua Um, Centro" pra Goiânia — AEPFMK,
+// 2026-10-28, ~19km, R$18,48 em vez de R$4). Pelas entregas reais dos últimos 60 dias, nenhum
+// endereço legítimo na própria cidade da loja passa de ~12km; acima de 15km é ponto errado.
+export const LIMITE_MESMA_CIDADE_KM = 15
+export class PontoEntregaSuspeitoError extends EnderecoForaDoRaioError {
+  constructor(distanciaKm: number, mensagem: string) {
+    super(distanciaKm)
+    this.message = mensagem
+  }
+}
+
 function normalizar(s: string) {
   return (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim()
+}
+
+// Valor mais usado pelas lojas da mesma cidade pra um município de destino (ver calcularTaxaEntregaCompleta)
+async function taxaPadraoDaCidade(sb: SupabaseClient, cidadeLoja: string, cidadeEntrega: string): Promise<number | null> {
+  const { data: lojas } = await sb.from("lojas").select("id, cidade").in("status", ["ativo", "aprovado"])
+  const ids = (lojas ?? []).filter((l: { cidade: string | null }) => mesmaCidade(l.cidade ?? "", cidadeLoja)).map((l: { id: string }) => l.id)
+  if (!ids.length) return null
+  const { data: linhas } = await sb.from("tabela_frete").select("loja_id, municipio, taxa, tipo").in("loja_id", ids).eq("tipo", "municipio")
+  const conta = new Map<number, number>()
+  for (const l of linhas ?? []) {
+    const e = normalizar(l.municipio), n = normalizar(cidadeEntrega)
+    if (!e || !(n.includes(e) || e.includes(n))) continue
+    const v = Number(l.taxa); conta.set(v, (conta.get(v) ?? 0) + 1)
+  }
+  if (!conta.size) return null
+  return [...conta.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0][0]
 }
 
 function buscarTabelaFrete(tabela: { municipio: string; taxa: number }[], nome: string): number | null {
@@ -79,9 +109,24 @@ function filtrarPorTipo<T extends { tipo?: string }>(tabela: T[], tipo: "municip
 // devia ser ~R$26 por distância real. A tabela de bairro só pode valer quando o cliente
 // está mesmo na cidade da loja — nunca aplicar preço de bairro de Guapó pra endereço fora
 // de Guapó só porque o nome do setor bate.
-function mesmaCidade(a: string, b: string): boolean {
+export function mesmaCidade(a: string, b: string): boolean {
   const na = normalizar(a), nb = normalizar(b)
   return !!na && !!nb && (na.includes(nb) || nb.includes(na))
+}
+
+/** CEP (só dígitos ou com hífen) -> nome da cidade via ViaCEP. Cidades pequenas atendidas
+ * têm CEP geral único (Guapó 75350-000, Aragoiânia 75330-000), então o CEP basta. Falha
+ * silenciosa (null) — nunca bloqueia o pedido. */
+async function cidadePorCep(cep: string | null | undefined): Promise<string | null> {
+  const digitos = (cep ?? "").replace(/\D/g, "")
+  if (digitos.length !== 8) return null
+  try {
+    const res = await fetch(`https://viacep.com.br/ws/${digitos}/json/`, { signal: AbortSignal.timeout(3000) })
+    const json = await res.json()
+    return typeof json?.localidade === "string" && json.localidade ? json.localidade : null
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -106,18 +151,39 @@ export async function calcularTaxaEntregaCompleta(
     cidade_entrega?: string | null
     bairro_entrega?: string | null
     cliente_id?: string | null
-  }
+    zona_rural?: boolean | null
+    /** Checkout do app: zona rural sem ponto no mapa é recusada (só a base sairia barata demais) */
+    exigir_ponto_rural?: boolean
+  },
+  /** Preenchido com a distância usada e de onde veio o valor, pra gravar no pedido e auditar depois */
+  detalhe?: { distancia_km?: number | null; fonte?: string }
 ): Promise<number> {
   if (params.tipo_entrega === "retirada") return 0
+
+  // Ponto de entrega em cima da loja (até 30 m) = o cliente não marcou onde mora: sem GPS o pino do
+  // checkout começa na loja (15 pedidos em out/2026, ex. H9E3AA rural saiu R$ 9). Vale como sem ponto.
+  if (params.loja_lat && params.loja_lng && params.lat_entrega && params.lng_entrega
+    && haversineKm(params.loja_lat, params.loja_lng, params.lat_entrega, params.lng_entrega) < 0.03) {
+    params = { ...params, lat_entrega: null, lng_entrega: null }
+  }
 
   // Frete fixo por cliente — override manual acima de qualquer cálculo por distância ou
   // tabela de município/bairro (pedido do usuário, 2026-09-25: casos pontuais em que o
   // frete calculado não reflete o combinado com a cliente, ex: Vitória Santos R$10,
   // Livia Jesus R$18). Só se aplica quando explicitamente cadastrado — null/ausente cai
   // no cálculo normal de sempre, comportamento 100% preservado pros demais clientes.
+  let cidadeEntrega = params.cidade_entrega?.trim() ?? ""
   if (params.cliente_id) {
-    const { data: clienteRow } = await sb.from("clientes").select("frete_fixo").eq("id", params.cliente_id).maybeSingle()
-    if (clienteRow?.frete_fixo != null) return Math.max(0, Number(clienteRow.frete_fixo))
+    const { data: clienteRow } = await sb.from("clientes").select("frete_fixo, endereco_cidade, endereco_cep").eq("id", params.cliente_id).maybeSingle()
+    if (clienteRow?.frete_fixo != null) { if (detalhe) detalhe.fonte = "cliente"; return Math.max(0, Number(clienteRow.frete_fixo)) }
+    // Cidade vazia = endereço do cadastro sem cidade e sem geocodificação (sem lat/lng) —
+    // nesse caso nenhuma tabela casava e caía na taxa base da loja. Incidente real,
+    // 2026-10-02: pedido CFXBSR (Pamonharia Cidade Nova, Guapó → Aragoiânia, CEP
+    // 75330-000) cobrou R$4 em vez dos R$26 da tabela de Aragoiânia. Recupera a cidade
+    // do cadastro do cliente (campo cidade, senão pelo CEP via ViaCEP).
+    if (!cidadeEntrega && params.lat_entrega == null) {
+      cidadeEntrega = clienteRow?.endereco_cidade?.trim() || await cidadePorCep(clienteRow?.endereco_cep) || ""
+    }
   }
 
   const [{ data: tabelaFrete }, { data: lojaRow }] = await Promise.all([
@@ -140,19 +206,88 @@ export async function calcularTaxaEntregaCompleta(
   const cidadesAtendidas: string[] = lojaRow?.cidades_atendidas ?? []
   const cidadesExtras = cidadesAtendidas.filter((c: string) => !!c && !mesmaCidade(c, lojaRow?.cidade ?? ""))
   const cidadesBairroElegiveis: string[] = cidadesExtras.length > 0 ? cidadesExtras : [lojaRow?.cidade].filter((c): c is string => !!c)
-  const clienteNaCidadeDaLoja = cidadesBairroElegiveis.some(c => mesmaCidade(params.cidade_entrega ?? "", c))
-  const taxaFixa = (clienteNaCidadeDaLoja ? buscarTabelaFrete(filtrarPorTipo(tabelaFrete ?? [], "bairro"), params.bairro_entrega ?? "") : null)
-    ?? buscarTabelaFrete(filtrarPorTipo(tabelaFrete ?? [], "municipio"), params.cidade_entrega ?? "")
+  const clienteNaCidadeDaLoja = cidadesBairroElegiveis.some(c => mesmaCidade(cidadeEntrega, c))
+  const taxaBairro = clienteNaCidadeDaLoja ? buscarTabelaFrete(filtrarPorTipo(tabelaFrete ?? [], "bairro"), params.bairro_entrega ?? "") : null
+  // Distância de rota medida uma vez só (serve pro km, pra zona rural e pra regra do município abaixo)
+  const distRota = await distanciaEntregaKm(params.loja_lat, params.loja_lng, params.lat_entrega, params.lng_entrega)
+  // Valor fixo de município vizinho só a partir de 8 km da loja (Lucas, 03/11/2026): chácara do
+  // município de Guapó a 4 km de Aragoiânia paga por km, não os R$ 30 da cidade de Guapó.
+  const municipioVale = distRota === null || distRota >= DIST_MINIMA_MUNICIPIO_KM
+  let taxaFixa = taxaBairro ?? (municipioVale ? buscarTabelaFrete(filtrarPorTipo(tabelaFrete ?? [], "municipio"), cidadeEntrega) : null)
+  if (detalhe) detalhe.fonte = taxaFixa === null ? "km" : taxaBairro !== null ? "bairro" : "municipio"
+  // Tabela padrão da cidade (03/11/2026): a tabela de município era copiada à mão loja por loja, e loja
+  // sem a linha caía no cálculo por km. Ex.: Aragoiânia → Guapó saiu de R$ 9 a R$ 37,25 no mesmo mês
+  // (GJBKRV, Bom Demais, R$ 16,73; CDY7VK, Sushi Biscuit, R$ 30). Sem linha própria, vale o valor mais
+  // usado pelas outras lojas da mesma cidade pra aquele município. Linha própria da loja sempre ganha.
+  if (taxaFixa === null && municipioVale && cidadeEntrega && lojaRow?.cidade && !mesmaCidade(cidadeEntrega, lojaRow.cidade)) {
+    taxaFixa = await taxaPadraoDaCidade(sb, lojaRow.cidade, cidadeEntrega)
+    if (taxaFixa !== null && detalhe) detalhe.fonte = "municipio_padrao"
+  }
 
   if (taxaFixa === null && params.loja_lat && params.loja_lng && params.lat_entrega && params.lng_entrega) {
     const distKm = haversineKm(params.loja_lat, params.loja_lng, params.lat_entrega, params.lng_entrega)
     if (distKm > RAIO_MAXIMO_KM) throw new EnderecoForaDoRaioError(distKm)
+    if (!params.zona_rural && distKm > LIMITE_MESMA_CIDADE_KM && mesmaCidade(cidadeEntrega, lojaRow?.cidade ?? ""))
+      throw new PontoEntregaSuspeitoError(distKm, `O ponto de entrega ficou a ${distKm.toFixed(0)}km da loja, fora de ${lojaRow?.cidade}. Confira o endereço e marque no mapa onde entregar.`)
   }
+  // Zona rural (MYC5TX, 2026-10-28): sem coordenada, a taxa saía só base + R$5 (R$9 em vez de R$23,90)
+  if (params.zona_rural && params.exigir_ponto_rural && taxaFixa === null && (!params.lat_entrega || !params.lng_entrega))
+    throw new PontoEntregaSuspeitoError(0, "Para entrega em zona rural, marque no mapa o local exato da entrega.")
 
-  const taxa = taxaFixa !== null
+  if (detalhe) detalhe.distancia_km = distRota !== null ? Math.round(distRota * 100) / 100 : null
+  let taxa = taxaFixa !== null
     ? taxaFixa
-    : await calcularTaxaPorDistancia(params.loja_lat, params.loja_lng, params.lat_entrega, params.lng_entrega, params.loja_taxa_base ?? 6.00)
+    : taxaPorDistancia(distRota, params.loja_taxa_base ?? 6.00)
 
   // Nunca negativa — loja com taxa_entrega cadastrada errada (< 0) não pode reduzir o total.
+  // Zona rural / estrada de chão (pergunta obrigatória no checkout, pedido do usuário em
+  // 2026-10-06): soma em cima da taxa normal — inclusive da taxa fixa de tabela — R$5,00 +
+  // R$1,00 por km acima de 5km (distância loja→cliente). Sem coordenada pra medir, só os R$5.
+  if (params.zona_rural) {
+    const dist = distRota
+    taxa += ADICIONAL_ZONA_RURAL + (dist !== null && dist > 5 ? (dist - 5) * 1.00 : 0)
+    taxa = Math.round(taxa * 100) / 100
+  }
+
   return Math.max(0, taxa)
+}
+
+// Coordenada do endereço de sempre do cliente, tirada das entregas anteriores dele no mesmo
+// bairro e cidade. Incidentes reais, 2026-10-28: AEPFMK (Padaria Flor de Ipê) saiu com a
+// "Rua Um, Centro, Aragoiânia" geocodificada em Goiânia (~20km) e cobrou R$18,48 em vez de
+// R$4; MYC5TX (Açaíteria Mendonça, zona rural no Campo Dourado) saiu sem coordenada e
+// cobrou R$9 em vez dos ~R$23 de sempre. Nos dois casos o cliente já tinha recebido ali
+// com a coordenada certa. Regra: sem coordenada, usa a do histórico; com coordenada a mais
+// de 3km da do histórico pro mesmo bairro, confia no histórico (o geocoder errou).
+const DESVIO_MAXIMO_KM = 3
+const PINO_NA_LOJA_KM = 0.05
+export async function coordsPeloHistorico(
+  sb: SupabaseClient,
+  p: { cliente_id?: string | null; bairro?: string | null; cidade?: string | null; lat: number | null; lng: number | null; loja_lat?: number | null; loja_lng?: number | null }
+): Promise<{ lat: number | null; lng: number | null; corrigido: boolean }> {
+  // Pino em cima da loja nunca é o endereço do cliente (YJEXNK, 08/11/2026: o pino errado
+  // de um pedido antigo virou "histórico" e todo pedido seguinte saiu na porta da Petiscaria).
+  const naLoja = (lat: number, lng: number, lLat?: number | null, lLng?: number | null) =>
+    !!lLat && !!lLng && haversineKm(lat, lng, Number(lLat), Number(lLng)) < PINO_NA_LOJA_KM
+  const entrada = p.lat != null && p.lng != null && naLoja(p.lat, p.lng, p.loja_lat, p.loja_lng)
+  const atual = entrada ? { lat: null, lng: null, corrigido: true } : { lat: p.lat ?? null, lng: p.lng ?? null, corrigido: false }
+  const bairro = normalizar(p.bairro ?? ""), cidade = normalizar(p.cidade ?? "")
+  if (!p.cliente_id || !bairro || !cidade) return atual
+  const { data } = await sb.from("pedidos").select("endereco_entrega, lat_entrega, lng_entrega, loja:lojas(lat, lng)")
+    .eq("cliente_id", p.cliente_id).eq("status", "entregue").not("lat_entrega", "is", null)
+    .order("criado_em", { ascending: false }).limit(30)
+  const anterior = (data ?? []).find((r: any) => {
+    if (naLoja(Number(r.lat_entrega), Number(r.lng_entrega), r.loja?.lat, r.loja?.lng)) return false
+    if (naLoja(Number(r.lat_entrega), Number(r.lng_entrega), p.loja_lat, p.loja_lng)) return false
+    const ultimo = String(r.endereco_entrega ?? "").split(" — ").pop() ?? ""
+    const partes = ultimo.split(",").map(s => normalizar(s))
+    if (partes.length < 2) return false
+    return partes[0] === bairro && mesmaCidade(partes[partes.length - 1], cidade)
+  })
+  if (!anterior) return atual
+  const hLat = Number(anterior.lat_entrega), hLng = Number(anterior.lng_entrega)
+  if (!Number.isFinite(hLat) || !Number.isFinite(hLng)) return atual
+  if (atual.lat == null || atual.lng == null || haversineKm(atual.lat, atual.lng, hLat, hLng) > DESVIO_MAXIMO_KM)
+    return { lat: hLat, lng: hLng, corrigido: true }
+  return atual
 }

@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { requireAdmin, unauthorized } from "@/lib/session"
 import { enviarReciboPagamento } from "@/lib/email"
+import { buscarPagamento } from "@/lib/asaas"
+
+const CONFIRMADOS = new Set(["CONFIRMED", "RECEIVED", "PAYMENT_CONFIRMED", "PAYMENT_RECEIVED"])
 
 function adminClient() {
   return createClient(
@@ -26,7 +29,8 @@ export async function POST(req: NextRequest) {
   const sess = requireAdmin(req)
   if (!sess) return unauthorized()
 
-  const { pedido_id } = await req.json()
+  const { pedido_id, comprovante: comprovanteBruto } = await req.json()
+  const comprovante = String(comprovanteBruto ?? "").trim()
   if (!pedido_id) return NextResponse.json({ error: "pedido_id obrigatório" }, { status: 400 })
 
   const sb = adminClient()
@@ -42,9 +46,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Esse pedido não está aguardando pagamento" }, { status: 422 })
   }
 
+  // Trava (05/11/2026, pedido #CNW8GC: liberado à mão com o Pix sem pagar e foi pra loja).
+  // Se o Mercado Pago/Asaas já diz que caiu, libera direto. Se diz que não caiu (ou não deu pra
+  // consultar), só libera com o admin dizendo onde viu o dinheiro (comprovante, extrato...).
+  let statusProvedor = "sem cobrança"
+  if (pedido.asaas_payment_id) {
+    try { statusProvedor = String((await buscarPagamento(pedido.asaas_payment_id)).status) } catch { statusProvedor = "não consultado" }
+  }
+  const provedorConfirmou = CONFIRMADOS.has(statusProvedor)
+  if (!provedorConfirmou && comprovante.length < 10) {
+    const provedor = String(pedido.asaas_payment_id ?? "").startsWith("mp_") ? "O Mercado Pago" : "O Asaas"
+    return NextResponse.json({
+      error: statusProvedor === "não consultado"
+        ? "Não deu pra consultar o pagamento agora. Escreva onde você viu o dinheiro (comprovante, extrato) pra liberar."
+        : `${provedor} diz que esse pagamento ainda NÃO caiu. Só libere se você viu o dinheiro: escreva onde (comprovante, extrato, valor e hora).`,
+      precisa_comprovante: true, status_provedor: statusProvedor,
+    }, { status: 409 })
+  }
+
   const { data: atualizado, error } = await sb
     .from("pedidos")
-    .update({ status: "pendente" })
+    .update({ status: "pendente", atualizado_em: new Date().toISOString() })
     .eq("id", pedido_id)
     .eq("status", "aguardando_pagamento")
     .select("id, codigo, status")
@@ -61,7 +83,7 @@ export async function POST(req: NextRequest) {
     await sb.from("webhook_events").insert({
       provider: "admin_manual",
       external_event_id: `confirmacao_manual_${pedido_id}_${Date.now()}`,
-      payload: { pedido_id, codigo: pedido.codigo, asaas_payment_id: pedido.asaas_payment_id, motivo: "Admin confirmou pagamento manualmente (Asaas/webhook não haviam confirmado ainda)" },
+      payload: { pedido_id, codigo: pedido.codigo, asaas_payment_id: pedido.asaas_payment_id, motivo: "Admin confirmou pagamento manualmente (Asaas/webhook não haviam confirmado ainda)", status_provedor: statusProvedor, comprovante: comprovante || null },
     })
   } catch { /* auditoria não pode bloquear a confirmação em si */ }
 

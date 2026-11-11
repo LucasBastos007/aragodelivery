@@ -11,9 +11,13 @@ const TIPOS = ["acesso", "cadastro", "pedido"] as const
 
 export async function POST(req: NextRequest) {
   try {
-    const { tipo } = await req.json()
+    const { tipo, visitante } = await req.json()
     if (!TIPOS.includes(tipo)) return NextResponse.json({ ok: false })
-    await sb.from("acessos_app").insert({ tipo })
+    // visitante: código anônimo do celular (só letras, números e hífen)
+    const vis = typeof visitante === "string" && /^[a-z0-9-]{8,48}$/i.test(visitante) ? visitante : null
+    const { error } = await sb.from("acessos_app").insert(vis ? { tipo, visitante: vis } : { tipo })
+    // Banco sem a coluna nova ainda: grava como antes
+    if (error && vis) await sb.from("acessos_app").insert({ tipo })
     return NextResponse.json({ ok: true })
   } catch {
     return NextResponse.json({ ok: true })

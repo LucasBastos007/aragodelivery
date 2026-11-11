@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import { supabase } from "@/lib/supabase"
+import Link from "next/link"
 import { useAuth } from "@/lib/auth"
-import { ganhoMotoboy } from "@/lib/comissao"
+import { ganhoMotoboy, ganhoMotoboyPedido } from "@/lib/comissao"
 
 // Calcula o valor líquido que o motoboy recebe após a taxa da plataforma
 function ganhoLiquido(taxa: number, criadoEm?: string | null): number {
@@ -21,25 +22,27 @@ function extrairTipoMaquininha(observacao?: string | null): string | null {
 // Quanto o motoboy precisa cobrar do cliente na entrega — só relevante pra dinheiro/maquininha
 // (PIX e cartão salvo já foram cobrados no app). Mostrado tanto na oferta quanto na corrida ativa.
 function DetalheCobranca({ pedido }: { pedido: any }) {
-  if (pedido.forma_pagamento === "dinheiro") {
-    return (
-      <p style={{ color: "#facc15", fontSize: 12, fontWeight: 800 }}>
-        💵 Cobrar R$ {Number(pedido.total ?? 0).toFixed(2)}
-        {pedido.troco_para ? ` · Troco para R$ ${Number(pedido.troco_para).toFixed(2)}` : " · Sem troco"}
-      </p>
-    )
-  }
-  if (pedido.forma_pagamento === "maquininha") {
+  // Layout novo: texto escuro sobre fundo amarelo-claro (cartões) — o conteúdo é o mesmo.
+  // Pagamento em 2 formas (20/10/2026): cobra só as partes de dinheiro/maquininha, cada uma
+  // com o próprio valor, e avisa quanto já foi pago no app.
+  const partes = partesPagamento(pedido)
+  const reais = (v: number) => `R$ ${v.toFixed(2).replace(".", ",")}`
+  const linhas = partes.filter(x => x.forma === "dinheiro" || x.forma === "maquininha").map(x => {
+    if (x.forma === "dinheiro") return `Cobrar ${reais(x.valor)} em dinheiro${pedido.troco_para ? `, troco pra ${reais(Number(pedido.troco_para))}` : ", sem troco"}`
     const tipo = extrairTipoMaquininha(pedido.observacao)
-    return (
-      <p style={{ color: "#facc15", fontSize: 12, fontWeight: 800 }}>
-        💳 Cobrar R$ {Number(pedido.total ?? 0).toFixed(2)}{tipo ? ` na maquininha (${tipo})` : " na maquininha"}
-      </p>
-    )
-  }
-  return null
+    return `Cobrar ${reais(x.valor)} na maquininha${tipo ? ` (${tipo})` : ""}`
+  })
+  if (!linhas.length) return null
+  const pagoNoApp = partes.filter(x => x.forma === "pix" || x.forma === "cartao")
+  return (
+    <span style={{ color: "#6B5100", fontSize: 13, fontWeight: 800, display: "block" }}>
+      {linhas.map((l, k) => <span key={k} style={{ display: "block" }}>{l}</span>)}
+      {pagoNoApp.length > 0 && <span style={{ display: "block", fontWeight: 600 }}>{pagoNoApp.map(x => `${reais(x.valor)} já pago no ${x.forma === "pix" ? "Pix" : "cartão"}`).join(", ")}</span>}
+    </span>
+  )
 }
 import type { Pedido } from "@/types"
+import { partesPagamento, cobraNaEntrega, rotuloPagamento } from "@/lib/pagamentoDividido"
 import { useJsApiLoader } from "@react-google-maps/api"
 
 const GMAPS_LIBS: ("geometry" | "places")[] = []
@@ -63,10 +66,10 @@ const DARK_MAP_STYLE = [
 ]
 
 const PGTO: Record<string, string> = {
-  pix: "PIX", cartao: "Cartão", dinheiro: "Dinheiro", maquininha: "Maquininha",
+  pix: "PIX", cartao: "Cartão", dinheiro: "Dinheiro", maquininha: "Maquininha", pix_loja: "Pix (já pago)",
 }
 const PGTO_COLOR: Record<string, string> = {
-  pix: "#818cf8", cartao: "#60a5fa", dinheiro: "#34d399", maquininha: "#f472b6",
+  pix: "#818cf8", cartao: "#60a5fa", dinheiro: "#34d399", maquininha: "#f472b6", pix_loja: "#818cf8",
 }
 
 const DEFAULT_LAT = -17.0549
@@ -482,17 +485,11 @@ function MapaMotoboy({
 
   // ── Entra/sai do navMode — muda zoom, heading e estilo do mapa ─────────────────
   useEffect(() => {
+    // Layout novo (19/10/2026): mapa claro também no modo navegação (o Lucas preferiu o
+    // mapa claro na proposta); só esconde os ícones de comércio pra não poluir a rota.
     const NAV_STYLES: google.maps.MapTypeStyle[] = [
-      { elementType: "geometry",           stylers: [{ color: "#1e2a45" }] },
-      { elementType: "labels.text.fill",   stylers: [{ color: "#8ec3b9" }] },
-      { elementType: "labels.text.stroke", stylers: [{ color: "#1a3646" }] },
-      { featureType: "road",               elementType: "geometry",        stylers: [{ color: "#38518a" }] },
-      { featureType: "road",               elementType: "geometry.stroke", stylers: [{ color: "#1d2c4d" }] },
-      { featureType: "road.highway",       elementType: "geometry",        stylers: [{ color: "#2c6675" }] },
-      { featureType: "road.highway",       elementType: "geometry.stroke", stylers: [{ color: "#255763" }] },
-      { featureType: "water",              elementType: "geometry",        stylers: [{ color: "#0e1626" }] },
-      { featureType: "poi",                elementType: "geometry",        stylers: [{ color: "#283d6a" }] },
-      { featureType: "poi.park",           elementType: "geometry",        stylers: [{ color: "#263c3f" }] },
+      { featureType: "poi", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+      { featureType: "poi.business", stylers: [{ visibility: "off" }] },
     ]
     const apply = () => {
       const map = mapInstanceRef.current; if (!map) return
@@ -558,10 +555,10 @@ function MapaMotoboy({
 
   return (
     <>
-      <div ref={containerRef} style={{ position: "absolute", inset: 0, background: "#1a1a2e" }} />
+      <div ref={containerRef} style={{ position: "absolute", inset: 0, background: "#E9E7E2" }} />
       {!isLoaded && (
-        <div style={{ position: "absolute", inset: 0, background: "#1a1a2e", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13 }}>Carregando mapa...</p>
+        <div style={{ position: "absolute", inset: 0, background: "#E9E7E2", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <p style={{ color: "#77736B", fontSize: 13 }}>Carregando mapa…</p>
         </div>
       )}
 
@@ -577,25 +574,22 @@ function MapaMotoboy({
           followRef.current = true
           setFollowing(true)
         }}
+        aria-label="Centralizar no meu local"
         style={{
-          position: "absolute", bottom: 24, right: 16, zIndex: 40,
-          display: "flex", alignItems: "center", gap: 6,
-          padding: "10px 16px",
-          background: following ? "rgba(249,115,22,0.18)" : "rgba(26,26,46,0.92)",
-          border: following ? "1.5px solid rgba(249,115,22,0.35)" : "1.5px solid rgba(249,115,22,0.7)",
-          borderRadius: 24,
-          color: following ? "rgba(255,255,255,0.5)" : "white",
-          fontSize: 13, fontWeight: 700, cursor: "pointer",
-          boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
-          backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
-          transition: "all 0.2s",
+          // Layout novo: botão redondo no canto de cima (antes ficava embaixo e cobria o painel)
+          position: "absolute", top: "calc(env(safe-area-inset-top, 0px) + 66px)", right: 12, zIndex: 21,
+          width: 44, height: 44, borderRadius: "50%", border: 0,
+          display: "grid", placeItems: "center",
+          background: following ? "#fff" : "#22201C",
+          color: following ? "#22201C" : "#fff",
+          boxShadow: "0 1px 2px rgba(34,32,28,.06),0 4px 14px rgba(34,32,28,.08)",
+          cursor: "pointer", transition: "all 0.2s",
         }}
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={following ? "rgba(249,115,22,0.5)" : "#f97316"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/>
           <line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>
         </svg>
-        Centralizar
       </button>
     </>
   )
@@ -618,6 +612,12 @@ export default function MotoboyPage() {
     if (typeof window !== "undefined") return localStorage.getItem("motoboy_online") === "1"
     return false
   })
+  // Corrida dinâmica (chuva, 25/10/2026): aviso enquanto vale + R$ X por entrega
+  const [dinamica, setDinamica] = useState<{ valor: number; ate: string } | null>(null)
+  useEffect(() => {
+    const ler = () => fetch("/api/corrida-dinamica").then(r => r.ok ? r.json() : null).then(j => setDinamica(j?.ativa ? { valor: j.valor, ate: j.ate } : null)).catch(() => {})
+    ler(); const t = setInterval(ler, 60000); return () => clearInterval(t)
+  }, [])
   const [dispLoading,    setDispLoading]    = useState(true)
   const [togglingDisp,   setTogglingDisp]   = useState(false)
   const [pushStatus,     setPushStatus]     = useState<"granted"|"denied"|"default"|"unsupported">("default")
@@ -685,6 +685,7 @@ export default function MotoboyPage() {
   const isFirstLoad     = useRef(true)
   const justAcceptedRef  = useRef(false)
   const dismissedIdsRef  = useRef<Set<string>>(new Set())
+  const buscouOfertaRef  = useRef<Map<string, number>>(new Map()) // última busca de cada oferta (anti-rajada)
   const isLoadingPedidosRef = useRef(false)
   const pedidoOfertaRef  = useRef<any>(null)
   // Ordem manual escolhida em "Priorizar esta entrega" — sem isso, o polling de 15s
@@ -762,6 +763,11 @@ export default function MotoboyPage() {
           // (garante que a preferência do usuário não seja sobrescrita ao trocar de aba)
           const localPref = localStorage.getItem("motoboy_online")
           if (localPref === null) setDisponivel(data.disponivel)
+          // App mostra "disponível" mas o banco está desligado (incidente real, 21/10/2026: lojista via
+          // "nenhum motoboy disponível" com motoboy rodando): grava de novo pro despacho enxergar ele.
+          if (localPref === "1" && !data.disponivel) {
+            fetch("/api/motoboy/status", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ motoboy_id, disponivel: true }) }).catch(() => {})
+          }
           localStorage.setItem("motoboy_online", (localPref !== null ? localPref === "1" : data.disponivel) ? "1" : "0")
           if (data.lat)     setMyLat(data.lat)
           if (data.lng)     setMyLng(data.lng)
@@ -866,7 +872,7 @@ export default function MotoboyPage() {
     const desde = hoje.toISOString()
     Promise.all([
       supabase.from("pedidos")
-        .select("taxa_entrega, criado_em")
+        .select("taxa_entrega, taxa_dinamica, criado_em")
         .eq("motoboy_id", motoboy_id)
         .eq("status", "entregue")
         .gte("criado_em", desde),
@@ -878,7 +884,7 @@ export default function MotoboyPage() {
     ]).then(([{ data: pedidosData }, { data: avulsasData }]) => {
       const pedidos = pedidosData ?? []
       const avulsas = avulsasData ?? []
-      setGanhosDia([...pedidos, ...avulsas].reduce((s: number, p: any) => s + ganhoLiquido(p.taxa_entrega ?? 0, p.criado_em), 0))
+      setGanhosDia([...pedidos, ...avulsas].reduce((s: number, p: any) => s + ganhoMotoboyPedido(p), 0))
       setCorridasDia(pedidos.length + avulsas.length)
     })
   }, [motoboy_id])
@@ -981,6 +987,9 @@ export default function MotoboyPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ motoboy_id, disponivel: novo }),
       })
+      // Sessão vencida (o login vale 30 dias): manda entrar de novo em vez de pedir pra
+      // tentar de novo pra sempre (Gustavo Alves, 31/10/2026, parado desde 05/09).
+      if (res.status === 401) { setToastMsg("Seu acesso venceu. Entre de novo para ficar online."); await logout(); window.location.href = "/entrar/motoboy"; return }
       if (!res.ok) throw new Error("status " + res.status)
       setDisponivel(novo)
       localStorage.setItem("motoboy_online", novo ? "1" : "0")
@@ -1022,10 +1031,12 @@ export default function MotoboyPage() {
           .eq("motoboy_id", motoboy_id)
           .order("criado_em", { ascending: true }),
         // Polling de fallback: busca oferta de corrida mesmo sem realtime ativo
+        // Inclui a corrida que o admin despachou direto pra ele (21/10/2026): antes só chegava pela
+        // notificação; se ele fechasse e reabrisse o app, a oferta sumia.
         supabase.from("pedidos")
           .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng, cidade), itens:itens_pedido(*)")
-          .eq("status", "aguardando_aceite").is("motoboy_id", null)
-          .limit(1),
+          .eq("status", "aguardando_aceite").or(`motoboy_id.is.null,motoboy_id.eq.${motoboy_id}`)
+          .limit(5),
       ])
 
       // Filtra pela distância até o raio configurado pelo motoboy — mesma regra do
@@ -1074,12 +1085,13 @@ export default function MotoboyPage() {
       // som de alerta do caminho realtime, senão a corrida aparece muda quando o
       // WebSocket cai (comum com o app em segundo plano ou rede instável).
       if (!pedidoOfertaRef.current && ofertaData && ofertaData.length > 0) {
-        const oferta = ofertaData[0]
+        const oferta = ofertaData.find((o: any) => o.motoboy_id === motoboy_id && !dismissedIdsRef.current.has(o.id)) ?? ofertaData[0]
+        const designada = (oferta as any).motoboy_id === motoboy_id
         const ofertaLl = (oferta as any).loja
         const ofertaDentroDoRaio = (cidadeFixaRef.current && ofertaLl?.cidade && ofertaLl.cidade === cidadeFixaRef.current)
           || !temGpsReal || !ofertaLl?.lat || !ofertaLl?.lng
           || haversineKm(myLatPedidosRef.current, myLngPedidosRef.current, ofertaLl.lat, ofertaLl.lng) <= (raioKmRef.current || 12)
-        if (!dismissedIdsRef.current.has(oferta.id) && ofertaDentroDoRaio) {
+        if (!dismissedIdsRef.current.has(oferta.id) && (designada || ofertaDentroDoRaio)) {
           playNotificationSound()
           setPedidoOferta(oferta); setTimerOferta(30); setDistKmOferta(null)
         }
@@ -1147,13 +1159,16 @@ export default function MotoboyPage() {
     // Verifica oferta pendente já existente ao entrar (broadcast: motoboy_id null)
     supabase.from("pedidos")
       .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng, cidade), itens:itens_pedido(*)")
-      .is("motoboy_id", null)
+      .or(`motoboy_id.is.null,motoboy_id.eq.${motoboy_id}`)
       .eq("status", "aguardando_aceite")
-      .limit(1)
+      .limit(5)
       .then(({ data }) => {
-        if (data && data.length > 0 && !dismissedIdsRef.current.has(data[0].id) && dentroDoRaio(data[0])) {
+        // A despachada direto pra ele vem primeiro e não depende do raio
+        const o = (data ?? []).find((x: any) => x.motoboy_id === motoboy_id && !dismissedIdsRef.current.has(x.id))
+          ?? (data ?? []).find((x: any) => !x.motoboy_id && !dismissedIdsRef.current.has(x.id) && dentroDoRaio(x))
+        if (o) {
           playNotificationSound()
-          setPedidoOferta(data[0]); setTimerOferta(30); setDistKmOferta(null)
+          setPedidoOferta(o); setTimerOferta(30); setDistKmOferta(null)
         }
       })
 
@@ -1163,14 +1178,18 @@ export default function MotoboyPage() {
         filter: `status=eq.aguardando_aceite`,
       }, payload => {
         const novo = payload.new as any
-        // Só processa pedidos broadcast (sem motoboy atribuído)
-        if (novo?.motoboy_id !== null) return
+        // Pedidos broadcast (sem motoboy) ou despachados direto pra ele
+        if (novo?.motoboy_id !== null && novo?.motoboy_id !== motoboy_id) return
         if (dismissedIdsRef.current.has(novo.id)) return
+        // Mesmo pedido reoferecido várias vezes seguidas: busca no máximo 1x a cada 20 s
+        const agoraMs = Date.now(), ultimaBusca = buscouOfertaRef.current.get(novo.id) ?? 0
+        if (agoraMs - ultimaBusca < 20_000) return
+        buscouOfertaRef.current.set(novo.id, agoraMs)
         supabase.from("pedidos")
           .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng, cidade), itens:itens_pedido(*)")
           .eq("id", novo.id).single()
           .then(({ data }) => {
-            if (data && !dismissedIdsRef.current.has(data.id) && dentroDoRaio(data)) {
+            if (data && !dismissedIdsRef.current.has(data.id) && (data.motoboy_id === motoboy_id || dentroDoRaio(data))) {
               playNotificationSound(); setPedidoOferta(data); setTimerOferta(30); setDistKmOferta(null)
             }
           })
@@ -1278,15 +1297,10 @@ export default function MotoboyPage() {
       const ofertaId = pedidoOferta.id
       setPedidoOferta(null)
       dismissedIdsRef.current.add(ofertaId)
-      fetch("/api/escalada", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pedido_id: ofertaId, motoboy_recusou_id: motoboy_id }),
-      }).catch(() => {
-        supabase.from("pedidos")
-          .update({ motoboy_id: null, status: "pronto" })
-          .eq("id", ofertaId).eq("status", "aguardando_aceite")
-          .then(() => {})
-      })
+      fetch("/api/motoboy/recusar-corrida", {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pedido_id: ofertaId, por_tempo: true }),
+      }).catch(() => {})
       return
     }
     const iv = setInterval(() => setTimerOferta(t => t - 1), 1000)
@@ -1361,7 +1375,7 @@ export default function MotoboyPage() {
           })
         } else if (novo?.status === "entregue" && novo.motoboy_id === motoboy_id) {
           setEmAndamentoAvulsa(prev => prev.filter((a: any) => a.id !== novo.id))
-          setGanhosDia(g => g + ganhoLiquido(novo.taxa_entrega ?? 0, novo.criado_em))
+          setGanhosDia(g => g + ganhoMotoboyPedido(novo))
           setCorridasDia(c => c + 1)
         }
       })
@@ -1520,8 +1534,30 @@ export default function MotoboyPage() {
     wakeLockRef.current = null
     setCompartilhando(false)
     setCidadeAtual(null)
-    if (motoboy_id) supabase.from("motoboys").update({ lat: null, lng: null }).eq("id", motoboy_id)
+    if (motoboy_id) fetch("/api/motoboy/update-location", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ limpar: true }) }).catch(() => {})
   }, [motoboy_id])
+
+  // Toque no aviso "Sem GPS" (pedido do Lucas, 20/10/2026): pede a permissão de localização
+  // ali mesmo e religa o rastreamento. Se o celular bloqueou, mostra como liberar — o navegador
+  // não consegue abrir os Ajustes do aparelho sozinho.
+  const [ajudaGps, setAjudaGps] = useState(false)
+  const [ligandoGps, setLigandoGps] = useState(false)
+  function ativarGps() {
+    if (!navigator.geolocation) { setAjudaGps(true); return }
+    setLigandoGps(true)
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        setLigandoGps(false); setAjudaGps(false); setGpsReady(true)
+        if (coords.accuracy == null || coords.accuracy <= ACCURACY_MAX_M) { setMyLat(coords.latitude); setMyLng(coords.longitude) }
+        // Reinicia o acompanhamento (o anterior pode ter parado por erro de permissão)
+        if (watchIdRef.current !== null) { navigator.geolocation.clearWatch(watchIdRef.current); watchIdRef.current = null }
+        if (forceIvRef.current !== null) { clearInterval(forceIvRef.current); forceIvRef.current = null }
+        iniciarRastreamento()
+      },
+      err => { setLigandoGps(false); if (err.code === 1) setAjudaGps(true); else { setToastMsg("Não achamos o sinal do GPS. Vá pra um lugar aberto e toque de novo."); setTimeout(() => setToastMsg(null), 3500) } },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    )
+  }
 
   // Pede localização imediatamente ao carregar — centraliza o mapa na posição real.
   // Mesma guarda de precisão do watchPosition acima: uma primeira leitura ruim (comum
@@ -1547,13 +1583,14 @@ export default function MotoboyPage() {
     else pararRastreamento()
   }, [disponivel, iniciarRastreamento, pararRastreamento])
 
-  // Heartbeat: atualiza last_seen a cada 30s quando online (cobre motoboys estacionários)
+  // Heartbeat a cada 30s quando online: também regrava disponivel=true, pra o banco nunca ficar
+  // "desligado" enquanto o app mostra "disponível" (senão o despacho não chama esse motoboy)
   useEffect(() => {
     if (!motoboy_id || !disponivel) return
     const iv = setInterval(() => {
       fetch("/api/motoboy/status", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ motoboy_id }),
+        body: JSON.stringify({ motoboy_id, disponivel: true }),
       }).catch(() => {})
     }, 30_000)
     return () => clearInterval(iv)
@@ -1620,6 +1657,82 @@ export default function MotoboyPage() {
     if (perm === "granted") await registerPush(motoboy_id)
   }
 
+  // ── Permissões ao entrar (pedido do Lucas, 20/10/2026) ─────────────────────
+  // Celular só deixa pedir notificação e liberar som depois de um toque da pessoa; por isso
+  // uma tela com "Permitir tudo" que, num toque, pede localização, notificação e destrava o som.
+  type EstadoPerm = "ok" | "negado" | "pendente" | "sem_suporte"
+  const [perm, setPerm] = useState<{ loc: EstadoPerm; notif: EstadoPerm; som: EstadoPerm }>({ loc: "pendente", notif: "pendente", som: "pendente" })
+  const [telaPerm, setTelaPerm] = useState(false)
+  const [pedindoPerm, setPedindoPerm] = useState(false)
+  const [erroLoc, setErroLoc] = useState<string | null>(null)
+  const ehIphone = typeof navigator !== "undefined" && /iPhone|iPad|iPod/i.test(navigator.userAgent)
+  useEffect(() => {
+    let vivo = true
+    async function conferir() {
+      let loc: EstadoPerm = "pendente"
+      try {
+        const st = await (navigator as any).permissions?.query({ name: "geolocation" })
+        if (st?.state === "granted") loc = "ok"; else if (st?.state === "denied") loc = "negado"
+      } catch {}
+      const notif: EstadoPerm = !("Notification" in window) ? "sem_suporte" : Notification.permission === "granted" ? "ok" : Notification.permission === "denied" ? "negado" : "pendente"
+      const som: EstadoPerm = sessionStorage.getItem("mb_som_ok") === "1" ? "ok" : "pendente"
+      if (!vivo) return
+      setPerm({ loc, notif, som })
+      const dispensou = sessionStorage.getItem("mb_perm_agora_nao") === "1"
+      if (!dispensou && (loc !== "ok" || notif === "pendente" || notif === "negado")) setTelaPerm(true)
+    }
+    conferir()
+    return () => { vivo = false }
+  }, [])
+  // Cada permissão também pode ser ativada sozinha pelo botão "Ativar" (layout da proposta).
+  const [ativando, setAtivando] = useState<null | "loc" | "notif" | "som">(null)
+  function ativarSom() {
+    try { desbloquearAudioNotificacao(); beep(); sessionStorage.setItem("mb_som_ok", "1") } catch {}
+    setPerm(p => ({ ...p, som: "ok" }))
+  }
+  function permitirTudo(so?: "loc" | "notif" | "som") {
+    if (so === "som") { ativarSom(); return }
+    setPedindoPerm(true); setAtivando(so ?? null)
+    // 1) som: destrava dentro do toque e toca um bipe curto pra confirmar
+    if (!so) ativarSom()
+    // 2) notificação primeiro, ainda dentro do toque (Safari exige o toque pra perguntar).
+    // 3) localização SÓ DEPOIS da resposta: o iPhone mostra uma pergunta por vez e, se as duas
+    //    vinham juntas, recusava sozinho a de localização (bug achado pelo Lucas, 20/10/2026).
+    const pedirNotif = (): Promise<void> => ("Notification" in window && Notification.permission === "default")
+      ? Notification.requestPermission().then(r => {
+          setPushStatus(r as any)
+          setPerm(p => ({ ...p, notif: r === "granted" ? "ok" : r === "denied" ? "negado" : "pendente" }))
+          if (r === "granted" && motoboy_id) registerPush(motoboy_id)
+        }).catch(() => {})
+      : Promise.resolve().then(() => {
+          // já respondida antes: só atualiza a lista (e garante a inscrição do push)
+          if (!("Notification" in window)) return
+          const r = Notification.permission
+          setPushStatus(r as any)
+          setPerm(p => ({ ...p, notif: r === "granted" ? "ok" : r === "denied" ? "negado" : "pendente" }))
+          if (r === "granted" && motoboy_id) registerPush(motoboy_id)
+        })
+    const pedirLoc = () => new Promise<void>(res => {
+      if (!navigator.geolocation) { setPerm(p => ({ ...p, loc: "sem_suporte" })); return res() }
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => {
+          setPerm(p => ({ ...p, loc: "ok" })); setErroLoc(null); setGpsReady(true)
+          if (coords.accuracy == null || coords.accuracy <= ACCURACY_MAX_M) { setMyLat(coords.latitude); setMyLng(coords.longitude) }
+          if (watchIdRef.current !== null) { navigator.geolocation.clearWatch(watchIdRef.current); watchIdRef.current = null }
+          if (forceIvRef.current !== null) { clearInterval(forceIvRef.current); forceIvRef.current = null }
+          if (disponivel) iniciarRastreamento()
+          res()
+        },
+        err => { setErroLoc(`${err.code}: ${err.message}`); setPerm(p => ({ ...p, loc: err.code === 1 ? "negado" : "pendente" })); res() },
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+      )
+    })
+    const fim = () => { setPedindoPerm(false); setAtivando(null) }
+    if (so === "notif") { pedirNotif().finally(fim); return }
+    if (so === "loc") { pedirLoc().finally(fim); return }
+    pedirNotif().then(pedirLoc).finally(fim)
+  }
+
   // ── Push — ouvir mensagem do SW para tocar som em segundo plano ───────────
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return
@@ -1636,7 +1749,7 @@ export default function MotoboyPage() {
   async function enviarPush(pedido_id: string, status: string, codigo: string) {
     try {
       await fetch("/api/push", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "send", pedido_id, status, codigo }),
       })
     } catch {}
@@ -1655,10 +1768,12 @@ export default function MotoboyPage() {
       return
     }
     setAtualizando(pedido.id)
-    const { error } = await supabase.from("pedidos")
-      .update({ status: "indo_para_loja", motoboy_id })
-      .eq("id", pedido.id)
-      .eq("status", "pronto")  // race condition guard
+    // Mesma rota da oferta: o servidor confere limite, retirada e se ninguém pegou antes
+    const res = await fetch("/api/motoboy/aceitar-corrida", {
+      method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pedido_id: pedido.id, da_lista: true }),
+    }).catch(() => null)
+    const error = !res || !res.ok
     if (!error) {
       justAcceptedRef.current = true
       setTimeout(() => { justAcceptedRef.current = false }, 30_000)
@@ -1671,17 +1786,6 @@ export default function MotoboyPage() {
     }
     loadPedidos()
     setAtualizando(null)
-  }
-
-  async function marcarEntregue(pedido: Pedido) {
-    setAtualizando(pedido.id)
-    await supabase.from("pedidos").update({ status: "entregue" }).eq("id", pedido.id)
-    enviarPush(pedido.id, "entregue", pedido.codigo)
-    setGanhosDia(prev => prev + ganhoLiquido(pedido.taxa_entrega ?? 0, pedido.criado_em))
-    setCorridasDia(prev => prev + 1)
-    await loadPedidos()
-    setAtualizando(null)
-    setConfirmandoId(null); setCodigoInput(""); setErroConfirm("")
   }
 
   // ── Aceitar corrida (atômico — protege contra dois motoboys) ──────────────
@@ -1725,23 +1829,11 @@ export default function MotoboyPage() {
     const ofertaId = pedidoOferta.id
     setPedidoOferta(null)
     dismissedIdsRef.current.add(ofertaId)
-    // Escalada: tenta próximo motoboy (ou fila geral se atingiu limite)
-    try {
-      await fetch("/api/escalada", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pedido_id: ofertaId, motoboy_recusou_id: motoboy_id }),
-      })
-    } catch {
-      // Fallback: devolve para fila geral
-      await supabase.from("pedidos")
-        .update({ motoboy_id: null, status: "pronto" })
-        .eq("id", ofertaId).eq("status", "aguardando_aceite")
-    }
-    // Incrementa campo recusas (se existir)
-    try {
-      const { data: mb } = await supabase.from("motoboys").select("recusas").eq("id", motoboy_id).single()
-      await supabase.from("motoboys").update({ recusas: (mb?.recusas ?? 0) + 1 }).eq("id", motoboy_id)
-    } catch {}
+    // Servidor conta a recusa, oferece ao próximo motoboy ou devolve pra fila
+    await fetch("/api/motoboy/recusar-corrida", {
+      method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pedido_id: ofertaId }),
+    }).catch(() => {})
   }
 
   // ── Aceitar entrega avulsa ────────────────────────────────────────────────
@@ -1792,7 +1884,7 @@ export default function MotoboyPage() {
     const next: string = json.nextStatus
     if (next === "entregue") {
       setEmAndamentoAvulsa(prev => prev.filter((a: any) => a.id !== avulsa.id))
-      setGanhosDia(g => g + ganhoLiquido(avulsa.taxa_entrega ?? 0, avulsa.criado_em))
+      setGanhosDia(g => g + ganhoMotoboyPedido(avulsa))
       setCorridasDia(c => c + 1)
     } else {
       setEmAndamentoAvulsa(prev => prev.map((a: any) => a.id === avulsa.id ? { ...a, status: next } : a))
@@ -1854,7 +1946,7 @@ export default function MotoboyPage() {
     if (nextStatus === "entregue") {
       setCorridaConcluida(ativa)
       setEmAndamento(prev => prev.filter(p => p.id !== ativa.id))
-      setGanhosDia(prev => prev + ganhoLiquido(ativa.taxa_entrega ?? 0, ativa.criado_em))
+      setGanhosDia(prev => prev + ganhoMotoboyPedido(ativa))
       setCorridasDia(prev => prev + 1)
       setSegundoAberto(false)
       enviarPush(ativa.id, "entregue", ativa.codigo)
@@ -1866,13 +1958,6 @@ export default function MotoboyPage() {
     loadPedidos()
   }
 
-  function confirmarCodigo(pedido: Pedido) {
-    if (codigoInput.trim() !== codigoEntregaCliente(pedido)) {
-      setErroConfirm("Código incorreto. Peça os 4 últimos dígitos do telefone do cliente.")
-      return
-    }
-    marcarEntregue(pedido)
-  }
 
   // ── Bottom sheet drag — Pointer Capture para captura confiável no mobile ──
   function onDragPointerDown(e: React.PointerEvent<HTMLDivElement>) {
@@ -1905,13 +1990,33 @@ export default function MotoboyPage() {
   // motoboy com 3+ corridas só via a 1ª e a 2ª, a 3ª ficava invisível no app).
   const entregasExtras = corridasAtivas.slice(1)
   const segundaEntrega = entregasExtras[0] ?? null
+
+  // Distância do motoboy até o PRÓXIMO ponto de cada corrida (loja antes de coletar,
+  // cliente depois) — pra ele escolher qual priorizar com várias aceitas ao mesmo tempo
+  // (pedido real, 2026-10-03: 3 avulsas + 1 normal, só a 1ª avulsa aparecia na tela).
+  const distAte = (lat: any, lng: any): number | null =>
+    lat != null && lng != null && !isNaN(Number(lat)) && !isNaN(Number(lng)) ? haversineKm(myLat, myLng, Number(lat), Number(lng)) : null
+  const distPedido = (p: any) => ["em_rota", "coletado"].includes(p.status)
+    ? distAte(p.lat_entrega, p.lng_entrega)
+    : distAte(p.loja?.lat ?? p.loja_lat, p.loja?.lng ?? p.loja_lng)
+  const distAvulsa = (a: any) => ["coletado", "em_rota"].includes(a.status)
+    ? distAte(a.cliente_lat, a.cliente_lng)
+    : distAte(a.loja_lat, a.loja_lng)
+  const porDistancia = <T,>(lista: T[], dist: (x: T) => number | null) => lista
+    .map(item => ({ item, km: dist(item) }))
+    .sort((a, b) => (a.km ?? Infinity) - (b.km ?? Infinity))
+  const extrasPorDistancia = porDistancia(entregasExtras, distPedido)
+  const avulsasPorDistancia = porDistancia(emAndamentoAvulsa, distAvulsa)
+  const fmtKm = (km: number) => km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1).replace(".", ",")} km`
   const ETAPA_MAP: Record<string, number> = { "indo_para_loja": 0, "na_loja": 1, "em_rota": 2, "coletado": 2, "entregue": 3 }
   const etapaAtual = corridaConcluida ? 3 : (ETAPA_MAP[corridaAtiva?.status ?? ""] ?? 0)
   const ETAPAS_LABEL = ["Indo à loja", "Na loja", "Em rota", "Entregue!"]
 
   // Quando indo à loja, rota aponta para a loja; nas demais etapas, para o cliente
-  const efetDestinoLat = corridaAtiva?.status === "indo_para_loja" ? (lojaLat ?? destinoLat) : destinoLat
-  const efetDestinoLng = corridaAtiva?.status === "indo_para_loja" ? (lojaLng ?? destinoLng) : destinoLng
+  // Indo à loja: a rota vai SÓ pra loja. Antes, sem coordenada da loja, caía no destino do
+  // cliente e o mapa levava o motoboy direto pra casa do cliente (teste do Lucas, 20/10/2026).
+  const efetDestinoLat = corridaAtiva?.status === "indo_para_loja" ? lojaLat : destinoLat
+  const efetDestinoLng = corridaAtiva?.status === "indo_para_loja" ? lojaLng : destinoLng
 
   // Pins extras de TODAS as corridas além da 1ª para o mapa (não só a 2ª)
   const extrasLojaMap: PinExtra[] = entregasExtras
@@ -1924,31 +2029,80 @@ export default function MotoboyPage() {
 
   const temOferta = !!(pedidoOferta || avulsaOferta)
 
+  const navOffset = "var(--nav-h)"
+  const statusTxt = (s: string) => s === "indo_para_loja" ? "indo à loja" : s === "na_loja" ? "na loja" : "em rota"
+  const kmTxt = (p: any) => { const km = distPedido(p); return km != null ? fmtKm(km) : null }
+  const iniciais = (sessao?.role === "motoboy" ? (sessao as any).motoboy_nome ?? "" : "").trim().split(/\s+/).map((x: string) => x[0]).slice(0, 2).join("").toUpperCase()
+
   return (
     <div style={{
       position: "fixed",
-      top: fullscreenMap ? 0 : 52,
-      left: 0, right: 0,
-      bottom: fullscreenMap ? 0 : 60,
-      background: "#1a1a2e",
-      zIndex: fullscreenMap ? 999 : "auto" as any,
-      transition: "top 0.25s, bottom 0.25s",
+      top: 0, left: 0, right: 0,
+      bottom: fullscreenMap ? 0 : navOffset,
+      background: "#E9E7E2",
+      // Corrida nova cobre a barra de baixo (o "Agora não" ficava por trás dela)
+      zIndex: fullscreenMap || temOferta || telaPerm ? 999 : "auto" as any,
+      transition: "bottom 0.25s",
     }}>
 
       {/* Toast de teste de notificação */}
       {mostrarObrigadoTeste && (
-        <div style={{
-          position: "fixed", top: 64, left: 16, right: 16, zIndex: 9999,
-          background: "linear-gradient(135deg, #16a34a, #15803d)",
-          borderRadius: 16, padding: "18px 20px",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
-          display: "flex", alignItems: "center", gap: 14,
-          animation: "slideUpCard 300ms ease-out",
-        }}>
-          <span style={{ fontSize: 36 }}>✅</span>
-          <div>
-            <p style={{ color: "#fff", fontWeight: 900, fontSize: 17, margin: 0 }}>Obrigado pelo teste!</p>
-            <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 13, marginTop: 4 }}>Notificação, card e aceite funcionando 100%! 🚀</p>
+        <div className="mb-toast" style={{ top: 70, background: "var(--folha)" }}>
+          <b style={{ display: "block", fontSize: 16 }}>Obrigado pelo teste!</b>
+          <span style={{ opacity: .9, fontSize: 13 }}>Notificação, cartão e aceite funcionando.</span>
+        </div>
+      )}
+
+      {/* ── Permissões ao entrar ── */}
+      {telaPerm && (
+        <div className="mb-perm" role="dialog" aria-label="Permissões do app">
+          {/* Layout da proposta (tela "Pronto pra rodar"): progresso + "Ativar" em cada item */}
+          <h1 className="t28">Antes de ficar online</h1>
+          <p className="mut" style={{ fontSize: 15, margin: "8px 0 6px" }}>Ative as 3 permissões pra receber corrida com o celular no bolso.</p>
+          {(() => { const n = (["loc", "notif", "som"] as const).filter(k => perm[k] === "ok" || perm[k] === "sem_suporte").length; return <>
+            <div className="mb-perm-prog"><i style={{ width: `${n / 3 * 100}%` }} /></div>
+            <small className="mut" style={{ fontSize: 12 }}>{n} de 3 ativadas</small>
+          </> })()}
+          <div className="mb-perm-lista">
+            {([
+              ["loc", <><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg></>, "Localização", "Pra receber corrida perto e a loja e o cliente verem você chegando"],
+              ["notif", <><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z" /><path d="M10 20a2 2 0 0 0 4 0" /></svg></>, "Notificações", ehIphone && perm.notif === "sem_suporte" ? "No iPhone só funciona com o app instalado na tela de início" : "Corrida nova toca mesmo com o app fechado"],
+              ["som", <><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5 6 9H3v6h3l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" /></svg></>, "Som alto de corrida", "Pra tocar alto quando aparecer corrida"],
+            ] as const).map(([k, ic, nome, desc]) => {
+              const st = perm[k]
+              const ok = st === "ok" || st === "sem_suporte"
+              return (
+                <div key={k} className={`mb-perm-item ${ok ? "feita" : ""}`}>
+                  <span className="mb-perm-ic">{ic}</span>
+                  <span style={{ flex: 1, minWidth: 0 }}><b className="t16" style={{ display: "block" }}>{nome}</b><small className="mut">{desc}</small></span>
+                  {st === "ok" ? <span className="mb-perm-ok">✓</span>
+                    : ativando === k ? <span className="mb-perm-gira" />
+                    : st === "negado" ? <button className="mb-perm-bt" disabled={pedindoPerm} onClick={() => permitirTudo(k)} aria-label={`Tentar de novo: ${nome}`}>Tentar</button>
+                    : st === "sem_suporte" ? <span className="mb-perm-st">—</span>
+                    : <button className="mb-perm-bt" disabled={pedindoPerm} onClick={() => permitirTudo(k)}>Ativar</button>}
+                </div>
+              )
+            })}
+          </div>
+          <div className="mb-perm-dica">Dica: desligue a economia de bateria pro Chegô. Senão o celular pode fechar o app no meio da rua.</div>
+          {(perm.loc === "negado" || perm.notif === "negado") && (
+            <div className="mb-perm-ajuda">
+              <b>Algo ficou bloqueado. Pra liberar:</b>
+              {erroLoc && <small style={{ opacity: .75 }}>Motivo da localização: {erroLoc}</small>}
+              {ehIphone
+                ? <span>
+                    1. Ajustes, Privacidade e Segurança, Serviços de Localização, <b>Sites do Safari</b>: Durante o Uso.<br />
+                    2. Ajustes, <b>Apps</b>, <b>Safari</b>, <b>Localização</b>: Permitir.<br />
+                    3. Se continuar bloqueado, o iPhone guardou o “Não permitir” só pro Chegô: segure o ícone do Chegô na tela de início, toque em <b>Remover</b>, abra chegodelivery.com no Safari, toque em <b>Compartilhar</b>, <b>Adicionar à Tela de Início</b>, entre de novo e toque em Permitir.
+                  </span>
+                : <span>No Chrome, toque no <b>cadeado</b> ao lado do endereço, depois <b>Permissões</b>, e libere <b>Local</b> e <b>Notificações</b>. Se instalou o app: segure o ícone, <b>Informações do app</b>, <b>Permissões</b>.</span>}
+            </div>
+          )}
+          <div style={{ marginTop: "auto", paddingTop: 16 }}>
+            {perm.loc === "ok" && perm.notif !== "pendente" && perm.notif !== "negado" && perm.som === "ok"
+              ? <button className="mb-btn verde" onClick={() => setTelaPerm(false)}>Tudo pronto, ir pro mapa</button>
+              : <button className="mb-btn verm" onClick={() => permitirTudo()} disabled={pedindoPerm}>{pedindoPerm ? "Ativando…" : perm.loc === "negado" || perm.notif === "negado" ? "Tentar de novo" : perm.loc === "ok" || perm.notif === "ok" || perm.som === "ok" ? "Ativar o que falta" : "Ativar tudo"}</button>}
+            <button className="mb-btn claro" style={{ marginTop: 8 }} onClick={() => { sessionStorage.setItem("mb_perm_agora_nao", "1"); setTelaPerm(false) }}>Agora não</button>
           </div>
         </div>
       )}
@@ -1966,111 +2120,9 @@ export default function MotoboyPage() {
         fitBoundsTrigger={fitBoundsTrigger}
       />
 
-      {/* ── Toast de erro ── */}
-      {/* ── Banner de status no mapa ── */}
-      {(corridaAtiva || corridaConcluida) && !fullscreenMap && (
-        <div style={{
-          position: "absolute",
-          top: 12, left: 12, right: 12, zIndex: 30,
-          borderRadius: 14, padding: "10px 14px",
-          background: "rgba(0,0,0,0.78)",
-          backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
-          boxShadow: "0 2px 12px rgba(0,0,0,0.5)",
-        }}>
-          <div style={{ display: "flex", alignItems: "flex-start" }}>
-            {ETAPAS_LABEL.map((label, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "flex-start", flex: i < 3 ? 1 : undefined }}>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, flexShrink: 0 }}>
-                  <div style={{
-                    width: 22, height: 22, borderRadius: "50%",
-                    background: i < etapaAtual ? "#22C55E" : i === etapaAtual ? "#FF8C00" : "#3A3A3C",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    transition: "background 0.35s",
-                  }}>
-                    {i < etapaAtual ? (
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="20 6 9 17 4 12"/>
-                      </svg>
-                    ) : (
-                      <span style={{ color: "white", fontSize: 8, fontWeight: 900 }}>{i + 1}</span>
-                    )}
-                  </div>
-                  <p style={{
-                    color: i <= etapaAtual ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.25)",
-                    fontSize: 8, fontWeight: i === etapaAtual ? 800 : 500,
-                    textAlign: "center", maxWidth: 44, lineHeight: 1.2, margin: 0,
-                  }}>
-                    {label}
-                  </p>
-                </div>
-                {i < 3 && (
-                  <div style={{
-                    flex: 1, height: 2, marginTop: 10,
-                    background: i < etapaAtual ? "#22C55E" : "#3A3A3C",
-                    transition: "background 0.35s",
-                  }} />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {toastMsg && <div className="mb-toast" role="alert" style={{ top: 70 }}>{toastMsg}</div>}
 
-      {toastMsg && (
-        <div style={{
-          position: "absolute", top: 60, left: 12, right: 12, zIndex: 60,
-          background: "#1C1C1E", border: "1px solid rgba(255,68,68,0.45)",
-          borderRadius: 14, padding: "12px 16px",
-          boxShadow: "0 4px 24px rgba(0,0,0,0.6)",
-          animation: "slideUpCard 0.2s ease-out",
-        }}>
-          <p style={{ color: "#FF4444", fontWeight: 700, fontSize: 14 }}>{toastMsg}</p>
-        </div>
-      )}
-
-      {/* ── Alerta visual piscante quando chega oferta ── */}
-      <style>{`
-        @keyframes moto-flash {
-          0%   { opacity: 0; }
-          50%  { opacity: 1; }
-          100% { opacity: 0; }
-        }
-        @keyframes moto-border {
-          0%   { box-shadow: inset 0 0 0 0px #f97316; }
-          50%  { box-shadow: inset 0 0 0 6px #f97316; }
-          100% { box-shadow: inset 0 0 0 0px #f97316; }
-        }
-      `}</style>
-      {temOferta && (
-        <>
-          {/* Fundo laranja piscando */}
-          <div style={{
-            position: "absolute", inset: 0, zIndex: 4, pointerEvents: "none",
-            background: "rgba(249,115,22,0.18)",
-            animation: "moto-flash 0.7s ease-in-out infinite",
-          }} />
-          {/* Borda laranja piscando */}
-          <div style={{
-            position: "absolute", inset: 0, zIndex: 5, pointerEvents: "none",
-            animation: "moto-border 0.7s ease-in-out infinite",
-          }} />
-          {/* Banner topo */}
-          <div style={{
-            position: "absolute", top: 0, left: 0, right: 0, zIndex: 30,
-            background: "#f97316",
-            padding: "8px 0",
-            textAlign: "center",
-            animation: "moto-flash 0.5s ease-in-out infinite",
-            pointerEvents: "none",
-          }}>
-            <p style={{ color: "white", fontWeight: 900, fontSize: 15, letterSpacing: 1 }}>
-              🛵 NOVA ENTREGA DISPONÍVEL!
-            </p>
-          </div>
-        </>
-      )}
-
-      {/* ── Card de oferta de corrida (Tópico 02) ── */}
+      {/* ── Corrida nova ── */}
       {pedidoOferta && (
         <CardCorrida
           pedido={pedidoOferta}
@@ -2081,8 +2133,6 @@ export default function MotoboyPage() {
           carregando={aceitandoCorrida}
         />
       )}
-
-      {/* ── Card de oferta de entrega avulsa ── */}
       {avulsaOferta && !pedidoOferta && (
         <CardAvulsa
           avulsa={avulsaOferta}
@@ -2093,281 +2143,115 @@ export default function MotoboyPage() {
         />
       )}
 
-      {/* ── Ganhos do dia — badge central no topo ── */}
-      {!fullscreenMap && <div style={{
-        position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)", zIndex: 20,
-        background: "rgba(0,0,0,0.78)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
-        borderRadius: 999, padding: "8px 18px",
-        border: "1px solid rgba(255,255,255,0.12)",
-        display: "flex", alignItems: "center", gap: 8,
-        boxShadow: "0 2px 16px rgba(0,0,0,0.4)",
-        whiteSpace: "nowrap",
-      }}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={ganhosDia > 0 ? "#22c55e" : "rgba(255,255,255,0.4)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-        </svg>
-        <span style={{ color: ganhosDia > 0 ? "#22c55e" : "rgba(255,255,255,0.5)", fontWeight: 900, fontSize: 16, letterSpacing: 0.3 }}>
-          R$ {ganhosDia.toFixed(2)}
-        </span>
-        <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, fontWeight: 600 }}>
-          {corridasDia > 0 ? `${corridasDia}x · hoje` : "hoje"}
-        </span>
-      </div>}
+      {/* ── Topo: perfil, ganhos de hoje e SOS ── */}
+      {!fullscreenMap && !temOferta && (
+        <>
+          <Link className="mb-redondo" href="/motoboy/perfil" aria-label="Perfil" style={{ left: 12, fontFamily: "var(--display)", fontWeight: 800, fontSize: 14, textDecoration: "none" }}>
+            {fotoMotoboy ? <img src={fotoMotoboy} alt="" style={{ width: 44, height: 44, borderRadius: "50%", objectFit: "cover" }} /> : (iniciais || "?")}
+          </Link>
+          <Link className="mb-pilula" href="/motoboy/financeiro" style={{ textDecoration: "none" }}>
+            <b>R$ {ganhosDia.toFixed(2).replace(".", ",")}</b><span>{corridasDia > 0 && !dinamica ? `${corridasDia} ${corridasDia === 1 ? "corrida" : "corridas"} hoje` : "hoje"}</span>
+            {dinamica && <em className="mb-pilula-din" title="Corrida dinâmica (chuva)">🌧️ + R$ {dinamica.valor.toFixed(2).replace(".", ",")}</em>}
+          </Link>
+          <button className="mb-redondo mb-sos" style={{ right: 12 }} onClick={() => setSosModal(true)} aria-label="SOS de emergência">SOS</button>
+        </>
+      )}
 
-      {/* ── Toggle online/offline — canto superior direito ── */}
-      {!fullscreenMap && <div
-        onClick={!dispLoading && !togglingDisp && !corridaAtiva && !corridaConcluida ? toggleDisponivel : undefined}
-        style={{
-          position: "absolute", top: 12, right: 12, zIndex: 20,
-          background: disponivel ? "rgba(34,197,94,0.14)" : "rgba(0,0,0,0.72)",
-          backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
-          border: "1.5px solid " + (disponivel ? "rgba(34,197,94,0.55)" : "rgba(255,255,255,0.12)"),
-          borderRadius: 999, padding: "8px 16px 8px 12px",
-          display: "flex", alignItems: "center", gap: 8,
-          cursor: dispLoading || togglingDisp || corridaAtiva || corridaConcluida ? "not-allowed" : "pointer",
-          opacity: togglingDisp || corridaAtiva || corridaConcluida ? 0.45 : 1,
-          transition: "all 0.3s ease",
-          userSelect: "none",
-        }}
-      >
-        {/* Ícone: raio (online) ou lua (offline) */}
-        {disponivel ? (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="#22c55e">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-          </svg>
-        ) : (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-          </svg>
-        )}
-
-        {/* Dot com pulse quando online */}
-        <div style={{ position: "relative", width: 8, height: 8, flexShrink: 0 }}>
-          {disponivel && (
-            <div style={{
-              position: "absolute", inset: 0, borderRadius: "50%",
-              background: "#22c55e",
-              animation: "motoPulse 1.8s ease-out infinite",
-            }} />
-          )}
-          <div style={{
-            width: 8, height: 8, borderRadius: "50%",
-            background: disponivel ? "#22c55e" : "#444",
-            position: "relative",
-          }} />
+      {/* ── Aviso: notificação desligada ── */}
+      {pushStatus !== "granted" && pushStatus !== "unsupported" && !fullscreenMap && !temOferta && (
+        <div className="mb-aviso" style={{ top: 66, background: "var(--pimenta)", color: "#fff" }}>
+          <span style={{ fontSize: 20 }}>🔕</span>
+          <span style={{ flex: 1 }}><b>Notificações desligadas</b><small>{pushStatus === "denied" ? "Libere nas configurações do celular pra não perder corridas." : "Sem elas você pode perder corridas."}</small></span>
+          {pushStatus !== "denied" && <button onClick={ativarPush} style={{ background: "#fff", color: "var(--pimenta)" }}>Ativar</button>}
         </div>
+      )}
 
-        <span style={{
-          color: disponivel ? "#22c55e" : "rgba(255,255,255,0.45)",
-          fontSize: 12, fontWeight: 800, letterSpacing: 0.2,
-        }}>
-          {togglingDisp ? "..." : disponivel ? "Online" : "Offline"}
-        </span>
-      </div>}
+      {/* ── Aviso: bateria do Android ── */}
+      {!avisoBateriaFechado && pushStatus === "granted" && !fullscreenMap && !temOferta && (
+        <div className="mb-aviso" style={{ top: 66, background: "var(--pequi-claro)", color: "#6B5100" }}>
+          <span style={{ fontSize: 20 }}>🔋</span>
+          <span style={{ flex: 1 }}>
+            <b>Corrida pode não avisar com o app fechado</b>
+            <small>Configurações, Apps, Chrome, Bateria: “Sem restrições”. Em Xiaomi, Redmi ou Poco, ative também “Início automático” pro Chrome.{!appInstalado && <> No Chrome, toque em ⋮ e escolha “Instalar aplicativo”.</>}</small>
+          </span>
+          <button onClick={fecharAvisoBateria} style={{ background: "#6B5100", color: "#fff" }}>Entendi</button>
+        </div>
+      )}
 
-      {/* ── Banner: push desativado ── */}
-      {pushStatus !== "granted" && pushStatus !== "unsupported" && !fullscreenMap && (
-        <div style={{
-          position: "absolute", top: 60, left: 12, right: 12, zIndex: 30,
-          background: "rgba(239,68,68,0.95)", backdropFilter: "blur(8px)",
-          borderRadius: 14, padding: "11px 14px",
-          display: "flex", alignItems: "center", gap: 10,
-          boxShadow: "0 4px 20px rgba(239,68,68,0.4)",
-        }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-            <line x1="1" y1="1" x2="23" y2="23"/>
-          </svg>
-          <div style={{ flex: 1 }}>
-            <p style={{ color: "white", fontWeight: 800, fontSize: 12, lineHeight: 1.2 }}>Notificações desativadas</p>
-            <p style={{ color: "rgba(255,255,255,0.75)", fontSize: 11, marginTop: 2 }}>
-              {pushStatus === "denied" ? "Acesse as configurações do celular para permitir" : "Você pode perder corridas sem notificação"}
-            </p>
-          </div>
-          {pushStatus !== "denied" && (
-            <button onClick={ativarPush} style={{
-              background: "white", color: "#ef4444", border: "none",
-              borderRadius: 10, padding: "6px 12px", fontSize: 11, fontWeight: 800,
-              cursor: "pointer", flexShrink: 0,
-            }}>
-              Ativar
+      {/* ── GPS: tocar no aviso liga a localização ── */}
+      {disponivel && !fullscreenMap && !temOferta && !corridaAtiva && !corridaConcluida && (
+        compartilhando
+          ? <div className="mb-gps" style={{ top: 66 + (pushStatus !== "granted" && pushStatus !== "unsupported" ? 74 : 0) }}>
+              <i style={{ background: "var(--folha)" }} /><span>GPS ligado{cidadeAtual ? `, ${cidadeAtual}` : ""}</span>
+            </div>
+          : <button className="mb-gps" onClick={ativarGps} disabled={ligandoGps} style={{ top: 66 + (pushStatus !== "granted" && pushStatus !== "unsupported" ? 74 : 0), border: "1.5px solid var(--pequi)", cursor: "pointer" }}>
+              <i style={{ background: "var(--pequi)" }} />
+              <span style={{ color: "#8a6d00" }}>{ligandoGps ? "Ligando o GPS…" : "Sem GPS, toque pra ativar"}</span>
             </button>
-          )}
-        </div>
       )}
 
-      {/* ── Banner: otimização de bateria (Android) — some com o toque, não sozinho ── */}
-      {!avisoBateriaFechado && pushStatus === "granted" && !fullscreenMap && (
-        <div style={{
-          position: "absolute", top: 60, left: 12, right: 12, zIndex: 30,
-          background: "rgba(217,119,6,0.95)", backdropFilter: "blur(8px)",
-          borderRadius: 14, padding: "11px 14px",
-          display: "flex", alignItems: "center", gap: 10,
-          boxShadow: "0 4px 20px rgba(217,119,6,0.4)",
-        }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-            <path d="M17 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Z"/>
-            <line x1="11" y1="6" x2="13" y2="6"/>
-          </svg>
-          <div style={{ flex: 1 }}>
-            <p style={{ color: "white", fontWeight: 800, fontSize: 12, lineHeight: 1.2 }}>Corrida pode não notificar com o app fechado</p>
-            <p style={{ color: "rgba(255,255,255,0.8)", fontSize: 11, marginTop: 2, lineHeight: 1.5 }}>
-              Configurações → Apps → Chrome → Bateria: &quot;Sem restrições&quot;. Em celular Xiaomi/Redmi/Poco,
-              procure também &quot;Início automático&quot; (Autostart) e ative pro Chrome — sem isso o Android
-              não deixa a notificação chegar com o app fechado.
-              {!appInstalado && <> · No Chrome, toque em ⋮ e escolha &quot;Instalar aplicativo&quot;</>}
-            </p>
+      {ajudaGps && (
+        <div className="mb-folha-modal" onClick={() => setAjudaGps(false)}>
+          <div onClick={e => e.stopPropagation()}>
+            <span className="t20">Libere a localização</span>
+            <p className="mut" style={{ fontSize: 14, margin: "6px 0 14px", lineHeight: 1.5 }}>A localização está bloqueada neste celular. Sem ela você não recebe corridas perto de você.</p>
+            {/iPhone|iPad|iPod/i.test(typeof navigator !== "undefined" ? navigator.userAgent : "") ? (
+              // No iPhone o app da tela de início não aparece na lista de apps: ele usa a
+              // permissão de localização do Safari ("Sites do Safari").
+              <ol style={{ paddingLeft: 20, fontSize: 14.5, lineHeight: 1.7, color: "var(--grafite)" }}>
+                <li>Abra <b>Ajustes</b> do iPhone, toque em <b>Privacidade e Segurança</b> e depois em <b>Serviços de Localização</b>. Deixe ligado.</li>
+                <li>Role a lista até <b>Sites do Safari</b>, escolha <b>Durante o Uso</b> e ligue <b>Localização Precisa</b>. O app do Chegô usa essa permissão, por isso ele não aparece com o próprio nome.</li>
+                <li>Volte em <b>Ajustes</b>, toque em <b>Apps</b>, depois <b>Safari</b> e <b>Localização</b>, e escolha <b>Permitir</b> ou <b>Perguntar</b>.</li>
+                <li>Feche o app do Chegô (arraste pra cima), abra de novo e toque em <b>Tentar de novo</b>.</li>
+                <li>Se continuar bloqueado, o iPhone guardou o “Não permitir” só pro Chegô: segure o ícone do Chegô na tela de início, <b>Remover</b>, abra chegodelivery.com no Safari, <b>Compartilhar</b>, <b>Adicionar à Tela de Início</b> e entre de novo.</li>
+              </ol>
+            ) : (
+              <ol style={{ paddingLeft: 20, fontSize: 14.5, lineHeight: 1.7, color: "var(--grafite)" }}>
+                <li>Puxe a barra de cima do celular e ligue a <b>Localização</b>.</li>
+                <li>No Chrome, toque no <b>cadeado</b> ao lado do endereço, depois <b>Permissões</b> e libere <b>Local</b>.</li>
+                <li>Volte aqui e toque em <b>Tentar de novo</b>.</li>
+              </ol>
+            )}
+            <button className="mb-btn verde" style={{ marginTop: 14 }} onClick={ativarGps} disabled={ligandoGps}>{ligandoGps ? "Ligando…" : "Tentar de novo"}</button>
+            <button className="mb-btn claro" style={{ marginTop: 8 }} onClick={() => setAjudaGps(false)}>Fechar</button>
           </div>
-          <button onClick={fecharAvisoBateria} style={{
-            background: "white", color: "#d97706", border: "none",
-            borderRadius: 10, padding: "6px 12px", fontSize: 11, fontWeight: 800,
-            cursor: "pointer", flexShrink: 0,
-          }}>
-            Entendi
-          </button>
         </div>
       )}
 
-      {/* ── Botão de raio de atuação — canto inferior direito sobre o mapa ── */}
-      {!corridaAtiva && !corridaConcluida && (
-        <div style={{
-          position: "absolute", bottom: sheetH + 16, right: 14, zIndex: 25,
-          display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10,
-        }}>
-          {/* Painel do slider */}
+      {/* ── Raio de atuação ── */}
+      {!corridaAtiva && !corridaConcluida && !temOferta && (
+        <div className="mb-raio" style={{ bottom: sheetH + 16 }}>
           {raioOpen && (
-            <div style={{
-              background: "rgba(10,10,10,0.92)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
-              borderRadius: 18, padding: "16px 18px",
-              border: "1px solid rgba(249,115,22,0.35)",
-              boxShadow: "0 4px 24px rgba(0,0,0,0.5)",
-              width: 220,
-            }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                <p style={{ color: "white", fontWeight: 800, fontSize: 13 }}>Raio de atuação</p>
-                <span style={{ color: "#f97316", fontWeight: 900, fontSize: 20 }}>{raioDisplay} km</span>
+            <div className="mb-raio-painel">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+                <b className="t16">Raio de atuação</b>
+                <b style={{ fontFamily: "var(--display)", fontSize: 20, color: "var(--pimenta)" }}>{raioDisplay} km</b>
               </div>
-              <input
-                type="range"
-                min={1} max={40} step={1}
-                value={raioDisplay}
+              <input type="range" min={1} max={40} step={1} value={raioDisplay}
                 onChange={e => setRaioDisplay(Number(e.target.value))}
-                onMouseUp={() => salvarRaio(raioDisplay)}
-                onTouchEnd={() => salvarRaio(raioDisplay)}
-                style={{
-                  width: "100%", accentColor: "#f97316",
-                  cursor: "pointer", height: 4,
-                }}
-              />
-              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
-                <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 10 }}>1 km</span>
-                <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 10 }}>40 km</span>
-              </div>
-              <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 10, marginTop: 8, textAlign: "center" }}>
-                {salvandoRaio ? "Salvando..." : `Pedidos em até ${raioDisplay} km`}
-              </p>
+                onMouseUp={() => salvarRaio(raioDisplay)} onTouchEnd={() => salvarRaio(raioDisplay)} aria-label="Raio de atuação em km" />
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5 }} className="mut"><span>1 km</span><span>40 km</span></div>
+              <p className="mut" style={{ fontSize: 12, marginTop: 8, textAlign: "center" }}>{salvandoRaio ? "Salvando…" : `Corridas em até ${raioDisplay} km de você`}</p>
             </div>
           )}
-
-          {/* Botão raio */}
-          <button
-            onClick={() => setRaioOpen(o => !o)}
-            style={{
-              width: 48, height: 48, borderRadius: "50%", border: "none",
-              background: raioOpen ? "#f97316" : "rgba(10,10,10,0.82)",
-              backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
-              boxShadow: raioOpen ? "0 0 0 3px rgba(249,115,22,0.4), 0 4px 16px rgba(0,0,0,0.5)" : "0 2px 14px rgba(0,0,0,0.5)",
-              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-              transition: "all 0.2s",
-            }}
-          >
-            {/* Ícone de radar/raio */}
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={raioOpen ? "white" : "rgba(249,115,22,0.9)"} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="2"/>
-              <path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49"/>
-              <path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
-            </svg>
+          <button className="mb-redondo" style={{ position: "static", width: 48, height: 48, background: raioOpen ? "var(--pimenta)" : "#fff", color: raioOpen ? "#fff" : "var(--pimenta)" }} onClick={() => setRaioOpen(o => !o)} aria-label="Raio de atuação">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="2" /><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14" /></svg>
           </button>
         </div>
       )}
 
-      {/* ── Botão tela cheia — canto inferior esquerdo do mapa ── */}
+      {/* ── Mapa em tela cheia ── */}
       {corridaAtiva && !corridaConcluida && (
-        <button
-          onClick={() => {
-            setFullscreenMap(f => {
-              if (!f) setSheetH(0)
-              else setSheetH(SHEET_MID)
-              return !f
-            })
-          }}
-          style={{
-            position: "absolute",
-            bottom: fullscreenMap ? 24 : sheetH + 16,
-            left: 16, zIndex: 40,
-            width: 44, height: 44, borderRadius: "50%", border: "none",
-            background: fullscreenMap ? "rgba(249,115,22,0.9)" : "rgba(10,10,10,0.82)",
-            backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
-            boxShadow: "0 2px 14px rgba(0,0,0,0.5)",
-            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-            transition: "all 0.25s",
-          }}
-        >
-          {fullscreenMap ? (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/>
-              <line x1="10" y1="14" x2="3" y2="21"/><line x1="21" y1="3" x2="14" y2="10"/>
-            </svg>
-          ) : (
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(249,115,22,0.9)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
-              <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
-            </svg>
-          )}
+        <button className="mb-redondo" onClick={() => { setFullscreenMap(f => { if (!f) setSheetH(0); else setSheetH(SHEET_MID); return !f }) }}
+          aria-label={fullscreenMap ? "Voltar pro painel" : "Mapa em tela cheia"}
+          style={{ top: "auto", bottom: fullscreenMap ? 24 : "calc(72% + 12px)", left: 12, zIndex: 40, background: fullscreenMap ? "var(--pimenta)" : "#fff", color: fullscreenMap ? "#fff" : "var(--grafite)" }}>
+          {fullscreenMap
+            ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 14 10 14 10 20" /><polyline points="20 10 14 10 14 4" /><line x1="10" y1="14" x2="3" y2="21" /><line x1="21" y1="3" x2="14" y2="10" /></svg>
+            : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></svg>}
         </button>
       )}
 
-      {/* ── GPS badge + cidade — canto superior esquerdo ── */}
-      {disponivel && !fullscreenMap && (
-        <div style={{
-          position: "absolute", top: 12, left: 12, zIndex: 20,
-          background: "rgba(0,0,0,0.72)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
-          borderRadius: 999, padding: "6px 11px",
-          border: `1px solid ${compartilhando ? "rgba(34,197,94,0.3)" : "rgba(249,115,22,0.3)"}`,
-          display: "flex", alignItems: "center", gap: 5,
-        }}>
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: compartilhando ? "#22c55e" : "#f97316", display: "inline-block", flexShrink: 0 }} />
-          {compartilhando ? (
-            <>
-              <span style={{ color: "#22c55e", fontSize: 10, fontWeight: 700 }}>GPS</span>
-              {cidadeAtual && (
-                <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 10, fontWeight: 600 }}>· {cidadeAtual}</span>
-              )}
-            </>
-          ) : (
-            <span style={{ color: "#f97316", fontSize: 10, fontWeight: 700 }}>Sem GPS · ative a localização</span>
-          )}
-        </div>
-      )}
-
-      {/* ── Legenda rota (só quando NÃO tem corrida ativa no painel) ── */}
-      {!corridaAtiva && !corridaConcluida && entregaAtiva && destinoLat && (
-        <div style={{
-          position: "absolute", bottom: sheetH + 12, left: 12, zIndex: 20,
-          background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
-          borderRadius: 12, padding: "8px 14px",
-          border: "1px solid rgba(249,115,22,0.3)",
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-            <div style={{ width: 16, height: 3, borderRadius: 2, background: "#f97316", borderTop: "2px dashed #f97316" }} />
-            <span style={{ color: "rgba(255,255,255,0.7)", fontSize: 10, fontWeight: 700 }}>Rota até o cliente</span>
-          </div>
-          <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 10 }}>{entregaAtiva.endereco_entrega?.split(",")[0]}</p>
-        </div>
-      )}
-
-      {/* ── Modal SOS — renderizado no nível raiz para escapar do overflow:hidden do painel ── */}
+      {/* ── SOS ── */}
       {sosModal && motoboy_id && (
         <SOSModal
           motoboyId={motoboy_id}
@@ -2378,281 +2262,87 @@ export default function MotoboyPage() {
         />
       )}
 
-      {/* ── Badge das entregas extras ativas (botão flutuante) — mostra TODAS, não só a 2ª ── */}
-      {entregasExtras.length > 0 && !corridaConcluida && !fullscreenMap && (
-        <button
-          onClick={() => setSegundoAberto(o => !o)}
-          style={{
-            position: "absolute", top: 62, left: 12, zIndex: 36,
-            background: segundoAberto ? "#f97316" : "rgba(10,10,10,0.85)",
-            backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
-            border: `1.5px solid ${segundoAberto ? "transparent" : "rgba(249,115,22,0.6)"}`,
-            borderRadius: 999, padding: "7px 14px",
-            display: "flex", alignItems: "center", gap: 7,
-            color: "white", fontWeight: 800, fontSize: 12,
-            cursor: "pointer", boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
-          }}>
-          <span style={{ background: "rgba(255,255,255,0.25)", borderRadius: 999, padding: "1px 7px", fontSize: 10, fontWeight: 900 }}>{entregasExtras.length}</span>
-          {entregasExtras.length === 1
-            ? `2° pedido #${segundaEntrega!.codigo}`
-            : `${entregasExtras.length} outras entregas`}
-          {entregasExtras.length === 1 && (
-            <span style={{ fontSize: 10, opacity: 0.7 }}>
-              {segundaEntrega!.status === "indo_para_loja" ? "• indo à loja" : segundaEntrega!.status === "na_loja" ? "• na loja" : "• em rota"}
-            </span>
-          )}
+      {/* ── Outras entregas aceitas (todas, não só a 2ª) ── */}
+      {entregasExtras.length > 0 && !corridaConcluida && !fullscreenMap && !temOferta && (
+        <button className="mb-flutua" onClick={() => setSegundoAberto(o => !o)} style={{ top: 66, left: 12, background: segundoAberto ? "var(--grafite)" : "#fff", color: segundoAberto ? "#fff" : "var(--grafite)" }}>
+          <span className="n">{entregasExtras.length}</span>
+          {entregasExtras.length === 1 ? `2º pedido #${segundaEntrega!.codigo}, ${statusTxt(segundaEntrega!.status)}` : `${entregasExtras.length} outras entregas`}
         </button>
       )}
 
-      {/* ── Badge de entrega avulsa em andamento (visível mesmo com corrida ativa) ── */}
-      {corridaAtiva && !corridaConcluida && !fullscreenMap && emAndamentoAvulsa.length > 0 && (
-        <button
-          onClick={() => setAvulsaFlutuanteAberta(o => !o)}
-          style={{
-            position: "absolute", top: 62, right: 12, zIndex: 36,
-            background: avulsaFlutuanteAberta ? "#a78bfa" : "rgba(10,10,10,0.85)",
-            backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
-            border: `1.5px solid ${avulsaFlutuanteAberta ? "transparent" : "rgba(167,139,250,0.6)"}`,
-            borderRadius: 999, padding: "7px 14px",
-            display: "flex", alignItems: "center", gap: 7,
-            color: "white", fontWeight: 800, fontSize: 12,
-            cursor: "pointer", boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
-          }}>
-          {emAndamentoAvulsa.length > 1 && (
-            <span style={{ background: "rgba(255,255,255,0.25)", borderRadius: 999, padding: "1px 7px", fontSize: 10, fontWeight: 900 }}>{emAndamentoAvulsa.length}</span>
-          )}
-          🛵 Avulsa #{emAndamentoAvulsa[0].codigo}
+      {/* ── Avulsas em andamento (visível mesmo com corrida ativa) ── */}
+      {corridaAtiva && !corridaConcluida && !fullscreenMap && !temOferta && emAndamentoAvulsa.length > 0 && (
+        <button className="mb-flutua" onClick={() => setAvulsaFlutuanteAberta(o => !o)} style={{ top: 66, right: 12, background: avulsaFlutuanteAberta ? "var(--grafite)" : "#fff", color: avulsaFlutuanteAberta ? "#fff" : "var(--grafite)" }}>
+          {emAndamentoAvulsa.length > 1 && <span className="n">{emAndamentoAvulsa.length}</span>}
+          {emAndamentoAvulsa.length > 1 ? `${emAndamentoAvulsa.length} avulsas` : `Avulsa #${emAndamentoAvulsa[0].codigo}`}
         </button>
       )}
 
-      {avulsaFlutuanteAberta && emAndamentoAvulsa.length > 0 && !corridaConcluida && (() => {
-        const a = emAndamentoAvulsa[0]
-        return (
-          <div style={{
-            position: "absolute", top: 100, left: 10, right: 10, zIndex: 37,
-            background: "rgba(10,10,10,0.96)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
-            borderRadius: 20, padding: "16px",
-            border: "1px solid rgba(167,139,250,0.4)",
-            boxShadow: "0 4px 32px rgba(0,0,0,0.6)",
-          }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-              <div>
-                <p style={{ color: "#a78bfa", fontWeight: 900, fontSize: 13 }}>
-                  Avulsa — #{a.codigo}
-                </p>
-                <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, marginTop: 2 }}>
-                  R$ {ganhoLiquido(a.taxa_entrega ?? 0, a.criado_em).toFixed(2)} {a.loja_nome ? `• ${a.loja_nome}` : ""}
-                </p>
-              </div>
-              <button onClick={() => setAvulsaFlutuanteAberta(false)} style={{ background: "transparent", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 20, cursor: "pointer" }}>×</button>
+      {avulsaFlutuanteAberta && emAndamentoAvulsa.length > 0 && !corridaConcluida && (
+        <div className="mb-folha-modal" onClick={() => setAvulsaFlutuanteAberta(false)}>
+          <div onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <span className="t20">{emAndamentoAvulsa.length === 1 ? "Entrega avulsa" : `${emAndamentoAvulsa.length} entregas avulsas`}</span>
+              <button className="mb-redondo" style={{ position: "static", boxShadow: "none", background: "var(--pedra)" }} onClick={() => setAvulsaFlutuanteAberta(false)} aria-label="Fechar">✕</button>
             </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
-              <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>
-                <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 11 }}>Cliente: </span>
-                <strong style={{ color: "white" }}>{a.cliente_nome}</strong>
-              </p>
-              <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>
-                <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 11 }}>Entregar em </span>
-                {a.endereco}
-              </p>
-              {a.observacao && (
-                <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, fontStyle: "italic" }}>{a.observacao}</p>
-              )}
-            </div>
-
-            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-              {a.loja_lat && a.loja_lng && (
-                <a href={`https://waze.com/ul?ll=${a.loja_lat},${a.loja_lng}&navigate=yes`} target="_blank" rel="noreferrer" style={{
-                  flex: 1, padding: "9px 0", borderRadius: 10, textDecoration: "none",
-                  border: "1px solid rgba(0,170,255,0.3)", background: "rgba(0,170,255,0.07)",
-                  color: "#00aaff", fontWeight: 800, fontSize: 11, textAlign: "center",
-                }}>
-                  🗺 Ir à loja
-                </a>
-              )}
-              <a href={`https://waze.com/ul?q=${encodeURIComponent(a.endereco)}&navigate=yes`} target="_blank" rel="noreferrer" style={{
-                flex: 1, padding: "9px 0", borderRadius: 10, textDecoration: "none",
-                border: "1px solid rgba(0,170,255,0.3)", background: "rgba(0,170,255,0.07)",
-                color: "#00aaff", fontWeight: 800, fontSize: 11, textAlign: "center",
-              }}>
-                🗺 Ir ao cliente
-              </a>
-            </div>
-
-            {a.status === "aceito" && (
-              <button onClick={() => avancarAvulsa(a)} style={{
-                width: "100%", padding: "12px", borderRadius: 12, border: "none",
-                background: "#f97316", color: "white", fontWeight: 900, fontSize: 13, cursor: "pointer",
-              }}>
-                🏪 Cheguei na loja
-              </button>
-            )}
-            {a.status === "coletado" && (
-              <button onClick={() => avancarAvulsa(a)} style={{
-                width: "100%", padding: "12px", borderRadius: 12, border: "none",
-                background: "#f97316", color: "white", fontWeight: 900, fontSize: 13, cursor: "pointer",
-              }}>
-                🛵 Saindo para entrega
-              </button>
-            )}
-            {a.status === "em_rota" && (
-              <button onClick={() => avancarAvulsa(a)} style={{
-                width: "100%", padding: "12px", borderRadius: 12, border: "none",
-                background: "#22c55e", color: "white", fontWeight: 900, fontSize: 13, cursor: "pointer",
-              }}>
-                ✓ Confirmar entrega
-              </button>
-            )}
+            {avulsasPorDistancia.length > 1 && <p className="mut" style={{ fontSize: 13, marginBottom: 10 }}>A mais perto aparece primeiro.</p>}
+            {avulsasPorDistancia.map(({ item: a, km }) => <AvulsaAndamento key={a.id} a={a} km={km != null ? fmtKm(km) : null} onAvancar={() => avancarAvulsa(a)} />)}
           </div>
-        )
-      })()}
+        </div>
+      )}
 
-      {/* ── Botão aceitar pedido disponível (só quando não há badge de extras ocupando o mesmo canto) ── */}
-      {corridaAtiva && !corridaConcluida && entregasExtras.length === 0 && prontos.length > 0 && emAndamento.length < maxPedidos && (
-        <button
-          onClick={() => setDisponiveisAberto(o => !o)}
-          style={{
-            position: "absolute", top: 62, left: 12, zIndex: 36,
-            background: disponiveisAberto ? "#22c55e" : "rgba(10,10,10,0.85)",
-            backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
-            border: `1.5px solid ${disponiveisAberto ? "transparent" : "rgba(34,197,94,0.6)"}`,
-            borderRadius: 999, padding: "7px 14px",
-            display: "flex", alignItems: "center", gap: 7,
-            color: "white", fontWeight: 800, fontSize: 12,
-            cursor: "pointer", boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
-          }}>
-          <span style={{ fontSize: 14 }}>+</span>
-          {prontos.length} pedido{prontos.length > 1 ? "s" : ""} disponível{prontos.length > 1 ? "is" : ""}
+      {/* ── Pegar outra corrida durante a atual ── */}
+      {corridaAtiva && !corridaConcluida && entregasExtras.length === 0 && prontos.length > 0 && emAndamento.length < maxPedidos && !fullscreenMap && !temOferta && (
+        <button className="mb-flutua" onClick={() => setDisponiveisAberto(o => !o)} style={{ top: 66, left: 12, background: disponiveisAberto ? "var(--folha)" : "#fff", color: disponiveisAberto ? "#fff" : "var(--folha)" }}>
+          <span className="n" style={{ background: "var(--folha)" }}>+{prontos.length}</span>
+          {prontos.length === 1 ? "corrida no caminho" : "corridas no caminho"}
         </button>
       )}
 
-      {/* ── Mini-sheet das entregas extras ativas — lista TODAS, não só a 2ª ── */}
       {segundoAberto && entregasExtras.length > 0 && !corridaConcluida && (
-        <div style={{
-          position: "absolute", top: 100, left: 10, right: 10, zIndex: 37,
-          background: "rgba(10,10,10,0.96)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
-          borderRadius: 20, padding: "16px",
-          border: "1px solid rgba(249,115,22,0.4)",
-          boxShadow: "0 4px 32px rgba(0,0,0,0.6)",
-          maxHeight: "70vh", overflowY: "auto",
-        }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <p style={{ color: "#f97316", fontWeight: 900, fontSize: 13 }}>
-              {entregasExtras.length === 1 ? "2° pedido" : `${entregasExtras.length} entregas extras`}
-            </p>
-            <button onClick={() => setSegundoAberto(false)} style={{ background: "transparent", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 20, cursor: "pointer" }}>×</button>
-          </div>
-
-          {entregasExtras.map((entrega, idx) => (
-            <div key={entrega.id} style={{
-              marginBottom: idx < entregasExtras.length - 1 ? 16 : 0,
-              paddingBottom: idx < entregasExtras.length - 1 ? 16 : 0,
-              borderBottom: idx < entregasExtras.length - 1 ? "1px solid rgba(255,255,255,0.08)" : "none",
-            }}>
-              <p style={{ color: "#f97316", fontWeight: 900, fontSize: 13 }}>
-                #{entrega.codigo}
-              </p>
-              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, marginTop: 2, marginBottom: 8 }}>
-                R$ {ganhoLiquido(entrega.taxa_entrega ?? 0, entrega.criado_em).toFixed(2)} • {(entrega as any).loja?.nome ?? "—"}
-              </p>
-
-              <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, marginBottom: 10 }}>
-                {entrega.status === "indo_para_loja" && `🏪 Indo buscar em ${(entrega as any).loja?.nome}`}
-                {entrega.status === "na_loja" && "📦 Aguardando coleta na loja"}
-                {["em_rota","coletado"].includes(entrega.status) && `🏠 Entregando em ${entrega.endereco_entrega}`}
-              </p>
-
-              {/* Priorizar: troca a ordem — o mapa passa a rotear para este primeiro */}
-              <button
-                onClick={() => priorizarSegundaEntrega(entrega.id)}
-                style={{
-                  width: "100%", padding: "11px", borderRadius: 12, border: "1.5px solid rgba(249,115,22,0.6)",
-                  background: "transparent", color: "#f97316", fontWeight: 900, fontSize: 13, cursor: "pointer",
-                  marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="17 11 21 7 17 3"/><line x1="21" y1="7" x2="9" y2="7"/>
-                  <polyline points="7 21 3 17 7 13"/><line x1="15" y1="17" x2="3" y2="17"/>
-                </svg>
-                Priorizar esta entrega
-              </button>
-
-              {entrega.status === "indo_para_loja" && (
-                <button onClick={() => avancarEtapa(entrega)} disabled={avancandoEtapa} style={{
-                  width: "100%", padding: "12px", borderRadius: 12, border: "none",
-                  background: "#f97316", color: "white", fontWeight: 900, fontSize: 13, cursor: "pointer",
-                }}>
-                  {avancandoEtapa ? "..." : "Cheguei na loja"}
-                </button>
-              )}
-              {entrega.status === "na_loja" && (
-                <button onClick={() => avancarEtapa(entrega)} disabled={avancandoEtapa} style={{
-                  width: "100%", padding: "12px", borderRadius: 12, border: "none",
-                  background: "#22c55e", color: "white", fontWeight: 900, fontSize: 13, cursor: "pointer",
-                }}>
-                  {avancandoEtapa ? "..." : "Coletei o pedido"}
-                </button>
-              )}
-              {["em_rota","coletado"].includes(entrega.status) && (
-                <button onClick={() => avancarEtapa(entrega)} disabled={avancandoEtapa} style={{
-                  width: "100%", padding: "12px", borderRadius: 12, border: "none",
-                  background: "#818cf8", color: "white", fontWeight: 900, fontSize: 13, cursor: "pointer",
-                }}>
-                  {avancandoEtapa ? "..." : "Confirmar entrega"}
-                </button>
-              )}
+        <div className="mb-folha-modal" onClick={() => setSegundoAberto(false)}>
+          <div onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <span className="t20">{entregasExtras.length === 1 ? "2º pedido" : `${entregasExtras.length} outras entregas`}</span>
+              <button className="mb-redondo" style={{ position: "static", boxShadow: "none", background: "var(--pedra)" }} onClick={() => setSegundoAberto(false)} aria-label="Fechar">✕</button>
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* ── Mini-sheet de pedidos disponíveis (para aceitar 2° pedido) ── */}
-      {disponiveisAberto && !corridaConcluida && (
-        <div style={{
-          position: "absolute", top: 100, left: 10, right: 10, zIndex: 37,
-          background: "rgba(10,10,10,0.96)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
-          borderRadius: 20, padding: "16px",
-          border: "1px solid rgba(34,197,94,0.4)",
-          boxShadow: "0 4px 32px rgba(0,0,0,0.6)",
-          maxHeight: "40vh", overflowY: "auto",
-        }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <p style={{ color: "#22c55e", fontWeight: 900, fontSize: 13 }}>Pedidos disponíveis</p>
-            <button onClick={() => setDisponiveisAberto(false)} style={{ background: "transparent", border: "none", color: "rgba(255,255,255,0.4)", fontSize: 20, cursor: "pointer" }}>×</button>
-          </div>
-          {prontos.map(p => (
-            <div key={p.id} style={{
-              background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: "12px",
-              marginBottom: 10, border: "1px solid rgba(34,197,94,0.2)",
-            }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 11 }}>
-                  #{p.codigo} · {(p as any).loja?.nome ?? "—"}
-                </p>
-                <p style={{ color: "#22c55e", fontWeight: 900, fontSize: 15 }}>R$ {ganhoLiquido(p.taxa_entrega ?? 0, p.criado_em).toFixed(2)}</p>
+            {extrasPorDistancia.map(({ item: entrega, km }, idx) => (
+              <div key={entrega.id} className="mb-disp">
+                <div className="l1">
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <b className="t16">#{entrega.codigo}, {(entrega as any).loja?.nome ?? ""}</b>
+                    <p>{entrega.status === "indo_para_loja" ? "Indo buscar na loja" : entrega.status === "na_loja" ? "Esperando pegar na loja" : `Entregar em ${entrega.endereco_entrega}`}</p>
+                  </span>
+                  <span className="v">R$ {ganhoMotoboyPedido(entrega).toFixed(2).replace(".", ",")}{km != null && <small>{idx === 0 && extrasPorDistancia.length > 1 ? "mais perto, " : ""}{fmtKm(km)}</small>}</span>
+                </div>
+                <button className="mb-btn claro peq" style={{ marginTop: 10 }} onClick={() => priorizarSegundaEntrega(entrega.id)}>Fazer esta primeiro</button>
+                {entrega.status === "indo_para_loja" && <button className="mb-btn verm peq" style={{ marginTop: 8 }} onClick={() => avancarEtapa(entrega)} disabled={avancandoEtapa}>{avancandoEtapa ? "Salvando…" : "Cheguei na loja"}</button>}
+                {entrega.status === "na_loja" && <button className="mb-btn verde peq" style={{ marginTop: 8 }} onClick={() => avancarEtapa(entrega)} disabled={avancandoEtapa}>{avancandoEtapa ? "Salvando…" : "Peguei o pedido"}</button>}
+                {["em_rota", "coletado"].includes(entrega.status) && <button className="mb-btn escuro peq" style={{ marginTop: 8 }} onClick={() => avancarEtapa(entrega)} disabled={avancandoEtapa}>{avancandoEtapa ? "Salvando…" : "Confirmar entrega"}</button>}
               </div>
-              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, marginBottom: 10 }}>{p.endereco_entrega}</p>
-              <button onClick={() => aceitarEntrega(p)} disabled={!!atualizando} style={{
-                width: "100%", padding: "10px", borderRadius: 10, border: "none",
-                background: atualizando === p.id ? "rgba(34,197,94,0.3)" : "#22c55e",
-                color: "white", fontWeight: 900, fontSize: 13, cursor: "pointer",
-              }}>
-                {atualizando === p.id ? "..." : "Aceitar 2° pedido"}
-              </button>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
 
-      {/* ── Painel de corrida ativa (Tópico 03) ── */}
+      {disponiveisAberto && !corridaConcluida && (
+        <div className="mb-folha-modal" onClick={() => setDisponiveisAberto(false)}>
+          <div onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <span className="t20">Corridas disponíveis</span>
+              <button className="mb-redondo" style={{ position: "static", boxShadow: "none", background: "var(--pedra)" }} onClick={() => setDisponiveisAberto(false)} aria-label="Fechar">✕</button>
+            </div>
+            {prontos.map(p => <CorridaDisponivel key={p.id} p={p} km={kmTxt(p)} ocupado={atualizando === p.id} bloqueado={!!atualizando} rotulo="Aceitar 2º pedido" onAceitar={() => aceitarEntrega(p)} />)}
+          </div>
+        </div>
+      )}
+
+      {/* ── Corrida em andamento ── */}
       {(corridaAtiva || corridaConcluida) && !fullscreenMap && (
         <CorridaAtivaPanel
           // key força remontar o painel ao trocar de pedido (concluída -> próxima já
           // aceita) — sem isso, estado interno (código digitado, "cheguei" enviado,
-          // colapsado) ficava herdado da corrida anterior porque o componente só
-          // recebe props novas, não remonta. Bug real reportado, 2026-09-23.
+          // colapsado) ficava herdado da corrida anterior. Bug real reportado, 2026-09-23.
           key={(corridaConcluida?.id ?? corridaAtiva?.id) ?? "none"}
           pedido={corridaAtiva}
           corridaConcluida={corridaConcluida}
@@ -2666,458 +2356,143 @@ export default function MotoboyPage() {
           lojaLng={lojaLng ?? undefined}
           destinoLat={destinoLat ?? undefined}
           destinoLng={destinoLng ?? undefined}
+          ganhosDia={ganhosDia}
+          corridasDia={corridasDia}
           onSOSOpen={() => setSosModal(true)}
           onSetDestino={(lat, lng) => { setDestinoLat(lat); setDestinoLng(lng) }}
           onShowRoute={() => setFitBoundsTrigger(n => n + 1)}
+          temOutraCorrida={emAndamento.some(x => x.id !== corridaConcluida?.id && ["indo_para_loja","na_loja","em_rota","coletado"].includes(x.status))}
+          onPararHoje={async () => { await avancarEtapa(); if (disponivel) await toggleDisponivel() }}
         />
       )}
 
-      {/* ── Bottom Sheet (só quando sem corrida ativa e não em fullscreen) ── */}
-      {!corridaAtiva && !corridaConcluida && !fullscreenMap && <div
-        style={{
-          position: "absolute", left: 0, right: 0, bottom: 0,
-          height: sheetH, background: "#111",
-          borderRadius: "20px 20px 0 0",
-          boxShadow: "0 -4px 32px rgba(0,0,0,0.6)",
-          zIndex: 30, display: "flex", flexDirection: "column",
-          transition: isDragging.current ? "none" : "height 0.3s cubic-bezier(0.32,0.72,0,1)",
-          overflow: "hidden",
-        }}
-      >
-        {/* Drag handle — Pointer Capture garante captura fora do elemento */}
-        <div
-          style={{ padding: "16px 0 10px", cursor: "grab", flexShrink: 0, touchAction: "none", userSelect: "none" }}
-          onPointerDown={onDragPointerDown}
-          onPointerMove={onDragPointerMove}
-          onPointerUp={onDragPointerUp}
-          onPointerCancel={onDragPointerUp}
-        >
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.15)", margin: "0 auto" }} />
-        </div>
-
-        {/* Header sheet — clicável para expandir/recolher */}
-        <div
-          onClick={() => setSheetH(h => h === SHEET_PEEK ? SHEET_MID : h === SHEET_MID ? SHEET_FULL : SHEET_PEEK)}
-          style={{ padding: "0 20px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, cursor: "pointer", userSelect: "none" }}
-        >
-          <div>
-            {!disponivel ? (
-              <p style={{ color: "rgba(255,255,255,0.4)", fontWeight: 700, fontSize: 14 }}>Você está offline</p>
-            ) : pedidosLoading ? (
-              <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 14 }}>Carregando...</p>
-            ) : emAndamento.length > 0 ? (
-              <p style={{ color: "#60a5fa", fontWeight: 800, fontSize: 14 }}>
-                {emAndamento.length} entrega{emAndamento.length > 1 ? "s" : ""} em andamento
-              </p>
-            ) : prontos.length > 0 ? (
-              <p style={{ color: "#f97316", fontWeight: 800, fontSize: 14 }}>
-                {prontos.length} pedido{prontos.length > 1 ? "s" : ""} disponíve{prontos.length > 1 ? "is" : "l"}
-              </p>
-            ) : (
-              <p style={{ color: "rgba(255,255,255,0.3)", fontWeight: 600, fontSize: 14 }}>Aguardando pedidos...</p>
-            )}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            {disponivel && (prontos.length > 0 || emAndamento.length > 0) && (
-              <span style={{ background: "rgba(255,255,255,0.06)", borderRadius: 8, color: "rgba(255,255,255,0.4)", fontSize: 11, padding: "4px 10px" }}>
-                {sheetH <= SHEET_PEEK ? "Ver ▲" : sheetH >= SHEET_FULL ? "Recolher ▼" : "▲"}
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Conteúdo scrollável */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "0 14px 14px", WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
-
-          {/* Offline */}
+      {/* ── Folha de baixo (sem corrida ativa) ── */}
+      {!corridaAtiva && !corridaConcluida && !fullscreenMap && (
+        <div className="mb-folha" style={{ height: sheetH, transition: isDragging.current ? "none" : "height 0.3s cubic-bezier(0.32,0.72,0,1)", overflow: disponivel ? "hidden" : "visible" }}>
           {!disponivel && (
-            <div style={{ textAlign: "center", paddingTop: 6 }}>
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
-                {fotoMotoboy ? (
-                  <img src={fotoMotoboy} alt="Foto" style={{
-                    width: 56, height: 56, borderRadius: "50%", objectFit: "cover",
-                    border: "2px solid rgba(255,255,255,0.15)", opacity: 0.7,
-                  }} />
-                ) : (
-                  <div style={{
-                    width: 56, height: 56, borderRadius: "50%", opacity: 0.25,
-                    background: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center",
-                  }}>
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                    </svg>
-                  </div>
-                )}
-              </div>
-
-              {/* Localização atual */}
-              <div style={{
-                display: "inline-flex", alignItems: "center", gap: 6,
-                background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: 999, padding: "5px 12px", marginBottom: 14,
-              }}>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={cidadeAtual ? "#22c55e" : "rgba(255,255,255,0.2)"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
-                </svg>
-                <span style={{ fontSize: 11, fontWeight: 700, color: cidadeAtual ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.25)" }}>
-                  {cidadeAtual ?? "Detectando localização..."}
-                </span>
-              </div>
-
-              <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 13, marginBottom: 18 }}>
-                Fique online para receber pedidos na sua região
-              </p>
-              <button onClick={toggleDisponivel} disabled={togglingDisp || dispLoading} style={{
-                width: "100%", padding: "16px", borderRadius: 16, border: "none",
-                background: "#22c55e", color: "white", fontWeight: 900, fontSize: 16, cursor: "pointer",
-                display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-              }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
-                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-                </svg>
-                {togglingDisp ? "..." : "Ficar Online"}
-              </button>
-
-            </div>
+            <button className="mb-online-btn" onClick={toggleDisponivel} disabled={togglingDisp || dispLoading} aria-label="Ficar online">
+              {togglingDisp ? <b>…</b> : <><span>Ficar</span><b>online</b></>}
+            </button>
           )}
+          <div className="mb-pega" onPointerDown={onDragPointerDown} onPointerMove={onDragPointerMove} onPointerUp={onDragPointerUp} onPointerCancel={onDragPointerUp}
+            onClick={() => setSheetH(h => h === SHEET_PEEK ? SHEET_MID : h === SHEET_MID ? SHEET_FULL : SHEET_PEEK)}><i /></div>
 
-          {/* Online sem pedidos */}
-          {disponivel && !pedidosLoading && prontos.length === 0 && emAndamento.length === 0 && (
-            <div style={{ textAlign: "center", paddingTop: 8 }}>
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: 8, opacity: 0.25 }}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/>
-                </svg>
+          <div className="mb-rolagem">
+            {/* Offline */}
+            {!disponivel && (
+              <>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "4px 0 12px" }}>
+                  <span className="mb-estado off">Offline</span>
+                  <span className="mut" style={{ fontSize: 13.5, flex: 1 }}>Raio de {raioKm} km{cidadeAtual ? `, ${cidadeAtual}` : ""}</span>
+                  <button onClick={() => setRaioOpen(o => !o)} style={{ background: "none", border: 0, color: "var(--pimenta)", fontWeight: 800, fontSize: 13.5 }}>Mudar raio</button>
+                </div>
+                <div className="mb-stats">
+                  <div><b>R$ {ganhosDia.toFixed(2).replace(".", ",")}</b><span>hoje</span></div>
+                  <div><b>{corridasDia}</b><span>{corridasDia === 1 ? "corrida" : "corridas"}</span></div>
+                  <div><b>{raioKm} km</b><span>de raio</span></div>
+                </div>
+              </>
+            )}
+
+            {dinamica && (
+              <div className="mb-dinamica">
+                <b>🌧️ Corrida dinâmica: + R$ {dinamica.valor.toFixed(2).replace(".", ",")} por entrega</b>
+                <small>Vale até {new Date(dinamica.ate).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }).replace(":", "h")}, em todas as lojas. O valor já aparece somado em cada corrida.</small>
               </div>
-              <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 13 }}>Novos pedidos aparecerão aqui</p>
+            )}
 
-              {/* Botão de teste exclusivo para Carlos */}
-              {motoboy_id === "c4cdc45e-ca42-4965-80e5-af05cb518b11" && (
-                <button
-                  onClick={mostrarFakeCorrida}
-                  style={{
-                    marginTop: 20, padding: "12px 24px",
-                    background: "rgba(255,140,0,0.12)",
-                    border: "1.5px dashed rgba(255,140,0,0.4)",
-                    borderRadius: 14, color: "#FF8C00",
-                    fontWeight: 800, fontSize: 13, cursor: "pointer",
-                  }}
-                >
-                  🧪 Simular corrida teste
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Entregas em andamento */}
-          {disponivel && emAndamento.map(p => (
-            <div key={p.id} style={{
-              background: "#0d1117", borderRadius: 16,
-              border: "1px solid rgba(59,130,246,0.35)", marginBottom: 12, overflow: "hidden",
-            }}>
-              <div style={{ background: "rgba(59,130,246,0.08)", padding: "11px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 11, fontWeight: 800, padding: "3px 10px", borderRadius: 999, background: "rgba(59,130,246,0.2)", color: "#60a5fa", border: "1px solid rgba(59,130,246,0.3)" }}>
-                    Em andamento
+            {/* Online */}
+            {disponivel && (
+              <>
+                <div className="mb-procurando" style={{ marginTop: 2 }}>
+                  <span className="radar" />
+                  <span style={{ flex: 1 }}>
+                    <b className="t16">{pedidosLoading ? "Carregando…" : "Procurando corridas"}</b>
+                    <p className="mut" style={{ fontSize: 13 }}>Raio de {raioKm} km. Corrida nova toca e abre sozinha.</p>
                   </span>
-                  <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 12 }}>#{p.codigo}</span>
-                </div>
-                <p style={{ color: "white", fontWeight: 900, fontSize: 18 }}>R$ {ganhoLiquido(p.taxa_entrega ?? 0, p.criado_em).toFixed(2)}</p>
-              </div>
-
-              <div style={{ padding: "12px 16px" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
-                  <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#f97316", flexShrink: 0, marginTop: 5 }} />
-                    <p style={{ color: "rgba(255,255,255,0.55)", fontSize: 13, lineHeight: 1.4 }}>
-                      <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 11 }}>Coletar em </span>
-                      <strong style={{ color: "white" }}>{(p as any).loja?.nome ?? "—"}</strong>
-                    </p>
-                  </div>
-                  <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", flexShrink: 0, marginTop: 5 }} />
-                    <p style={{ color: "rgba(255,255,255,0.55)", fontSize: 13, lineHeight: 1.4 }}>
-                      <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 11 }}>Entregar em </span>
-                      {p.endereco_entrega}
-                    </p>
-                  </div>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <div style={{ width: 7, height: 7, borderRadius: 2, background: PGTO_COLOR[p.forma_pagamento] ?? "#818cf8", flexShrink: 0 }} />
-                    <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12 }}>{PGTO[p.forma_pagamento] ?? p.forma_pagamento}</p>
-                  </div>
-                  <DetalheCobranca pedido={p} />
-                  {p.observacao && (
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <div style={{ width: 7, height: 7, borderRadius: "50%", background: "rgba(255,255,255,0.15)", flexShrink: 0, marginTop: 4 }} />
-                      <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, fontStyle: "italic" }}>{p.observacao}</p>
-                    </div>
-                  )}
+                  <span className="mb-estado on">Online</span>
                 </div>
 
-                {/* ── Botão de ação baseado no status ── */}
-                {p.status === "indo_para_loja" && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    <div style={{ padding: "10px 14px", borderRadius: 12, background: "rgba(249,115,22,0.12)", border: "1px solid rgba(249,115,22,0.3)", display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f97316", flexShrink: 0, animation: "gpsPulse 1.5s ease-out infinite" }} />
-                      <p style={{ color: "#f97316", fontSize: 13, fontWeight: 700 }}>🏪 A caminho da loja — rota no mapa</p>
-                    </div>
-                    <button
-                      onClick={() => avancarEtapa()}
-                      disabled={!!atualizando}
-                      style={{
-                        width: "100%", padding: "16px", borderRadius: 14, border: "none",
-                        background: atualizando === p.id ? "rgba(249,115,22,0.4)" : "#f97316",
-                        color: "white", fontWeight: 900, fontSize: 16, cursor: atualizando ? "not-allowed" : "pointer",
-                        display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-                        boxShadow: "0 4px 16px rgba(249,115,22,0.35)",
-                      }}>
-                      {atualizando === p.id ? "..." : "📦 Cheguei na loja — Pedido recebido"}
-                    </button>
-                  </div>
-                )}
-
-                {p.status === "na_loja" && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    <div style={{ padding: "10px 14px", borderRadius: 12, background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.3)", display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", flexShrink: 0 }} />
-                      <p style={{ color: "#22c55e", fontSize: 13, fontWeight: 700 }}>✅ Na loja — pegue o pedido e clique abaixo</p>
-                    </div>
-                    <button
-                      onClick={() => avancarEtapa()}
-                      disabled={!!atualizando}
-                      style={{
-                        width: "100%", padding: "16px", borderRadius: 14, border: "none",
-                        background: atualizando === p.id ? "rgba(34,197,94,0.4)" : "#22c55e",
-                        color: "white", fontWeight: 900, fontSize: 16, cursor: atualizando ? "not-allowed" : "pointer",
-                        display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-                        boxShadow: "0 4px 16px rgba(34,197,94,0.35)",
-                      }}>
-                      {atualizando === p.id ? "..." : "🛵 Peguei o pedido — Saindo para entrega"}
-                    </button>
-                  </div>
-                )}
-
-                {(p.status === "em_rota" || p.status === "coletado") && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    <div style={{ padding: "10px 14px", borderRadius: 12, background: "rgba(99,102,241,0.12)", border: "1px solid rgba(99,102,241,0.3)", display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#818cf8", flexShrink: 0, animation: "gpsPulse 1.5s ease-out infinite" }} />
-                      <p style={{ color: "#818cf8", fontSize: 13, fontWeight: 700 }}>🏠 A caminho do cliente — rota no mapa</p>
-                    </div>
-                    {confirmandoId === p.id ? (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, fontWeight: 600 }}>Peça os 4 últimos números do telefone do cliente:</p>
-                        <div style={{ display: "flex", gap: 8 }}>
-                          <input
-                            value={codigoInput}
-                            onChange={e => { setCodigoInput(e.target.value.replace(/\D/g, "")); setErroConfirm("") }}
-                            onKeyDown={e => e.key === "Enter" && confirmarCodigo(p)}
-                            placeholder="0000" maxLength={4} inputMode="numeric" autoFocus
-                            style={{
-                              flex: 1, padding: "12px 14px", borderRadius: 12, fontSize: 26,
-                              fontWeight: 900, letterSpacing: 10, textAlign: "center",
-                              background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.18)",
-                              color: "white", outline: "none",
-                            }}
-                          />
-                          <button onClick={() => confirmarCodigo(p)} disabled={!codigoInput.trim() || !!atualizando} style={{
-                            padding: "12px 18px", borderRadius: 12, border: "none", fontSize: 22,
-                            background: codigoInput.trim() ? "#22c55e" : "rgba(34,197,94,0.15)",
-                            color: "white", fontWeight: 900, cursor: codigoInput.trim() ? "pointer" : "not-allowed",
-                          }}>
-                            {atualizando === p.id ? "..." : "✓"}
-                          </button>
-                          <button onClick={() => setConfirmandoId(null)} style={{
-                            padding: "12px 14px", borderRadius: 12,
-                            background: "transparent", border: "1px solid rgba(255,255,255,0.1)",
-                            color: "rgba(255,255,255,0.3)", cursor: "pointer", fontSize: 16,
-                          }}>×</button>
+                {emAndamento.length > 0 && (
+                  <>
+                    <div className="mb-sec"><b className="t16">Em andamento</b></div>
+                    {emAndamento.map(p => (
+                      <div key={p.id} className="mb-disp">
+                        <div className="l1">
+                          <span style={{ flex: 1, minWidth: 0 }}><b className="t16">#{p.codigo}, {(p as any).loja?.nome ?? ""}</b><p>{statusTxt(p.status)}, {p.endereco_entrega}</p></span>
+                          <span className="v">R$ {ganhoMotoboyPedido(p).toFixed(2).replace(".", ",")}</span>
                         </div>
-                        {erroConfirm && (
-                          <p style={{ color: "#f87171", fontSize: 12, fontWeight: 600, padding: "8px 12px", background: "rgba(239,68,68,0.08)", borderRadius: 10, border: "1px solid rgba(239,68,68,0.15)" }}>
-                            {erroConfirm}
-                          </p>
-                        )}
+                        <DetalheCobranca pedido={p} />
                       </div>
-                    ) : (
-                      <button
-                        onClick={() => { setConfirmandoId(p.id); setCodigoInput(""); setErroConfirm("") }}
-                        disabled={!!atualizando}
-                        style={{
-                          width: "100%", padding: "14px", borderRadius: 14, border: "none",
-                          background: atualizando === p.id ? "rgba(34,197,94,0.3)" : "#22c55e",
-                          color: "white", fontWeight: 900, fontSize: 15, cursor: "pointer",
-                        }}>
-                        {atualizando === p.id ? "..." : "✓ Confirmar entrega com código"}
-                      </button>
-                    )}
-                  </div>
+                    ))}
+                  </>
                 )}
-              </div>
-            </div>
-          ))}
 
-          {/* Entregas avulsas em andamento */}
-          {disponivel && emAndamentoAvulsa.map(a => (
-            <div key={a.id} style={{
-              background: "#0d1117", borderRadius: 16,
-              border: "1px solid rgba(167,139,250,0.35)", marginBottom: 12, overflow: "hidden",
-            }}>
-              <div style={{ background: "rgba(167,139,250,0.08)", padding: "11px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 11, fontWeight: 800, padding: "3px 10px", borderRadius: 999, background: "rgba(167,139,250,0.2)", color: "#a78bfa", border: "1px solid rgba(167,139,250,0.3)" }}>
-                    Avulsa
-                  </span>
-                  <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 12 }}>#{a.codigo}</span>
-                </div>
-                <p style={{ color: "white", fontWeight: 900, fontSize: 18 }}>R$ {ganhoLiquido(a.taxa_entrega ?? 0, a.criado_em).toFixed(2)}</p>
-              </div>
-              <div style={{ padding: "12px 16px" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
-                  {a.loja_nome && (
-                    <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 12, fontWeight: 700 }}>
-                      🏪 {a.loja_nome}
-                    </p>
-                  )}
-                  <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 13 }}>
-                    <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 11 }}>Cliente: </span>
-                    <strong style={{ color: "white" }}>{a.cliente_nome}</strong>
-                  </p>
-                  <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", flexShrink: 0, marginTop: 5 }} />
-                    <p style={{ color: "rgba(255,255,255,0.55)", fontSize: 13, lineHeight: 1.4 }}>
-                      <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 11 }}>Entregar em </span>
-                      {a.endereco}
-                    </p>
-                  </div>
-                  {a.observacao && (
-                    <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, fontStyle: "italic" }}>{a.observacao}</p>
-                  )}
-                </div>
-                {/* Waze */}
-                <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                  {a.loja_lat && a.loja_lng && (
-                    <a
-                      href={`https://waze.com/ul?ll=${a.loja_lat},${a.loja_lng}&navigate=yes`}
-                      target="_blank" rel="noreferrer"
-                      style={{
-                        flex: 1, padding: "9px 0", borderRadius: 10, textDecoration: "none",
-                        border: "1px solid rgba(0,170,255,0.3)", background: "rgba(0,170,255,0.07)",
-                        color: "#00aaff", fontWeight: 800, fontSize: 11, textAlign: "center",
-                      }}
-                    >
-                      🗺 Ir à loja
-                    </a>
-                  )}
-                  <a
-                    href={`https://waze.com/ul?q=${encodeURIComponent(a.endereco)}&navigate=yes`}
-                    target="_blank" rel="noreferrer"
-                    style={{
-                      flex: 1, padding: "9px 0", borderRadius: 10, textDecoration: "none",
-                      border: "1px solid rgba(0,170,255,0.3)", background: "rgba(0,170,255,0.07)",
-                      color: "#00aaff", fontWeight: 800, fontSize: 11, textAlign: "center",
-                    }}
-                  >
-                    🗺 Ir ao cliente
-                  </a>
-                </div>
-                {a.status === "aceito" && (
-                  <button onClick={() => avancarAvulsa(a)} style={{
-                    width: "100%", padding: "16px", borderRadius: 14, border: "none",
-                    background: "#f97316", color: "white", fontWeight: 900, fontSize: 16, cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-                  }}>
-                    🏪 Cheguei na loja
-                  </button>
+                {emAndamentoAvulsa.length > 0 && (
+                  <>
+                    <div className="mb-sec"><b className="t16">Avulsas em andamento</b></div>
+                    {emAndamentoAvulsa.map(a => <AvulsaAndamento key={a.id} a={a} km={null} onAvancar={() => avancarAvulsa(a)} />)}
+                  </>
                 )}
-                {a.status === "coletado" && (
-                  <button onClick={() => avancarAvulsa(a)} style={{
-                    width: "100%", padding: "16px", borderRadius: 14, border: "none",
-                    background: "#f97316", color: "white", fontWeight: 900, fontSize: 16, cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-                  }}>
-                    🛵 Saindo para entrega
-                  </button>
-                )}
-                {a.status === "em_rota" && (
-                  <button onClick={() => avancarAvulsa(a)} style={{
-                    width: "100%", padding: "16px", borderRadius: 14, border: "none",
-                    background: "#22c55e", color: "white", fontWeight: 900, fontSize: 16, cursor: "pointer",
-                  }}>
-                    ✓ Confirmar entrega
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
 
-          {/* Pedidos prontos */}
-          {disponivel && prontos.length > 0 && (
-            <>
-              {emAndamento.length > 0 && (
-                <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "4px 0 10px" }}>
-                  <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
-                  <span style={{ color: "rgba(255,255,255,0.2)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1 }}>
-                    Disponíveis
-                  </span>
-                  <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
-                </div>
-              )}
-              {prontos.map(p => (
-                <div key={p.id} style={{
-                  background: "#0d1117", borderRadius: 16,
-                  border: "1px solid rgba(249,115,22,0.35)", marginBottom: 10, overflow: "hidden",
-                }}>
-                  <div style={{ background: "rgba(249,115,22,0.08)", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ fontSize: 11, fontWeight: 800, padding: "3px 10px", borderRadius: 999, background: "rgba(249,115,22,0.18)", color: "#f97316", border: "1px solid rgba(249,115,22,0.3)" }}>
-                        Disponível
-                      </span>
-                      <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 12 }}>
-                        #{p.codigo} · {new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    </div>
-                    <p style={{ color: "white", fontWeight: 900, fontSize: 17 }}>R$ {ganhoLiquido(p.taxa_entrega ?? 0, p.criado_em).toFixed(2)}</p>
-                  </div>
-                  <div style={{ padding: "12px 16px" }}>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 12 }}>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#f97316", flexShrink: 0, marginTop: 4 }} />
-                        <p style={{ color: "rgba(255,255,255,0.55)", fontSize: 13 }}>
-                          {(p as any).loja?.nome ?? "—"}
-                          {(p as any).loja?.endereco && (
-                            <span style={{ color: "rgba(255,255,255,0.25)", fontSize: 11, display: "block" }}>{(p as any).loja.endereco}</span>
-                          )}
-                        </p>
-                      </div>
-                      <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                        <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", flexShrink: 0, marginTop: 4 }} />
-                        <p style={{ color: "rgba(255,255,255,0.55)", fontSize: 13 }}>{p.endereco_entrega}</p>
-                      </div>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <div style={{ width: 7, height: 7, borderRadius: 2, background: PGTO_COLOR[p.forma_pagamento] ?? "#818cf8", flexShrink: 0 }} />
-                        <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 12 }}>{PGTO[p.forma_pagamento] ?? p.forma_pagamento}</p>
-                      </div>
-                      <DetalheCobranca pedido={p} />
-                      {p.itens && p.itens.length > 0 && (
-                        <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 11, marginLeft: 21 }}>
-                          {p.itens.map((i: any) => `${i.quantidade}x ${i.nome}`).join(" · ")}
-                        </p>
-                      )}
-                    </div>
-                    <button onClick={() => aceitarEntrega(p)} disabled={!!atualizando} style={{
-                      width: "100%", padding: "14px", borderRadius: 14, border: "none",
-                      background: atualizando === p.id ? "rgba(249,115,22,0.4)" : "#f97316",
-                      color: "white", fontWeight: 900, fontSize: 15, cursor: "pointer",
-                    }}>
-                      {atualizando === p.id ? "..." : "Aceitar entrega"}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </>
-          )}
+                <div className="mb-sec"><b className="t16">Rotas disponíveis</b><span className="mut" style={{ fontSize: 13 }}>{prontos.length === 0 ? "nenhuma agora" : `${prontos.length} perto de você`}</span></div>
+                {!pedidosLoading && prontos.length === 0 && (
+                  <p className="mut" style={{ fontSize: 13.5, textAlign: "center", padding: "6px 0 10px" }}>Quando a loja deixar um pedido pronto, ele aparece aqui.</p>
+                )}
+                {prontos.map(p => <CorridaDisponivel key={p.id} p={p} km={kmTxt(p)} ocupado={atualizando === p.id} bloqueado={!!atualizando} rotulo="Aceitar corrida" onAceitar={() => aceitarEntrega(p)} />)}
+
+
+                <button className="mb-btn claro" style={{ marginTop: 10 }} onClick={toggleDisponivel} disabled={togglingDisp || dispLoading}>{togglingDisp ? "…" : "Ficar offline"}</button>
+              </>
+            )}
+          </div>
         </div>
-      </div>}
+      )}
+    </div>
+  )
+}
+
+// ─── Cartão de corrida pronta (lista e "2º pedido") ─────────────────────────
+function CorridaDisponivel({ p, km, ocupado, bloqueado, rotulo, onAceitar }: { p: any; km: string | null; ocupado: boolean; bloqueado: boolean; rotulo: string; onAceitar: () => void }) {
+  const ganho = ganhoMotoboyPedido(p)
+  return (
+    <div className="mb-disp">
+      <div className="l1">
+        <span className="logo">🏪</span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <b className="t16" style={{ display: "block" }}>{p.loja?.nome ?? "Loja"}</b>
+          <p>{km ? `${km} de você, ` : ""}#{p.codigo}, {new Date(p.criado_em).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })}</p>
+        </span>
+        <span className="v">R$ {ganho.toFixed(2).replace(".", ",")}</span>
+      </div>
+      <p style={{ marginTop: 8 }}>Entregar em {p.endereco_entrega}</p>
+      <p style={{ fontSize: 12.5 }}>{p.forma_pagamento_2 ? rotuloPagamento(p) : PGTO[p.forma_pagamento] ?? p.forma_pagamento}{p.itens?.length ? `, ${p.itens.length} ${p.itens.length === 1 ? "item" : "itens"}` : ""}</p>
+      <DetalheCobranca pedido={p} />
+      <button className="mb-btn verde peq" style={{ marginTop: 10 }} onClick={onAceitar} disabled={bloqueado}>{ocupado ? "Aceitando…" : rotulo}</button>
+    </div>
+  )
+}
+
+// ─── Entrega avulsa em andamento ─────────────────────────────────────────────
+function AvulsaAndamento({ a, km, onAvancar }: { a: any; km: string | null; onAvancar: () => void }) {
+  return (
+    <div className="mb-disp">
+      <div className="l1">
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <b className="t16" style={{ display: "block" }}>Avulsa #{a.codigo}{a.loja_nome ? `, ${a.loja_nome}` : ""}</b>
+          <p>{a.status === "aceito" ? "Ir buscar na loja" : a.status === "coletado" ? "Na loja" : "Em rota"}{km ? `, ${km}` : ""}</p>
+        </span>
+        <span className="v">R$ {ganhoMotoboyPedido(a).toFixed(2).replace(".", ",")}</span>
+      </div>
+      <p style={{ marginTop: 8 }}>Cliente <b style={{ color: "var(--grafite)" }}>{a.cliente_nome}</b>, entregar em {a.endereco}</p>
+      {a.observacao && <p style={{ fontStyle: "italic" }}>{a.observacao}</p>}
+      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        {a.loja_lat && a.loja_lng && <a className="mb-btn claro peq" style={{ textDecoration: "none" }} href={`https://waze.com/ul?ll=${a.loja_lat},${a.loja_lng}&navigate=yes`} target="_blank" rel="noreferrer">Ir à loja</a>}
+        <a className="mb-btn claro peq" style={{ textDecoration: "none" }} href={`https://waze.com/ul?q=${encodeURIComponent(a.endereco)}&navigate=yes`} target="_blank" rel="noreferrer">Ir ao cliente</a>
+      </div>
+      {a.status === "aceito" && <button className="mb-btn verm peq" style={{ marginTop: 8 }} onClick={onAvancar}>Cheguei na loja</button>}
+      {a.status === "coletado" && <button className="mb-btn verm peq" style={{ marginTop: 8 }} onClick={onAvancar}>Saindo para entrega</button>}
+      {a.status === "em_rota" && <button className="mb-btn verde peq" style={{ marginTop: 8 }} onClick={onAvancar}>Confirmar entrega</button>}
     </div>
   )
 }
@@ -3231,10 +2606,39 @@ function SOSModal({
 }
 
 // ─── Painel de corrida ativa — stepper 4 etapas (Tópico 03) ─────────────────
+// ─── Botão de deslizar (aceitar / avançar etapa) ─────────────────────────────
+// Deslizar evita aceite ou avanço por toque sem querer no bolso ou no guidão. Teclado:
+// Enter ou espaço também confirmam (acessibilidade).
+function Desliza({ rotulo, onConfirmar, cor = "verde", ocupado = false }: { rotulo: string; onConfirmar: () => void; cor?: "verde" | "escuro" | "verm"; ocupado?: boolean }) {
+  const trilho = useRef<HTMLDivElement>(null)
+  const [x, setX] = useState(0)
+  const ini = useRef<number | null>(null)
+  const max = () => (trilho.current?.clientWidth ?? 300) - 64
+  function fim() {
+    if (ini.current === null) return
+    ini.current = null
+    if (x >= max() * 0.82 && !ocupado) { setX(max()); onConfirmar(); setTimeout(() => setX(0), 600) }
+    else setX(0)
+  }
+  return (
+    <div ref={trilho} className={`mb-desliza ${cor} ${ocupado ? "ocupado" : ""}`} role="button" tabIndex={0} aria-label={rotulo}
+      onKeyDown={e => { if ((e.key === "Enter" || e.key === " ") && !ocupado) { e.preventDefault(); onConfirmar() } }}
+      onPointerDown={e => { if (ocupado) return; (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId); ini.current = e.clientX - x }}
+      onPointerMove={e => { if (ini.current === null) return; setX(Math.max(0, Math.min(max(), e.clientX - ini.current))) }}
+      onPointerUp={fim} onPointerCancel={fim}>
+      <span className="rot" style={{ opacity: 1 - Math.min(1, x / Math.max(1, max())) * 0.8 }}>{ocupado ? "Salvando…" : rotulo}</span>
+      <span className="bola" style={{ transform: `translateX(${x}px)`, transition: ini.current === null ? "transform .25s" : "none" }}>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+      </span>
+    </div>
+  )
+}
+
 function CorridaAtivaPanel({
   pedido, corridaConcluida, avancando, onAvancar, onConcluir,
   motoboyId, myLat, myLng, lojaLat, lojaLng, destinoLat, destinoLng,
-  onSOSOpen, onSetDestino, onShowRoute,
+  ganhosDia, corridasDia,
+  onSOSOpen, onSetDestino, onShowRoute, temOutraCorrida, onPararHoje,
 }: {
   pedido: any | null
   corridaConcluida: any | null
@@ -3248,16 +2652,23 @@ function CorridaAtivaPanel({
   lojaLng?: number
   destinoLat?: number
   destinoLng?: number
+  ganhosDia?: number
+  corridasDia?: number
   onSOSOpen: () => void
   onSetDestino?: (lat: number, lng: number) => void
   onShowRoute?: () => void
+  temOutraCorrida?: boolean
+  onPararHoje?: () => Promise<void>
 }) {
+  const [verMapaNaLoja,   setVerMapaNaLoja]   = useState(false)
+  const [parando,         setParando]         = useState(false)
   const [navDestino,      setNavDestino]      = useState<{ texto: string; lat?: number; lng?: number } | null>(null)
   const [codigoInput,     setCodigoInput]     = useState("")
   const [erroConfirm,     setErroConfirm]     = useState("")
   const [chegueiEnviado,  setChegueiEnviado]  = useState(false)
   const [enviandoCheguei, setEnviandoCheguei] = useState(false)
   const [collapsed,       setCollapsed]       = useState(false)
+  const [conferidos,      setConferidos]      = useState<Set<number>>(new Set())
 
   const p    = corridaConcluida ?? pedido
   const loja = p?.loja
@@ -3290,309 +2701,203 @@ function CorridaAtivaPanel({
     onAvancar()
   }
 
-  const expandedH = etapa === 2 && !chegueiEnviado ? "38%" : "52%"
-  const STATUS_LABEL: Record<string, string> = {
-    "indo_para_loja": "🏪 Indo à loja",
-    "na_loja":        "📦 Na loja",
-    "em_rota":        "🏠 Em rota",
-    "coletado":       "🛵 Em rota",
-    "entregue":       "✅ Entregue",
+  const km = (lat?: number | null, lng?: number | null) =>
+    myLat != null && myLng != null && lat != null && lng != null && !isNaN(Number(lat)) ? haversineKm(myLat, myLng, Number(lat), Number(lng)) : null
+  const fmt = (v: number | null) => v == null ? "" : v < 1 ? `, ${Math.round(v * 1000)} m` : `, ${v.toFixed(1).replace(".", ",")} km`
+  // -16.9146388 é a coordenada padrão de loja que nunca marcou o ponto no mapa (centro de
+  // Aragoiânia). Ela não pode virar destino do Waze/Maps: sem ponto real, os apps buscam
+  // pelo texto do endereço e o painel avisa o motoboy pra confirmar com a loja.
+  const coordLojaReal = (lat: any) => lat != null && Math.abs(Number(lat) + 16.9146388) >= 0.0001
+  const lojaFallbackLat = coordLojaReal(p?.loja?.lat) ? p?.loja?.lat : coordLojaReal(p?.loja_lat) ? p?.loja_lat : null
+  const lojaFallbackLng = coordLojaReal(p?.loja?.lat) ? p?.loja?.lng : coordLojaReal(p?.loja_lat) ? p?.loja_lng : null
+  const lojaLatEf = lojaLat ?? lojaFallbackLat
+  const lojaLngEf = lojaLng ?? lojaFallbackLng
+  const destLatEf = destinoLat ?? p?.lat_entrega
+  const destLngEf = destinoLng ?? p?.lng_entrega
+  const zap = (tel: string, texto: string) => `https://wa.me/55${tel.replace(/\D/g, "")}?text=${encodeURIComponent(texto)}`
+  const IcNav = <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M3 11 21 3l-8 18-2-8-8-2z" /></svg>
+  const IcFone = <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z" /></svg>
+  const IcMsg = <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+
+  // ETAPA 4 — Entregue: tela verde cheia, como na proposta
+  if (etapa === 3) {
+    return (
+      <div className="mb-feito" role="status">
+        <div className="ok"><svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg></div>
+        <div className="v">+ R$ {ganhoMotoboyPedido(p ?? {}).toFixed(2).replace(".", ",")}</div>
+        <p style={{ opacity: .9, marginTop: 8, fontSize: 15 }}>Pedido #{p?.codigo} entregue. Mandou bem!</p>
+        {ganhosDia != null && (
+          <div style={{ width: "100%", maxWidth: 380, background: "rgba(255,255,255,.14)", borderRadius: 16, padding: "12px 16px", margin: "22px 0", textAlign: "left", fontSize: 14.5 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0" }}><span>Hoje</span><b>R$ {ganhosDia.toFixed(2).replace(".", ",")}</b></div>
+            <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0" }}><span>Corridas hoje</span><b>{corridasDia}</b></div>
+          </div>
+        )}
+        <button className="mb-btn" style={{ background: "#fff", color: "var(--folha)", maxWidth: 380 }} onClick={onConcluir} disabled={parando}>{temOutraCorrida ? "Seguir pra próxima entrega" : "Procurar a próxima"}</button>
+        {/* "Parar por hoje" (proposta): fecha a corrida e fica offline pela mesma rota do botão Online */}
+        {!temOutraCorrida && onPararHoje && (
+          <button className="mb-btn" style={{ background: "transparent", color: "#fff", maxWidth: 380, marginTop: 6, minHeight: 48 }} disabled={parando}
+            onClick={async () => { setParando(true); try { await onPararHoje() } finally { setParando(false) } }}>{parando ? "Saindo…" : "Parar por hoje"}</button>
+        )}
+      </div>
+    )
   }
-  const statusLabel = corridaConcluida ? "✅ Entregue" : STATUS_LABEL[pedido?.status ?? ""] ?? "Em andamento"
+
+  const enderecoRaw = p?.endereco_entrega ?? ""
+  const refIdx = enderecoRaw.indexOf(" — Ref: ")
+  const enderecoLimpo = refIdx >= 0 ? enderecoRaw.substring(0, refIdx) : enderecoRaw
+  const pontoRef = refIdx >= 0 ? enderecoRaw.substring(refIdx + 8) : ""
+  const cobra = p && cobraNaEntrega(p)
+  const tituloEtapa = etapa === 0 ? `Indo à loja${fmt(km(lojaLatEf, lojaLngEf))}` : etapa === 1 ? "Na loja" : `Indo ao cliente${fmt(km(destLatEf, destLngEf))}`
+
+  // ETAPA 2 — Na loja: "Conferir pedido" em tela cheia, como na proposta. Só a tela muda:
+  // conferir os itens não grava nada e o "Peguei o pedido" chama a mesma etapa de antes.
+  // A seta de voltar mostra o painel de sempre, em cima do mapa.
+  if (etapa === 1 && !verMapaNaLoja) {
+    const itens: any[] = p?.itens ?? []
+    const tudo = itens.length === 0 || conferidos.size >= itens.length
+    return (
+      <div className="mb-conferir" role="dialog" aria-label="Conferir pedido">
+        <div className="mb-topo-pag" style={{ paddingTop: "calc(env(safe-area-inset-top,0px) + 12px)" }}>
+          <button className="mb-redondo-peq" onClick={() => setVerMapaNaLoja(true)} aria-label="Ver no mapa"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg></button>
+          <h1 className="t20" style={{ flex: 1 }}>Conferir pedido</h1>
+          <span className="mb-selo-cod">{p?.codigo}</span>
+        </div>
+        <div className="mb-conferir-corpo">
+          <div className="mb-passos" aria-hidden="true">{[0, 1, 2, 3].map(i => <i key={i} className={i < 1 ? "feito" : i === 1 ? "agora" : ""} />)}</div>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 6 }}>
+            {loja?.logo_url ? <img src={loja.logo_url} alt="" style={{ width: 46, height: 46, borderRadius: 12, objectFit: "cover", flex: "none" }} />
+              : <span style={{ width: 46, height: 46, borderRadius: 12, background: "var(--pedra)", display: "grid", placeItems: "center", fontSize: 22, flex: "none" }}>🏪</span>}
+            <span style={{ minWidth: 0 }}><b className="t16" style={{ display: "block", fontWeight: 700 }}>{loja?.nome ?? "Loja"}</b><span className="mut" style={{ fontSize: 14 }}>Peça o pedido {p?.codigo} no balcão</span></span>
+          </div>
+          {itens.length > 0 && <>
+            <p className="mut" style={{ fontSize: 14, marginTop: 16, lineHeight: 1.45 }}>Toque em cada item pra conferir antes de sair. Faltou algo? Avise a loja agora, depois fica difícil.</p>
+            <div className="mb-itens" style={{ marginTop: 10 }}>
+              {itens.map((item: any, i: number) => (
+                <div key={item.id ?? i} role="checkbox" aria-checked={conferidos.has(i)} tabIndex={0} style={{ cursor: "pointer", alignItems: "center", padding: "14px 0" }}
+                  onClick={() => setConferidos(s => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n })}>
+                  <b>{item.quantidade}×</b><span style={{ flex: 1, fontWeight: 600 }}>{item.nome}</span>
+                  <span style={{ width: 26, height: 26, borderRadius: 8, border: "2px solid " + (conferidos.has(i) ? "var(--folha)" : "#C9C6C0"), background: conferidos.has(i) ? "var(--folha)" : "#fff", color: "#fff", display: "grid", placeItems: "center", fontSize: 15, fontWeight: 900 }}>{conferidos.has(i) ? "✓" : ""}</span>
+                </div>
+              ))}
+            </div>
+          </>}
+          {cobra && <div className="mb-cobrar" style={{ marginTop: 14 }}><span className="ic">R$</span><span style={{ flex: 1 }}><DetalheCobranca pedido={p} /></span></div>}
+          {loja?.telefone
+            ? <a className="mb-btn" style={{ marginTop: 14, background: "#fff", color: "var(--grafite)", border: "1.5px solid var(--linha)" }} href={zap(loja.telefone, `Cheguei pra buscar o pedido #${p?.codigo}.`)} target="_blank" rel="noreferrer">Falar com a loja</a>
+            : null}
+        </div>
+        <div className="mb-conferir-rodape">
+          {tudo ? <Desliza rotulo="Peguei o pedido, saindo" cor="verde" ocupado={avancando} onConfirmar={() => onAvancar()} />
+            : <button className="mb-btn verm" disabled style={{ opacity: .5 }}>Confira os {itens.length} itens</button>}
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div style={{
-      position: "absolute", left: 0, right: 0, bottom: 0,
-      height: collapsed ? 52 : expandedH, background: "#1C1C1E",
-      borderRadius: "20px 20px 0 0",
-      boxShadow: "0 -4px 32px rgba(0,0,0,0.7)",
-      zIndex: 35, display: "flex", flexDirection: "column",
-      overflow: "hidden", boxSizing: "border-box",
-      transition: "height 0.3s cubic-bezier(0.32,0.72,0,1)",
-    }}>
-      {/* Modal de navegação */}
+    <div className="mb-corrida" style={{ maxHeight: collapsed ? 92 : "72%" }}>
       {navDestino && (
         <NavModal
           destino={navDestino}
           onClose={() => setNavDestino(null)}
-          onNavApp={(lat, lng) => {
-            if (lat && lng && onSetDestino) onSetDestino(lat, lng)
+          onNavApp={() => {
+            // A rota do mapa já segue a etapa (loja ou cliente). Antes isto gravava a
+            // coordenada da loja como destino do cliente e bagunçava a etapa seguinte.
             onShowRoute?.()
             setNavDestino(null)
           }}
         />
       )}
 
-      {/* Handle + toggle */}
-      <div
-        onClick={() => setCollapsed(c => !c)}
-        style={{ padding: "8px 16px 4px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, cursor: "pointer", userSelect: "none" }}
-      >
-        <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.15)" }} />
+      <div className="mb-pega" onClick={() => setCollapsed(c => !c)} role="button" aria-label={collapsed ? "Abrir painel" : "Recolher painel"}><i /></div>
+
+      <div className="mb-rolagem" style={{ paddingBottom: 18 }}>
+        <div className="mb-passos" aria-hidden="true">
+          {[0, 1, 2, 3].map(i => <i key={i} className={i < etapa ? "feito" : i === etapa ? "agora" : ""} />)}
         </div>
-      </div>
+        <p className="mut" style={{ fontSize: 13.5 }}>{tituloEtapa}</p>
 
-      {/* Barra de status colapsada */}
-      {collapsed && (
-        <div
-          onClick={() => setCollapsed(false)}
-          style={{ padding: "0 16px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}
-        >
-          <span style={{ color: "white", fontWeight: 700, fontSize: 13 }}>{statusLabel}</span>
-          <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 11 }}>▲ expandir</span>
-        </div>
-      )}
-
-      {/* Conteúdo */}
-      {!collapsed && <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "2px 16px 16px", width: "100%", boxSizing: "border-box" }}>
-
-        {/* ETAPA 4 — Entregue */}
-        {etapa === 3 && (
-          <div style={{ textAlign: "center", paddingTop: 4 }}>
-            <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
-              <div style={{ width: 48, height: 48, borderRadius: "50%", background: "rgba(34,197,94,0.12)", border: "2px solid #22C55E", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-              </div>
-            </div>
-            <p style={{ color: "#22C55E", fontWeight: 900, fontSize: 17, marginBottom: 3 }}>Entrega confirmada!</p>
-            <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 12, marginBottom: 10 }}>
-              Pedido #{p?.codigo} entregue com sucesso
-            </p>
-            <p style={{ color: "#FF8C00", fontWeight: 900, fontSize: 26, marginBottom: 14 }}>
-              + R$ {ganhoLiquido((p?.taxa_entrega ?? 0) as number, p?.criado_em).toFixed(2).replace(".", ",")}
-            </p>
-            <button onClick={onConcluir} style={{
-              width: "100%", padding: "15px", borderRadius: 14,
-              border: "none", background: "#FF8C00", color: "white",
-              fontWeight: 900, fontSize: 15, cursor: "pointer",
-            }}>
-              Voltar para pedidos
-            </button>
-          </div>
-        )}
-
-        {/* ETAPA 1 — Indo à loja */}
-        {etapa === 0 && (
+        {collapsed ? null : etapa === 0 ? (
           <>
-            <div style={{ marginBottom: 12 }}>
-              <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>Buscar pedido em</p>
-              <p style={{ color: "white", fontWeight: 800, fontSize: 16 }}>{loja?.nome ?? "—"}</p>
-              {loja?.endereco && <p style={{ color: "#888", fontSize: 12, marginTop: 2 }}>{loja.endereco}</p>}
+            <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 6 }}>
+              <span className="mb-disp-logo" style={{ width: 46, height: 46, borderRadius: 12, background: "var(--pedra)", display: "grid", placeItems: "center", fontSize: 22, flex: "none" }}>🏪</span>
+              <span style={{ minWidth: 0 }}><b className="t20" style={{ display: "block" }}>{loja?.nome ?? "Loja"}</b><span className="mut" style={{ fontSize: 13.5 }}>Pedido {p?.codigo}{loja?.endereco ? `, ${loja.endereco}` : ""}</span></span>
             </div>
-            <button onClick={() => onAvancar()} disabled={avancando} style={{
-              width: "100%", padding: "14px", borderRadius: 14, border: "none",
-              background: "#FF8C00", color: "white", fontWeight: 900, fontSize: 14,
-              cursor: "pointer", marginBottom: 8,
-            }}>
-              {avancando ? "Salvando..." : "Cheguei na loja"}
-            </button>
-            <button onClick={() => setNavDestino({ texto: loja?.endereco ?? loja?.nome ?? "", lat: lojaLat ?? (p as any).loja_lat ?? undefined, lng: lojaLng ?? (p as any).loja_lng ?? undefined })} style={{
-              width: "100%", padding: "13px", borderRadius: 14,
-              border: "1.5px solid rgba(255,255,255,0.18)", background: "transparent",
-              color: "rgba(255,255,255,0.7)", fontWeight: 700, fontSize: 13, cursor: "pointer",
-            }}>
-              Navegar até a loja
-            </button>
+            {lojaLatEf == null && <p style={{ background: "var(--pequi-claro)", color: "var(--texto)", borderRadius: 12, padding: "10px 12px", fontSize: 13.5, marginTop: 10, lineHeight: 1.45 }}>Esta loja ainda não marcou o ponto no mapa. O GPS vai pelo endereço escrito: confirme com a loja antes de sair.</p>}
+            <div className="mb-acoes">
+              <button onClick={() => setNavDestino({ texto: loja?.endereco ?? loja?.nome ?? "", lat: lojaLatEf ?? undefined, lng: lojaLngEf ?? undefined })}>{IcNav}Navegar</button>
+              {loja?.telefone ? <a href={zap(loja.telefone, `Sou o entregador do pedido #${p?.codigo}. Estou a caminho!`)} target="_blank" rel="noreferrer">{IcMsg}Loja</a> : <button disabled style={{ opacity: .4 }}>{IcMsg}Loja</button>}
+              {loja?.telefone ? <a href={`tel:${loja.telefone}`}>{IcFone}Ligar</a> : <button disabled style={{ opacity: .4 }}>{IcFone}Ligar</button>}
+            </div>
           </>
-        )}
-
-        {/* ETAPA 2 — Na loja */}
-        {etapa === 1 && (
+        ) : etapa === 1 ? (
           <>
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8 }}>Pedido #{p?.codigo}</p>
-                {loja?.telefone && (
-                  <a href={`tel:${loja.telefone}`} style={{
-                    color: "#FF8C00", fontSize: 11, fontWeight: 700, textDecoration: "none",
-                    padding: "3px 10px", borderRadius: 8, border: "1px solid rgba(255,140,0,0.3)",
-                  }}>
-                    Ligar para loja
-                  </a>
-                )}
-              </div>
-              {p?.itens?.length > 0 && (
-                <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: "10px 12px" }}>
+            <b className="t20" style={{ display: "block", marginTop: 4 }}>{loja?.nome ?? "Loja"}</b>
+            <span className="mut" style={{ fontSize: 13.5 }}>Peça o pedido {p?.codigo} no balcão</span>
+            <button className="mb-btn" style={{ marginTop: 10, background: "var(--grafite)", color: "#fff", minHeight: 48 }} onClick={() => setVerMapaNaLoja(false)}>Conferir pedido</button>
+            {p?.itens?.length > 0 && (
+              <>
+                <p className="mut" style={{ fontSize: 13, marginTop: 10 }}>Toque em cada item pra conferir antes de sair.</p>
+                <div className="mb-itens">
                   {p.itens.map((item: any, i: number) => (
-                    <p key={item.id ?? i} style={{ color: "rgba(255,255,255,0.65)", fontSize: 13, marginBottom: i < p.itens.length - 1 ? 4 : 0 }}>
-                      {item.quantidade}× {item.nome}
-                    </p>
+                    <div key={item.id ?? i} role="checkbox" aria-checked={conferidos.has(i)} tabIndex={0} style={{ cursor: "pointer", alignItems: "center" }}
+                      onClick={() => setConferidos(s => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n })}>
+                      <b>{item.quantidade}×</b><span style={{ flex: 1 }}>{item.nome}</span>
+                      <span style={{ width: 24, height: 24, borderRadius: 7, border: "2px solid " + (conferidos.has(i) ? "var(--folha)" : "#C9C6C0"), background: conferidos.has(i) ? "var(--folha)" : "#fff", color: "#fff", display: "grid", placeItems: "center", fontSize: 14, fontWeight: 900 }}>{conferidos.has(i) ? "✓" : ""}</span>
+                    </div>
                   ))}
                 </div>
-              )}
+              </>
+            )}
+            {cobra && <div className="mb-cobrar"><span className="ic">R$</span><span style={{ flex: 1 }}><DetalheCobranca pedido={p} /></span></div>}
+            <div className="mb-acoes">
+              <button onClick={() => setNavDestino({ texto: p?.endereco_entrega ?? "", lat: destLatEf ?? undefined, lng: destLngEf ?? undefined })}>{IcNav}Ver cliente</button>
+              {loja?.telefone ? <a href={zap(loja.telefone, `Cheguei pra buscar o pedido #${p?.codigo}.`)} target="_blank" rel="noreferrer">{IcMsg}Loja</a> : <button disabled style={{ opacity: .4 }}>{IcMsg}Loja</button>}
+              {loja?.telefone ? <a href={`tel:${loja.telefone}`}>{IcFone}Ligar</a> : <button disabled style={{ opacity: .4 }}>{IcFone}Ligar</button>}
             </div>
-            <button onClick={() => onAvancar()} disabled={avancando} style={{
-              width: "100%", padding: "14px", borderRadius: 14, border: "none",
-              background: "#FF8C00", color: "white", fontWeight: 900, fontSize: 14,
-              cursor: "pointer",
-            }}>
-              {avancando ? "Salvando..." : "Coletei o pedido"}
-            </button>
+          </>
+        ) : (
+          <>
+            <b className="t20" style={{ display: "block", marginTop: 4, wordBreak: "break-word" }}>{enderecoLimpo}</b>
+            {pontoRef && <div className="mb-nota">📍 {pontoRef}</div>}
+            {p?.observacao && <p className="mut" style={{ fontSize: 13, marginTop: 8, wordBreak: "break-word" }}>{p.observacao}</p>}
+            {cobra && <div className="mb-cobrar"><span className="ic">R$</span><span style={{ flex: 1 }}><DetalheCobranca pedido={p} /></span></div>}
+            <div className="mb-acoes">
+              <button onClick={() => setNavDestino({ texto: p?.endereco_entrega ?? "", lat: destLatEf ?? undefined, lng: destLngEf ?? undefined })}>{IcNav}Navegar</button>
+              {p?.telefone_cliente ? <a href={zap(p.telefone_cliente, `Olá! Sou o entregador do Chegô com o seu pedido #${p?.codigo}. Estou a caminho!`)} target="_blank" rel="noreferrer">{IcMsg}Cliente</a> : <button disabled style={{ opacity: .4 }}>{IcMsg}Cliente</button>}
+              {p?.telefone_cliente ? <a href={`tel:${p.telefone_cliente}`} aria-label={`Ligar pro cliente ${mascaraTelefone(p.telefone_cliente)}`}>{IcFone}Ligar</a> : <button disabled style={{ opacity: .4 }}>{IcFone}Ligar</button>}
+            </div>
+
           </>
         )}
+      </div>
 
-        {/* ETAPA 3 — Em rota */}
-        {etapa === 2 && (
-          <>
-            <div style={{ marginBottom: 10 }}>
-              <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>Entregar em</p>
-              {(() => {
-                const enderecoRaw = p?.endereco_entrega ?? ""
-                const refIdx = enderecoRaw.indexOf(" — Ref: ")
-                const enderecoLimpo = refIdx >= 0 ? enderecoRaw.substring(0, refIdx) : enderecoRaw
-                const pontoRef = refIdx >= 0 ? enderecoRaw.substring(refIdx + 8) : ""
-                return (
-                  <>
-                    <p style={{ color: "white", fontWeight: 800, fontSize: 14, lineHeight: 1.4, wordBreak: "break-word", overflowWrap: "anywhere" }}>{enderecoLimpo}</p>
-                    {pontoRef && (
-                      <div style={{
-                        marginTop: 6, display: "inline-flex", alignItems: "center", gap: 5,
-                        background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.3)",
-                        borderRadius: 8, padding: "5px 10px",
-                      }}>
-                        <span style={{ fontSize: 13 }}>📌</span>
-                        <span style={{ color: "#fbbf24", fontSize: 12, fontWeight: 700 }}>{pontoRef}</span>
-                      </div>
-                    )}
-                  </>
-                )
-              })()}
-              {p && <div style={{ marginTop: 4 }}><DetalheCobranca pedido={p} /></div>}
-              {p?.observacao && (
-                <p style={{ color: "#aaa", fontSize: 12, marginTop: 4, wordBreak: "break-word" }}>{p.observacao}</p>
-              )}
-            </div>
-
-            {/* Input de código — só aparece após "Cheguei no local" */}
-            {chegueiEnviado && (
-              <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 14, padding: "12px 14px", marginBottom: 8 }}>
-                <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, marginBottom: 8 }}>
-                  Peça os 4 últimos números do telefone do cliente:
-                </p>
+      {/* Ação da etapa sempre visível no rodapé do painel */}
+      {!collapsed && (
+        <div className="mb-rodape-acao">
+          {etapa === 0 && <Desliza rotulo="Cheguei na loja" cor="escuro" ocupado={avancando} onConfirmar={() => onAvancar()} />}
+          {etapa === 1 && <Desliza rotulo="Peguei o pedido, saindo" cor="verde" ocupado={avancando} onConfirmar={() => onAvancar()} />}
+          {etapa === 2 && (!chegueiEnviado ? (
+            <Desliza rotulo={enviandoCheguei ? "Avisando o cliente…" : "Cheguei no endereço"} cor="escuro" ocupado={enviandoCheguei} onConfirmar={avisarCheguei} />
+          ) : (
+            <>
+              <p className="t16" style={{ margin: "0 0 8px" }}>Peça os 4 últimos números do telefone do cliente</p>
+              <div style={{ display: "flex", gap: 8 }}>
                 <input
+                  className={`mb-codigo ${erroConfirm ? "erro" : ""}`}
                   value={codigoInput}
                   onChange={e => { setCodigoInput(e.target.value.replace(/\D/g, "")); setErroConfirm("") }}
                   onKeyDown={e => { if (e.key === "Enter") confirmarEntrega() }}
-                  placeholder="0000"
-                  maxLength={4}
-                  inputMode="numeric"
-                  autoComplete="off"
-                  autoFocus
-                  style={{
-                    width: "100%", boxSizing: "border-box",
-                    padding: "14px", borderRadius: 12,
-                    fontSize: 26, fontWeight: 900, letterSpacing: 10, textAlign: "center",
-                    background: "rgba(255,255,255,0.07)",
-                    border: erroConfirm ? "1.5px solid rgba(239,68,68,0.6)" : "1.5px solid rgba(255,255,255,0.15)",
-                    color: "white", outline: "none",
-                  }}
+                  placeholder="0000" maxLength={4} inputMode="numeric" autoComplete="off" autoFocus aria-label="Código de entrega"
+                  style={{ flex: 1, minWidth: 0 }}
                 />
-                {erroConfirm && (
-                  <p style={{ color: "#f87171", fontSize: 11, fontWeight: 600, marginTop: 8, padding: "6px 10px", background: "rgba(239,68,68,0.08)", borderRadius: 8 }}>
-                    {erroConfirm}
-                  </p>
-                )}
+                <button className="mb-btn verde" style={{ width: 120, height: 64 }} onClick={confirmarEntrega} disabled={avancando || codigoInput.length < 4}>{avancando ? "…" : "Confirmar entrega"}</button>
               </div>
-            )}
-
-            <button
-              onClick={() => setNavDestino({ texto: p?.endereco_entrega ?? "", lat: destinoLat ?? (p as any).lat_entrega ?? undefined, lng: destinoLng ?? (p as any).lng_entrega ?? undefined })}
-              style={{
-                width: "100%", padding: "11px", borderRadius: 12, marginBottom: 8,
-                border: "1.5px solid rgba(255,255,255,0.14)", background: "transparent",
-                color: "rgba(255,255,255,0.6)", fontSize: 13, cursor: "pointer", fontWeight: 700,
-              }}>
-              🗺 Navegar até o cliente
-            </button>
-
-            {!chegueiEnviado ? (
-              <button
-                onClick={avisarCheguei}
-                disabled={enviandoCheguei}
-                style={{
-                  width: "100%", padding: "14px", borderRadius: 14, border: "none",
-                  background: enviandoCheguei ? "rgba(34,211,238,0.3)" : "#0891b2",
-                  color: "white", fontWeight: 900, fontSize: 14,
-                  cursor: enviandoCheguei ? "not-allowed" : "pointer", marginBottom: 8,
-                  display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                }}>
-                {enviandoCheguei ? "Avisando..." : "📍 Cheguei no local"}
-              </button>
-            ) : (
-              <button
-                onClick={confirmarEntrega}
-                disabled={avancando}
-                style={{
-                  width: "100%", padding: "14px", borderRadius: 14, border: "none",
-                  background: codigoInput.trim() ? "#22c55e" : "rgba(34,197,94,0.2)",
-                  color: "white", fontWeight: 900, fontSize: 14,
-                  cursor: avancando ? "not-allowed" : "pointer", marginBottom: 8,
-                }}>
-                {avancando ? "Confirmando..." : "✓ Confirmar entrega"}
-              </button>
-            )}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {/* Contato do cliente (mascarado) */}
-              {p?.telefone_cliente && (
-                <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 12, padding: "10px 14px" }}>
-                  <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>
-                    Cliente{p?.nome_cliente ? `: ${p.nome_cliente}` : ""}
-                  </p>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <a href={`tel:${p.telefone_cliente}`} style={{
-                      flex: 1, padding: "9px", borderRadius: 10,
-                      border: "1px solid rgba(255,255,255,0.1)", background: "transparent",
-                      color: "rgba(255,255,255,0.6)", fontSize: 11, fontWeight: 700,
-                      textDecoration: "none", textAlign: "center" as const,
-                    }}>
-                      {mascaraTelefone(p.telefone_cliente)}
-                    </a>
-                    <a
-                      href={`https://wa.me/55${p.telefone_cliente.replace(/\D/g, "")}?text=${encodeURIComponent(`Olá! Sou o entregador da Chegô Delivery com o seu pedido #${p?.codigo}. Estou a caminho!`)}`}
-                      target="_blank" rel="noreferrer"
-                      style={{
-                        padding: "9px 14px", borderRadius: 10,
-                        border: "1px solid rgba(37,211,102,0.4)", background: "rgba(37,211,102,0.12)",
-                        color: "#25D366", fontSize: 12, fontWeight: 800,
-                        textDecoration: "none", display: "flex", alignItems: "center", gap: 5,
-                      }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.125.558 4.122 1.532 5.855L.057 23.885l6.174-1.618A11.944 11.944 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.9a9.9 9.9 0 01-5.031-1.374l-.361-.214-3.741.981.999-3.647-.235-.374A9.861 9.861 0 012.1 12C2.1 6.533 6.533 2.1 12 2.1c5.467 0 9.9 4.433 9.9 9.9 0 5.467-4.433 9.9-9.9 9.9z"/></svg>
-                      WhatsApp
-                    </a>
-                  </div>
-                </div>
-              )}
-              {/* Contato da loja */}
-              {loja?.telefone && (
-                <div style={{ display: "flex", gap: 8 }}>
-                  <a href={`tel:${loja.telefone}`} style={{
-                    flex: 1, padding: "9px", borderRadius: 10,
-                    border: "1px solid rgba(255,255,255,0.08)", background: "transparent",
-                    color: "rgba(255,255,255,0.4)", fontSize: 10, fontWeight: 700,
-                    textDecoration: "none", textAlign: "center" as const,
-                  }}>
-                    Ligar para loja
-                  </a>
-                  <a
-                    href={`https://wa.me/55${loja.telefone.replace(/\D/g, "")}?text=${encodeURIComponent(`Sou o entregador do pedido #${p?.codigo}. Estou a caminho!`)}`}
-                    target="_blank" rel="noreferrer"
-                    style={{
-                      flex: 1, padding: "9px", borderRadius: 10,
-                      border: "1px solid rgba(37,211,102,0.2)", background: "transparent",
-                      color: "#25D366", fontSize: 10, fontWeight: 700,
-                      textDecoration: "none", textAlign: "center" as const,
-                    }}>
-                    WhatsApp loja
-                  </a>
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </div>}
+              {erroConfirm && <p style={{ color: "var(--pimenta)", fontSize: 13.5, fontWeight: 700, marginTop: 8 }}>{erroConfirm}</p>}
+            </>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -3632,7 +2937,7 @@ function CardAvulsa({
               </p>
             )}
             <p style={{ color: "#FF8C00", fontWeight: 900, fontSize: 34, lineHeight: 1, letterSpacing: -0.5 }}>
-              R$ {ganhoLiquido(avulsa.taxa_entrega ?? 0, avulsa.criado_em).toFixed(2).replace(".", ",")}
+              R$ {ganhoMotoboyPedido(avulsa).toFixed(2).replace(".", ",")}
             </p>
             <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, marginTop: 6 }}>
               {avulsa.codigo} · {avulsa.cliente_nome}
@@ -3737,175 +3042,40 @@ function CardCorrida({
   pedido: any; timer: number; distKm: number | null
   onAceitar: () => void; onRecusar: () => void; carregando: boolean
 }) {
-  const loja        = pedido.loja
-  const dashOffset  = CIRCUM * (1 - timer / 30)
-  const timerColor  = timer <= 10 ? "#FF4444" : "#FF8C00"
-
+  const loja  = pedido.loja
+  const ganho = ganhoMotoboyPedido(pedido)
+  const enderecoRaw = pedido.endereco_entrega ?? ""
+  const refIdx = enderecoRaw.indexOf(" — Ref: ")
+  const enderecoLimpo = refIdx >= 0 ? enderecoRaw.substring(0, refIdx) : enderecoRaw
+  const pontoRef = refIdx >= 0 ? enderecoRaw.substring(refIdx + 8) : ""
+  const cobra = cobraNaEntrega(pedido)
+  // Igual à proposta: distância até a loja, da loja até o cliente, total e R$/km.
+  // Loja sem ponto marcado (coordenada padrão) não entra no cálculo.
+  const lojaReal = loja?.lat != null && Math.abs(Number(loja.lat) + 16.9146388) >= 0.0001
+  const kmEntrega = lojaReal && pedido.lat_entrega && pedido.lng_entrega ? haversineKm(Number(loja.lat), Number(loja.lng), Number(pedido.lat_entrega), Number(pedido.lng_entrega)) : null
+  const kmTotal = distKm != null && kmEntrega != null ? distKm + kmEntrega : null
+  const km1 = (v: number) => v.toFixed(1).replace(".", ",")
   return (
     <>
-      {/* Overlay escurece o mapa */}
-      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.62)", zIndex: 40 }} />
-
-      {/* Card */}
-      <div style={{
-        position: "fixed", left: 0, right: 0, bottom: 60, zIndex: 50,
-        background: "#1C1C1E", borderRadius: "24px 24px 0 0",
-        boxShadow: "0 -8px 48px rgba(0,0,0,0.8)",
-        animation: "slideUpCard 300ms ease-out",
-        overflow: "hidden",
-      }}>
-        {/* Handle */}
-        <div style={{ padding: "12px 0 0", display: "flex", justifyContent: "center" }}>
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.12)" }} />
+      <div className="mb-oferta-veu" />
+      <div className="mb-oferta-topo"><span>Nova corrida</span><b className={timer <= 10 ? "fim" : ""} aria-live="polite">{timer}s</b></div>
+      <div className="mb-oferta" role="dialog" aria-label="Corrida nova">
+        <div style={{ padding: "18px 0 0" }}>
+          <span className="valor">R$ {ganho.toFixed(2).replace(".", ",")}</span>
+          {kmTotal != null && kmTotal > 0.2 ? <span className="kmchip">R$ {(ganho / kmTotal).toFixed(2).replace(".", ",")}/km</span>
+            : distKm != null && distKm > 0 && <span className="kmchip">{km1(distKm)} km de você</span>}
+          <p className="sub">{kmTotal != null ? `${km1(kmTotal)} km no total, uns ${Math.max(5, Math.round(kmTotal / 22 * 60 + 4))} min` : <>{pedido.itens?.length ? `${pedido.itens.length} ${pedido.itens.length === 1 ? "item" : "itens"}, ` : ""}{pedido.forma_pagamento_2 ? rotuloPagamento(pedido) : PGTO[pedido.forma_pagamento] ?? pedido.forma_pagamento}</>}</p>
         </div>
-
-        {/* Header: título + valor + timer */}
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "14px 20px 14px" }}>
-          <div>
-            <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 13, fontWeight: 600, marginBottom: 6, letterSpacing: 0.3 }}>
-              Nova corrida!
-            </p>
-            <p style={{ color: "#FF8C00", fontWeight: 900, fontSize: 34, lineHeight: 1, letterSpacing: -0.5 }}>
-              R$ {ganhoLiquido(pedido.taxa_entrega ?? 0, pedido.criado_em).toFixed(2).replace(".", ",")}
-            </p>
-            {pedido.itens?.length > 0 && (
-              <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, marginTop: 6 }}>
-                {pedido.itens.length} iten{pedido.itens.length > 1 ? "s" : ""} · {pedido.forma_pagamento?.toUpperCase()}
-              </p>
-            )}
-            <div style={{ marginTop: 4 }}><DetalheCobranca pedido={pedido} /></div>
-          </div>
-
-          {/* Timer circular SVG */}
-          <div style={{ position: "relative", width: 68, height: 68, flexShrink: 0 }}>
-            <svg width="68" height="68" viewBox="0 0 100 100">
-              <circle cx="50" cy="50" r="40" fill="none" stroke="#2C2C2E" strokeWidth="7" />
-              <circle
-                cx="50" cy="50" r="40" fill="none"
-                stroke={timerColor} strokeWidth="7"
-                strokeDasharray={CIRCUM}
-                strokeDashoffset={dashOffset}
-                strokeLinecap="round"
-                transform="rotate(-90 50 50)"
-                style={{ transition: "stroke-dashoffset 1s linear, stroke 0.3s" }}
-              />
-            </svg>
-            <div style={{
-              position: "absolute", inset: 0,
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <span style={{
-                color: timerColor, fontWeight: 900, fontSize: 22,
-                animation: timer <= 10 ? "timerPulse 0.7s ease-in-out infinite" : "none",
-              }}>
-                {timer}
-              </span>
-            </div>
-          </div>
+        <div className="mb-trajeto">
+          <div><small>Coletar{distKm != null && distKm > 0 ? ` a ${km1(distKm)} km` : ""}</small><b>{loja?.nome ?? "Loja"}</b>{loja?.endereco && <span>{loja.endereco}</span>}</div>
+          <div className="fim"><small>Entregar{kmEntrega != null ? ` a ${km1(kmEntrega)} km da loja` : ""}</small><b style={{ wordBreak: "break-word" }}>{enderecoLimpo}</b>{pontoRef && <span>📍 {pontoRef}</span>}</div>
         </div>
-
-        {/* Separator */}
-        <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0 20px 16px" }} />
-
-        {/* Bloco COLETA */}
-        <div style={{ padding: "0 20px 12px", display: "flex", gap: 14, alignItems: "flex-start" }}>
-          <div style={{
-            width: 38, height: 38, borderRadius: "50%", flexShrink: 0,
-            background: "rgba(255,140,0,0.12)", border: "1.5px solid rgba(255,140,0,0.35)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#FF8C00" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-              <polyline points="9 22 9 12 15 12 15 22"/>
-            </svg>
-          </div>
-          <div style={{ flex: 1 }}>
-            <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>Coleta</p>
-            <p style={{ color: "white", fontSize: 15, fontWeight: 700 }}>{loja?.nome ?? "—"}</p>
-            {loja?.endereco && <p style={{ color: "#888", fontSize: 12, marginTop: 2, lineHeight: 1.3 }}>{loja.endereco}</p>}
-          </div>
+        <div className="mb-chips">
+          {cobra && <span className="am"><DetalheCobranca pedido={pedido} /></span>}
+          {pedido.itens?.length > 0 && <span>{pedido.itens.length} {pedido.itens.length === 1 ? "item" : "itens"}</span>}
         </div>
-
-        {/* Seta intermediária */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "0 20px", marginBottom: 12 }}>
-          <div style={{ width: 38, display: "flex", justifyContent: "center" }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>
-            </svg>
-          </div>
-          <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.05)" }} />
-        </div>
-
-        {/* Bloco ENTREGA */}
-        {(() => {
-          const enderecoRaw = pedido.endereco_entrega ?? ""
-          const refIdx = enderecoRaw.indexOf(" — Ref: ")
-          const enderecoLimpo = refIdx >= 0 ? enderecoRaw.substring(0, refIdx) : enderecoRaw
-          const pontoRef = refIdx >= 0 ? enderecoRaw.substring(refIdx + 8) : ""
-          return (
-            <div style={{ padding: "0 20px 16px", display: "flex", gap: 14, alignItems: "flex-start" }}>
-              <div style={{
-                width: 38, height: 38, borderRadius: "50%", flexShrink: 0,
-                background: "rgba(34,197,94,0.1)", border: "1.5px solid rgba(34,197,94,0.3)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}>
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/>
-                  <circle cx="12" cy="10" r="3"/>
-                </svg>
-              </div>
-              <div style={{ flex: 1 }}>
-                <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 3 }}>Entrega</p>
-                <p style={{ color: "white", fontSize: 15, fontWeight: 700 }}>{enderecoLimpo}</p>
-                <p style={{ color: "#888", fontSize: 12, marginTop: 2 }}>
-                  {distKm !== null
-                    ? `~${distKm.toFixed(1).replace(".", ",")} km de você`
-                    : "Calculando distância..."}
-                </p>
-                {pontoRef && (
-                  <div style={{
-                    marginTop: 8, display: "inline-flex", alignItems: "center", gap: 5,
-                    background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.3)",
-                    borderRadius: 8, padding: "5px 10px",
-                  }}>
-                    <span style={{ fontSize: 13 }}>📌</span>
-                    <span style={{ color: "#fbbf24", fontSize: 12, fontWeight: 700 }}>{pontoRef}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )
-        })()}
-
-        {/* Separator */}
-        <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0 20px 16px" }} />
-
-        {/* Botões */}
-        <div style={{ display: "flex", gap: 10, padding: "0 20px 20px" }}>
-          <button
-            onClick={onRecusar} disabled={carregando}
-            style={{
-              flex: 1, padding: "16px 0", borderRadius: 14,
-              border: "1.5px solid rgba(255,255,255,0.22)",
-              background: "transparent", color: "white",
-              fontWeight: 800, fontSize: 15, cursor: "pointer",
-            }}
-          >
-            Recusar
-          </button>
-          <button
-            onClick={onAceitar} disabled={carregando}
-            style={{
-              flex: 2, padding: "16px 0", borderRadius: 14,
-              border: "none", background: "#FF8C00", color: "white",
-              fontWeight: 900, fontSize: 15, cursor: "pointer",
-              opacity: carregando ? 0.7 : 1,
-              transition: "opacity 0.2s",
-            }}
-          >
-            {carregando ? "Aceitando..." : "Aceitar corrida"}
-          </button>
-        </div>
+        <button className="mb-btn verde" style={{ height: 64, borderRadius: 999 }} onClick={onAceitar} disabled={carregando}>{carregando ? "Aceitando…" : "Aceitar corrida"}</button>
+        <button className="mb-agora-nao" onClick={onRecusar} disabled={carregando}>Agora não</button>
       </div>
     </>
   )

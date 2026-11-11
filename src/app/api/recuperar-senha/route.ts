@@ -36,12 +36,15 @@ export async function POST(req: NextRequest) {
   let emailDestino = emailNorm
 
   if (tipo === "lojista") {
-    const { data } = await sb
+    // Mesmo e-mail pode ter mais de uma loja: usa a ativa (senão a mais antiga) — a mesma
+    // regra do /api/login-loja, pra senha nova valer na loja que o dono realmente usa.
+    const { data: lojas } = await sb
       .from("lojas")
-      .select("id, email, nome_responsavel, email")
+      .select("id, email, nome_responsavel, status, criado_em")
       .ilike("email", emailNorm)
-      .limit(1)
-      .maybeSingle()
+      .order("criado_em", { ascending: true })
+      .limit(10)
+    const data = (lojas ?? []).find(l => l.status === "ativo") ?? lojas?.[0] ?? null
 
     if (data && data.nome_responsavel?.toLowerCase().includes(nomeNorm)) {
       id = data.id

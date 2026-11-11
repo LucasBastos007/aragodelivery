@@ -250,264 +250,98 @@ function unlockAudio() {
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
+// Boas-vindas do layout novo (19/10/2026): arte do próprio Chegô (sem loja em destaque),
+// "Bateu a fome? O Chegô leva." e 3 benefícios. A lógica continua a mesma de antes:
+// pede notificação e localização, marca arago_onboarded e segue pro app.
 export default function OnboardingPage() {
-  const router  = useRouter()
-  const [phase, setPhase] = useState<"intro" | "slides">("intro")
-  const [logoVisible, setLogoVisible] = useState(false)
-  const [slide, setSlide] = useState(0)
-  const [dir,   setDir]   = useState<"left" | "right">("left")
-  const [animating, setAnimating] = useState(false)
-  const [loading,   setLoading]   = useState(false)
-  const [btnPress,  setBtnPress]  = useState(false)
-  const touchStart  = useRef<number | null>(null)
+  const router = useRouter()
+  const [loading, setLoading] = useState(false)
 
-  const s    = SLIDES[slide]
-  const isLast = slide === SLIDES.length - 1
-  const Illu = ILLUSTRATIONS[slide]
-
-  useEffect(() => {
-    const t1 = setTimeout(() => setLogoVisible(true), 300)
-    const t2 = setTimeout(() => setPhase("slides"), 2800)
-    return () => { clearTimeout(t1); clearTimeout(t2) }
-  }, [])
-
-  function goTo(next: number) {
-    if (animating || next < 0 || next >= SLIDES.length) return
-    setDir(next > slide ? "left" : "right")
-    setAnimating(true)
-    setTimeout(() => { setSlide(next); setAnimating(false) }, 300)
-  }
-
-  function next() {
-    if (isLast) { solicitarPermissoes(); return }
-    goTo(slide + 1)
-  }
-
-  async function solicitarPermissoes() {
+  async function solicitarPermissoes(destino: string) {
+    if (loading) return
     setLoading(true)
     unlockAudio()
     if ("Notification" in window) {
       try { await Notification.requestPermission() } catch {}
     }
+    const ir = () => concluir(destino)
     if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(() => concluir(), () => concluir(), { timeout: 8000 })
+      navigator.geolocation.getCurrentPosition(ir, ir, { timeout: 8000 })
     } else {
-      concluir()
+      ir()
     }
   }
 
-  function concluir() {
+  function concluir(destino: string) {
     localStorage.setItem("arago_onboarded", "1")
-    router.push("/")
+    router.push(destino)
   }
-
-  // ── Intro ───────────────────────────────────────────────────────────────────
-  if (phase === "intro") {
-    return (
-      <div style={{
-        minHeight: "100vh",
-        background: `linear-gradient(160deg, ${SLIDES[0].grad[0]}, ${SLIDES[0].grad[1]}, ${SLIDES[0].grad[2]})`,
-        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-        overflow: "hidden", position: "relative",
-      }}>
-        {/* Círculos decorativos */}
-        <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
-          <div style={{ position: "absolute", top: "-10%", right: "-10%", width: 300, height: 300, borderRadius: "50%", background: "rgba(255,255,255,0.06)" }}/>
-          <div style={{ position: "absolute", bottom: "-5%", left: "-15%", width: 400, height: 400, borderRadius: "50%", background: "rgba(255,255,255,0.04)" }}/>
-          <div style={{ position: "absolute", top: "40%", left: "-5%", width: 150, height: 150, borderRadius: "50%", background: "rgba(255,255,255,0.05)" }}/>
-        </div>
-
-        {/* Partículas */}
-        {Array.from({ length: 10 }).map((_, i) => (
-          <div key={i} style={{
-            position: "absolute",
-            width: 5 + (i % 3) * 3, height: 5 + (i % 3) * 3,
-            borderRadius: "50%", background: "rgba(255,255,255,0.3)",
-            left: `${10 + i * 9}%`, top: `${15 + (i * 17) % 70}%`,
-            opacity: logoVisible ? 1 : 0,
-            animation: `floatP ${2.5 + (i % 3) * 0.5}s ease-in-out ${i * 0.2}s infinite alternate`,
-            transition: "opacity 0.5s",
-          }}/>
-        ))}
-
-        {/* Logo */}
-        <div style={{
-          transform: logoVisible ? "scale(1) translateY(0)" : "scale(0.3) translateY(40px)",
-          opacity: logoVisible ? 1 : 0,
-          transition: "all 0.8s cubic-bezier(0.34,1.56,0.64,1)",
-          filter: logoVisible ? "drop-shadow(0 20px 60px rgba(0,0,0,0.35))" : "none",
-        }}>
-          <img src="/logo-chego.jpg" alt="Chegô" style={{ width: 180, height: 180, borderRadius: 40, objectFit: "contain", display: "block" }}/>
-        </div>
-
-        <p style={{
-          color: "rgba(255,255,255,0.9)", fontSize: 22, fontWeight: 800, marginTop: 28, letterSpacing: "-0.3px",
-          opacity: logoVisible ? 1 : 0,
-          transform: logoVisible ? "translateY(0)" : "translateY(20px)",
-          transition: "all 0.6s ease 0.4s",
-        }}>
-          Chegô Delivery
-        </p>
-        <p style={{
-          color: "rgba(255,255,255,0.55)", fontSize: 13, fontWeight: 600, marginTop: 6, letterSpacing: 3, textTransform: "uppercase",
-          opacity: logoVisible ? 1 : 0,
-          transform: logoVisible ? "translateY(0)" : "translateY(12px)",
-          transition: "all 0.6s ease 0.55s",
-        }}>
-          Aragoiânia · GO
-        </p>
-
-        <style>{`
-          @keyframes floatP {
-            from { transform: translateY(0) rotate(0deg); }
-            to   { transform: translateY(-18px) rotate(180deg); }
-          }
-        `}</style>
-      </div>
-    )
-  }
-
-  // ── Slides ──────────────────────────────────────────────────────────────────
-  const grad = `linear-gradient(160deg, ${s.grad[0]}, ${s.grad[1]} 55%, ${s.grad[2]})`
 
   return (
-    <div style={{
-      minHeight: "100vh", background: grad, transition: "background 0.5s ease",
-      display: "flex", flexDirection: "column", position: "relative", overflow: "hidden",
-      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-    }}
-      onTouchStart={e => { touchStart.current = e.touches[0].clientX }}
-      onTouchEnd={e => {
-        if (touchStart.current === null) return
-        const dx = e.changedTouches[0].clientX - touchStart.current
-        if (Math.abs(dx) > 50) { dx < 0 ? goTo(slide + 1) : goTo(slide - 1) }
-        touchStart.current = null
-      }}
-    >
-      {/* Decoração de fundo */}
-      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", overflow: "hidden" }}>
-        <div style={{ position: "absolute", top: "-20%", right: "-20%", width: 450, height: 450, borderRadius: "50%", background: "rgba(255,255,255,0.06)" }}/>
-        <div style={{ position: "absolute", bottom: "-10%", left: "-20%", width: 500, height: 500, borderRadius: "50%", background: "rgba(255,255,255,0.04)" }}/>
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} style={{
-            position: "absolute", borderRadius: "50%",
-            width: 4 + (i % 3) * 3, height: 4 + (i % 3) * 3,
-            background: "rgba(255,255,255,0.25)",
-            left: `${8 + i * 15}%`, top: `${20 + (i * 12) % 55}%`,
-            animation: `floatP ${2 + i * 0.4}s ease-in-out ${i * 0.3}s infinite alternate`,
-          }}/>
-        ))}
+    <div className="bv">
+      <div className="bv-arte" aria-hidden="true">
+        <svg className="bv-mapa" viewBox="0 0 390 380" preserveAspectRatio="xMidYMax slice">
+          <defs><radialGradient id="bvg" cx="70%" cy="25%" r="90%"><stop offset="0" stopColor="#E8392F" /><stop offset="1" stopColor="#A9180F" /></radialGradient></defs>
+          <rect width="390" height="380" fill="url(#bvg)" />
+          <g fill="rgba(255,255,255,.06)">
+            <rect x="18" y="120" width="70" height="52" rx="8" /><rect x="104" y="120" width="96" height="52" rx="8" /><rect x="216" y="120" width="60" height="52" rx="8" /><rect x="292" y="120" width="90" height="52" rx="8" />
+            <rect x="18" y="190" width="120" height="64" rx="8" /><rect x="154" y="190" width="70" height="64" rx="8" /><rect x="240" y="190" width="142" height="64" rx="8" />
+            <rect x="18" y="272" width="80" height="70" rx="8" /><rect x="114" y="272" width="110" height="70" rx="8" /><rect x="240" y="272" width="64" height="70" rx="8" /><rect x="320" y="272" width="62" height="70" rx="8" />
+          </g>
+          <path id="bvrota" d="M56 312 C 56 262, 146 262, 146 228 S 232 182, 232 181 S 340 176, 330 128" fill="none" stroke="rgba(255,255,255,.9)" strokeWidth="4" strokeLinecap="round" strokeDasharray="2 11" />
+          <g transform="translate(56 312)"><circle r="19" fill="#fff" /><path d="M-8-4h16l-1.6 13h-12.8z" fill="#D7261E" /><path d="M-4.5-4v-2.5a4.5 4.5 0 0 1 9 0V-4" fill="none" stroke="#D7261E" strokeWidth="2.2" /></g>
+          <g transform="translate(330 118)"><path d="M0 22C-14 6-20-2-20-10a20 20 0 0 1 40 0c0 8-6 16-20 32z" fill="#fff" /><path d="M-8-8l8-7 8 7v9h-16z" fill="#D7261E" /></g>
+          <g><circle r="20" fill="#22201C" /><text y="7" textAnchor="middle" fontSize="20" transform="scale(-1 1)">🛵</text>
+            <animateMotion dur="5.5s" repeatCount="indefinite" keyPoints="0;1;1" keyTimes="0;.82;1" calcMode="linear"><mpath href="#bvrota" /></animateMotion></g>
+        </svg>
+        <span className="bv-logo"><img src="/logo-chego-transparente.png" alt="Chegô" /></span>
+        <div className="bv-card c1"><i className="ok">✓</i><span><b>Pix aprovado</b><small>na hora, direto no app</small></span></div>
+        <div className="bv-card c2"><i>🛵</i><span><b>Saiu para entrega</b><small>chega em 12 min</small></span></div>
+        <div className="bv-card c3"><i className="est">★</i><span><b>4,9</b><small>entregador da sua cidade</small></span></div>
       </div>
-
-      {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "52px 28px 0", position: "relative", zIndex: 10 }}>
-        <img src="/logo-chego.jpg" alt="Chegô" style={{ height: 36, width: 36, borderRadius: 10, objectFit: "contain" }}/>
-        <button onClick={concluir} style={{
-          background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.3)",
-          color: "white", fontSize: 13, fontWeight: 700, padding: "6px 16px", borderRadius: 99,
-          cursor: "pointer", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
-        }}>
-          Pular
-        </button>
+      <div className="bv-corpo">
+        <h1>Bateu a fome?<br />O Chegô leva.</h1>
+        <p className="bv-sub">Lojas de Aragoiânia e Guapó, com entregador da sua cidade.</p>
+        <ul className="bv-lista">
+          <li><span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D7261E" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2" /><circle cx="12" cy="12" r="2.8" /><path d="M6 9v.01M18 15v.01" /></svg></span>Pague no Pix, cartão ou dinheiro, até em 2 formas</li>
+          <li><span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D7261E" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg></span>Acompanhe a moto até a sua porta</li>
+          <li><span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D7261E" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5h16v11H9l-5 4z" /><path d="M8 9.5h8M8 12.5h5" /></svg></span>Ajuda pelo chat do suporte</li>
+        </ul>
+        <button className="bv-btn" disabled={loading} onClick={() => solicitarPermissoes("/cliente/entrar")}>{loading ? "Só um instante…" : "Entrar ou criar conta"}</button>
+        <button className="bv-link" disabled={loading} onClick={() => solicitarPermissoes("/")}>Ver as lojas sem entrar</button>
+        <p className="bv-nota">Vamos pedir pra te mandar avisos do pedido e usar sua localização pra achar as lojas perto.</p>
       </div>
-
-      {/* Ilustração */}
-      <div style={{
-        flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
-        padding: "24px 20px 0", position: "relative", zIndex: 10,
-        transform: animating ? (dir === "left" ? "translateX(-40px)" : "translateX(40px)") : "translateX(0)",
-        opacity: animating ? 0 : 1,
-        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-      }}>
-        <Illu accent={s.accent} />
-      </div>
-
-      {/* Card de conteúdo */}
-      <div style={{
-        margin: "0 0", padding: "32px 28px 40px",
-        background: "rgba(255,255,255,0.12)",
-        backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
-        borderTop: "1px solid rgba(255,255,255,0.2)",
-        borderRadius: "32px 32px 0 0",
-        position: "relative", zIndex: 10,
-        transform: animating ? "translateY(16px)" : "translateY(0)",
-        opacity: animating ? 0 : 1,
-        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1) 0.05s",
-      }}>
-        {/* Título */}
-        <h1 style={{
-          color: "white", fontWeight: 900, fontSize: 28, lineHeight: 1.2,
-          letterSpacing: "-0.5px", marginBottom: 10, whiteSpace: "pre-line",
-        }}>
-          {s.title}
-        </h1>
-        <p style={{ color: "rgba(255,255,255,0.75)", fontSize: 15, lineHeight: 1.6, marginBottom: 28 }}>
-          {s.sub}
-        </p>
-
-        {/* Card de permissões (último slide) */}
-        {isLast && (
-          <div style={{
-            background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.2)",
-            borderRadius: 18, padding: "14px 16px", marginBottom: 24,
-            display: "flex", flexDirection: "column", gap: 12,
-          }}>
-            <p style={{ color: "rgba(255,255,255,0.9)", fontWeight: 700, fontSize: 12, textTransform: "uppercase", letterSpacing: 1 }}>
-              O app vai solicitar
-            </p>
-            {[
-              { emoji: "📍", label: "Localização", desc: "Para preencher o endereço automaticamente" },
-              { emoji: "🔔", label: "Notificações", desc: "Para avisar quando o pedido sair para entrega" },
-              { emoji: "🔊", label: "Áudio",        desc: "Para tocar sons de confirmação" },
-            ].map(item => (
-              <div key={item.label} style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                <span style={{ fontSize: 20 }}>{item.emoji}</span>
-                <div>
-                  <p style={{ color: "white", fontWeight: 700, fontSize: 13 }}>{item.label}</p>
-                  <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>{item.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Dots */}
-        <div style={{ display: "flex", gap: 6, marginBottom: 20, alignItems: "center" }}>
-          {SLIDES.map((_, i) => (
-            <div key={i} onClick={() => goTo(i)} style={{
-              height: 6, borderRadius: 3, cursor: "pointer",
-              width: i === slide ? 24 : 6,
-              background: i === slide ? "white" : "rgba(255,255,255,0.35)",
-              transition: "all 0.3s cubic-bezier(0.34,1.56,0.64,1)",
-            }}/>
-          ))}
-        </div>
-
-        {/* Botão */}
-        <button
-          onClick={() => { if (!loading && !animating) { setBtnPress(true); setTimeout(() => setBtnPress(false), 150); next() } }}
-          disabled={loading}
-          style={{
-            width: "100%", padding: "17px", borderRadius: 16, border: "none",
-            background: loading ? "rgba(255,255,255,0.4)" : "white",
-            color: loading ? "rgba(255,255,255,0.7)" : s.grad[0],
-            fontWeight: 900, fontSize: 16, cursor: loading ? "not-allowed" : "pointer",
-            boxShadow: btnPress ? "none" : "0 8px 32px rgba(0,0,0,0.2)",
-            transform: btnPress ? "scale(0.97)" : "scale(1)",
-            transition: "all 0.15s cubic-bezier(0.34,1.56,0.64,1)",
-            letterSpacing: "-0.2px",
-          }}
-        >
-          {loading ? "Configurando..." : isLast ? "Permitir e começar →" : "Continuar →"}
-        </button>
-      </div>
-
-      <style>{`
-        @keyframes floatP {
-          from { transform: translateY(0) rotate(0deg); }
-          to   { transform: translateY(-16px) rotate(180deg); }
-        }
-      `}</style>
+      <style>{CSS_BV}</style>
     </div>
   )
 }
+
+const CSS_BV = `
+.bv{min-height:100dvh;background:#fff;display:flex;flex-direction:column;font-family:var(--font-corpo),system-ui,sans-serif}
+.bv-arte{position:relative;height:46vh;min-height:300px;overflow:hidden;background:#B01D16}
+.bv-mapa{position:absolute;inset:0;width:100%;height:100%}
+.bv-logo{position:absolute;left:16px;top:calc(env(safe-area-inset-top,0px) + 14px);z-index:2;background:#fff;border-radius:16px;padding:6px 12px;box-shadow:0 8px 20px rgba(0,0,0,.2)}
+.bv-logo img{width:96px;display:block}
+.bv-card{position:absolute;z-index:2;display:flex;gap:10px;align-items:center;background:#fff;border-radius:14px;padding:9px 12px 9px 9px;box-shadow:0 12px 28px rgba(0,0,0,.25);font-size:12px;color:#3D3A35;animation:bvsobe .5s both,bvboia 4s ease-in-out infinite}
+.bv-card b{display:block;font-size:13.5px;color:#22201C;font-weight:800}
+.bv-card small{color:#77736B;font-size:11.5px}
+.bv-card i{width:32px;height:32px;border-radius:10px;display:grid;place-items:center;font-style:normal;font-size:17px;background:#FDECEB;flex-shrink:0}
+.bv-card i.ok{background:#1E8A4C;color:#fff;font-weight:800;font-size:16px}
+.bv-card i.est{background:#FFF6D6;color:#E8A400}
+.bv-card.c1{left:14px;bottom:min(190px,calc(100% - 190px - env(safe-area-inset-top,0px)));animation-delay:.3s,.8s}
+.bv-card.c2{right:12px;bottom:128px;animation-delay:.6s,1.6s}
+.bv-card.c3{left:96px;bottom:44px;animation-delay:.9s,2.4s}
+@keyframes bvsobe{from{transform:translateY(12px);opacity:0}}
+@keyframes bvboia{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@media (max-height:700px){.bv-card.c3{display:none}.bv-card.c2{bottom:46px}}
+.bv-corpo{flex:1;margin-top:-26px;position:relative;z-index:3;background:#fff;border-radius:26px 26px 0 0;padding:24px 22px calc(env(safe-area-inset-bottom,0px) + 24px);max-width:520px;width:100%;align-self:center}
+.bv-corpo h1{font-family:var(--font-display),system-ui,sans-serif;font-weight:800;font-size:28px;line-height:1.08;color:#22201C;letter-spacing:-.02em;margin:0}
+.bv-sub{color:#77736B;margin:8px 0 16px;font-size:15px}
+.bv-lista{list-style:none;margin:0 0 20px;padding:0;display:flex;flex-direction:column;gap:10px}
+.bv-lista li{display:flex;gap:12px;align-items:center;font-size:15px;color:#3D3A35}
+.bv-lista span{width:36px;height:36px;border-radius:10px;background:#FDECEB;display:grid;place-items:center;flex-shrink:0}
+.bv-btn{width:100%;height:54px;border-radius:16px;border:0;background:#D7261E;color:#fff;font-weight:700;font-size:16px;cursor:pointer}
+.bv-btn:disabled{opacity:.7}
+.bv-link{display:block;width:100%;margin-top:10px;height:46px;border:0;background:none;color:#D7261E;font-weight:700;font-size:15px;cursor:pointer}
+.bv-nota{font-size:12px;color:#9A968E;text-align:center;margin-top:8px}
+`

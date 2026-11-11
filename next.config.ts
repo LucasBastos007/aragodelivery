@@ -32,6 +32,8 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["puppeteer-core", "@sparticuz/chromium"],
   outputFileTracingIncludes: {
     "/api/cron/fechamento-diario/route": ["./node_modules/puppeteer-core/**", "./node_modules/@sparticuz/chromium/**"],
+    // relatório semanal (sexta 9h) gera os mesmos PDFs — precisa do mesmo Chromium
+    "/api/cron/relatorio-semanal/route": ["./node_modules/puppeteer-core/**", "./node_modules/@sparticuz/chromium/**"],
   },
 
   async headers() {

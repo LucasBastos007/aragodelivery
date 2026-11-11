@@ -6,8 +6,9 @@
  * Requer sessão de admin ou loja (que seja a loja do pedido).
  */
 import { NextRequest, NextResponse } from "next/server"
+import { valorDaForma } from "@/lib/pagamentoDividido"
 import { createClient } from "@supabase/supabase-js"
-import { requireAdmin, requireLoja, unauthorized } from "@/lib/session"
+import { requireAdmin, unauthorized } from "@/lib/session"
 import { estornarPagamento } from "@/lib/asaas"
 
 function adminSb() {
@@ -18,11 +19,11 @@ function adminSb() {
   )
 }
 
+// Reembolso é decidido só pelo admin (20/10/2026). A loja não aprova nem nega mais.
 export async function POST(req: NextRequest) {
   const sessAdmin = requireAdmin(req)
-  const sessLoja  = !sessAdmin ? requireLoja(req) : null
-
-  if (!sessAdmin && !sessLoja) return unauthorized()
+  const sessLoja  = null as { loja_id: string } | null
+  if (!sessAdmin) return unauthorized()
 
   const { reembolso_id, acao, valor_aprovado, negado_motivo } = await req.json()
   // acao: "aprovar" | "negar"
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
   // Busca o reembolso com os dados do pedido
   const { data: reembolso } = await sb
     .from("reembolsos")
-    .select("*, pedido:pedidos(id, total, asaas_payment_id, loja_id, forma_pagamento)")
+    .select("*, pedido:pedidos(id, total, asaas_payment_id, asaas_payment_id_2, loja_id, forma_pagamento, forma_pagamento_2, valor_pagamento_1, valor_pagamento_2)")
     .eq("id", reembolso_id)
     .single()
 
@@ -80,8 +81,26 @@ export async function POST(req: NextRequest) {
   let asaasRefundId: string | null = null
   let novoStatus = "aprovado"
 
-  if (pedido.asaas_payment_id) {
+  if (pedido.asaas_payment_id && pedido.asaas_payment_id_2) {
+    // Pix + cartão (pagamento em 2 formas): estorna o cartão primeiro e o resto no pix.
     try {
+      const vCartao = valorDaForma(pedido, "cartao")
+      const vPix = valorDaForma(pedido, "pix")
+      const alvo = valorEstorno ?? vCartao + vPix
+      const noCartao = Math.min(alvo, vCartao)
+      const noPix = Math.round((alvo - noCartao) * 100) / 100
+      const ids: string[] = []
+      if (noCartao > 0) ids.push((await estornarPagamento(pedido.asaas_payment_id, noCartao >= vCartao ? undefined : noCartao)).id)
+      if (noPix > 0) ids.push((await estornarPagamento(pedido.asaas_payment_id_2, noPix >= vPix ? undefined : noPix)).id)
+      asaasRefundId = ids.join(",") || null
+      novoStatus = "processando"
+    } catch (e: any) {
+      console.error("[reembolso/processar] falha Asaas (2 formas):", e.message)
+    }
+  } else if (pedido.asaas_payment_id) {
+    try {
+      // Pedido em 2 formas com uma parte online: o estorno total devolve só essa cobrança;
+      // a parte paga na entrega volta por fora.
       const refund = await estornarPagamento(pedido.asaas_payment_id, valorEstorno ?? undefined)
       asaasRefundId = refund.id
       novoStatus = "processando"
@@ -106,8 +125,8 @@ export async function POST(req: NextRequest) {
 // GET — busca reembolso por ID (admin ou loja dona do pedido)
 export async function GET(req: NextRequest) {
   const sessAdmin = requireAdmin(req)
-  const sessLoja  = !sessAdmin ? requireLoja(req) : null
-  if (!sessAdmin && !sessLoja) return unauthorized()
+  const sessLoja  = null as { loja_id: string } | null
+  if (!sessAdmin) return unauthorized()
 
   const { searchParams } = new URL(req.url)
   const reembolso_id = searchParams.get("id")

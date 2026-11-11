@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react"
 import type { AdicionalProduto } from "@/types"
+import { supabase } from "@/lib/supabase"
 
 export type CartItem = {
   id: string
@@ -40,6 +41,25 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setReady(true)
+  }, [])
+
+  // Pix pago fora da tela do Pix (cliente foi pagar no app do banco e o app recarregou): a sacola
+  // ficava cheia e parecia que o pedido não tinha ido, convidando a pedir de novo (#CNW8GC,
+  // 05/11/2026). Ao abrir/voltar pro app, confere o pedido do Pix e esvazia se já foi pago.
+  useEffect(() => {
+    async function conferirPix() {
+      let id: string | null = null
+      try { id = localStorage.getItem("arago_pix_pendente") } catch { return }
+      if (!id) return
+      const { data } = await supabase.from("pedidos").select("status").eq("id", id).maybeSingle()
+      if (!data || data.status === "aguardando_pagamento") return
+      try { localStorage.removeItem("arago_pix_pendente") } catch {}
+      if (data.status !== "cancelado") setItems([])
+    }
+    conferirPix()
+    const aoVoltar = () => { if (document.visibilityState === "visible") conferirPix() }
+    document.addEventListener("visibilitychange", aoVoltar)
+    return () => document.removeEventListener("visibilitychange", aoVoltar)
   }, [])
 
   useEffect(() => {

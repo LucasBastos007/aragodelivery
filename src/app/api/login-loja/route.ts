@@ -18,34 +18,39 @@ export async function POST(req: NextRequest) {
       { auth: { persistSession: false, autoRefreshToken: false } },
     )
 
-    const { data, error } = await client
+    // O mesmo e-mail pode ter mais de uma loja (ex.: dono com 2 unidades — Winderson
+    // Lanches, 2026-10-08). Antes era .single(): com 2 linhas dava erro e o login recusava
+    // até a senha certa. Agora testa a senha em cada uma e, se mais de uma servir, entra na
+    // ativa (depois a mais antiga — a que já operava).
+    const { data: lojas, error } = await client
       .from("lojas")
-      .select("id, nome, status, senha, primeiro_acesso")
+      .select("id, nome, status, senha, primeiro_acesso, criado_em")
       .eq("email", (email as string).trim().toLowerCase())
-      .single()
+      .order("criado_em", { ascending: true })
+      .limit(10)
 
     // Hash dummy garante timing igual quando e-mail não existe (evita timing oracle)
     const DUMMY_HASH = "$2b$12$invalidhashfortimingequalityxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
-    if (error || !data) {
+    if (error || !lojas?.length) {
       await bcrypt.compare(senha, DUMMY_HASH).catch(() => {})
       return NextResponse.json({ error: "E-mail ou senha incorretos." }, { status: 401 })
     }
 
     // Verificação com migração transparente para bcrypt
-    let valid = false
-    if (data.senha) {
-      if (data.senha.startsWith("$2")) {
-        valid = await bcrypt.compare(senha, data.senha)
-      } else {
-        valid = data.senha === senha
-        if (valid) {
-          const hash = await bcrypt.hash(senha, 12)
-          await client.from("lojas").update({ senha: hash }).eq("id", data.id)
-        }
+    const validas: typeof lojas = []
+    for (const l of lojas) {
+      if (!l.senha) continue
+      if (l.senha.startsWith("$2")) {
+        if (await bcrypt.compare(senha, l.senha)) validas.push(l)
+      } else if (l.senha === senha) {
+        const hash = await bcrypt.hash(senha, 12)
+        await client.from("lojas").update({ senha: hash }).eq("id", l.id)
+        validas.push(l)
       }
     }
-    if (!valid) return NextResponse.json({ error: "E-mail ou senha incorretos." }, { status: 401 })
+    if (!validas.length) return NextResponse.json({ error: "E-mail ou senha incorretos." }, { status: 401 })
+    const data = validas.find(l => l.status === "ativo") ?? validas[0]
 
     if (data.status === "pendente")          return NextResponse.json({ error: "Seu cadastro ainda não foi processado. Assine o contrato enviado por e-mail ou aguarde contato da nossa equipe." }, { status: 403 })
     if (data.status === "contrato_assinado") return NextResponse.json({ error: "Contrato assinado! Sua loja será ativada em breve pela equipe Chegô." }, { status: 403 })

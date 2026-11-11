@@ -6,9 +6,10 @@ import Link from "next/link"
 import { useClienteAuth } from "@/lib/auth-cliente"
 import { supabase } from "@/lib/supabase"
 import InstalarApp from "@/components/InstalarApp"
+import EntrarWhats, { BOTAO_WHATS_ESTILO } from "@/components/EntrarWhats"
 
 const inp: React.CSSProperties = {
-  width: "100%", padding: "12px 14px", borderRadius: 10, fontSize: 14,
+  width: "100%", padding: "13px 14px", borderRadius: 12, fontSize: 16, // 16: iPhone não dá zoom ao digitar
   background: "#F9FAFB", border: "1px solid #E5E7EB",
   color: "#111827", outline: "none", boxSizing: "border-box",
 }
@@ -29,6 +30,11 @@ export default function ClienteEntrarPage() {
   const [resetModal, setResetModal] = useState(false)
   const [resetOk,    setResetOk]    = useState(false)
   const [resetLoad,  setResetLoad]  = useState(false)
+  // Entrada pelo WhatsApp: aparece pra todos com NEXT_PUBLIC_LOGIN_WHATS=1; antes disso,
+  // só abrindo /cliente/entrar?whats=1 (teste — o servidor ainda restringe aos números de teste).
+  const [whatsDisponivel, setWhatsDisponivel] = useState(process.env.NEXT_PUBLIC_LOGIN_WHATS === "1")
+  const [modoWhats, setModoWhats] = useState(false)
+  useEffect(() => { if (new URLSearchParams(window.location.search).get("whats") === "1") setWhatsDisponivel(true) }, [])
 
   useEffect(() => {
     if (user) router.push("/")
@@ -55,26 +61,33 @@ export default function ClienteEntrarPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+    <div style={{ minHeight: "100vh", background: "#F2F2EF", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div style={{ width: "100%", maxWidth: 400 }}>
 
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: 32 }}>
           <Link href="/" style={{ textDecoration: "none", display: "block" }}>
             <img
-              src="/logo-chego.png"
+              src="/logo-chego-transparente.png"
               alt="Chegô"
-              style={{ width: 80, height: 80, borderRadius: 20, objectFit: "cover", marginBottom: 10, boxShadow: "0 4px 16px rgba(220,38,38,0.2)", display: "block", margin: "0 auto 10px" }}
+              style={{ width: 150, display: "block", margin: "0 auto 6px" }}
             />
-            <p style={{ color: "#DC2626", fontWeight: 900, fontSize: 22, marginTop: 0 }}>Chegô Delivery</p>
           </Link>
-          <p style={{ color: "#9CA3AF", fontSize: 13, marginTop: 4 }}>Minha conta</p>
+          <h1 style={{ color: "#22201C", fontWeight: 800, fontSize: 26, margin: "8px 0 0" }}>Entre pra pedir</h1>
+          <p style={{ color: "#77736B", fontSize: 14, marginTop: 4 }}>Com o WhatsApp é mais rápido: chega um código e pronto.</p>
         </div>
 
-        <div style={{ background: "#ffffff", borderRadius: 20, border: "1px solid #e5e7eb", padding: 28 }}>
+        <div style={{ background: "#ffffff", borderRadius: 24, border: "1px solid #E6E5E1", padding: 24, boxShadow: "0 6px 18px rgba(34,32,28,.07)" }}>
+          {modoWhats ? <EntrarWhats onEntrou={() => router.push("/")} onCancelar={() => setModoWhats(false)} /> : <>
 
           {/* Social logins */}
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+            {whatsDisponivel && (
+              <button onClick={() => setModoWhats(true)} style={BOTAO_WHATS_ESTILO}>
+                <svg width="18" height="18" viewBox="0 0 32 32" fill="white"><path d="M23.3 8.7A10.3 10.3 0 0 0 7 21.1L5.6 26.3l5.3-1.4a10.3 10.3 0 0 0 4.9 1.3c5.7 0 10.3-4.6 10.3-10.3 0-2.7-1-5.3-2.8-7.2zm-7.3 15.8a8.5 8.5 0 0 1-4.4-1.2l-.3-.2-3.1.8.8-3-.2-.3a8.5 8.5 0 1 1 7.2 3.9z"/></svg>
+                Entrar com WhatsApp
+              </button>
+            )}
             {/* Google */}
             <button
               onClick={loginGoogle}
@@ -105,7 +118,7 @@ export default function ClienteEntrarPage() {
             {(["entrar", "cadastrar"] as const).map(m => (
               <button key={m} onClick={() => { setModo(m); setErro(""); setSucesso("") }} style={{
                 flex: 1, padding: "8px", borderRadius: 8, border: "none", cursor: "pointer",
-                background: modo === m ? "#DC2626" : "transparent",
+                background: modo === m ? "#D7261E" : "transparent",
                 color: modo === m ? "white" : "#9CA3AF",
                 fontWeight: 700, fontSize: 13,
               }}>
@@ -154,6 +167,11 @@ export default function ClienteEntrarPage() {
             }}>
               {loading ? "Aguarde..." : modo === "entrar" ? "Entrar →" : "Criar conta →"}
             </button>
+            {modo !== "entrar" && (
+              <p style={{ color: "#9CA3AF", fontSize: 12.5, lineHeight: 1.5, textAlign: "center" }}>
+                Ao criar a conta você concorda com os <a href="/termos" style={{ color: "#6B7280", textDecoration: "underline" }}>Termos de uso</a> e a <a href="/termos#privacidade" style={{ color: "#6B7280", textDecoration: "underline" }}>Política de privacidade</a>.
+              </p>
+            )}
 
             {modo === "entrar" && (
               <div style={{ textAlign: "center" }}>
@@ -163,6 +181,7 @@ export default function ClienteEntrarPage() {
               </div>
             )}
           </div>
+          </>}
           <InstalarApp papel="cliente" />
         </div>
 

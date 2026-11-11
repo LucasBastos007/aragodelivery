@@ -102,7 +102,7 @@ export default function MapaPicker({ lat, lng, onMove }: Props) {
       }}>
         <div style={{
           width: 22, height: 30,
-          background: "#f97316",
+          background: "#D7261E",
           borderRadius: "50% 50% 50% 0",
           transform: "rotate(-45deg)",
           border: "3px solid white",
@@ -137,13 +137,13 @@ export default function MapaPicker({ lat, lng, onMove }: Props) {
         title="Usar minha localização"
       >
         {localizando ? (
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D7261E" strokeWidth="2">
             <circle cx="12" cy="12" r="10" strokeDasharray="40" strokeDashoffset="10">
               <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/>
             </circle>
           </svg>
         ) : (
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D7261E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="3"/>
             <line x1="12" y1="2" x2="12" y2="6"/>
             <line x1="12" y1="18" x2="12" y2="22"/>

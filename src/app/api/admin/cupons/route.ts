@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   if (!requireAdmin(req)) return unauthorized()
 
   const body = await req.json()
-  const { codigo, tipo, valor, pedido_minimo, validade, lojas_ids, centro_lat, centro_lng, raio_km } = body
+  const { codigo, tipo, valor, pedido_minimo, validade, lojas_ids, centro_lat, centro_lng, raio_km, max_usos } = body
   if (!codigo || !tipo || valor == null) {
     return NextResponse.json({ error: "codigo, tipo e valor são obrigatórios" }, { status: 400 })
   }
@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
     centro_lat: centro_lat != null ? Number(centro_lat) : null,
     centro_lng: centro_lng != null ? Number(centro_lng) : null,
     raio_km:    raio_km    != null ? Number(raio_km)    : null,
+    max_usos:   Number(max_usos) > 0 ? Math.floor(Number(max_usos)) : null,
   }).select("id").single()
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ ok: true, id: data.id })

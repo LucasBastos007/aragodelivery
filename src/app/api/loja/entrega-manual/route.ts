@@ -23,54 +23,8 @@ export async function POST(req: NextRequest) {
   if (sess?.role !== "loja") return unauthorized()
   const { loja_id } = sess as any
 
-  const { nome_cliente, endereco_entrega, observacao, taxa_entrega } = await req.json()
-
-  if (!nome_cliente?.trim() || !endereco_entrega?.trim()) {
-    return NextResponse.json({ error: "Nome do cliente e endereço são obrigatórios" }, { status: 400 })
-  }
-
-  const sb = adminSb()
-
-  const { data: loja } = await sb.from("lojas").select("lat, lng").eq("id", loja_id).single()
-
-  const codigo = gerarCodigo()
-  const taxaFinal = parseFloat(taxa_entrega) || 0
-
-  const { data: pedido, error } = await sb
-    .from("pedidos")
-    .insert({
-      loja_id,
-      codigo,
-      tipo:             "manual",
-      status:           "pronto",       // já pula direto para buscar motoboy
-      forma_pagamento:  "externo",      // pago fora do app
-      subtotal:         0,
-      taxa_entrega:     taxaFinal,
-      desconto:         0,
-      total:            taxaFinal,
-      endereco_entrega: endereco_entrega.trim(),
-      observacao:       observacao?.trim() ?? "",
-      nome_cliente:     nome_cliente.trim(),
-      cliente_push_token: crypto.randomBytes(16).toString("hex"),
-      ...(loja?.lat ? { loja_lat: loja.lat, loja_lng: loja.lng } : {}),
-    })
-    .select("id")
-    .single()
-
-  if (error || !pedido) {
-    return NextResponse.json({ error: "Erro ao criar pedido manual" }, { status: 500 })
-  }
-
-  // Chama escalação de motoboy imediatamente
-  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://chegodelivery.com"
-  fetch(`${site}/api/escalada`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-internal-secret": process.env.INTERNAL_API_SECRET ?? "",
-    },
-    body: JSON.stringify({ pedido_id: pedido.id }),
-  }).catch(() => {})
-
-  return NextResponse.json({ ok: true, pedido_id: pedido.id, codigo })
+  // Sem tela que use esta rota (0 pedidos "manual"). Ela gravava a taxa digitada pela loja,
+  // e o frete é só do Chegô (20/10/2026): a loja usa a Entrega avulsa, que calcula a taxa.
+  void loja_id
+  return NextResponse.json({ error: "Use a Entrega avulsa: a taxa de entrega é calculada pelo Chegô." }, { status: 410 })
 }

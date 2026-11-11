@@ -3,6 +3,7 @@ import webpush from "web-push"
 import { createClient } from "@supabase/supabase-js"
 import { requireMotoboy, requireLoja, requireAdmin, getSession, unauthorized } from "@/lib/session"
 import { checkRateLimit } from "@/lib/rate-limit"
+import { inscricaoValida } from "@/lib/pushHosts"
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -64,6 +65,28 @@ export async function POST(req: NextRequest) {
   const { action } = body
 
   // ── Salvar subscription do cliente (pedido) — exige token secreto do pedido ─
+  // ── Inscrição geral do cliente (31/10/2026): cartão "Ativar notificações" da tela inicial.
+  // Logado → grava com cliente_id (token do login); sem login → grava só o celular.
+  if (action === "subscribe-cliente") {
+    const limitado = checkRateLimit(req)
+    if (limitado) return limitado
+    const { subscription } = body
+    // Só endereços dos serviços de push de verdade (lib/pushHosts)
+    if (!inscricaoValida(subscription)) return NextResponse.json({ error: "inscrição inválida" }, { status: 400 })
+    const ep: string = subscription.endpoint
+    const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "")
+    const { data: u } = token ? await supabaseAdmin.auth.getUser(token) : { data: null }
+    // Nunca mexe numa inscrição de outro tipo (ex.: o celular do admin que recebe o SOS)
+    const { data: atual } = await supabaseAdmin.from("push_subscriptions").select("id, tipo").eq("endpoint", ep).maybeSingle()
+    if (atual && atual.tipo !== "cliente") return NextResponse.json({ ok: true })
+    const row: Record<string, unknown> = { tipo: "cliente", subscription, endpoint: ep }
+    if (u?.user?.id) row.cliente_id = u.user.id
+    const { error } = atual
+      ? await supabaseAdmin.from("push_subscriptions").update(row).eq("id", atual.id).eq("tipo", "cliente")
+      : await supabaseAdmin.from("push_subscriptions").insert(row)
+    return NextResponse.json({ ok: !error })
+  }
+
   if (action === "subscribe") {
     const { pedido_id, subscription, cliente_push_token } = body
     if (!pedido_id || !subscription || !cliente_push_token) {

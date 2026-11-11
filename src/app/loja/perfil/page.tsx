@@ -4,6 +4,21 @@ import { useEffect, useRef, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
 import { diaEMinutosAgoraBrt } from "@/lib/periodoBrt"
+import dynamic from "next/dynamic"
+
+const MapaPicker = dynamic(() => import("@/components/MapaPicker"), { ssr: false })
+// Coordenada padrão gravada em loja que nunca marcou o ponto (centro de Aragoiânia).
+const COORD_PADRAO_LAT = -16.9146388
+const coordReal = (lat: any) => lat != null && Math.abs(Number(lat) - COORD_PADRAO_LAT) >= 0.0001
+
+// Grava os dados da loja pelo servidor, com a sessão da loja (20/10/2026). Antes gravava direto
+// no banco pelo navegador com a chave pública.
+async function atualizarLoja(campos: Record<string, unknown>): Promise<{ error: string | null }> {
+  const r = await fetch("/api/loja/atualizar", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(campos) }).catch(() => null)
+  if (!r) return { error: "Sem conexão. Tente de novo." }
+  if (!r.ok) { const j = await r.json().catch(() => ({})); return { error: j.error ?? "Não foi possível salvar." } }
+  return { error: null }
+}
 
 type DiaSemana = "dom" | "seg" | "ter" | "qua" | "qui" | "sex" | "sab"
 type DiaConfig = { aberto: boolean; inicio: string; fim: string }
@@ -123,6 +138,12 @@ export default function PerfilPage() {
   const [bannerPreview, setBannerPreview] = useState<string>("")
   const bannerRef = useRef<HTMLInputElement>(null)
   const [horarios, setHorarios] = useState<Horarios>(HORARIOS_PADRAO)
+  // Ponto da loja no mapa (20/10/2026). O motoboy navega até este ponto; antes só existia o
+  // endereço geocodificado, que errava a rua e às vezes nem achava (ficava a coordenada padrão).
+  const [ponto, setPonto] = useState<{ lat: number; lng: number } | null>(null)
+  const [pontoMarcado, setPontoMarcado] = useState(false) // marcado à mão nesta tela
+  const [marcando, setMarcando] = useState<{ lat: number; lng: number } | null>(null)
+  const enderecoInicial = useRef("")
 
   const [form, setForm] = useState<Form>({
     nome: "", descricao: "", categoria: "Restaurante",
@@ -169,6 +190,8 @@ export default function PerfilPage() {
         banco_tipo_conta: data.banco_tipo_conta ?? "Corrente",
       })
       setBannerPreview(data.logo_url ?? "")
+      if (coordReal(data.lat) && data.lng) setPonto({ lat: Number(data.lat), lng: Number(data.lng) })
+      enderecoInicial.current = [data.logradouro, data.numero, data.bairro, data.cidade].join("|")
       setLoading(false)
     })
   }, [loja_id])
@@ -215,17 +238,18 @@ export default function PerfilPage() {
     if (!loja_id) return
     setTogglingAberto(true)
     const novoEstado = !aberto
-    await supabase.from("lojas").update({ aberto: novoEstado }).eq("id", loja_id)
-    setAberto(novoEstado)
+    const r = await atualizarLoja({ aberto: novoEstado })
+    if (!r.error) setAberto(novoEstado)
     setTogglingAberto(false)
   }
 
   async function sincronizarHorarios(horariosAtuais: Horarios, loja_id_atual: string) {
     // sempre_aberto = sem restrição de horário, mas o toggle manual controla o aberto
     if (horariosAtuais.tipo === "sempre_aberto") return
+    void loja_id_atual
     const deveEstarAberto = horariosEstaAberto(horariosAtuais)
-    await supabase.from("lojas").update({ aberto: deveEstarAberto }).eq("id", loja_id_atual)
-    setAberto(deveEstarAberto)
+    const r = await atualizarLoja({ aberto: deveEstarAberto })
+    if (!r.error) setAberto(deveEstarAberto)
   }
 
   async function salvar() {
@@ -245,9 +269,15 @@ export default function PerfilPage() {
 
     const enderecoCompleto = [form.logradouro, form.numero, form.complemento, form.bairro, form.cidade + (form.estado ? " - " + form.estado : "")]
       .filter(Boolean).join(", ")
-    const coords = enderecoCompleto ? await geocodeAddress(enderecoCompleto) : null
+    // Ponto marcado no mapa vale sempre. Sem ponto marcado, só geocodifica se a loja ainda não
+    // tem ponto real ou se o endereço mudou; antes, todo "Salvar" geocodificava de novo e podia
+    // trocar um ponto certo por um errado.
+    const enderecoMudou = [form.logradouro, form.numero, form.bairro, form.cidade].join("|") !== enderecoInicial.current
+    const coords: [number, number] | null = pontoMarcado && ponto
+      ? [ponto.lat, ponto.lng]
+      : (!ponto || enderecoMudou) && enderecoCompleto ? await geocodeAddress(enderecoCompleto) : null
 
-    const { error: errUpdate } = await supabase.from("lojas").update({
+    const { error: errUpdate } = await atualizarLoja({
       nome: form.nome.trim(),
       descricao: form.descricao.trim(),
       categoria: form.categoria,
@@ -260,7 +290,6 @@ export default function PerfilPage() {
       estado: form.estado.trim() || "GO",
       endereco: enderecoCompleto || null,
       telefone: form.telefone.trim(),
-      taxa_entrega: Math.max(0, parseFloat(form.taxa_entrega) || 0),
       tempo_min: parseInt(form.tempo_min) || 30,
       tempo_max: parseInt(form.tempo_max) || 60,
       nome_responsavel: form.nome_responsavel.trim(),
@@ -272,13 +301,15 @@ export default function PerfilPage() {
       banco_tipo_conta: form.banco_tipo_conta || "Corrente",
       horarios,
       ...(coords ? { lat: coords[0], lng: coords[1] } : {}),
-    }).eq("id", loja_id)
+    })
 
     if (errUpdate) {
-      setErroSalvar(errUpdate.message)
+      setErroSalvar(errUpdate)
       setSalvando(false)
       return
     }
+    if (coords) { setPonto({ lat: coords[0], lng: coords[1] }); setPontoMarcado(false) }
+    enderecoInicial.current = [form.logradouro, form.numero, form.bairro, form.cidade].join("|")
 
     await sincronizarHorarios(horarios, loja_id)
 
@@ -289,71 +320,71 @@ export default function PerfilPage() {
 
   if (loading) return (
     <div className="p-6 sm:p-8">
-      <p style={{ color: "#9CA3AF" }}>Carregando...</p>
+      <p style={{ color: "var(--suave)" }}>Carregando...</p>
     </div>
   )
 
-  const statusColor: Record<string, string> = { ativo: "#22c55e", pendente: "#f59e0b", suspenso: "#ef4444" }
+  const statusColor: Record<string, string> = { ativo: "var(--folha)", pendente: "var(--pequi)", suspenso: "var(--pimenta)" }
   const statusLabel: Record<string, string> = { ativo: "Ativa", pendente: "Aguardando aprovação", suspenso: "Suspensa" }
 
   return (
-    <div style={{ padding: "24px 16px", maxWidth: 720, margin: "0 auto" }}>
+    <div style={{ padding: "4px 0 24px", maxWidth: 900, margin: "0 auto" }}>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-black" style={{ color: "#111827" }}>Minha loja</h1>
+          
           <div className="flex items-center gap-2 mt-1">
             <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: statusColor[status] ?? "#888" }} />
-            <p className="text-sm font-semibold" style={{ color: "#6B7280" }}>{statusLabel[status] ?? status}</p>
+            <p className="text-sm font-semibold" style={{ color: "var(--suave)" }}>{statusLabel[status] ?? status}</p>
           </div>
         </div>
-        {salvo && <span style={{ color: "#22c55e", fontWeight: 700, fontSize: 13 }}>✓ Salvo!</span>}
+        {salvo && <span style={{ color: "var(--folha)", fontWeight: 700, fontSize: 13 }}>✓ Salvo!</span>}
       </div>
 
       {/* Foto */}
       <div className="card p-4 mb-4">
-        <p className="font-black mb-3" style={{ color: "#111827", fontSize: 14 }}>Foto da loja</p>
+        <p className="font-black mb-3" style={{ color: "var(--grafite)", fontSize: 14 }}>Foto da loja</p>
         <div style={{ display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
-          <div style={{ width: 100, height: 100, borderRadius: 14, overflow: "hidden", flexShrink: 0, background: "#F3F4F6", border: "2px dashed #D1D5DB", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: 100, height: 100, borderRadius: 14, overflow: "hidden", flexShrink: 0, background: "var(--pedra)", border: "2px dashed var(--linha)", display: "flex", alignItems: "center", justifyContent: "center" }}>
             {bannerPreview
               ? <img src={bannerPreview} alt="Logo" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              : <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>}
+              : <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--linha)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>}
           </div>
           <div style={{ flex: 1, minWidth: 180 }}>
-            <p className="text-sm mb-3" style={{ color: "#6B7280" }}>Foto exibida na listagem e na página do estabelecimento.</p>
+            <p className="text-sm mb-3" style={{ color: "var(--suave)" }}>Foto exibida na listagem e na página do estabelecimento.</p>
             <input ref={bannerRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (!f) return; setBannerFile(f); setBannerPreview(URL.createObjectURL(f)) }} />
             <div className="flex gap-2 flex-wrap">
               <button type="button" onClick={() => bannerRef.current?.click()} className="btn-ghost" style={{ fontSize: 12 }}>
                 {bannerPreview ? "📷 Trocar foto" : "📷 Adicionar foto"}
               </button>
               {bannerPreview && (
-                <button type="button" onClick={() => { setBannerFile(null); setBannerPreview(""); setForm(f => ({ ...f, logo_url: "" })); if (bannerRef.current) bannerRef.current.value = "" }} style={{ background: "none", border: "none", color: "#9CA3AF", cursor: "pointer", padding: "7px 12px", fontSize: 12, fontWeight: 600 }}>
+                <button type="button" onClick={() => { setBannerFile(null); setBannerPreview(""); setForm(f => ({ ...f, logo_url: "" })); if (bannerRef.current) bannerRef.current.value = "" }} style={{ background: "none", border: "none", color: "var(--suave)", cursor: "pointer", padding: "7px 12px", fontSize: 12, fontWeight: 600 }}>
                   Remover
                 </button>
               )}
             </div>
-            <p className="text-xs mt-2" style={{ color: "#D1D5DB" }}>JPG, PNG ou WEBP · máx. 5MB</p>
+            <p className="text-xs mt-2" style={{ color: "var(--linha)" }}>JPG, PNG ou WEBP · máx. 5MB</p>
           </div>
         </div>
       </div>
 
       {/* Toggle Aberto/Fechado */}
-      <div className="card p-4 mb-4" style={{ border: aberto ? "1px solid rgba(34,197,94,0.3)" : "1px solid #e5e7eb", background: aberto ? "rgba(34,197,94,0.06)" : undefined }}>
+      <div className="card p-4 mb-4" style={{ border: aberto ? "1px solid rgba(34,197,94,0.3)" : "1px solid var(--linha)", background: aberto ? "rgba(34,197,94,0.06)" : undefined }}>
         <div className="flex items-center justify-between gap-3">
           <div style={{ flex: 1 }}>
-            <p className="font-black text-base" style={{ color: "#111827" }}>{aberto ? "🟢 Loja aberta" : "🔴 Loja fechada"}</p>
-            <p className="text-sm mt-0.5" style={{ color: "#6B7280", fontSize: 13 }}>{aberto ? "Clientes podem fazer pedidos agora" : "Nenhum pedido será recebido enquanto fechada"}</p>
+            <p className="font-black text-base" style={{ color: "var(--grafite)" }}>{aberto ? "🟢 Loja aberta" : "🔴 Loja fechada"}</p>
+            <p className="text-sm mt-0.5" style={{ color: "var(--suave)", fontSize: 13 }}>{aberto ? "Clientes podem fazer pedidos agora" : "Nenhum pedido será recebido enquanto fechada"}</p>
           </div>
-          <button onClick={toggleAberto} disabled={togglingAberto || status !== "ativo"} style={{ width: 52, height: 28, borderRadius: 14, border: "none", cursor: status !== "ativo" ? "not-allowed" : "pointer", background: aberto ? "#22c55e" : "#E5E7EB", position: "relative", transition: "background 0.25s", flexShrink: 0, opacity: togglingAberto ? 0.5 : 1 }}>
+          <button onClick={toggleAberto} disabled={togglingAberto || status !== "ativo"} style={{ width: 52, height: 28, borderRadius: 14, border: "none", cursor: status !== "ativo" ? "not-allowed" : "pointer", background: aberto ? "var(--folha)" : "var(--linha)", position: "relative", transition: "background 0.25s", flexShrink: 0, opacity: togglingAberto ? 0.5 : 1 }}>
             <div style={{ width: 20, height: 20, borderRadius: "50%", background: "white", position: "absolute", top: 4, transition: "left 0.25s", left: aberto ? 28 : 4 }} />
           </button>
         </div>
-        {status !== "ativo" && <p className="text-xs mt-2 font-semibold" style={{ color: "#f59e0b" }}>Atenção: só é possível abrir a loja após aprovação pelo administrador.</p>}
+        {status !== "ativo" && <p className="text-xs mt-2 font-semibold" style={{ color: "var(--pequi)" }}>Atenção: só é possível abrir a loja após aprovação pelo administrador.</p>}
       </div>
 
       {/* Dados da loja */}
       <div className="card p-4 mb-4">
-        <p className="font-black mb-4" style={{ color: "#111827", fontSize: 14 }}>Dados da loja</p>
+        <p className="font-black mb-4" style={{ color: "var(--grafite)", fontSize: 14 }}>Dados da loja</p>
         <div className="flex flex-col gap-3">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
             <div style={{ minWidth: 0 }}>
@@ -385,7 +416,7 @@ export default function PerfilPage() {
 
       {/* Endereço */}
       <div className="card p-4 mb-4">
-        <p className="font-black mb-4" style={{ color: "#111827", fontSize: 14 }}>Endereço</p>
+        <p className="font-black mb-4" style={{ color: "var(--grafite)", fontSize: 14 }}>Endereço</p>
         <div className="flex flex-col gap-3">
           {/* CEP */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 12, alignItems: "end" }}>
@@ -397,7 +428,7 @@ export default function PerfilPage() {
                   onBlur={handleCepBlur}
                   style={{ paddingRight: buscandoCep ? 36 : undefined }}
                 />
-                {buscandoCep && <div style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", width: 16, height: 16, border: "2px solid #f97316", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />}
+                {buscandoCep && <div style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", width: 16, height: 16, border: "2px solid var(--pimenta)", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />}
               </div>
             </div>
             <div>
@@ -433,13 +464,24 @@ export default function PerfilPage() {
               <input className="input" value={form.estado} onChange={e => set("estado", e.target.value)} maxLength={2} style={{ textTransform: "uppercase" }} />
             </div>
           </div>
+          {/* Ponto da loja no mapa */}
+          <div style={{ borderRadius: 12, padding: "12px 14px", background: ponto ? "var(--folha-claro)" : "var(--pimenta-claro)", border: `1px solid ${ponto ? "#A7F3D0" : "#FED7AA"}` }}>
+            <p style={{ fontWeight: 800, fontSize: 14, color: "var(--grafite)" }}>{ponto ? (pontoMarcado ? "Ponto marcado. Clique em Salvar alterações." : "Ponto da loja marcado no mapa") : "Ponto da loja não marcado no mapa"}</p>
+            <p style={{ fontSize: 13, color: "#4B5563", marginTop: 4, lineHeight: 1.45 }}>
+              {ponto ? "É para este ponto que o motoboy navega quando vai buscar o pedido." : "Sem o ponto, o GPS do motoboy pode levar para a rua errada. Marque onde fica a porta da loja."}
+            </p>
+            <button type="button" onClick={() => setMarcando(ponto ?? { lat: -16.9214, lng: -49.4497 })}
+              style={{ marginTop: 10, padding: "10px 14px", borderRadius: 10, border: "none", background: "#D7261E", color: "white", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>
+              {ponto ? "Ajustar ponto no mapa" : "Marcar ponto no mapa"}
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Horários de funcionamento */}
       <div className="card p-4 mb-4">
-        <p className="font-black mb-1" style={{ color: "#111827", fontSize: 14 }}>Horários de funcionamento</p>
-        <p className="text-xs mb-4" style={{ color: "#9CA3AF" }}>Configure quando sua loja fica aberta automaticamente.</p>
+        <p className="font-black mb-1" style={{ color: "var(--grafite)", fontSize: 14 }}>Horários de funcionamento</p>
+        <p className="text-xs mb-4" style={{ color: "var(--suave)" }}>Configure quando sua loja fica aberta automaticamente.</p>
 
         <div className="flex flex-col gap-3 mb-4">
           {/* Tipo de horário */}
@@ -449,14 +491,14 @@ export default function PerfilPage() {
               { v: "por_horario", label: "Por horário" },
             ] as const).map(op => (
               <button key={op.v} type="button" onClick={() => setHorarios(h => ({ ...h, tipo: op.v }))}
-                style={{ padding: "8px 16px", borderRadius: 10, border: horarios.tipo === op.v ? "2px solid #f97316" : "1px solid #e5e7eb", background: horarios.tipo === op.v ? "rgba(249,115,22,0.08)" : "#fff", color: horarios.tipo === op.v ? "#f97316" : "#6B7280", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+                style={{ padding: "8px 16px", borderRadius: 10, border: horarios.tipo === op.v ? "2px solid var(--pimenta)" : "1px solid var(--linha)", background: horarios.tipo === op.v ? "rgba(215,38,30,0.08)" : "#fff", color: horarios.tipo === op.v ? "var(--pimenta)" : "var(--suave)", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
                 {op.label}
               </button>
             ))}
           </div>
 
           {horarios.tipo === "sempre_aberto" && (
-            <p className="text-sm" style={{ color: "#6B7280" }}>A loja permanece aberta 24h por dia, todos os dias.</p>
+            <p className="text-sm" style={{ color: "var(--suave)" }}>A loja permanece aberta 24h por dia, todos os dias.</p>
           )}
 
           {horarios.tipo === "por_horario" && (
@@ -464,40 +506,40 @@ export default function PerfilPage() {
               <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 400 }}>
                 <thead>
                   <tr>
-                    <th style={{ textAlign: "left", fontSize: 11, color: "#9CA3AF", fontWeight: 700, padding: "4px 0", width: 90 }}>DIA</th>
-                    <th style={{ textAlign: "left", fontSize: 11, color: "#9CA3AF", fontWeight: 700, padding: "4px 8px", width: 60 }}>ABERTO</th>
-                    <th style={{ textAlign: "left", fontSize: 11, color: "#9CA3AF", fontWeight: 700, padding: "4px 8px" }}>ABRE</th>
-                    <th style={{ textAlign: "left", fontSize: 11, color: "#9CA3AF", fontWeight: 700, padding: "4px 8px" }}>FECHA</th>
+                    <th style={{ textAlign: "left", fontSize: 11, color: "var(--suave)", fontWeight: 700, padding: "4px 0", width: 90 }}>DIA</th>
+                    <th style={{ textAlign: "left", fontSize: 11, color: "var(--suave)", fontWeight: 700, padding: "4px 8px", width: 60 }}>ABERTO</th>
+                    <th style={{ textAlign: "left", fontSize: 11, color: "var(--suave)", fontWeight: 700, padding: "4px 8px" }}>ABRE</th>
+                    <th style={{ textAlign: "left", fontSize: 11, color: "var(--suave)", fontWeight: 700, padding: "4px 8px" }}>FECHA</th>
                   </tr>
                 </thead>
                 <tbody>
                   {DIAS.map(({ key, label }) => {
                     const d = horarios.dias[key]
                     return (
-                      <tr key={key} style={{ borderTop: "1px solid #f3f4f6" }}>
-                        <td style={{ fontSize: 13, fontWeight: 600, color: "#374151", padding: "8px 0" }}>{label}</td>
+                      <tr key={key} style={{ borderTop: "1px solid var(--pedra)" }}>
+                        <td style={{ fontSize: 13, fontWeight: 600, color: "var(--texto)", padding: "8px 0" }}>{label}</td>
                         <td style={{ padding: "8px 8px" }}>
                           <button type="button" onClick={() => setDia(key, "aberto", !d.aberto)}
-                            style={{ width: 40, height: 22, borderRadius: 11, border: "none", cursor: "pointer", background: d.aberto ? "#22c55e" : "#E5E7EB", position: "relative", transition: "background 0.2s" }}>
+                            style={{ width: 40, height: 22, borderRadius: 11, border: "none", cursor: "pointer", background: d.aberto ? "var(--folha)" : "var(--linha)", position: "relative", transition: "background 0.2s" }}>
                             <div style={{ width: 16, height: 16, borderRadius: "50%", background: "white", position: "absolute", top: 3, left: d.aberto ? 21 : 3, transition: "left 0.2s" }} />
                           </button>
                         </td>
                         <td style={{ padding: "8px 8px" }}>
                           <input type="time" value={d.inicio} onChange={e => setDia(key, "inicio", e.target.value)}
                             disabled={!d.aberto}
-                            style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "4px 8px", fontSize: 13, color: d.aberto ? "#111827" : "#D1D5DB", background: "white", cursor: d.aberto ? "pointer" : "not-allowed", minWidth: 90 }} />
+                            style={{ border: "1px solid var(--linha)", borderRadius: 8, padding: "4px 8px", fontSize: 13, color: d.aberto ? "var(--grafite)" : "var(--linha)", background: "white", cursor: d.aberto ? "pointer" : "not-allowed", minWidth: 90 }} />
                         </td>
                         <td style={{ padding: "8px 8px" }}>
                           <input type="time" value={d.fim} onChange={e => setDia(key, "fim", e.target.value)}
                             disabled={!d.aberto}
-                            style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "4px 8px", fontSize: 13, color: d.aberto ? "#111827" : "#D1D5DB", background: "white", cursor: d.aberto ? "pointer" : "not-allowed", minWidth: 90 }} />
+                            style={{ border: "1px solid var(--linha)", borderRadius: 8, padding: "4px 8px", fontSize: 13, color: d.aberto ? "var(--grafite)" : "var(--linha)", background: "white", cursor: d.aberto ? "pointer" : "not-allowed", minWidth: 90 }} />
                         </td>
                       </tr>
                     )
                   })}
                 </tbody>
               </table>
-              <p className="text-xs mt-3" style={{ color: "#9CA3AF" }}>💡 A loja abre e fecha automaticamente nos horários definidos.</p>
+              <p className="text-xs mt-3" style={{ color: "var(--suave)" }}>💡 A loja abre e fecha automaticamente nos horários definidos.</p>
             </div>
           )}
         </div>
@@ -505,8 +547,8 @@ export default function PerfilPage() {
 
       {/* Entrega */}
       <div className="card p-4 mb-4">
-        <p className="font-black mb-4" style={{ color: "#111827", fontSize: 14 }}>Entrega</p>
-        <p style={{ fontSize: 12, color: "#6B7280", marginBottom: 12 }}>
+        <p className="font-black mb-4" style={{ color: "var(--grafite)", fontSize: 14 }}>Entrega</p>
+        <p style={{ fontSize: 12, color: "var(--suave)", marginBottom: 12 }}>
           Taxa definida pela plataforma: <strong>R$ 6,00</strong> até 6 km · +R$ 1,00/km adicional
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -523,7 +565,7 @@ export default function PerfilPage() {
 
       {/* Conta */}
       <div className="card p-4 mb-4">
-        <p className="font-black mb-4" style={{ color: "#111827", fontSize: 14 }}>Conta</p>
+        <p className="font-black mb-4" style={{ color: "var(--grafite)", fontSize: 14 }}>Conta</p>
         <div className="flex flex-col gap-3">
           <div>
             <label className="label">Nome do responsável</label>
@@ -532,23 +574,23 @@ export default function PerfilPage() {
           <div>
             <label className="label">Email de acesso</label>
             <input className="input" type="email" value={form.email} disabled style={{ opacity: 0.5, cursor: "not-allowed" }} />
-            <p className="text-xs mt-1" style={{ color: "#9CA3AF" }}>Para alterar o email, entre em contato com o suporte.</p>
+            <p className="text-xs mt-1" style={{ color: "var(--suave)" }}>Para alterar o email, entre em contato com o suporte.</p>
           </div>
         </div>
       </div>
 
       {/* Financeiro */}
       <div className="card p-4 mb-6">
-        <p className="font-black mb-1" style={{ color: "#111827", fontSize: 14 }}>Financeiro</p>
-        <p className="text-xs mb-4" style={{ color: "#9CA3AF" }}>Dados bancários e chave PIX para receber saques da plataforma.</p>
+        <p className="font-black mb-1" style={{ color: "var(--grafite)", fontSize: 14 }}>Financeiro</p>
+        <p className="text-xs mb-4" style={{ color: "var(--suave)" }}>Dados bancários e chave PIX para receber saques da plataforma.</p>
         <div className="flex flex-col gap-3">
           <div>
             <label className="label">Chave PIX para saque</label>
             <input className="input" value={form.pix_key} onChange={e => set("pix_key", e.target.value)} placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória" />
-            {!form.pix_key && <p className="text-xs mt-2 font-semibold" style={{ color: "#f59e0b" }}>Atenção: sem chave PIX você não poderá solicitar saques.</p>}
+            {!form.pix_key && <p className="text-xs mt-2 font-semibold" style={{ color: "var(--pequi)" }}>Atenção: sem chave PIX você não poderá solicitar saques.</p>}
           </div>
           <div style={{ borderTop: "1px solid #f0f0f0", paddingTop: 12 }}>
-            <p className="text-xs font-bold mb-3" style={{ color: "#6B7280", textTransform: "uppercase", letterSpacing: 1 }}>Dados bancários</p>
+            <p className="text-xs font-bold mb-3" style={{ color: "var(--suave)", textTransform: "uppercase", letterSpacing: 1 }}>Dados bancários</p>
             <div className="flex flex-col gap-3">
               <div>
                 <label className="label">Banco</label>
@@ -577,13 +619,27 @@ export default function PerfilPage() {
       </div>
 
       {erroSalvar && (
-        <p style={{ color: "#ef4444", fontSize: 13, fontWeight: 600, background: "rgba(239,68,68,0.08)", padding: "12px 16px", borderRadius: 10, marginBottom: 12 }}>
+        <p style={{ color: "var(--pimenta)", fontSize: 13, fontWeight: 600, background: "rgba(239,68,68,0.08)", padding: "12px 16px", borderRadius: 10, marginBottom: 12 }}>
           ⚠️ {erroSalvar}
         </p>
       )}
       <button onClick={salvar} disabled={salvando} className="btn-primary" style={{ padding: "14px 32px", width: "100%" }}>
         {salvando ? "Salvando..." : "Salvar alterações"}
       </button>
+
+      {marcando && (
+        <div onClick={() => setMarcando(null)} style={{ position: "fixed", inset: 0, zIndex: 2000, background: "rgba(0,0,0,.55)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth: 560, background: "white", borderRadius: "20px 20px 0 0", padding: "18px 16px calc(env(safe-area-inset-bottom,0px) + 16px)" }}>
+            <p style={{ fontWeight: 900, fontSize: 17, color: "var(--grafite)" }}>Onde fica a porta da loja?</p>
+            <p style={{ fontSize: 13, color: "#4B5563", margin: "4px 0 12px", lineHeight: 1.45 }}>Arraste o mapa até o pino ficar em cima da loja. Se você está na loja agora, toque no botão de localização no canto do mapa.</p>
+            <MapaPicker lat={marcando.lat} lng={marcando.lng} onMove={(lat, lng) => setMarcando({ lat, lng })} />
+            <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+              <button type="button" onClick={() => setMarcando(null)} style={{ flex: 1, padding: 13, borderRadius: 12, border: "1px solid var(--linha)", background: "white", fontWeight: 700, fontSize: 15 }}>Cancelar</button>
+              <button type="button" onClick={() => { setPonto(marcando); setPontoMarcado(true); setMarcando(null) }} style={{ flex: 2, padding: 13, borderRadius: 12, border: "none", background: "#D7261E", color: "white", fontWeight: 800, fontSize: 15 }}>Usar este ponto</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes spin { to { transform: translateY(-50%) rotate(360deg); } }

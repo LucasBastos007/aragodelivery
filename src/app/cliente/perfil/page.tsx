@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useClienteAuth } from "@/lib/auth-cliente"
 import { useCart } from "@/lib/cart"
+import { montarReordem } from "@/lib/reordenar"
 import { supabase } from "@/lib/supabase"
 
 const inp: React.CSSProperties = {
@@ -121,19 +122,13 @@ export default function ClientePerfilPage() {
   }
 
   async function handleReorder(pedido: any) {
-    const loja = pedido.loja
-    const itens = pedido.itens ?? []
-    if (!loja || itens.length === 0) return
+    const loja  = pedido.loja
+    if (!loja || !(pedido.itens ?? []).length) return
     setReordenadoId(pedido.id)
-    for (const item of itens) {
-      for (let i = 0; i < item.quantidade; i++) {
-        add({ id: item.produto_id ?? item.id, nome: item.nome, preco: item.preco, loja_id: loja.id, loja_nome: loja.nome })
-      }
-    }
-    setTimeout(() => {
-      setReordenadoId(null)
-      router.push(`/restaurante/${loja.id}`)
-    }, 600)
+    const { itens, pendentes } = await montarReordem(pedido)
+    for (const unidades of itens) for (const u of unidades) add(u)
+    if (pendentes.length) alert(`Alguns itens não foram adicionados:\n• ${pendentes.join("\n• ")}\n\nEscolha eles de novo no cardápio.`)
+    setTimeout(() => { setReordenadoId(null); router.push(`/restaurante/${loja.id}`) }, 700)
   }
 
   if (loading) return (

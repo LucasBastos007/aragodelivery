@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
-import { ganhoMotoboy } from "@/lib/comissao"
+import { ganhoMotoboy, ganhoMotoboyPedido } from "@/lib/comissao"
 
 type Periodo = "hoje" | "semana" | "mes" | "total"
 
@@ -26,20 +26,20 @@ function dateInicio(periodo: Periodo): Date {
 // fixo (80% da taxa) totalmente desconectado da fórmula real usada no resto do app, o que
 // fazia os valores daqui divergirem de "Corridas"/"Histórico". Pedido explícito do usuário.
 function ganhoReal(p: any): number {
-  return ganhoMotoboy(p.taxa_entrega ?? 0, p.criado_em)
+  return ganhoMotoboyPedido(p)
 }
 
 function StatCard({ icon, label, value, sub, color }: {
   icon: React.ReactNode; label: string; value: string; sub: string; color: string
 }) {
   return (
-    <div style={{ background: "#111", borderRadius: 16, padding: "14px 12px", border: "1px solid rgba(255,255,255,0.07)", minWidth: 0 }}>
+    <div style={{ background: "#FFFFFF", borderRadius: 16, padding: "14px 12px", border: "1px solid #E6E5E1", minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
         {icon}
-        <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</p>
+        <p style={{ color: "#77736B", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</p>
       </div>
       <p style={{ color, fontWeight: 900, fontSize: 20, lineHeight: 1, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</p>
-      <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 11 }}>{sub}</p>
+      <p style={{ color: "#77736B", fontSize: 11 }}>{sub}</p>
     </div>
   )
 }
@@ -64,8 +64,8 @@ function GraficoSemanal({ pedidos }: { pedidos: any[] }) {
   const labels = dias.map(d => d.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "").slice(0, 3))
 
   return (
-    <div style={{ background: "#111", borderRadius: 16, padding: "14px 12px", marginBottom: 16, border: "1px solid rgba(255,255,255,0.07)" }}>
-      <p style={{ color: "white", fontWeight: 900, fontSize: 13, marginBottom: 14 }}>Ganhos — 7 dias</p>
+    <div style={{ background: "#FFFFFF", borderRadius: 16, padding: "14px 12px", marginBottom: 16, border: "1px solid #E6E5E1" }}>
+      <p style={{ color: "#22201C", fontWeight: 900, fontSize: 13, marginBottom: 14 }}>Ganhos — 7 dias</p>
       <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 80 }}>
         {valores.map((v, i) => (
           <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
@@ -75,10 +75,10 @@ function GraficoSemanal({ pedidos }: { pedidos: any[] }) {
             <div style={{
               width: "100%", borderRadius: "4px 4px 0 0",
               height: `${Math.max((v / maxVal) * 64, v > 0 ? 4 : 0)}px`,
-              background: i === 6 ? "#f97316" : "rgba(249,115,22,0.3)",
+              background: i === 6 ? "#D7261E" : "rgba(249,115,22,0.3)",
               transition: "height 0.4s ease",
             }} />
-            <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 9, fontWeight: 600 }}>{labels[i]}</p>
+            <p style={{ color: "#77736B", fontSize: 9, fontWeight: 600 }}>{labels[i]}</p>
           </div>
         ))}
       </div>
@@ -116,7 +116,7 @@ export default function MotoboyDashboardPage() {
     // no histórico, senão o motoboy via só uma parte do que realmente ganhou.
     const [{ data: todosPedidos }, { data: todasAvulsas }] = await Promise.all([
       supabase.from("pedidos")
-        .select("id, codigo, taxa_entrega, criado_em, loja:lojas(nome)")
+        .select("id, codigo, taxa_entrega, taxa_dinamica, criado_em, loja:lojas(nome)")
         .eq("motoboy_id", motoboy_id).eq("status", "entregue")
         .order("criado_em", { ascending: false }),
       supabase.from("entregas_avulsas")
@@ -160,8 +160,8 @@ export default function MotoboyDashboardPage() {
   return (
     <div style={{ maxWidth: 600, margin: "0 auto", padding: "20px 14px", overflowX: "hidden" }}>
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ color: "white", fontWeight: 900, fontSize: 20 }}>Dashboard</h1>
-        <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13, marginTop: 3 }}>Seus ganhos e corridas</p>
+        <h1 style={{ color: "#22201C", fontWeight: 900, fontSize: 20 }}>Dashboard</h1>
+        <p style={{ color: "#77736B", fontSize: 13, marginTop: 3 }}>Seus ganhos e corridas</p>
       </div>
 
       <div style={{ display: "flex", gap: 6, marginBottom: 24, flexWrap: "wrap" }}>
@@ -169,8 +169,8 @@ export default function MotoboyDashboardPage() {
           <button key={p.key} onClick={() => setPeriodo(p.key)} style={{
             padding: "8px 18px", borderRadius: 999, fontSize: 13, fontWeight: 700,
             cursor: "pointer", border: "none", transition: "all 0.15s",
-            background: periodo === p.key ? "#f97316" : "rgba(255,255,255,0.07)",
-            color: periodo === p.key ? "white" : "rgba(255,255,255,0.45)",
+            background: periodo === p.key ? "#D7261E" : "#E6E5E1",
+            color: periodo === p.key ? "white" : "#77736B",
           }}>
             {p.label}
           </button>
@@ -178,10 +178,10 @@ export default function MotoboyDashboardPage() {
       </div>
 
       {loading ? (
-        <p style={{ color: "rgba(255,255,255,0.3)" }}>Carregando...</p>
+        <p style={{ color: "#77736B" }}>Carregando...</p>
       ) : (
         <>
-          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 12 }}>
+          <p style={{ color: "#77736B", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 12 }}>
             {periodoLabel}
           </p>
 
@@ -191,8 +191,8 @@ export default function MotoboyDashboardPage() {
               label="Ganhos" value={`R$ ${ganhos.toFixed(2)}`} sub="taxa de entrega" color="#22c55e"
             />
             <StatCard
-              icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 17H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v9a2 2 0 0 1-2 2h-3"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>}
-              label="Corridas" value={String(corridas)} sub="entregas feitas" color="#f97316"
+              icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D7261E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 17H3a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v9a2 2 0 0 1-2 2h-3"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>}
+              label="Corridas" value={String(corridas)} sub="entregas feitas" color="#D7261E"
             />
             <StatCard
               icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>}
@@ -208,16 +208,16 @@ export default function MotoboyDashboardPage() {
 
           {/* Card de avaliação */}
           {notaMedia !== null && (
-            <div style={{ background: "#111", borderRadius: 16, padding: "16px", marginBottom: 16, border: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <div style={{ background: "#FFFFFF", borderRadius: 16, padding: "16px", marginBottom: 16, border: "1px solid #E6E5E1", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
               <div style={{ minWidth: 0 }}>
-                <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Avaliação</p>
+                <p style={{ color: "#77736B", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Avaliação</p>
                 <p style={{ color: "#f59e0b", fontWeight: 900, fontSize: 26, lineHeight: 1 }}>{notaMedia.toFixed(1)}</p>
-                <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 12, marginTop: 4 }}>{totalAvals} aval.</p>
+                <p style={{ color: "#77736B", fontSize: 12, marginTop: 4 }}>{totalAvals} aval.</p>
               </div>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
                 {[5, 4, 3, 2, 1].map(s => (
                   <div key={s} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                    <div style={{ width: 44, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.05)", overflow: "hidden" }}>
+                    <div style={{ width: 44, height: 4, borderRadius: 2, background: "#F2F2EF", overflow: "hidden" }}>
                       <div style={{ height: "100%", borderRadius: 2, background: notaMedia >= s ? "#f59e0b" : "transparent", width: notaMedia >= s ? "100%" : `${Math.max(0, (notaMedia - (s - 1)) * 100)}%` }} />
                     </div>
                     <span style={{ color: "#f59e0b", fontSize: 9 }}>{"★".repeat(s)}</span>
@@ -228,18 +228,18 @@ export default function MotoboyDashboardPage() {
           )}
 
           {lojaFreq.length > 0 && (
-            <div style={{ background: "#111", borderRadius: 16, padding: "18px 20px", marginBottom: 16, border: "1px solid rgba(255,255,255,0.07)" }}>
-              <p style={{ color: "white", fontWeight: 900, fontSize: 14, marginBottom: 16 }}>Lojas no período</p>
+            <div style={{ background: "#FFFFFF", borderRadius: 16, padding: "18px 20px", marginBottom: 16, border: "1px solid #E6E5E1" }}>
+              <p style={{ color: "#22201C", fontWeight: 900, fontSize: 14, marginBottom: 16 }}>Lojas no período</p>
               {lojaFreq.map((l, i) => (
                 <div key={l.nome} style={{ marginBottom: 12 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5, fontSize: 13 }}>
-                    <span style={{ color: "white", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-                      <span style={{ fontSize: 10, fontWeight: 900, minWidth: 16, color: i === 0 ? "#f59e0b" : "rgba(255,255,255,0.3)" }}>{i + 1}°</span>
+                    <span style={{ color: "#22201C", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ fontSize: 10, fontWeight: 900, minWidth: 16, color: i === 0 ? "#f59e0b" : "#77736B" }}>{i + 1}°</span>
                       {l.nome}
                     </span>
-                    <span style={{ color: "#f97316", fontWeight: 700 }}>{l.count}x</span>
+                    <span style={{ color: "#D7261E", fontWeight: 700 }}>{l.count}x</span>
                   </div>
-                  <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,0.05)" }}>
+                  <div style={{ height: 4, borderRadius: 2, background: "#F2F2EF" }}>
                     <div style={{ height: "100%", borderRadius: 2, background: i === 0 ? "linear-gradient(90deg,#f97316,#fb923c)" : "rgba(249,115,22,0.4)", width: `${(l.count / maxFreq) * 100}%`, transition: "width 0.5s" }} />
                   </div>
                 </div>
@@ -248,18 +248,18 @@ export default function MotoboyDashboardPage() {
           )}
 
           {ultimos.length > 0 && (
-            <div style={{ background: "#111", borderRadius: 16, padding: "18px 20px", border: "1px solid rgba(255,255,255,0.07)" }}>
-              <p style={{ color: "white", fontWeight: 900, fontSize: 14, marginBottom: 14 }}>Últimas entregas</p>
+            <div style={{ background: "#FFFFFF", borderRadius: 16, padding: "18px 20px", border: "1px solid #E6E5E1" }}>
+              <p style={{ color: "#22201C", fontWeight: 900, fontSize: 14, marginBottom: 14 }}>Últimas entregas</p>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {ultimos.map((p, i) => (
                   <div key={p.id + i} style={{
                     display: "flex", justifyContent: "space-between", alignItems: "center",
                     padding: "8px 10px", borderRadius: 10,
-                    background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)",
+                    background: "#F2F2EF", border: "1px solid #E6E5E1",
                   }}>
                     <div>
-                      <p style={{ color: "white", fontSize: 13, fontWeight: 700 }}>#{p.codigo}</p>
-                      <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 11 }}>
+                      <p style={{ color: "#22201C", fontSize: 13, fontWeight: 700 }}>#{p.codigo}</p>
+                      <p style={{ color: "#77736B", fontSize: 11 }}>
                         {p.loja?.nome ?? "—"} · {new Date(p.criado_em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
                       </p>
                     </div>
@@ -272,7 +272,7 @@ export default function MotoboyDashboardPage() {
 
           {corridas === 0 && (
             <div style={{ textAlign: "center", marginTop: 48 }}>
-              <p style={{ color: "rgba(255,255,255,0.4)", fontWeight: 600 }}>Nenhuma entrega no período</p>
+              <p style={{ color: "#77736B", fontWeight: 600 }}>Nenhuma entrega no período</p>
             </div>
           )}
         </>

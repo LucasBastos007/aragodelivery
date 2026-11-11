@@ -85,6 +85,11 @@ export interface EntregaAvulsa {
   criado_em: string
   cliente_lat?: number | null
   cliente_lng?: number | null
+  itens?: { produto_id: string; nome: string; preco: number; quantidade: number; adicionais: { id: string; nome: string; preco: number }[]; observacao?: string }[]
+  subtotal_itens?: number
+  comissao_pct?: number | null
+  comissao_valor?: number
+  referencia?: string | null
 }
 
 export interface Motoboy {
@@ -125,6 +130,8 @@ export interface AdicionalProduto {
   id: string
   nome: string
   preco: number
+  /** Grupo de onde o cliente escolheu (o mesmo id pode existir em mais de um grupo) */
+  grupo_id?: string
 }
 
 export interface GrupoAdicional {
@@ -181,9 +188,13 @@ export interface Pedido {
   motoboy_id: string | null
   status: StatusPedido
   forma_pagamento: FormaPagamento
+  forma_pagamento_2?: FormaPagamento | null
+  valor_pagamento_1?: number | null
+  valor_pagamento_2?: number | null
   troco_para?: number | null
   subtotal: number
   taxa_entrega: number
+  taxa_dinamica?: number | null  // corrida dinâmica (chuva), vai pro motoboy
   desconto?: number | null
   cupom_codigo?: string | null
   total: number

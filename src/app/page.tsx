@@ -1,5 +1,7 @@
 "use client"
 
+import AberturaChego from "@/components/AberturaChego"
+import { ultimaPorUltimo } from "@/lib/ordemLojas"
 import { useEffect, useMemo, useRef, useState } from "react"
 import type React from "react"
 import { useRouter } from "next/navigation"
@@ -7,12 +9,16 @@ import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import { useCart } from "@/lib/cart"
 import { useClienteAuth } from "@/lib/auth-cliente"
-import { useIsMobile } from "@/lib/use-mobile"
+import { useIsMobileOuNulo } from "@/lib/use-mobile"
 import type { Loja, CategoriaLoja } from "@/types"
 import { LogoClean } from "@/components/LogoClean"
 import { MobileBottomNav } from "@/components/MobileBottomNav"
+import { HalloweenDecor } from "@/components/HalloweenDecor"
+import { FaixaPrimeiroPedido } from "@/components/FaixaPrimeiroPedido"
+import { AtivarNotificacoes } from "@/components/AtivarNotificacoes"
 import AddressBottomSheet from "@/components/AddressBottomSheet"
 import ModalCompletarPerfil from "@/components/ModalCompletarPerfil"
+import InicioNovo from "@/components/cliente/InicioNovo"
 
 const CAT_IMG: Record<string, string> = {
   Restaurante: "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f354.png",
@@ -451,6 +457,10 @@ export default function Home() {
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null)
   const splashDone = typeof window !== "undefined" && !!sessionStorage.getItem("arago_splash_done")
   const [splashVis,  setSplashVis]  = useState(!splashDone)
+  // A abertura só é desenhada depois de montar no navegador: o servidor não enxerga o
+  // sessionStorage, e desenhar antes gerava diferença entre servidor e navegador (React #418).
+  const [montado, setMontado] = useState(false)
+  useEffect(() => { setMontado(true) }, [])
   const [splashFade, setSplashFade] = useState(false)
   const [menuAberto, setMenuAberto] = useState(false)
   const [lastAddress, setLastAddress] = useState("Aragoiânia, GO")
@@ -464,7 +474,8 @@ export default function Home() {
   const splashTimers = useRef<ReturnType<typeof setTimeout>[]>([])
   const [pedidoAtivo, setPedidoAtivo] = useState<{ codigo: string; id: string } | null>(null)
 
-  const isMobile    = useIsMobile()
+  const telaCel     = useIsMobileOuNulo()
+  const isMobile    = telaCel === true
   const primeiroNome = perfil?.nome?.split(" ")[0] ?? user?.user_metadata?.name?.split(" ")[0] ?? null
 
   useEffect(() => {
@@ -472,10 +483,13 @@ export default function Home() {
     const KEY = "arago_last_acesso"
     const last = Number(localStorage.getItem(KEY) ?? 0)
     if (Date.now() - last > 30 * 60 * 1000) {
+      // Código anônimo do celular (sem dado pessoal), pra contar pessoas diferentes e não só visitas
+      let vis = localStorage.getItem("arago_visitante")
+      if (!vis) { vis = (crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`); localStorage.setItem("arago_visitante", vis) }
       fetch("/api/tracking/evento", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tipo: "acesso" }),
+        body: JSON.stringify({ tipo: "acesso", visitante: vis }),
       }).catch(() => {})
       localStorage.setItem(KEY, String(Date.now()))
     }
@@ -548,13 +562,12 @@ export default function Home() {
     supabase.from("lojas").select("*").eq("status", "ativo")
       .order("ordem_home", { ascending: true, nullsFirst: false })
       .order("destaque", { ascending: false }).order("aberto", { ascending: false }).order("nome")
-      .then(({ data }) => { setLojas((data as Loja[]) ?? []); setLoading(false) })
+      .then(({ data }) => { setLojas(ultimaPorUltimo((data as Loja[]) ?? [])); setLoading(false) })
 
     // Splash já foi exibido nesta sessão — fecha imediatamente
     if (sessionStorage.getItem("arago_splash_done")) { setSplashVis(false); return }
 
-    // Inicia splash automaticamente sem exigir toque
-    iniciarSplash()
+    // A abertura (AberturaChego) começa sozinha e toca a música; termina chamando onFim.
 
     return () => splashTimers.current.forEach(clearTimeout)
   }, [])
@@ -614,8 +627,52 @@ export default function Home() {
     return [...grupos.entries()].sort((a, b) => a[1].length - b[1].length || a[0].localeCompare(b[0]))
   }, [abertas])
 
+  const folhaEndereco = addrSheetOpen && (
+    <AddressBottomSheet
+      currentAddress={lastAddress}
+      onSelect={addr => {
+        setLastAddress(addr)
+        try {
+          const endSalvo = localStorage.getItem("arago_endereco_salvo")
+          if (endSalvo) {
+            const saved = JSON.parse(endSalvo)
+            if (saved.lat && saved.lng && saved.lat !== 0 && saved.lng !== 0)
+              setUserCoords({ lat: saved.lat, lng: saved.lng })
+          }
+        } catch {}
+      }}
+      onClose={() => setAddrSheetOpen(false)}
+    />
+  )
+
+  // Antes de saber o tamanho da tela não desenha nada (senão o celular via a versão de
+  // computador por um instante ao recarregar).
+  if (telaCel === null) return <div style={{ minHeight: "100vh", background: "#fff" }} />
+
+  // Celular: layout novo (19/10/2026). Mesmos dados, mesmo endereço, mesmas rotas; só a tela muda.
+  if (isMobile) return (
+    <>
+      {montado && splashVis && (
+        <AberturaChego onFim={() => { setSplashVis(false); sessionStorage.setItem("arago_splash_done", "1") }} />
+      )}
+      {!splashVis && <HalloweenDecor />}
+      <InicioNovo
+        avisos={!splashVis ? <><FaixaPrimeiroPedido telefone={perfil?.telefone} /><AtivarNotificacoes /></> : null}
+        lojas={lojas} loading={loading} logado={!!user}
+        endereco={lastAddress} onEndereco={() => setAddrSheetOpen(true)}
+        pedidoAtivo={splashVis ? null : pedidoAtivo} userCoords={userCoords}
+      />
+      <MobileBottomNav />
+      {folhaEndereco}
+      <ModalCompletarPerfil />
+    </>
+  )
+
   return (
     <div style={{ minHeight: "100vh", background: "#F9FAFB", overflowX: "hidden" }}>
+      {!splashVis && <HalloweenDecor />}
+      {!splashVis && <FaixaPrimeiroPedido telefone={perfil?.telefone} />}
+      {!splashVis && <AtivarNotificacoes />}
 
       {/* ── BANNER PEDIDO ATIVO ────────────────────────────── */}
       {pedidoAtivo && !splashVis && (
@@ -634,111 +691,9 @@ export default function Home() {
         </a>
       )}
 
-      {/* ── SPLASH ─────────────────────────────────────────── */}
-      {splashVis && (
-        <div
-          onClick={iniciarSplash}
-          style={{
-            position: "fixed", inset: 0, zIndex: 9999, background: "#ffffff",
-            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-            opacity: splashFade ? 0 : 1, transition: "opacity 0.6s ease",
-            pointerEvents: splashFade ? "none" : "all",
-            cursor: splashStarted ? "default" : "pointer",
-            userSelect: "none",
-          }}>
-          {/* Partículas de fundo */}
-          <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none" }}>
-            {Array.from({ length: 12 }).map((_, i) => (
-              <div key={i} style={{
-                position: "absolute", width: 5, height: 5, borderRadius: "50%",
-                background: i % 3 === 0 ? "#DC2626" : i % 3 === 1 ? "rgba(220,38,38,0.2)" : "rgba(0,0,0,0.05)",
-                left: `${(i * 8.3 + 5) % 100}%`, top: `${(i * 13 + 10) % 100}%`,
-                animation: `splashFloat ${3 + (i % 3)}s ease-in-out ${i * 0.3}s infinite alternate`,
-                opacity: step > 0 ? 1 : 0, transition: "opacity 0.5s",
-              }} />
-            ))}
-          </div>
-
-          <div style={{
-            position: "absolute",
-            width: 280, height: 280, borderRadius: "50%",
-            background: "radial-gradient(circle, rgba(220,38,38,0.07) 0%, transparent 70%)",
-            opacity: step > 0 && step < 4 ? 1 : 0,
-            transform: step > 0 && step < 4 ? "scale(1)" : "scale(0.6)",
-            transition: "opacity 0.4s, transform 0.4s",
-          }} />
-
-          <div style={{ position: "relative", width: 200, height: 200, perspective: "600px" }}>
-            <img src="https://cdn-icons-png.flaticon.com/512/3075/3075977.png" alt="Restaurantes" style={{
-              position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain",
-              opacity: step === 1 ? 1 : 0,
-              transform: step === 1 ? "scale(1) translateY(0px)" : step < 1 ? "scale(0.6) translateY(32px)" : "scale(0.6) translateY(-32px)",
-              transition: "opacity 0.4s ease, transform 0.4s ease",
-              filter: "drop-shadow(0 0 24px rgba(249,115,22,0.4))",
-            }} />
-            <img src="https://cdn-icons-png.flaticon.com/512/3081/3081559.png" alt="Mercados" style={{
-              position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain",
-              opacity: step === 2 ? 1 : 0,
-              transform: step === 2 ? "scale(1) translateY(0px)" : step < 2 ? "scale(0.6) translateY(32px)" : "scale(0.6) translateY(-32px)",
-              transition: "opacity 0.4s ease, transform 0.4s ease",
-              filter: "drop-shadow(0 0 24px rgba(34,197,94,0.4))",
-            }} />
-            <img src="https://cdn-icons-png.flaticon.com/512/2913/2913133.png" alt="Farmácias" style={{
-              position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain",
-              opacity: step === 3 ? 1 : 0,
-              transform: step === 3 ? "scale(1) translateY(0px)" : step < 3 ? "scale(0.6) translateY(32px)" : "scale(0.6) translateY(-32px)",
-              transition: "opacity 0.4s ease, transform 0.4s ease",
-              filter: "drop-shadow(0 0 24px rgba(59,130,246,0.4))",
-            }} />
-            <div style={{
-              position: "absolute", inset: 0,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              transform: step === 4 ? "rotateY(0deg) scale(1)" : "rotateY(-90deg) scale(0.5)",
-              opacity: step === 4 ? 1 : 0,
-              transition: "transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.5s ease",
-              transformStyle: "preserve-3d",
-              filter: step === 4 ? "drop-shadow(0 0 24px rgba(220,38,38,0.3))" : "none",
-            }}>
-              <img src="/logo-chego.png" alt="Chegô" style={{ width: 180, height: 180, objectFit: "contain" }} />
-            </div>
-          </div>
-
-          <p style={{
-            marginTop: 32,
-            fontSize: step === 4 ? 15 : 13,
-            fontWeight: 700,
-            letterSpacing: step === 4 ? 1 : 3,
-            textTransform: step === 4 ? "none" : "uppercase",
-            textAlign: "center",
-            maxWidth: 280,
-            opacity: step > 0 ? 1 : 0,
-            transform: step > 0 ? "translateY(0px)" : "translateY(12px)",
-            transition: "opacity 0.35s ease, transform 0.35s ease, font-size 0.3s ease",
-            color: step === 1 ? "#f97316"
-                 : step === 2 ? "#22c55e"
-                 : step === 3 ? "#60a5fa"
-                 : step === 4 ? "#374151"
-                 : "transparent",
-          }}>
-            {step === 1 ? "Restaurantes"
-           : step === 2 ? "Mercados"
-           : step === 3 ? "Farmácias"
-           : step === 4 ? "O primeiro aplicativo delivery de Aragoiânia"
-           : ""}
-          </p>
-
-
-          <style>{`
-            @keyframes splashFloat {
-              from { transform: translateY(0px) rotate(0deg); }
-              to   { transform: translateY(-18px) rotate(180deg); }
-            }
-            @keyframes splashPulse {
-              0%, 100% { transform: scale(1); opacity: 0.7; }
-              50%       { transform: scale(1.15); opacity: 1; }
-            }
-          `}</style>
-        </div>
+      {/* ── ABERTURA (layout novo, 19/10/2026) ───────────────── */}
+      {montado && splashVis && (
+        <AberturaChego onFim={() => { setSplashVis(false); sessionStorage.setItem("arago_splash_done", "1") }} />
       )}
 
       {/* ── HEADER MOBILE (iFood-style) ─────────────────────── */}
@@ -750,9 +705,12 @@ export default function Home() {
           <div style={{ padding: "12px 16px 6px" }}>
             {/* Row 1: Saudação + avatar */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-              <p style={{ color: "#6B7280", fontSize: 13, fontWeight: 500 }}>
-                {getGreeting()}{primeiroNome ? `, ${primeiroNome}` : ""} 👋
-              </p>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                <img src="/logo-chego-transparente.png" alt="Chegô" style={{ height: 34, width: "auto", display: "block", flexShrink: 0 }} />
+                <p style={{ color: "#6B7280", fontSize: 13, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {getGreeting()}{primeiroNome ? `, ${primeiroNome}` : ""} 👋
+                </p>
+              </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 {count > 0 && !!user && (
                   <Link href="/carrinho" style={{
@@ -864,10 +822,11 @@ export default function Home() {
       {/* ── NAVBAR DESKTOP ─────────────────────────────────── */}
       {!isMobile && (
         <nav style={{
-          background: "rgba(255,255,255,0.97)",
+          // Azul-marinho do logo (21/10/2026), mesma paleta do topo do celular
+          background: "linear-gradient(180deg, #0B1A33, #122650)",
           backdropFilter: "blur(12px)",
           WebkitBackdropFilter: "blur(12px)",
-          borderBottom: "1px solid #e5e7eb",
+          borderBottom: "1px solid #0B1A33",
           position: "sticky", top: 0, zIndex: 100,
           boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
         }}>
@@ -887,10 +846,10 @@ export default function Home() {
               ].map(({ label, cat }) => (
                 <button key={cat} onClick={() => selectCat(cat)}
                   style={{
-                    background: filtro === cat ? "rgba(220,38,38,0.08)" : "transparent",
-                    border: filtro === cat ? "1px solid rgba(220,38,38,0.3)" : "1px solid transparent",
+                    background: filtro === cat ? "rgba(232,20,28,0.18)" : "transparent",
+                    border: filtro === cat ? "1px solid rgba(232,20,28,0.55)" : "1px solid transparent",
                     borderRadius: 10, padding: "8px 16px", cursor: "pointer",
-                    color: filtro === cat ? "#DC2626" : "#374151",
+                    color: filtro === cat ? "#FF6B6B" : "rgba(255,255,255,0.78)",
                     fontWeight: 500, fontSize: 15,
                   }}>
                   {label}
@@ -911,7 +870,7 @@ export default function Home() {
               )}
               <Link href="/cadastro-loja" style={{
                 padding: "8px 16px", borderRadius: 12,
-                color: "#374151", fontWeight: 600, fontSize: 14, textDecoration: "none",
+                color: "rgba(255,255,255,0.85)", fontWeight: 600, fontSize: 14, textDecoration: "none",
               }}>
                 Anuncie sua loja
               </Link>
@@ -925,8 +884,8 @@ export default function Home() {
                   <button onClick={() => setMenuAberto(v => !v)} style={{
                     display: "flex", alignItems: "center", gap: 8,
                     padding: "8px 14px", borderRadius: 12, cursor: "pointer",
-                    background: "rgba(0,0,0,0.04)", border: "1px solid #e5e7eb",
-                    color: "#374151", fontWeight: 600, fontSize: 13,
+                    background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.22)",
+                    color: "#fff", fontWeight: 600, fontSize: 13,
                   }}>
                     {user.user_metadata?.avatar_url
                       ? <img src={user.user_metadata.avatar_url} alt="" style={{ width: 26, height: 26, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
@@ -1011,7 +970,7 @@ export default function Home() {
       {/* ── HERO (desktop only) ─────────────────────────────── */}
       {!isMobile && (
         <div style={{
-          background: "linear-gradient(135deg, #B91C1C 0%, #DC2626 40%, #EF4444 75%, #F87171 100%)",
+          background: "radial-gradient(circle at 85% 20%, rgba(232,20,28,0.35), transparent 45%), linear-gradient(135deg, #0B1A33 0%, #122650 55%, #1B2E63 100%)",
           minHeight: 420,
           display: "flex", alignItems: "center", justifyContent: "center",
           position: "relative", overflow: "hidden",
@@ -1091,13 +1050,13 @@ export default function Home() {
 
         {/* Mobile: grade de categorias iFood 2×5 */}
         {isMobile && !busca && (
-          <div style={{ background: "white", padding: "16px 8px 14px", borderBottom: "1px solid #f0f0f0", marginBottom: 8 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: "14px 0" }}>
+          <div style={{ background: "white", padding: "12px 0 12px", borderBottom: "1px solid #f0f0f0", marginBottom: 8 }}>
+            <div className="cats-fileira" style={{ display: "flex", gap: 6, overflowX: "auto", padding: "0 12px", scrollbarWidth: "none", scrollSnapType: "x proximity" }}>
               {CATS_HOME.map(c => {
                 const isActive = !!(c.cat && filtro === c.cat)
                 return (
                   <button key={c.label} onClick={() => handleHomeCat(c)} style={{
-                    display: "flex", flexDirection: "column", alignItems: "center", gap: 5,
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: 5, flexShrink: 0, width: 70, scrollSnapAlign: "start",
                     background: "none", border: "none", cursor: "pointer", padding: "0 2px",
                   }}>
                     <div style={{ position: "relative" }}>

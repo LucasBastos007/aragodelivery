@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import MotoboyLayoutClient from "./_MotoboyLayoutClient"
+import "./mb-novo.css"
 
 export const metadata: Metadata = {
   manifest: "/manifest-motoboy.json",

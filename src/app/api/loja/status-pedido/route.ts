@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
+import { desfazerCobrancas } from "@/lib/pagamentoDivididoServidor"
 import { createClient } from "@supabase/supabase-js"
 import webpush from "web-push"
 import { requireLoja, unauthorized } from "@/lib/session"
-import { estornarPagamento, cancelarPagamento } from "@/lib/asaas"
 
 function adminClient() {
   return createClient(
@@ -191,7 +191,7 @@ export async function POST(req: NextRequest) {
   // estornar) — leitura, não faz parte da condição atômica do UPDATE abaixo.
   const { data: pedidoAtual } = await sb
     .from("pedidos")
-    .select("id, codigo, status, asaas_payment_id, forma_pagamento, endereco_entrega")
+    .select("id, codigo, status, asaas_payment_id, asaas_payment_id_2, pagamentos_online_confirmados, forma_pagamento, endereco_entrega")
     .eq("id", pedido_id)
     .eq("loja_id", loja_id)
     .single()
@@ -258,19 +258,9 @@ export async function POST(req: NextRequest) {
 
     // Estorno automático ao cancelar pedidos pagos via PIX ou cartão — nunca pode
     // rodar duas vezes (dobraria o estorno de dinheiro real).
-    if (status === "cancelado" && pedidoAtual.asaas_payment_id) {
-      const pid = pedidoAtual.asaas_payment_id
-      const statusAntesDoCancelamento = pedidoAtual.status
-      try {
-        // Se ainda não confirmado → cancela. Se já pago → estorna.
-        if (statusAntesDoCancelamento === "aguardando_pagamento") {
-          await cancelarPagamento(pid)
-        } else {
-          await estornarPagamento(pid)
-        }
-      } catch (e) {
-        console.error("[estorno] falha:", e)
-      }
+    // Se ainda não confirmado → cancela. Se já pago → estorna (as duas cobranças no pix + cartão).
+    if (status === "cancelado" && (pedidoAtual.asaas_payment_id || pedidoAtual.asaas_payment_id_2)) {
+      await desfazerCobrancas(pedidoAtual, pedidoAtual.status)
     }
   }
 

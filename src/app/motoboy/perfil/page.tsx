@@ -3,9 +3,15 @@
 import { useEffect, useRef, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
+import { useRouter } from "next/navigation"
+import Link from "next/link"
 
 export default function MotoboyPerfilPage() {
-  const { sessao } = useAuth()
+  const { sessao, logout } = useAuth()
+  const router = useRouter()
+  const [nota, setNota] = useState<{ media: number | null; total: number }>({ media: null, total: 0 })
+  const [entregas, setEntregas] = useState(0)
+  const [dadosAbertos, setDadosAbertos] = useState(false)
   const motoboy_id = sessao?.role === "motoboy" ? sessao.motoboy_id : null
 
   const [loading,   setLoading]   = useState(true)
@@ -40,6 +46,11 @@ export default function MotoboyPerfilPage() {
         }
         setLoading(false)
       })
+    // Nota e total de entregas (mesmas consultas do menu antigo do topo)
+    supabase.from("motoboys").select("nota_media, total_avaliacoes").eq("id", motoboy_id).single()
+      .then(({ data }) => { if (data) setNota({ media: (data as any).nota_media ?? null, total: (data as any).total_avaliacoes ?? 0 }) })
+    supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("motoboy_id", motoboy_id).eq("status", "entregue")
+      .then(({ count }) => setEntregas(count ?? 0))
   }, [motoboy_id])
 
   // Pedido explícito do usuário, 2026-09-17: "não salva nada, nem a foto" — o problema
@@ -76,99 +87,56 @@ export default function MotoboyPerfilPage() {
     setTimeout(() => setSucesso(false), 2500)
   }
 
-  const inp: React.CSSProperties = {
-    width: "100%", padding: "12px 14px", borderRadius: 12, fontSize: 14,
-    background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-    color: "white", outline: "none", boxSizing: "border-box",
-  }
+  if (loading) return <div style={{ padding: 32 }}><p className="mut">Carregando…</p></div>
 
-  if (loading) return (
-    <div style={{ padding: 24, display: "flex", justifyContent: "center" }}>
-      <p style={{ color: "rgba(255,255,255,0.3)" }}>Carregando...</p>
-    </div>
-  )
+  const iniciais = form.nome.trim().split(/\s+/).map(x => x[0]).slice(0, 2).join("").toUpperCase()
 
   return (
-    <div style={{ maxWidth: 480, margin: "0 auto", padding: "24px 20px 100px" }}>
-      <p style={{ color: "white", fontWeight: 900, fontSize: 20, marginBottom: 4 }}>Meu perfil</p>
-      <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13, marginBottom: 28 }}>Seus dados e configurações</p>
-
-      {/* Foto */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 32 }}>
-        <div
-          onClick={() => inputRef.current?.click()}
-          style={{
-            width: 96, height: 96, borderRadius: "50%", cursor: "pointer",
-            background: "rgba(249,115,22,0.12)", border: "2px dashed rgba(249,115,22,0.4)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            overflow: "hidden", position: "relative",
-          }}
-        >
-          {foto ? (
-            <img src={foto} alt="Foto" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-          ) : (
-            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(249,115,22,0.5)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-              <circle cx="12" cy="13" r="4"/>
-            </svg>
-          )}
-        </div>
-        <input ref={inputRef} type="file" accept="image/*" capture="user" onChange={handleFoto} style={{ display: "none" }} />
-        <button onClick={() => inputRef.current?.click()} style={{
-          marginTop: 10, background: "none", border: "none", color: "#f97316",
-          fontSize: 13, fontWeight: 700, cursor: "pointer",
-        }}>
-          {uploading ? "Enviando..." : "Trocar foto"}
+    <div className="mb-pagina">
+      <div className="mb-cartao" style={{ display: "flex", gap: 14, alignItems: "center", boxShadow: "var(--sombra)", border: 0 }}>
+        <button onClick={() => inputRef.current?.click()} aria-label="Trocar foto" style={{ position: "relative", width: 68, height: 68, borderRadius: "50%", border: 0, padding: 0, background: "var(--pimenta)", color: "#fff", fontFamily: "var(--display)", fontWeight: 800, fontSize: 24, overflow: "hidden", flex: "none" }}>
+          {foto ? <img src={foto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : iniciais || "?"}
+          <span style={{ position: "absolute", right: 0, bottom: 0, width: 24, height: 24, borderRadius: "50%", background: "#fff", color: "var(--grafite)", display: "grid", placeItems: "center", fontSize: 12, boxShadow: "var(--sombra)" }}>📷</span>
         </button>
+        <input ref={inputRef} type="file" accept="image/*" capture="user" onChange={handleFoto} style={{ display: "none" }} />
+        <span style={{ minWidth: 0 }}>
+          <b className="t20" style={{ display: "block" }}>{form.nome || "Entregador"}</b>
+          <span className="mut" style={{ fontSize: 13.5 }}>{uploading ? "Enviando foto…" : `${entregas} ${entregas === 1 ? "entrega" : "entregas"}`}</span>
+          <b style={{ display: "block", color: "var(--pimenta)", fontSize: 14 }}>★ {nota.media != null ? nota.media.toFixed(1).replace(".", ",") : "sem nota"}{nota.total ? `, ${nota.total} avaliações` : ""}</b>
+        </span>
       </div>
 
-      {/* Campos */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        {[
-          { key: "nome",      label: "Nome completo",  placeholder: "Seu nome" },
-          { key: "email",     label: "E-mail",         placeholder: "email@exemplo.com", disabled: true },
-          { key: "telefone",  label: "Telefone",       placeholder: "(62) 9 0000-0000" },
-          { key: "cpf",       label: "CPF",            placeholder: "000.000.000-00",   disabled: true },
-          { key: "pix_key", label: "Chave PIX",      placeholder: "CPF, e-mail ou telefone" },
-        ].map(({ key, label, placeholder, disabled }) => (
-          <div key={key}>
-            <label style={{ display: "block", color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
-              {label}
-            </label>
-            <input
-              value={(form as any)[key]}
-              onChange={e => !disabled && setForm(f => ({ ...f, [key]: e.target.value }))}
-              placeholder={placeholder}
-              disabled={disabled}
-              style={{ ...inp, opacity: disabled ? 0.45 : 1, cursor: disabled ? "not-allowed" : "text" }}
-            />
+      <div className="mb-menu">
+        <button className="seta" onClick={() => setDadosAbertos(a => !a)} aria-expanded={dadosAbertos}><span className="ic">👤</span><span><b>Meus dados</b><small>Nome, telefone e foto</small></span></button>
+        {dadosAbertos && (
+          <div style={{ padding: "6px 16px 16px", display: "flex", flexDirection: "column", gap: 12, borderBottom: "1px solid var(--linha)" }}>
+            {[
+              { key: "nome",     label: "Nome completo", placeholder: "Seu nome" },
+              { key: "email",    label: "E-mail",        placeholder: "email@exemplo.com", disabled: true },
+              { key: "telefone", label: "Telefone",      placeholder: "(62) 9 0000-0000" },
+              { key: "cpf",      label: "CPF",           placeholder: "000.000.000-00",   disabled: true },
+            ].map(({ key, label, placeholder, disabled }) => (
+              <label key={key} className="mb-campo"><span>{label}</span>
+                <input value={(form as any)[key]} onChange={e => !disabled && setForm(f => ({ ...f, [key]: e.target.value }))} placeholder={placeholder} disabled={disabled} style={{ opacity: disabled ? .55 : 1 }} />
+              </label>
+            ))}
+            <p className="mut" style={{ fontSize: 12.5 }}>A chave Pix fica na tela de Ganhos.</p>
+            <button className="mb-btn verm peq" onClick={salvar} disabled={salvando}>{salvando ? "Salvando…" : "Salvar alterações"}</button>
+            {erro && <p style={{ color: "var(--pimenta)", fontSize: 13.5, fontWeight: 700 }}>{erro}</p>}
           </div>
-        ))}
+        )}
+        <Link href="/motoboy/financeiro"><span className="ic">💸</span><span><b>Ganhos e chave Pix</b><small>Saldo, saque e dados do banco</small></span></Link>
+        <Link href="/motoboy/dashboard"><span className="ic">📊</span><span><b>Painel</b><small>Seus números da semana</small></span></Link>
+        <Link href="/motoboy/pedidos"><span className="ic">🧾</span><span><b>Pedidos</b><small>Em preparo nas lojas</small></span></Link>
+        <Link href="/motoboy/caixa"><span className="ic">💵</span><span><b>Dinheiro em mãos</b><small>Declarar o caixa do dia</small></span></Link>
       </div>
 
-      <button onClick={salvar} disabled={salvando} style={{
-        width: "100%", marginTop: 28, padding: "16px",
-        borderRadius: 14, border: "none",
-        background: salvando ? "rgba(249,115,22,0.4)" : "#f97316",
-        color: "white", fontWeight: 900, fontSize: 15, cursor: salvando ? "not-allowed" : "pointer",
-      }}>
-        {salvando ? "Salvando..." : "Salvar alterações"}
-      </button>
+      <div className="mb-menu">
+        <a href={`https://wa.me/5562985845621?text=${encodeURIComponent("Olá! Sou entregador do Chegô e preciso de ajuda.")}`} target="_blank" rel="noreferrer"><span className="ic">💬</span><span><b>Falar com o suporte</b><small>Pelo WhatsApp</small></span></a>
+        <button onClick={() => { logout(); router.push("/entrar/motoboy") }}><span className="ic">↪</span><span><b style={{ color: "var(--pimenta)" }}>Sair da conta</b></span></button>
+      </div>
 
-      {erro && (
-        <p style={{ color: "#f87171", fontSize: 13, fontWeight: 600, marginTop: 12, textAlign: "center" }}>{erro}</p>
-      )}
-
-      {sucesso && (
-        <div style={{
-          position: "fixed", bottom: 90, left: 16, right: 16,
-          background: "#22c55e", color: "white", fontWeight: 700, fontSize: 13,
-          padding: "12px 20px", borderRadius: 14, boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
-          textAlign: "center",
-        }}>
-          Perfil atualizado com sucesso
-        </div>
-      )}
+      {sucesso && <div className="mb-toast" style={{ position: "fixed", bottom: "calc(var(--nav-h) + 16px)", background: "var(--folha)", textAlign: "center" }}>Dados salvos</div>}
     </div>
   )
 }

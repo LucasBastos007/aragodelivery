@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic"
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { enviarTexto, zapiOk } from "@/lib/whatsSuporte"
 
 // Monitoramento de saúde do banco — criado depois do incidente de 2026-09-17 (Nano
 // Compute ficou sem memória e o banco parou de responder consultas reais por ~1h30,
@@ -15,6 +16,14 @@ const TABELAS = ["motoboys", "pedidos", "lojas"]
 const TIMEOUT_MS = 5000
 const LIMIAR_LENTO_MS = 3000
 const THROTTLE_ALERTA_MIN = 30
+// Alarme no celular (pedido do Lucas depois do travamento de 31/10/2026): além do e-mail,
+// manda WhatsApp pelo Z-API. Roda a cada 2 min (vercel.json).
+const WHATS_ALERTA = "5562991032686"
+
+async function avisarWhats(msg: string) {
+  if (!zapiOk()) return
+  await enviarTexto(WHATS_ALERTA, msg).catch(e => console.error("[MONITOR] whats falhou", e))
+}
 
 function adminSb() {
   return createClient(
@@ -64,13 +73,23 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 })
   }
 
+  // ?teste=1 (com a mesma senha do cron): só manda uma mensagem de teste do alarme
+  if (new URL(req.url).searchParams.get("teste") === "1") {
+    if (!zapiOk()) return NextResponse.json({ ok: false, erro: "Z-API não configurada" })
+    const hora = new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })
+    try {
+      await enviarTexto(WHATS_ALERTA, `🔴 Chegô (TESTE do alarme, ${hora}): o banco NÃO está respondendo. Cliente, loja e admin podem estar travados.\n\nIsto é só um teste, está tudo funcionando.`)
+      return NextResponse.json({ ok: true, enviado: true })
+    } catch (e: any) { return NextResponse.json({ ok: false, erro: e.message }) }
+  }
+
   const sb = adminSb()
   const resultados = await Promise.all(TABELAS.map(testarTabela))
   const falhas = resultados.filter(r => !r.ok)
   const lentas = resultados.filter(r => r.ok && r.tempoMs > LIMIAR_LENTO_MS)
   const statusAtual: "down" | "lento" | "saudavel" = falhas.length > 0 ? "down" : lentas.length > 0 ? "lento" : "saudavel"
 
-  const { data: ultimoEvento } = await sb
+  const { data: ultimoEvento, error: erroEstado } = await sb
     .from("webhook_events")
     .select("payload, created_at")
     .eq("provider", "monitoramento_saude")
@@ -88,8 +107,15 @@ export async function GET(req: Request) {
   let acao = "nenhuma"
 
   if (statusAtual !== "saudavel") {
-    const podeAlertar = statusAnterior === "saudavel" || minutosDesdeUltimoAlerta >= THROTTLE_ALERTA_MIN
+    // Com o banco fora, nem o registro do último alerta dá pra ler: aí avisa no máximo
+    // a cada ~10 min (minutos 0–1 de cada dezena) em vez de a cada execução.
+    const podeAlertar = erroEstado
+      ? new Date().getUTCMinutes() % 10 < 2
+      : statusAnterior === "saudavel" || minutosDesdeUltimoAlerta >= THROTTLE_ALERTA_MIN
     if (podeAlertar) {
+      await avisarWhats(statusAtual === "down"
+        ? `🔴 Chegô: o banco NÃO está respondendo (${new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })}). Cliente, loja e admin podem estar travados.`
+        : `🟡 Chegô: o banco está lento (${resultados.map(r => `${r.tabela} ${r.tempoMs}ms`).join(", ")}). Pode travar se piorar.`)
       await enviarAlerta(
         statusAtual === "down" ? "🔴 Banco fora do ar — Arago Delivery" : "🟡 Banco lento — Arago Delivery",
         `<h2>${statusAtual === "down" ? "Banco de dados não está respondendo" : "Banco de dados respondendo devagar"}</h2>
@@ -107,6 +133,7 @@ export async function GET(req: Request) {
       acao = "já alertado recentemente, sem novo e-mail"
     }
   } else if (statusAnterior !== "saudavel") {
+    await avisarWhats(`🟢 Chegô: o banco voltou ao normal (${new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })}).`)
     await enviarAlerta(
       "🟢 Banco normalizado — Arago Delivery",
       `<h2>Banco de dados voltou ao normal</h2>

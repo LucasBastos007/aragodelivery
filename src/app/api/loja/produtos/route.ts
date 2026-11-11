@@ -107,3 +107,30 @@ export async function PATCH(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
+
+// PUT — "Mais pedidos" escolhidos pela loja (20/10/2026): recebe até 6 ids na ordem em que
+// aparecem no app. O marcador continua sendo ncm = "destaque" (o mesmo que o app do cliente e a
+// NFC-e já entendem) e a posição vai em `ordem`. Produto com NCM fiscal de verdade ou marcado
+// como "almoco" nunca é tocado.
+export async function PUT(req: NextRequest) {
+  const sess = requireLoja(req)
+  if (!sess) return unauthorized()
+  const { ids } = await req.json().catch(() => ({}))
+  if (!Array.isArray(ids) || ids.length > 6 || ids.some(x => typeof x !== "string")) return NextResponse.json({ error: "Escolha até 6 produtos." }, { status: 400 })
+  const sb = adminClient()
+  const { data: prods } = await sb.from("produtos").select("id, ncm").eq("loja_id", sess.loja_id)
+  const livre = (ncm: string | null) => !ncm || ncm === "destaque"
+  const meus = new Map((prods ?? []).map((p: any) => [p.id, p.ncm as string | null]))
+  for (const id of ids) {
+    if (!meus.has(id)) return NextResponse.json({ error: "Produto não é desta loja." }, { status: 400 })
+    if (!livre(meus.get(id)!)) return NextResponse.json({ error: "Esse produto tem código fiscal (NCM) e não pode virar destaque por aqui. Fale com o suporte." }, { status: 422 })
+  }
+  // Tira dos destaques quem saiu da lista
+  const sair = (prods ?? []).filter((p: any) => p.ncm === "destaque" && !ids.includes(p.id)).map((p: any) => p.id)
+  if (sair.length) { const { error } = await sb.from("produtos").update({ ncm: null }).in("id", sair).eq("loja_id", sess.loja_id); if (error) return NextResponse.json({ error: error.message }, { status: 500 }) }
+  for (const [i, id] of ids.entries()) {
+    const { error } = await sb.from("produtos").update({ ncm: "destaque", ordem: i }).eq("id", id).eq("loja_id", sess.loja_id)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+  return NextResponse.json({ ok: true })
+}

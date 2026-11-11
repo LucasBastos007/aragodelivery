@@ -1,161 +1,34 @@
 "use client"
 
 import Link from "next/link"
-import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { useAuth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
+import { liberarSom, onSomLiberado, somLiberado, tocaSomPedido } from "@/lib/somPedido"
+import { Ico } from "./_icones"
+import "./loja-novo.css"
+import "./loja-app.css"
 
-const NAV: { href: string; icon: React.ReactNode; label: string }[] = [
-  { href: "/loja/dashboard", label: "Início", icon: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 11.5 12 4l9 7.5" />
-      <path d="M5.5 10v9a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-9" />
-      <path d="M9.5 20v-6h5v6" />
-    </svg>
-  )},
-  { href: "/loja", label: "Pedidos", icon: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      {/* Clipboard board */}
-      <rect x="6" y="4" width="12" height="17" rx="2"/>
-      {/* Paper clamp at top */}
-      <rect x="9" y="2" width="6" height="4" rx="1.5"/>
-      {/* Text rows - varying widths for realism */}
-      <line x1="9" y1="11" x2="15" y2="11"/>
-      <line x1="9" y1="14" x2="14" y2="14"/>
-      <line x1="9" y1="17" x2="12" y2="17"/>
-    </svg>
-  )},
-  { href: "/loja/historico", label: "Histórico", icon: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      {/* Outer ring */}
-      <circle cx="12" cy="12" r="10"/>
-      {/* Inner face circle */}
-      <circle cx="12" cy="12" r="7" strokeWidth="1" strokeOpacity="0.3"/>
-      {/* Hour hand pointing ~10 */}
-      <line x1="12" y1="12" x2="8.5" y2="8.5" strokeWidth="2.5"/>
-      {/* Minute hand pointing ~12 */}
-      <line x1="12" y1="12" x2="12" y2="6" strokeWidth="2"/>
-      {/* Center pivot */}
-      <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>
-      {/* Hour marks at 12/3/6/9 */}
-      <line x1="12" y1="3" x2="12" y2="4.5" strokeWidth="1.5"/>
-      <line x1="21" y1="12" x2="19.5" y2="12" strokeWidth="1.5"/>
-      <line x1="12" y1="21" x2="12" y2="19.5" strokeWidth="1.5"/>
-      <line x1="3" y1="12" x2="4.5" y2="12" strokeWidth="1.5"/>
-    </svg>
-  )},
-  { href: "/loja/cardapio", label: "Cardápio", icon: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      {/* Fork on left: 4 tines + handle */}
-      <line x1="6" y1="2" x2="6" y2="22"/>
-      <line x1="4" y1="2" x2="4" y2="7"/>
-      <line x1="6" y1="2" x2="6" y2="7"/>
-      <line x1="8" y1="2" x2="8" y2="7"/>
-      <path d="M4 7 Q6 10 6 12"/>
-      <path d="M8 7 Q6 10 6 12"/>
-      {/* Spoon on right: round bowl + handle */}
-      <ellipse cx="18" cy="5" rx="2.5" ry="3"/>
-      <line x1="18" y1="8" x2="18" y2="22"/>
-    </svg>
-  )},
-  { href: "/loja/cupons", label: "Cupons", icon: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      {/* Tag outline */}
-      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V3h9l9.59 9.59a2 2 0 0 1 0 2.82z"/>
-      {/* Hole at top-left */}
-      <circle cx="7" cy="8" r="1.5"/>
-      {/* Inner dashed border suggestion via short lines */}
-      <line x1="10" y1="14" x2="10.01" y2="14" strokeWidth="3"/>
-      {/* Percent symbol */}
-      <line x1="14" y1="10" x2="11" y2="14" strokeWidth="1.5"/>
-      <circle cx="13.5" cy="9.5" r="1" strokeWidth="1.5"/>
-      <circle cx="11.5" cy="14.5" r="1" strokeWidth="1.5"/>
-    </svg>
-  )},
-  { href: "/loja/financeiro", label: "Financeiro", icon: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      {/* Banknote rectangle */}
-      <rect x="2" y="6" width="20" height="12" rx="2"/>
-      {/* Left decorative oval */}
-      <ellipse cx="5" cy="12" rx="2" ry="3" strokeWidth="1.2" strokeOpacity="0.5"/>
-      {/* Right decorative oval */}
-      <ellipse cx="19" cy="12" rx="2" ry="3" strokeWidth="1.2" strokeOpacity="0.5"/>
-      {/* Dollar sign: vertical bar */}
-      <line x1="12" y1="8.5" x2="12" y2="15.5" strokeWidth="1.8"/>
-      {/* Dollar sign: S curves */}
-      <path d="M14.5 9.5 Q14.5 8 12 8 Q9.5 8 9.5 10 Q9.5 12 12 12 Q14.5 12 14.5 14 Q14.5 16 12 16 Q9.5 16 9.5 14.5" strokeWidth="1.8"/>
-    </svg>
-  )},
-  { href: "/loja/entrega-avulsa", label: "Motoboys", icon: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="8" r="3"/>
-      <path d="M6 20v-2a6 6 0 0 1 12 0v2"/>
-      <path d="M3 17l3-5"/>
-      <path d="M21 17l-3-5"/>
-      <circle cx="3" cy="17" r="1.5" fill="currentColor" stroke="none"/>
-      <circle cx="21" cy="17" r="1.5" fill="currentColor" stroke="none"/>
-    </svg>
-  )},
-  { href: "/loja/fiscal", label: "Fiscal", icon: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-      <polyline points="14 2 14 8 20 8"/>
-      <line x1="8" y1="13" x2="16" y2="13"/>
-      <line x1="8" y1="17" x2="13" y2="17"/>
-    </svg>
-  )},
-  { href: "/loja/relatorio", label: "Relatórios", icon: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      {/* Calendar/report page */}
-      <rect x="3" y="4" width="18" height="18" rx="2"/>
-      <line x1="3" y1="10" x2="21" y2="10"/>
-      <line x1="8" y1="2" x2="8" y2="6"/>
-      <line x1="16" y1="2" x2="16" y2="6"/>
-      {/* Small bar chart inside */}
-      <rect x="7" y="13" width="2.5" height="5" rx="0.5"/>
-      <rect x="10.75" y="14.5" width="2.5" height="3.5" rx="0.5"/>
-      <rect x="14.5" y="12" width="2.5" height="6" rx="0.5"/>
-    </svg>
-  )},
-  { href: "/loja/avaliacoes", label: "Avaliações", icon: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-    </svg>
-  )},
-  { href: "/loja/perfil", label: "Minha loja", icon: (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      {/* Roof triangle */}
-      <polyline points="2 10 12 2 22 10"/>
-      {/* Walls */}
-      <rect x="4" y="10" width="16" height="12" rx="1"/>
-      {/* Door with arch */}
-      <path d="M9 22 L9 16 Q9 14 12 14 Q15 14 15 16 L15 22"/>
-      {/* Left window */}
-      <rect x="5.5" y="12" width="3" height="3" rx="0.5"/>
-      {/* Right window */}
-      <rect x="15.5" y="12" width="3" height="3" rx="0.5"/>
-      {/* Chimney */}
-      <rect x="16" y="3.5" width="2.5" height="4" rx="0.5"/>
-    </svg>
-  )},
+// Menu do painel no layout novo (proposta aprovada, 20/10/2026). Reembolsos saíram (quem decide
+// é o admin) e o Suporte virou o botão do mascote no canto da tela.
+type ItemMenu = { href: string; ic: string; label: string; frase: string; cor: string }
+const MENU: ItemMenu[] = [
+  { href: "/loja", ic: "pedidos", label: "Pedidos", frase: "Aceite, prepare e acompanhe até a porta do cliente.", cor: "#D7261E" },
+  { href: "/loja/entrega-avulsa", ic: "mais", label: "Lançar pedido", frase: "Pedido do WhatsApp ou telefone, ou só chamar motoboy.", cor: "#6B3FC4" },
+  { href: "/loja/cardapio", ic: "cardapio", label: "Cardápio", frase: "O que o cliente vê no app: produtos, fotos, preços e opções.", cor: "#E8730C" },
+  { href: "/loja/dashboard", ic: "grafico", label: "Desempenho", frase: "Como a loja está vendendo e onde dá pra melhorar.", cor: "#1F5FBF" },
+  { href: "/loja/financeiro", ic: "dinheiro", label: "Financeiro", frase: "Seu dinheiro: repasse toda sexta, na sua chave Pix.", cor: "#1E8A4C" },
+  { href: "/loja/avaliacoes", ic: "estrela", label: "Avaliações", frase: "O que os clientes acharam. Responder aumenta a confiança.", cor: "#E8A400" },
+  { href: "/loja/cupons", ic: "cupom", label: "Cupons", frase: "Descontos que a loja banca pra atrair pedido.", cor: "#C2185B" },
+  { href: "/loja/historico", ic: "hist", label: "Histórico", frase: "Todos os pedidos que já passaram pela loja.", cor: "#5D5A53" },
+  { href: "/loja/perfil", ic: "loja", label: "Loja e horários", frase: "Quando abre, como recebe pedido e os dados da loja.", cor: "#22201C" },
 ]
-
-// Sidebar desktop agrupada (spec "Evolução Completa V1" seções 3/6/7/8/9) — referencia
-// os itens de NAV por href em vez de duplicar os SVGs, pra nunca dessincronizar ícone
-// de um item entre o grupo e a lista flat usada pela bottom nav/isActive.
-const GRUPOS_SIDEBAR: { titulo: string; hrefs: string[] }[] = [
-  { titulo: "Operação", hrefs: ["/loja/dashboard", "/loja", "/loja/cardapio"] },
-  { titulo: "Gestão", hrefs: ["/loja/financeiro", "/loja/relatorio", "/loja/historico", "/loja/cupons", "/loja/avaliacoes"] },
-  { titulo: "Operação e configurações", hrefs: ["/loja/entrega-avulsa", "/loja/fiscal", "/loja/perfil"] },
+// Telas que existem mas não estão no menu principal da proposta: ficam no fim do menu
+const EXTRAS: ItemMenu[] = [
+  { href: "/loja/fiscal", ic: "pedidos", label: "Nota fiscal", frase: "Dados fiscais e emissão de NFC-e.", cor: "#5D5A53" },
 ]
-
-// Itens da bottom nav mobile — usado tanto pra montar a bottom nav quanto pra filtrar o
-// que aparece dentro de "Mais" (não faz sentido listar de novo o que já tem ícone fixo
-// embaixo).
-const BOTTOM_NAV_HREFS = ["/loja/dashboard", "/loja", "/loja/cardapio", "/loja/financeiro"]
-const ITENS_RESTANTES = NAV.filter(n => !BOTTOM_NAV_HREFS.includes(n.href))
+const NAV_CEL = ["/loja", "/loja/cardapio", "/loja/dashboard", "/loja/financeiro"]
 
 const WHATSAPP_SUPORTE = "https://wa.me/5562993910717"
 
@@ -166,6 +39,26 @@ export default function LojaLayoutClient({ children }: { children: React.ReactNo
   const [menuOpen, setMenuOpen] = useState(false)
   const [lojaStatus, setLojaStatus] = useState<string | null>(null)
   const [pedidosPendentes, setPedidosPendentes] = useState(0)
+  const [loja, setLoja] = useState<{ nome: string; logo_url: string | null; aberto: boolean; tempo_min: number; tempo_max: number } | null>(null)
+  const [mudandoLoja, setMudandoLoja] = useState(false)
+
+  // Barra de cima: aberta/fechada e tempo de preparo (o tempo que o cliente vê no app)
+  useEffect(() => {
+    if (sessao?.role !== "lojista") return
+    const id = sessao.loja_id
+    const ler = () => supabase.from("lojas").select("nome, logo_url, aberto, tempo_min, tempo_max").eq("id", id).single()
+      .then(({ data }) => { if (data) setLoja({ ...(data as any), tempo_min: Number((data as any).tempo_min) || 30, tempo_max: Number((data as any).tempo_max) || 50 }) })
+    ler()
+    const iv = setInterval(ler, 30_000)
+    return () => clearInterval(iv)
+  }, [sessao])
+  async function salvarLoja(campos: Record<string, unknown>) {
+    setMudandoLoja(true)
+    const r = await fetch("/api/loja/atualizar", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(campos) }).catch(() => null)
+    if (r?.ok) setLoja(l => l ? { ...l, ...(campos as any) } : l)
+    setMudandoLoja(false)
+  }
+  const mudarTempo = (d: number) => { if (!loja) return; const min = Math.max(10, loja.tempo_min + d), max = Math.max(min + 5, loja.tempo_max + d); salvarLoja({ tempo_min: min, tempo_max: max }) }
 
   // Badge de "Pedidos" na bottom nav mobile (spec do redesign do Dashboard, seção 17) —
   // só conta novos pedidos (status pendente), que é o que realmente exige atenção
@@ -180,9 +73,62 @@ export default function LojaLayoutClient({ children }: { children: React.ReactNo
       setPedidosPendentes(count ?? 0)
     }
     contarPendentes()
-    const iv = setInterval(contarPendentes, 20_000)
-    return () => clearInterval(iv)
+    let rtTimer: ReturnType<typeof setTimeout> | null = null
+    const iv = setInterval(contarPendentes, 10_000)
+    // Realtime: atualiza a contagem na hora em qualquer tela de /loja (não só em Pedidos)
+    const ch = supabase.channel(`loja-alarme-${loja_id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "pedidos", filter: `loja_id=eq.${loja_id}` },
+        () => { // junta rajadas de mudanças numa recontagem só (incidente 31/10/2026)
+          if (rtTimer) clearTimeout(rtTimer)
+          rtTimer = setTimeout(() => { rtTimer = null; contarPendentes() }, 1000)
+        })
+      .subscribe()
+    // Volta pra aba depois de um tempo: o navegador pode ter pausado timers/conexão
+    const onVis = () => { if (document.visibilityState === "visible") contarPendentes() }
+    document.addEventListener("visibilitychange", onVis)
+    // Push do SW (app em segundo plano) → reconta na hora
+    const onMsg = (ev: MessageEvent) => {
+      if (ev.data?.type === "push-received" && String(ev.data?.tag ?? "").startsWith("pedido-loja-")) {
+        contarPendentes(); tocaSomPedido()
+      }
+    }
+    navigator.serviceWorker?.addEventListener("message", onMsg)
+    return () => {
+      clearInterval(iv); supabase.removeChannel(ch)
+      document.removeEventListener("visibilitychange", onVis)
+      navigator.serviceWorker?.removeEventListener("message", onMsg)
+    }
   }, [sessao])
+
+  // Alarme: enquanto houver pedido novo aguardando aceite, toca a cada 7s em
+  // QUALQUER tela do painel. Antes só tocava com a tela "Pedidos" aberta —
+  // loja parada no Dashboard/Cardápio não ouvia nada.
+  useEffect(() => {
+    if (pedidosPendentes === 0) return
+    tocaSomPedido()
+    const id = setInterval(() => tocaSomPedido(), 7_000)
+    return () => clearInterval(id)
+  }, [pedidosPendentes])
+
+  // Liberação do áudio: o navegador bloqueia som até um clique/tecla. Antes só
+  // tentava no 1º clique e desistia; página reaberta/recarregada sem clique
+  // ficava muda sem nenhum aviso. Agora tenta ao abrir, em todo clique/tecla
+  // até conseguir, e mostra o aviso enquanto estiver bloqueado.
+  const [somOk, setSomOk] = useState(true)
+  useEffect(() => {
+    if (sessao?.role !== "lojista") return
+    setSomOk(somLiberado())
+    const off = onSomLiberado(setSomOk)
+    liberarSom().then(ok => setSomOk(ok))
+    const tentar = () => { liberarSom() }
+    window.addEventListener("pointerdown", tentar)
+    window.addEventListener("keydown", tentar)
+    return () => {
+      off()
+      window.removeEventListener("pointerdown", tentar)
+      window.removeEventListener("keydown", tentar)
+    }
+  }, [sessao?.role])
 
   useEffect(() => {
     if (!authLoading && (!sessao || sessao.role !== "lojista")) {
@@ -245,27 +191,9 @@ export default function LojaLayoutClient({ children }: { children: React.ReactNo
     }
   }, [sessao?.role, (sessao as any)?.loja_id])
 
-  // Toca beep quando SW encaminha push de novo pedido (app em segundo plano)
-  useEffect(() => {
-    if (!("serviceWorker" in navigator)) return
-    const handler = (ev: MessageEvent) => {
-      if (ev.data?.type === "push-received" && String(ev.data?.tag ?? "").startsWith("pedido-loja-")) {
-        try {
-          const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
-          const play = (freq: number, t: number, d: number) => {
-            const o = ctx.createOscillator(); const g = ctx.createGain()
-            o.connect(g); g.connect(ctx.destination); o.frequency.value = freq
-            g.gain.setValueAtTime(0.4, ctx.currentTime + t)
-            g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + d)
-            o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + d)
-          }
-          play(880, 0, 0.15); play(1100, 0.18, 0.15); play(880, 0.36, 0.2)
-        } catch {}
-      }
-    }
-    navigator.serviceWorker.addEventListener("message", handler)
-    return () => navigator.serviceWorker.removeEventListener("message", handler)
-  }, [])
+  // Tela de login SEMPRE sem a casca do painel (barra de abrir/fechar e menu de baixo), mesmo
+  // com sessão antiga guardada no celular (print do Lucas, 21/10/2026: login aparecia dentro do painel)
+  if (path === "/loja/entrar") return <>{children}</>
 
   if (authLoading) {
     return (
@@ -327,206 +255,80 @@ export default function LojaLayoutClient({ children }: { children: React.ReactNo
   }
 
   const isActive = (href: string) => href === "/loja" ? path === "/loja" : path.startsWith(href)
+  const atual = [...MENU, ...EXTRAS].find(m => isActive(m.href)) ?? MENU[0]
+  const ehPedidos = path === "/loja"
+  const itemMenu = (m: ItemMenu, fechar?: boolean) => (
+    <Link key={m.href} href={m.href} aria-current={isActive(m.href)} onClick={() => fechar && setMenuOpen(false)}>
+      <Ico n={m.ic} />{m.label}{m.href === "/loja" && pedidosPendentes > 0 && <span className="badge num">{pedidosPendentes}</span>}
+    </Link>
+  )
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", background: "#f8fafc" }}>
-
-      {/* ── Sidebar desktop (≥768px) ── */}
-      <aside style={{
-        width: 210, background: "#ffffff", borderRight: "1px solid #e5e7eb",
-        flexShrink: 0, display: "flex", flexDirection: "column",
-        position: "sticky", top: 0, height: "100vh",
-      }} className="hidden-mobile">
-        <div style={{ padding: "16px 20px 14px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 10 }}>
-          <Image src="/logo-chego.png" alt="Chegô" width={32} height={32} style={{ borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
-          <div style={{ minWidth: 0 }}>
-            <p style={{ color: "#f97316", fontWeight: 900, fontSize: 14 }}>Chegô</p>
-            <p style={{ color: "#9CA3AF", fontSize: 11, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 1 }}>
-              {sessao.loja_nome}
-            </p>
-          </div>
+    <div className="lj">
+      <div className="app">
+        <aside className="lateral">
+          <div className="lat-marca"><img src="/logo-chego.png" alt="" /><span><b>Chegô</b><small>Gestor da loja</small></span></div>
+          <div className="lat-loja">{loja?.logo_url ? <img src={loja.logo_url} alt="" /> : <span style={{ width: 36, height: 36, borderRadius: 10, background: "#fff", flexShrink: 0 }} />}
+            <span><b>{loja?.nome ?? sessao.loja_nome}</b><small>{loja ? (loja.aberto ? "Aberta, recebendo pedidos" : "Fechada") : ""}</small></span></div>
+          <nav className="lat-nav">{MENU.map(m => itemMenu(m))}<div className="lat-sep" />{EXTRAS.map(m => itemMenu(m))}</nav>
+          <div className="lat-pe"><button className="lin" style={{ color: "rgba(255,255,255,.7)", fontWeight: 700 }} onClick={handleLogout}><Ico n="sair" /> Sair</button></div>
+        </aside>
+        <div className="principal">
+          {!somOk && (
+            <button className="som-aviso" onClick={() => { liberarSom().then(ok => { if (ok) tocaSomPedido() }) }}>
+              <Ico n="som" /> Toque aqui pra ligar o som dos pedidos
+            </button>
+          )}
+          <header className="barra">
+            <span className="tit">{ehPedidos ? "Pedidos" : ""}</span>
+            {loja && (
+              <button className={`loja-st ${loja.aberto ? "aberta" : "fechada"}`} disabled={mudandoLoja} onClick={() => salvarLoja({ aberto: !loja.aberto })}>
+                {loja.aberto ? "Aberta, recebendo pedidos" : "Fechada"}<span className="sw" role="switch" aria-checked={loja.aberto} />
+              </button>
+            )}
+            {loja && (
+              <span className="preparo" title="Tempo de entrega que o cliente vê no app">
+                <button onClick={() => mudarTempo(-5)} disabled={mudandoLoja} aria-label="Diminuir tempo">−</button>
+                <b className="num">{loja.tempo_min}-{loja.tempo_max} min</b>
+                <button onClick={() => mudarTempo(5)} disabled={mudandoLoja} aria-label="Aumentar tempo">+</button>
+              </span>
+            )}
+            <button className={`ic-bt ${somOk ? "" : "off"}`} aria-label="Testar o som de pedido novo" title="Testar o som" onClick={() => { liberarSom().then(() => tocaSomPedido()) }}><Ico n="som" /></button>
+            <Link className="ic-bt" href="/loja?impressora=1" aria-label="Impressora" title="Impressora"><Ico n="impressora" /></Link>
+          </header>
+          <main className="conteudo" style={{ ["--acento" as any]: atual.cor }}>
+            {!ehPedidos && (
+              <div className="sec-cab" style={{ ["--acento" as any]: atual.cor }}>
+                <span className="sec-ic"><Ico n={atual.ic} /></span><span><b>{atual.label}</b><span>{atual.frase}</span></span>
+              </div>
+            )}
+            {children}
+          </main>
         </div>
-
-        <nav style={{ display: "flex", flexDirection: "column", gap: 14, padding: 12, flex: 1, overflowY: "auto" }}>
-          {GRUPOS_SIDEBAR.map(grupo => (
-            <div key={grupo.titulo}>
-              <p style={{ color: "#9CA3AF", fontSize: 10.5, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.5, padding: "0 12px", marginBottom: 6 }}>
-                {grupo.titulo}
-              </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {grupo.hrefs.map(href => {
-                  const n = NAV.find(x => x.href === href)
-                  if (!n) return null
-                  const active = isActive(n.href)
-                  return (
-                    <Link key={n.href} href={n.href} style={{
-                      display: "flex", alignItems: "center", gap: 10,
-                      padding: "10px 12px", borderRadius: 12, fontSize: 13, fontWeight: 600,
-                      textDecoration: "none", transition: "all 0.15s",
-                      background: active ? "rgba(249,115,22,0.08)" : "transparent",
-                      color: active ? "#f97316" : "#6B7280",
-                      border: active ? "1px solid rgba(249,115,22,0.2)" : "1px solid transparent",
-                    }}>
-                      <span style={{ flexShrink: 0 }}>{n.icon}</span>
-                      {n.label}
-                    </Link>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
-        </nav>
-
-        {/* Rodapé — Ajuda/Configurações/Sair (spec "Evolução Completa V1"). "Configurações"
-            aponta pra Minha loja (/loja/perfil) por ora — não existe uma tela de
-            configurações de conta separada ainda (ver checkpoint). */}
-        <div style={{ padding: "14px 16px", borderTop: "1px solid #e5e7eb", display: "flex", flexDirection: "column", gap: 8 }}>
-          <a href={WHATSAPP_SUPORTE} target="_blank" rel="noreferrer" style={{ color: "#9CA3AF", fontSize: 12, fontWeight: 600, textDecoration: "none" }}>Ajuda</a>
-          <Link href="/loja/perfil" style={{ color: "#9CA3AF", fontSize: 12, fontWeight: 600, textDecoration: "none" }}>Configurações</Link>
-          <button onClick={handleLogout} style={{ background: "none", border: "none", color: "#9CA3AF", cursor: "pointer", padding: 0, fontSize: 12, fontWeight: 600, textAlign: "left" }}>
-            Sair da conta
-          </button>
-        </div>
-      </aside>
-
-      {/* ── Conteúdo principal ── */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, overflow: "auto" }}>
-
-        {/* Top bar mobile */}
-        <header style={{
-          display: "none", background: "#ffffff", borderBottom: "1px solid #e5e7eb",
-          padding: "10px 16px", alignItems: "center", justifyContent: "space-between",
-          position: "sticky", top: 0, zIndex: 40,
-        }} className="show-mobile-flex">
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Image src="/logo-chego.png" alt="Chegô" width={28} height={28} style={{ borderRadius: 6, objectFit: "cover" }} />
-            <div>
-              <p style={{ color: "#f97316", fontWeight: 900, fontSize: 13 }}>Chegô</p>
-              <p style={{ color: "#9CA3AF", fontSize: 10, marginTop: 1 }}>{sessao.loja_nome}</p>
-            </div>
-          </div>
-          <button onClick={() => setMenuOpen(o => !o)} style={{ background: "none", border: "none", cursor: "pointer", padding: 6 }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round">
-              {menuOpen ? <><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></> : <><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></>}
-            </svg>
-          </button>
-        </header>
-
-        {/* Drawer mobile */}
-        {menuOpen && (
-          <div onClick={() => setMenuOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 50, background: "rgba(0,0,0,0.4)" }} className="show-mobile-block">
-            <div onClick={e => e.stopPropagation()} style={{
-              position: "absolute", top: 0, right: 0, bottom: 0, width: 240,
-              background: "#ffffff", display: "flex", flexDirection: "column",
-              boxShadow: "-4px 0 24px rgba(0,0,0,0.12)",
-            }}>
-              <div style={{ padding: "20px 16px 14px", borderBottom: "1px solid #e5e7eb" }}>
-                <p style={{ color: "#111827", fontWeight: 900, fontSize: 15 }}>{sessao.loja_nome}</p>
-                <p style={{ color: "#9CA3AF", fontSize: 12, marginTop: 2 }}>Painel do lojista</p>
-              </div>
-              {/* Só os itens que não têm ícone fixo na bottom nav (Início/Pedidos/Cardápio/
-                  Financeiro já estão sempre visíveis embaixo) — "Mais" mostra o restante. */}
-              <nav style={{ flex: 1, padding: "12px 10px", display: "flex", flexDirection: "column", gap: 4, overflowY: "auto" }}>
-                {ITENS_RESTANTES.map(n => {
-                  const active = isActive(n.href)
-                  return (
-                    <Link key={n.href} href={n.href} onClick={() => setMenuOpen(false)} style={{
-                      display: "flex", alignItems: "center", gap: 12,
-                      padding: "12px 14px", borderRadius: 12, fontSize: 14, fontWeight: 600,
-                      textDecoration: "none", transition: "all 0.15s",
-                      background: active ? "rgba(249,115,22,0.08)" : "transparent",
-                      color: active ? "#f97316" : "#374151",
-                    }}>
-                      <span style={{ color: active ? "#f97316" : "#9CA3AF" }}>{n.icon}</span>
-                      {n.label}
-                    </Link>
-                  )
-                })}
-              </nav>
-              <div style={{ padding: "14px 16px", borderTop: "1px solid #e5e7eb", display: "flex", flexDirection: "column", gap: 10 }}>
-                <a href={WHATSAPP_SUPORTE} target="_blank" rel="noreferrer" style={{ color: "#9CA3AF", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>Ajuda</a>
-                <Link href="/loja/perfil" onClick={() => setMenuOpen(false)} style={{ color: "#9CA3AF", fontSize: 13, fontWeight: 600, textDecoration: "none" }}>Configurações</Link>
-                <button onClick={handleLogout} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", padding: 0, fontSize: 13, fontWeight: 700, textAlign: "left" }}>
-                  Sair da conta
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <main style={{ flex: 1, overflowX: "hidden" }}>
-          {children}
-        </main>
       </div>
 
-      {/* ── Bottom nav mobile (≤767px) ── */}
-      {/* Início / Pedidos / Cardápio / Financeiro / Mais — dedicada (não é mais um slice
-          genérico do NAV da sidebar), spec do redesign do Dashboard seção 17. "Mais" abre
-          o drawer já existente com o restante das opções (Cupons, Motoboy, Fiscal, Minha
-          loja, Relatório). Badge em Pedidos = pedidos "pendente" aguardando aceite. */}
-      <nav style={{
-        display: "none", position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 40,
-        background: "#ffffff", borderTop: "1px solid #e5e7eb",
-        paddingBottom: "env(safe-area-inset-bottom, 0px)",
-      }} className="show-mobile-flex">
-        {([
-          { href: "/loja/dashboard", label: "Início" },
-          { href: "/loja", label: "Pedidos", badge: pedidosPendentes },
-          { href: "/loja/cardapio", label: "Cardápio" },
-          { href: "/loja/financeiro", label: "Financeiro" },
-        ] as const).map(item => {
-          const n = NAV.find(x => x.href === item.href)!
-          const active = isActive(item.href)
-          return (
-            <Link key={item.href} href={item.href} style={{
-              flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
-              justifyContent: "center", gap: 3, textDecoration: "none",
-              padding: "8px 2px", minHeight: 56, position: "relative",
-            }}>
-              <span style={{ position: "relative", color: active ? "#f97316" : "#9CA3AF", transition: "color 0.15s" }}>
-                {n.icon}
-                {"badge" in item && item.badge > 0 && (
-                  <span style={{
-                    position: "absolute", top: -5, right: -7, minWidth: 15, height: 15, borderRadius: 999,
-                    background: "#ef4444", color: "white", fontSize: 9, fontWeight: 800,
-                    display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px",
-                  }}>
-                    {item.badge > 9 ? "9+" : item.badge}
-                  </span>
-                )}
-              </span>
-              <span style={{ fontSize: 9, fontWeight: active ? 800 : 500, color: active ? "#f97316" : "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.2 }}>
-                {item.label}
-              </span>
-            </Link>
-          )
-        })}
-        <button onClick={() => setMenuOpen(true)} style={{
-          flex: 1, display: "flex", flexDirection: "column", alignItems: "center",
-          justifyContent: "center", gap: 3, padding: "8px 2px", minHeight: 56,
-          background: "none", border: "none", cursor: "pointer",
-        }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={menuOpen ? "#f97316" : "#9CA3AF"} strokeWidth="2" strokeLinecap="round">
-            <circle cx="5" cy="12" r="1.5" fill={menuOpen ? "#f97316" : "#9CA3AF"} stroke="none" />
-            <circle cx="12" cy="12" r="1.5" fill={menuOpen ? "#f97316" : "#9CA3AF"} stroke="none" />
-            <circle cx="19" cy="12" r="1.5" fill={menuOpen ? "#f97316" : "#9CA3AF"} stroke="none" />
-          </svg>
-          <span style={{ fontSize: 9, fontWeight: 500, color: menuOpen ? "#f97316" : "#9CA3AF", textTransform: "uppercase", letterSpacing: 0.2 }}>Mais</span>
-        </button>
+      <nav className="nav-cel">
+        {NAV_CEL.map(h => { const m = MENU.find(x => x.href === h)!; return (
+          <Link key={h} href={h} aria-current={isActive(h)} className="nav-cel-bt"><Ico n={m.ic} />{h === "/loja/financeiro" ? "Dinheiro" : m.label}
+            {h === "/loja" && pedidosPendentes > 0 && <span className="badge num">{pedidosPendentes}</span>}</Link>
+        ) })}
+        <button className="nav-cel-bt" aria-current={menuOpen || (!NAV_CEL.some(h => isActive(h)))} onClick={() => setMenuOpen(true)}><Ico n="loja" />Mais</button>
       </nav>
 
-      <style>{`
-        @media (max-width: 767px) {
-          .hidden-mobile { display: none !important; }
-          .show-mobile-flex { display: flex !important; }
-          .show-mobile-block { display: block !important; }
-          main { padding-bottom: 64px; }
-        }
-        @media (min-width: 768px) {
-          .show-mobile-flex { display: none !important; }
-          .show-mobile-block { display: none !important; }
-        }
-      `}</style>
+      {menuOpen && (
+        <div className="veu on" onClick={() => setMenuOpen(false)}>
+          <div className="mais-folha" onClick={e => e.stopPropagation()}>
+            <div className="t20" style={{ marginBottom: 8 }}>Mais</div>
+            <nav className="mais-l">{MENU.filter(m => !NAV_CEL.includes(m.href)).map(m => itemMenu(m, true))}{EXTRAS.map(m => itemMenu(m, true))}
+              <button onClick={handleLogout}><Ico n="sair" />Sair</button></nav>
+          </div>
+        </div>
+      )}
+
+      {/* Suporte: o mascote no canto da tela abre o WhatsApp do suporte das lojas */}
+      <a className="fab-sup" href={WHATSAPP_SUPORTE} target="_blank" rel="noreferrer" aria-label="Falar com o suporte do Chegô">
+        <img src="/mascote/rosto.png" alt="" /><span className="fab-tx">Suporte</span>
+      </a>
     </div>
   )
 }

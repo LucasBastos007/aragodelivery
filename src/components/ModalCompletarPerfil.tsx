@@ -55,111 +55,28 @@ export default function ModalCompletarPerfil() {
     setVisivel(false)
   }
 
-  const inp: React.CSSProperties = {
-    width: "100%", padding: "12px 14px", borderRadius: 12, fontSize: 15,
-    background: "#F9FAFB", border: "1.5px solid #E5E7EB",
-    color: "#111827", outline: "none", boxSizing: "border-box",
-  }
-
+  // Layout novo (19/10/2026): folha de baixo no estilo da proposta; mesmos campos e mesma validação
   return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 9000,
-      background: "rgba(0,0,0,0.55)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      padding: "20px 16px",
-    }}>
-      <div style={{
-        background: "#fff", borderRadius: 24, width: "100%", maxWidth: 420,
-        padding: "28px 24px 24px",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
-      }}>
-        {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <div style={{ fontSize: 38, marginBottom: 10 }}>👋</div>
-          <p style={{ fontWeight: 800, fontSize: 18, color: "#111827", marginBottom: 6 }}>
-            Complete seu perfil
-          </p>
-          <p style={{ color: "#6B7280", fontSize: 13, lineHeight: 1.5 }}>
-            Precisamos de algumas informações para facilitar seus pedidos. Só pedimos uma vez!
-          </p>
-        </div>
-
-        {/* Email (read-only) */}
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#6B7280", marginBottom: 6 }}>
-            Email
-          </label>
-          <div style={{ ...inp, color: "#9CA3AF", borderStyle: "dashed" }}>
-            {user.email}
+    <div className="cn-veu on" style={{ zIndex: 9000 }}>
+      <div className="cn folha on" role="dialog" aria-label="Complete seu cadastro">
+        <div className="folha-rolagem" style={{ padding: "24px 20px 8px" }}>
+          <div className="passos" aria-hidden="true"><i className="on" /><i className="on" /><i /></div>
+          <div className="h1" style={{ fontSize: 26 }}>Falta pouco, {(nome.split(" ")[0] || "tudo certo")}</div>
+          <p className="mut" style={{ margin: "6px 0 18px", lineHeight: 1.5 }}>Só pedimos uma vez. O CPF é exigido pelo Banco Central pra pagar com Pix.</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <label className="campo"><span>Nome completo *</span>
+              <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome e sobrenome" autoComplete="name" /></label>
+            <label className={`campo ${cpf.replace(/\D/g, "").length === 11 ? "" : "falta"}`}><span>CPF *</span>
+              <input value={cpf} onChange={e => setCpf(fmtCpf(e.target.value))} placeholder="000.000.000-00" inputMode="numeric" /></label>
+            <label className="campo"><span>WhatsApp *</span>
+              <input value={telefone} onChange={e => setTelefone(fmtTel(e.target.value))} placeholder="(62) 99999-9999" inputMode="tel" autoComplete="tel" /></label>
+            <p className="mut" style={{ fontSize: 12.5 }}>Conta: {user.email}</p>
           </div>
+          {erro && <p className="aviso-vermelho" style={{ margin: "14px 0 0" }}>{erro}</p>}
         </div>
-
-        {/* Nome */}
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#6B7280", marginBottom: 6 }}>
-            Nome completo *
-          </label>
-          <input
-            value={nome}
-            onChange={e => setNome(e.target.value)}
-            placeholder="Seu nome completo"
-            style={inp}
-          />
+        <div className="rodape-fixo">
+          <button className="btn btn-p" onClick={salvar} disabled={salvando}>{salvando ? "Salvando…" : "Salvar e continuar"}</button>
         </div>
-
-        {/* CPF */}
-        <div style={{ marginBottom: 12 }}>
-          <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#6B7280", marginBottom: 6 }}>
-            CPF *
-          </label>
-          <input
-            value={cpf}
-            onChange={e => setCpf(fmtCpf(e.target.value))}
-            placeholder="000.000.000-00"
-            inputMode="numeric"
-            style={inp}
-          />
-          <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>
-            Exigido pelo Banco Central para pagamentos PIX
-          </p>
-        </div>
-
-        {/* Telefone */}
-        <div style={{ marginBottom: 20 }}>
-          <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#6B7280", marginBottom: 6 }}>
-            Telefone *
-          </label>
-          <input
-            value={telefone}
-            onChange={e => setTelefone(fmtTel(e.target.value))}
-            placeholder="(62) 99999-9999"
-            inputMode="tel"
-            style={inp}
-          />
-        </div>
-
-        {erro && (
-          <div style={{
-            background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
-            borderRadius: 10, padding: "10px 14px", marginBottom: 16,
-            color: "#DC2626", fontSize: 13,
-          }}>
-            {erro}
-          </div>
-        )}
-
-        <button
-          onClick={salvar}
-          disabled={salvando}
-          style={{
-            width: "100%", padding: "14px", borderRadius: 14, border: "none",
-            background: salvando ? "#9CA3AF" : "#DC2626",
-            color: "white", fontWeight: 700, fontSize: 15,
-            cursor: salvando ? "not-allowed" : "pointer",
-          }}
-        >
-          {salvando ? "Salvando..." : "Salvar e continuar →"}
-        </button>
       </div>
     </div>
   )

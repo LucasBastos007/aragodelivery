@@ -108,20 +108,20 @@ export default function FiscalPage() {
 
   const inputStyle: React.CSSProperties = {
     width: "100%", padding: "10px 12px", borderRadius: 10,
-    border: "1.5px solid #E2E8F0", fontSize: 16, outline: "none",
-    background: "#fff", color: "#111827", boxSizing: "border-box",
+    border: "1.5px solid var(--linha)", fontSize: 16, outline: "none",
+    background: "#fff", color: "var(--grafite)", boxSizing: "border-box",
   }
   const labelStyle: React.CSSProperties = {
-    fontSize: 12, fontWeight: 700, color: "#374151", marginBottom: 6, display: "block",
+    fontSize: 12, fontWeight: 700, color: "var(--texto)", marginBottom: 6, display: "block",
   }
   const fieldStyle: React.CSSProperties = { marginBottom: 16 }
 
   return (
-    <div style={{ maxWidth: 540, margin: "0 auto", padding: "24px 16px 40px" }}>
+    <div style={{ maxWidth: 760, margin: "0 auto", padding: "4px 0 40px" }}>
 
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 900, color: "#111827" }}>Dados Fiscais</h1>
-        <p style={{ fontSize: 13, color: "#6B7280", marginTop: 4 }}>
+        
+        <p style={{ fontSize: 13, color: "var(--suave)", marginTop: 4 }}>
           Informações necessárias para emissão de notas fiscais.
         </p>
       </div>
@@ -129,16 +129,16 @@ export default function FiscalPage() {
       {/* Status fiscal_ativo */}
       <div style={{
         padding: "12px 16px", borderRadius: 12, marginBottom: 24,
-        background: dados.fiscal_ativo ? "#ECFDF5" : "#FFF7ED",
+        background: dados.fiscal_ativo ? "var(--folha-claro)" : "var(--pimenta-claro)",
         border: `1.5px solid ${dados.fiscal_ativo ? "#A7F3D0" : "#FED7AA"}`,
         display: "flex", alignItems: "center", gap: 10,
       }}>
         <span style={{ fontSize: 18 }}>{dados.fiscal_ativo ? "✓" : "⏳"}</span>
         <div>
-          <p style={{ fontSize: 13, fontWeight: 800, color: dados.fiscal_ativo ? "#059669" : "#d97706" }}>
+          <p style={{ fontSize: 13, fontWeight: 800, color: dados.fiscal_ativo ? "var(--folha)" : "#d97706" }}>
             {dados.fiscal_ativo ? "Emissão fiscal ativa" : "Emissão fiscal pendente"}
           </p>
-          <p style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>
+          <p style={{ fontSize: 11, color: "var(--suave)", marginTop: 2 }}>
             {dados.fiscal_ativo
               ? "Esta loja está configurada para emitir NFC-e."
               : "Preencha os dados abaixo. A ativação é feita pelo administrador Chegô."}
@@ -148,10 +148,10 @@ export default function FiscalPage() {
 
       {/* Consulta CNPJ */}
       {dados.cnpj && (
-        <div style={{ marginBottom: 20, padding: 14, borderRadius: 12, background: "#F8FAFC", border: "1.5px solid #E2E8F0" }}>
+        <div style={{ marginBottom: 20, padding: 14, borderRadius: 12, background: "var(--pedra)", border: "1.5px solid var(--linha)" }}>
           <p style={labelStyle}>CNPJ da loja</p>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <p style={{ fontSize: 14, fontWeight: 700, color: "#374151", fontFamily: "monospace" }}>
+            <p style={{ fontSize: 14, fontWeight: 700, color: "var(--texto)", fontFamily: "monospace" }}>
               {dados.cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5")}
             </p>
             <button
@@ -160,7 +160,7 @@ export default function FiscalPage() {
               disabled={buscandoCnpj}
               style={{
                 padding: "5px 12px", borderRadius: 8, border: "1.5px solid #CBD5E1",
-                background: "#fff", color: "#374151", fontSize: 12, fontWeight: 700,
+                background: "#fff", color: "var(--texto)", fontSize: 12, fontWeight: 700,
                 cursor: buscandoCnpj ? "not-allowed" : "pointer",
                 opacity: buscandoCnpj ? 0.6 : 1,
               }}
@@ -168,7 +168,7 @@ export default function FiscalPage() {
               {buscandoCnpj ? "Consultando…" : "Consultar Receita Federal"}
             </button>
           </div>
-          <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>
+          <p style={{ fontSize: 11, color: "var(--suave)", marginTop: 4 }}>
             Busca CNAE automaticamente via BrasilAPI
           </p>
         </div>
@@ -184,7 +184,7 @@ export default function FiscalPage() {
             onChange={e => set("inscricao_estadual", e.target.value)}
             placeholder="Isento ou número da IE"
           />
-          <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>
+          <p style={{ fontSize: 11, color: "var(--suave)", marginTop: 4 }}>
             Digite "ISENTO" se não tiver IE. Obrigatório para NFC-e.
           </p>
         </div>
@@ -221,7 +221,7 @@ export default function FiscalPage() {
             onChange={e => set("cnae", e.target.value)}
             placeholder="Ex: 5611201"
           />
-          <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>
+          <p style={{ fontSize: 11, color: "var(--suave)", marginTop: 4 }}>
             Código da atividade econômica principal (7 dígitos, sem pontuação)
           </p>
         </div>
@@ -239,13 +239,13 @@ export default function FiscalPage() {
         </div>
 
         {erro && (
-          <div style={{ padding: "10px 14px", borderRadius: 10, background: "#FEF2F2", border: "1px solid #FECACA", color: "#DC2626", fontSize: 13, fontWeight: 600, marginBottom: 16 }}>
+          <div style={{ padding: "10px 14px", borderRadius: 10, background: "var(--pimenta-claro)", border: "1px solid #FECACA", color: "var(--pimenta)", fontSize: 13, fontWeight: 600, marginBottom: 16 }}>
             {erro}
           </div>
         )}
 
         {ok && (
-          <div style={{ padding: "10px 14px", borderRadius: 10, background: "#ECFDF5", border: "1px solid #A7F3D0", color: "#059669", fontSize: 13, fontWeight: 600, marginBottom: 16 }}>
+          <div style={{ padding: "10px 14px", borderRadius: 10, background: "var(--folha-claro)", border: "1px solid #A7F3D0", color: "var(--folha)", fontSize: 13, fontWeight: 600, marginBottom: 16 }}>
             Dados salvos com sucesso!
           </div>
         )}
@@ -255,8 +255,8 @@ export default function FiscalPage() {
           disabled={salvando}
           style={{
             width: "100%", padding: "13px", borderRadius: 12,
-            background: salvando ? "#e5e7eb" : "#f97316",
-            color: salvando ? "#9CA3AF" : "#fff",
+            background: salvando ? "var(--linha)" : "var(--pimenta)",
+            color: salvando ? "var(--suave)" : "#fff",
             border: "none", fontWeight: 800, fontSize: 15,
             cursor: salvando ? "not-allowed" : "pointer",
             minHeight: 44,
@@ -267,8 +267,8 @@ export default function FiscalPage() {
 
       </form>
 
-      <div style={{ marginTop: 32, padding: 16, borderRadius: 12, background: "#F8FAFC", border: "1.5px solid #E2E8F0" }}>
-        <p style={{ fontSize: 12, fontWeight: 800, color: "#374151", marginBottom: 8 }}>
+      <div style={{ marginTop: 32, padding: 16, borderRadius: 12, background: "var(--pedra)", border: "1.5px solid var(--linha)" }}>
+        <p style={{ fontSize: 12, fontWeight: 800, color: "var(--texto)", marginBottom: 8 }}>
           O que vem a seguir
         </p>
         <ul style={{ paddingLeft: 16, margin: 0 }}>
@@ -277,7 +277,7 @@ export default function FiscalPage() {
             "Configuração do CSC para contingência (FASE 3)",
             "Ativação da emissão de NFC-e pelo administrador (FASE 4)",
           ].map((t, i) => (
-            <li key={i} style={{ fontSize: 12, color: "#6B7280", marginBottom: 4 }}>{t}</li>
+            <li key={i} style={{ fontSize: 12, color: "var(--suave)", marginBottom: 4 }}>{t}</li>
           ))}
         </ul>
       </div>

@@ -1,1139 +1,389 @@
 "use client"
 
-import { useEffect, useState } from "react"
+// Pedidos (admin 2.0, 20/10/2026): a esteira inteira, do pagamento até a porta do cliente.
+// Colunas por etapa (ou lista), tempo em cada etapa e o pedido aberto numa gaveta com tudo.
+// Ações de antes, todas mantidas: avançar no lugar da loja (/api/admin/avancar-pedido), chamar
+// outro motoboy (/api/escalada), forçar entregue (/api/admin/completar-pedido), conferir cartão
+// (/api/pagamento/verificar), confirmar pagamento na mão (/api/admin/confirmar-pagamento-manual),
+// avulsas (/api/admin/avancar-avulsa, /api/escalada-avulsa) e excluir (/api/chego-ctrl/excluir-pedido),
+// que fica escondido em "Mais opções" pra não apagar pedido por engano.
+import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import type { Pedido, StatusPedido } from "@/types"
+import { rotuloPagamento, temForma, ehDividido } from "@/lib/pagamentoDividido"
 
-const WA_SVG = (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-    <path d="M11.999 0C5.372 0 0 5.373 0 12c0 2.117.554 4.103 1.523 5.829L.054 23.5l5.832-1.528A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12 0-6.628-5.373-12-12.001-12zm.001 21.818a9.822 9.822 0 01-5.004-1.372l-.36-.213-3.463.908.924-3.375-.234-.374A9.816 9.816 0 012.182 12C2.182 6.57 6.569 2.182 12 2.182S21.818 6.57 21.818 12c0 5.43-4.387 9.818-9.818 9.818z"/>
-  </svg>
-)
-
-function BotaoWA({ telefone, msg, label }: { telefone?: string | null; msg: string; label: string }) {
-  if (!telefone) return null
-  const tel = telefone.replace(/\D/g, "")
-  if (!tel) return null
-  return (
-    <a
-      href={`https://wa.me/55${tel}?text=${encodeURIComponent(msg)}`}
-      target="_blank" rel="noopener noreferrer"
-      title={`WhatsApp ${label}`}
-      onClick={e => e.stopPropagation()}
-      style={{
-        display: "inline-flex", alignItems: "center", gap: 4,
-        fontSize: 10, padding: "3px 8px", borderRadius: 6,
-        border: "1px solid rgba(37,211,102,0.35)",
-        background: "rgba(37,211,102,0.07)", color: "#16a34a",
-        fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap",
-      }}
-    >
-      {WA_SVG} {label}
-    </a>
-  )
-}
-
-// Etapas da timeline com campo de timestamp correspondente
-const ETAPAS_PEDIDO = [
-  { key: "pedido",   label: "Pedido",   statuses: ["pendente", "aguardando_pagamento"], tsKey: "criado_em"  },
-  { key: "aceito",   label: "Aceito",   statuses: ["aceito"],                           tsKey: "aceito_em"  },
-  { key: "preparo",  label: "Pronto",   statuses: ["preparando", "pronto"],             tsKey: "pronto_em"  },
-  { key: "motoboy",  label: "Motoboy",  statuses: ["aguardando_aceite", "indo_para_loja", "na_loja"], tsKey: null },
-  { key: "rota",     label: "Coletou",  statuses: ["em_rota", "coletado"],              tsKey: "coletado_em" },
-  { key: "entregue", label: "Entregue", statuses: ["entregue"],                         tsKey: "entregue_em" },
-] as const
-
-const ETAPAS_RETIRADA = [
-  { key: "pedido",   label: "Pedido",          statuses: ["pendente", "aguardando_pagamento"],                                     tsKey: "criado_em"  },
-  { key: "aceito",   label: "Aceito",          statuses: ["aceito"],                                                               tsKey: "aceito_em"  },
-  { key: "preparo",  label: "Em Preparo",      statuses: ["preparando"],                                                           tsKey: "pronto_em"  },
-  { key: "pronto",   label: "Pronto p/ Ret.",  statuses: ["pronto", "aguardando_aceite", "indo_para_loja", "na_loja", "em_rota", "coletado"], tsKey: "pronto_em" },
-  { key: "entregue", label: "Retirado",        statuses: ["entregue"],                                                             tsKey: "entregue_em" },
-] as const
-
-function TimelinePedido({ status, pedido }: { status: StatusPedido; pedido: Pedido }) {
-  const fmtTs = (iso?: string | null) =>
-    iso ? new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : null
-
-  if (status === "cancelado") {
-    return (
-      <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
-        <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#ef4444", flexShrink: 0 }} />
-        <span style={{ fontSize: 10, color: "#ef4444", fontWeight: 700 }}>Pedido cancelado</span>
-      </div>
-    )
-  }
-
-  const isRetirada = pedido.endereco_entrega?.includes("Retirada") ?? false
-  const etapas = isRetirada ? ETAPAS_RETIRADA : ETAPAS_PEDIDO
-  const idxAtual = etapas.findIndex(e => (e.statuses as readonly string[]).includes(status))
-
-  return (
-    <div style={{ display: "flex", alignItems: "flex-start", gap: 0, marginTop: 10 }}>
-      {etapas.map((e, i) => {
-        const done    = i < idxAtual
-        const current = i === idxAtual
-        const dotColor  = (done || current) ? "#f97316" : "#e2e8f0"
-        const lineColor = done ? "#f97316" : "#e2e8f0"
-        const textColor = (done || current) ? "#f97316" : "#94a3b8"
-        const hora = e.tsKey ? fmtTs((pedido as any)[e.tsKey]) : null
-
-        return (
-          <div key={e.key} style={{ display: "flex", alignItems: "flex-start", flex: i < etapas.length - 1 ? 1 : undefined }}>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-              <div style={{
-                width: current ? 10 : 8, height: current ? 10 : 8,
-                borderRadius: "50%", background: dotColor, flexShrink: 0,
-                boxShadow: current ? "0 0 0 3px rgba(249,115,22,0.2)" : "none",
-                marginTop: 1,
-              }} />
-              <span style={{ fontSize: 8, color: textColor, fontWeight: current ? 800 : done ? 600 : 400, whiteSpace: "nowrap", textAlign: "center" }}>
-                {e.label}
-              </span>
-              {hora && (
-                <span style={{ fontSize: 8, color: done ? "#64748b" : "#f97316", fontWeight: 700, whiteSpace: "nowrap" }}>
-                  {hora}
-                </span>
-              )}
-            </div>
-            {i < etapas.length - 1 && (
-              <div style={{ flex: 1, height: 2, background: lineColor, margin: "0 2px", marginTop: 4, minWidth: 6, transition: "background 0.3s" }} />
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function PercursoItem({ cor, label, hora, linha }: { cor: string; label: string; hora: string; linha: boolean }) {
-  return (
-    <div style={{ display: "flex", gap: 10 }}>
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: 16 }}>
-        <div style={{ width: 10, height: 10, borderRadius: "50%", background: cor, flexShrink: 0, marginTop: 2 }} />
-        {linha && <div style={{ width: 2, flex: 1, background: "#e2e8f0", margin: "2px 0 2px" }} />}
-      </div>
-      <div style={{ paddingBottom: linha ? 10 : 0, display: "flex", justifyContent: "space-between", flex: 1 }}>
-        <span style={{ fontSize: 12, color: "#64748b" }}>{label}</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: "#0F172A" }}>{hora}</span>
-      </div>
-    </div>
-  )
-}
-
-function ConfirmarCartaoBtn({ pedidoId, onConfirmado }: { pedidoId: string; onConfirmado: () => void }) {
-  const [loading, setLoading] = useState(false)
-  const [msg, setMsg] = useState("")
-
-  async function verificar() {
-    setLoading(true)
-    setMsg("")
-    const r = await fetch("/api/pagamento/verificar", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pedido_id: pedidoId }),
-    }).then(r => r.json()).catch(() => ({}))
-    if (r.confirmado) { onConfirmado() }
-    else { setMsg(r.status === "cancelado" ? "Recusado" : "Pendente") }
-    setLoading(false)
-  }
-
-  return (
-    <div style={{ marginTop: 4 }}>
-      <button onClick={verificar} disabled={loading} style={{
-        fontSize: 10, padding: "2px 6px", borderRadius: 6, border: "1px solid #f97316",
-        background: "none", color: "#f97316", cursor: loading ? "not-allowed" : "pointer", fontWeight: 700,
-      }}>
-        {loading ? "..." : "Confirmar"}
-      </button>
-      {msg && <p style={{ fontSize: 9, color: msg === "Recusado" ? "#DC2626" : "#6B7280", marginTop: 2 }}>{msg}</p>}
-    </div>
-  )
-}
-
-// Confirmação manual de pagamento (pedido do usuário, 2026-09-19, caso real: pedido
-// BB7X82 — cliente mandou comprovante, admin verificou que o dinheiro caiu, mas a Asaas
-// ainda mostrava PENDING e nenhum webhook tinha chegado pra esse pagamento específico).
-// Diferente do ConfirmarCartaoBtn (que consulta a Asaas de novo e não ajuda quando ELA
-// está atrasada), esse botão confia no admin e dispara o fluxo real de "pagamento
-// confirmado" (muda status + notifica a loja + manda recibo) direto — por isso o
-// confirm-antes-de-fato, mesmo padrão do ForcarEntregaBtn (ação com dinheiro real,
-// não pode ser 1 clique só).
-function ConfirmarPagamentoManualBtn({ pedidoId, onConfirmado }: { pedidoId: string; onConfirmado: () => void }) {
-  const [confirmando, setConfirmando] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [erro, setErro] = useState("")
-
-  async function confirmar() {
-    setLoading(true)
-    setErro("")
-    const r = await fetch("/api/admin/confirmar-pagamento-manual", {
-      method: "POST", credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pedido_id: pedidoId }),
-    }).then(r => r.json()).catch(() => ({}))
-    setLoading(false)
-    if (r.ok) { setConfirmando(false); onConfirmado() }
-    else setErro(r.error ?? "Erro ao confirmar")
-  }
-
-  if (confirmando) {
-    return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 4 }}>
-        <p style={{ fontSize: 9.5, color: "#92400E", margin: 0 }}>Confirma que o pagamento realmente caiu? Isso libera o pedido pra loja sem checar a Asaas de novo.</p>
-        <div style={{ display: "flex", gap: 3 }}>
-          <button onClick={confirmar} disabled={loading} style={{
-            fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 5, border: "none",
-            background: "#22c55e", color: "white", cursor: loading ? "not-allowed" : "pointer",
-          }}>
-            {loading ? "..." : "Sim, caiu"}
-          </button>
-          <button onClick={() => setConfirmando(false)} style={{
-            fontSize: 10, padding: "2px 6px", borderRadius: 5, border: "1px solid #e2e8f0",
-            background: "#f8fafc", color: "#64748b", cursor: "pointer",
-          }}>
-            Cancelar
-          </button>
-        </div>
-        {erro && <p style={{ fontSize: 9, color: "#DC2626", margin: 0 }}>{erro}</p>}
-      </div>
-    )
-  }
-
-  return (
-    <button onClick={() => setConfirmando(true)} title="Confirmar manualmente que o pagamento caiu (sem checar a Asaas)" style={{
-      fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 6,
-      border: "1px solid rgba(249,115,22,0.35)", background: "rgba(249,115,22,0.07)",
-      color: "#f97316", cursor: "pointer", whiteSpace: "nowrap",
-    }}>
-      💰 Já recebi, confirmar
-    </button>
-  )
-}
-
-const STATUSES_FORCAVEIS: readonly string[] = ["pronto", "aguardando_aceite", "indo_para_loja", "na_loja", "em_rota", "coletado"]
-// /api/escalada reatribui até "na_loja" (motoboy já aceitou mas ainda não coletou o pedido
-// fisicamente) — a partir de "coletado"/"em_rota" o pedido já está com o motoboy, não dá
-// mais pra trocar.
-const STATUSES_REESCALAVEIS: readonly string[] = ["pronto", "aguardando_aceite", "indo_para_loja", "na_loja"]
-
-function ForcarEntregaBtn({ pedidoId, onForcado }: { pedidoId: string; onForcado: () => void }) {
-  const [confirmando, setConfirmando] = useState(false)
-  const [loading, setLoading] = useState(false)
-
-  async function forcar() {
-    setLoading(true)
-    const r = await fetch("/api/admin/completar-pedido", {
-      method: "POST", credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pedido_id: pedidoId }),
-    }).then(r => r.json()).catch(() => ({}))
-    setLoading(false)
-    setConfirmando(false)
-    if (r.ok) onForcado()
-  }
-
-  if (confirmando) {
-    return (
-      <div style={{ display: "flex", gap: 3 }}>
-        <button onClick={forcar} disabled={loading} style={{
-          fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 5, border: "none",
-          background: "#22c55e", color: "white", cursor: loading ? "not-allowed" : "pointer",
-        }}>
-          {loading ? "..." : "Confirmar entrega"}
-        </button>
-        <button onClick={() => setConfirmando(false)} style={{
-          fontSize: 10, padding: "2px 6px", borderRadius: 5, border: "1px solid #e2e8f0",
-          background: "#f8fafc", color: "#64748b", cursor: "pointer",
-        }}>
-          Cancelar
-        </button>
-      </div>
-    )
-  }
-
-  return (
-    <button onClick={() => setConfirmando(true)} title="Forçar avanço para Entregue" style={{
-      fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 6,
-      border: "1px solid rgba(34,197,94,0.35)", background: "rgba(34,197,94,0.07)",
-      color: "#16a34a", cursor: "pointer", whiteSpace: "nowrap",
-    }}>
-      ✅ Avançar
-    </button>
-  )
-}
-
-// Etapas antes do motoboy entrar em cena (pendente → aceito → preparando → pronto) —
-// normalmente quem avança é a loja; isso destrava quando ela está lenta/off.
-const STATUSES_AVANCAVEIS_ADMIN: readonly string[] = ["pendente", "aceito", "preparando"]
-const PROXIMO_LABEL_ADMIN: Record<string, string> = {
-  pendente:   "✓ Aceitar",
-  aceito:     "Iniciar preparo",
-  preparando: "Marcar pronto",
-}
-
-function AvancarPedidoBtn({ pedidoId, statusAtual, onAvancado }: { pedidoId: string; statusAtual: string; onAvancado: (novoStatus: string) => void }) {
-  const [loading, setLoading] = useState(false)
-
-  async function avancar() {
-    setLoading(true)
-    const r = await fetch("/api/admin/avancar-pedido", {
-      method: "POST", credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pedido_id: pedidoId }),
-    }).then(r => r.json()).catch(() => ({}))
-    setLoading(false)
-    if (r.ok) onAvancado(r.pedido.status)
-  }
-
-  return (
-    <button onClick={avancar} disabled={loading} title="Avançar pra próxima etapa (no lugar da loja)" style={{
-      fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 6,
-      border: "1px solid rgba(34,197,94,0.35)", background: "rgba(34,197,94,0.07)",
-      color: "#16a34a", cursor: loading ? "not-allowed" : "pointer", whiteSpace: "nowrap",
-    }}>
-      {loading ? "..." : `✅ ${PROXIMO_LABEL_ADMIN[statusAtual] ?? "Avançar"}`}
-    </button>
-  )
-}
-
-const PROXIMO_LABEL_AVULSA: Record<string, string> = {
-  aceito:   "Coletei",
-  coletado: "Saiu p/ entrega",
-  em_rota:  "Entreguei",
-}
-
-function AvancarAvulsaBtn({ avulsaId, statusAtual, onAvancado }: { avulsaId: string; statusAtual: string; onAvancado: (novoStatus: string) => void }) {
-  const [loading, setLoading] = useState(false)
-
-  async function avancar() {
-    setLoading(true)
-    const r = await fetch("/api/admin/avancar-avulsa", {
-      method: "POST", credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ avulsa_id: avulsaId }),
-    }).then(r => r.json()).catch(() => ({}))
-    setLoading(false)
-    if (r.ok) onAvancado(r.avulsa.status)
-  }
-
-  if (!PROXIMO_LABEL_AVULSA[statusAtual]) return null
-
-  return (
-    <button onClick={avancar} disabled={loading} title="Avançar pra próxima etapa (no lugar do motoboy)" style={{
-      fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 6,
-      border: "1px solid rgba(34,197,94,0.35)", background: "rgba(34,197,94,0.07)",
-      color: "#16a34a", cursor: loading ? "not-allowed" : "pointer", whiteSpace: "nowrap",
-    }}>
-      {loading ? "..." : `✅ ${PROXIMO_LABEL_AVULSA[statusAtual]}`}
-    </button>
-  )
-}
-
-function ChamarOutroMotoboyBtn({ pedidoId, motoboyAtualId, onChamado }: { pedidoId: string; motoboyAtualId?: string | null; onChamado: () => void }) {
-  const [loading, setLoading] = useState(false)
-  const [msg, setMsg] = useState<string | null>(null)
-  const [confirmando, setConfirmando] = useState(false)
-
-  async function chamar() {
-    setLoading(true)
-    setMsg(null)
-    const r = await fetch("/api/escalada", {
-      method: "POST", credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pedido_id: pedidoId, motoboy_recusou_id: motoboyAtualId ?? undefined }),
-    }).then(r => r.json()).catch(() => ({}))
-    setLoading(false)
-    setConfirmando(false)
-    if (r.ok && r.broadcast) { setMsg(`Chamando ${r.broadcast} motoboy(s)…`); onChamado() }
-    else if (r.ok) setMsg(r.msg ?? "Nada a fazer")
-    else setMsg(r.error ?? "Erro")
-  }
-
-  // Já tem motoboy aceito (a caminho da loja) — confirma antes de tirar dele, já que ele
-  // é avisado por push mas pode já estar chegando lá.
-  if (motoboyAtualId && confirmando) {
-    return (
-      <div style={{ display: "flex", gap: 3 }}>
-        <button onClick={chamar} disabled={loading} style={{
-          fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 5, border: "none",
-          background: "#f97316", color: "white", cursor: loading ? "not-allowed" : "pointer",
-        }}>
-          {loading ? "..." : "Tirar e chamar outro"}
-        </button>
-        <button onClick={() => setConfirmando(false)} style={{
-          fontSize: 10, padding: "2px 6px", borderRadius: 5, border: "1px solid #e2e8f0",
-          background: "#f8fafc", color: "#64748b", cursor: "pointer",
-        }}>
-          Cancelar
-        </button>
-      </div>
-    )
-  }
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      <button
-        onClick={() => motoboyAtualId ? setConfirmando(true) : chamar()}
-        disabled={loading}
-        title={motoboyAtualId ? "Tirar do motoboy atual e chamar outro" : "Chamar outro motoboy (rebroadcast)"}
-        style={{
-          fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 6,
-          border: "1px solid rgba(249,115,22,0.35)", background: "rgba(249,115,22,0.07)",
-          color: "#c2410c", cursor: loading ? "not-allowed" : "pointer", whiteSpace: "nowrap",
-        }}>
-        {loading ? "..." : "🛵 Chamar outro"}
-      </button>
-      {msg && <p style={{ fontSize: 9, color: "#94a3b8" }}>{msg}</p>}
-    </div>
-  )
-}
-
-// Mesmo componente/UX de ChamarOutroMotoboyBtn, só que pra entrega avulsa
-// (/api/escalada-avulsa em vez de /api/escalada) — tabela e status diferentes
-// (entregas_avulsas: aguardando/aceito/coletado/em_rota/entregue), então não dá pra
-// reaproveitar a mesma chamada de API, mas o comportamento visual é idêntico.
-function ChamarOutroMotoboyAvulsaBtn({ avulsaId, motoboyAtualId, onChamado }: { avulsaId: string; motoboyAtualId?: string | null; onChamado: () => void }) {
-  const [loading, setLoading] = useState(false)
-  const [msg, setMsg] = useState<string | null>(null)
-  const [confirmando, setConfirmando] = useState(false)
-
-  async function chamar() {
-    setLoading(true)
-    setMsg(null)
-    const r = await fetch("/api/escalada-avulsa", {
-      method: "POST", credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ avulsa_id: avulsaId }),
-    }).then(r => r.json()).catch(() => ({}))
-    setLoading(false)
-    setConfirmando(false)
-    if (r.ok) { setMsg(r.msg ?? "Chamando outros motoboys…"); onChamado() }
-    else setMsg(r.error ?? "Erro")
-  }
-
-  if (motoboyAtualId && confirmando) {
-    return (
-      <div style={{ display: "flex", gap: 3 }}>
-        <button onClick={chamar} disabled={loading} style={{
-          fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 5, border: "none",
-          background: "#f97316", color: "white", cursor: loading ? "not-allowed" : "pointer",
-        }}>
-          {loading ? "..." : "Tirar e chamar outro"}
-        </button>
-        <button onClick={() => setConfirmando(false)} style={{
-          fontSize: 10, padding: "2px 6px", borderRadius: 5, border: "1px solid #e2e8f0",
-          background: "#f8fafc", color: "#64748b", cursor: "pointer",
-        }}>
-          Cancelar
-        </button>
-      </div>
-    )
-  }
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      <button
-        onClick={() => motoboyAtualId ? setConfirmando(true) : chamar()}
-        disabled={loading}
-        title={motoboyAtualId ? "Tirar do motoboy atual e chamar outro" : "Chamar outro motoboy (rebroadcast)"}
-        style={{
-          fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 6,
-          border: "1px solid rgba(249,115,22,0.35)", background: "rgba(249,115,22,0.07)",
-          color: "#c2410c", cursor: loading ? "not-allowed" : "pointer", whiteSpace: "nowrap",
-        }}>
-        {loading ? "..." : "🛵 Chamar outro"}
-      </button>
-      {msg && <p style={{ fontSize: 9, color: "#94a3b8" }}>{msg}</p>}
-    </div>
-  )
-}
-
-const STATUS_LABEL: Record<StatusPedido, string> = {
-  aguardando_pagamento: "Aguard. pagamento",
-  pendente:          "Pendente",
-  aceito:            "Aceito",
-  preparando:        "Preparando",
-  pronto:            "Pronto",
-  aguardando_aceite: "Aguard. motoboy",
-  indo_para_loja:    "Indo à loja",
-  na_loja:           "Na loja",
-  em_rota:           "Em rota",
-  coletado:          "Coletado",
-  entregue:          "Entregue",
-  cancelado:         "Cancelado",
-}
-const STATUS_BADGE: Record<StatusPedido, string> = {
-  aguardando_pagamento: "badge-yellow",
-  pendente:          "badge-yellow",
-  aceito:            "badge-blue",
-  preparando:        "badge-orange",
-  pronto:            "badge-blue",
-  aguardando_aceite: "badge-orange",
-  indo_para_loja:    "badge-blue",
-  na_loja:           "badge-blue",
-  em_rota:           "badge-orange",
-  coletado:          "badge-blue",
-  entregue:          "badge-green",
-  cancelado:         "badge-red",
-}
-const PAGAMENTO_ICON: Record<string, string> = {
-  pix: "PIX", cartao: "Cartão", dinheiro: "Dinheiro", maquininha: "Maquininha",
-}
-
-const AVULSA_STATUS_LABEL: Record<string, string> = {
-  aguardando: "Aguardando motoboy",
-  aceito:     "Indo à loja",
-  coletado:   "Pedido coletado",
-  em_rota:    "Em rota",
-  entregue:   "Entregue",
-  cancelado:  "Cancelado",
-}
-const AVULSA_STATUS_BADGE: Record<string, string> = {
-  aguardando: "badge-yellow",
-  aceito:     "badge-blue",
-  coletado:   "badge-blue",
-  em_rota:    "badge-orange",
-  entregue:   "badge-green",
-  cancelado:  "badge-red",
-}
-
-const ETAPAS_AVULSA = [
-  { key: "aguardando", label: "Aguardando" },
-  { key: "aceito",     label: "Indo à loja" },
-  { key: "coletado",   label: "Coletado" },
-  { key: "em_rota",    label: "Em rota" },
-  { key: "entregue",   label: "Entregue" },
-]
-
-function ProgressoAvulsa({ status }: { status: string }) {
-  const idx = ETAPAS_AVULSA.findIndex(e => e.key === status)
-  if (idx < 0 || status === "cancelado") return null
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 0, marginTop: 8 }}>
-      {ETAPAS_AVULSA.map((e, i) => {
-        const done    = i < idx
-        const current = i === idx
-        const color   = done || current ? "#8b5cf6" : "#e2e8f0"
-        const textClr = done || current ? "#8b5cf6" : "#94a3b8"
-        return (
-          <div key={e.key} style={{ display: "flex", alignItems: "center", flex: i < ETAPAS_AVULSA.length - 1 ? 1 : undefined }}>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-              <div style={{
-                width: 10, height: 10, borderRadius: "50%",
-                background: current ? "#8b5cf6" : done ? "#8b5cf6" : "#e2e8f0",
-                border: current ? "2px solid #8b5cf6" : "none",
-                boxShadow: current ? "0 0 0 3px rgba(139,92,246,0.2)" : "none",
-                flexShrink: 0,
-              }} />
-              <span style={{ fontSize: 8, color: textClr, fontWeight: current ? 800 : 400, whiteSpace: "nowrap" }}>
-                {e.label}
-              </span>
-            </div>
-            {i < ETAPAS_AVULSA.length - 1 && (
-              <div style={{ flex: 1, height: 2, background: done ? "#8b5cf6" : "#e2e8f0", margin: "0 2px", marginBottom: 14, minWidth: 8 }} />
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function BotaoWhatsApp({ avulsa, fone }: { avulsa: any; fone?: string }) {
-  if (!fone) return null
-  const tel = fone.replace(/\D/g, "")
-  if (!tel) return null
-
-  const msgs: Record<string, string> = {
-    aguardando: `Olá! Temos uma entrega avulsa *${avulsa.codigo}* aguardando motoboy para o cliente *${avulsa.cliente_nome}* (${avulsa.endereco}). Já tem alguém confirmado?`,
-    aceito:     `Olá! O motoboy *${avulsa.motoboy_nome ?? ""}* aceitou a entrega *${avulsa.codigo}* e está a caminho da sua loja. Aguarde!`,
-    coletado:   `Olá! O motoboy *${avulsa.motoboy_nome ?? ""}* já coletou o pedido *${avulsa.codigo}* e está a caminho do cliente *${avulsa.cliente_nome}*.`,
-    em_rota:    `Olá! O motoboy *${avulsa.motoboy_nome ?? ""}* está em rota entregando o pedido *${avulsa.codigo}* para *${avulsa.cliente_nome}*.`,
-  }
-  const txt = msgs[avulsa.status]
-  if (!txt) return null
-
-  return (
-    <a
-      href={`https://wa.me/55${tel}?text=${encodeURIComponent(txt)}`}
-      target="_blank"
-      rel="noopener noreferrer"
-      style={{
-        marginTop: 6, display: "inline-flex", alignItems: "center", gap: 4,
-        fontSize: 10, padding: "3px 8px", borderRadius: 6,
-        border: "1px solid rgba(37,211,102,0.4)",
-        background: "rgba(37,211,102,0.08)", color: "#16a34a",
-        fontWeight: 700, textDecoration: "none",
-      }}
-    >
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="#16a34a">
-        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-        <path d="M11.999 0C5.372 0 0 5.373 0 12c0 2.117.554 4.103 1.523 5.829L.054 23.5l5.832-1.528A11.945 11.945 0 0012 24c6.627 0 12-5.373 12-12 0-6.628-5.373-12-12.001-12zm.001 21.818a9.822 9.822 0 01-5.004-1.372l-.36-.213-3.463.908.924-3.375-.234-.374A9.816 9.816 0 012.182 12C2.182 6.57 6.569 2.182 12 2.182S21.818 6.57 21.818 12c0 5.43-4.387 9.818-9.818 9.818z"/>
-      </svg>
-      WhatsApp loja
-    </a>
-  )
-}
-
-type Filtro = "todos" | "avulsas" | StatusPedido
 type Periodo = "hoje" | "7d" | "15d" | "30d" | "custom"
+type Filtro = "andamento" | "atrasados" | "entregues" | "cancelados" | "todos" | "avulsas"
 
-const PERIODO_LABELS: Record<Periodo, string> = {
-  hoje: "Hoje", "7d": "7 dias", "15d": "15 dias", "30d": "30 dias", custom: "Personalizado",
+const brl = (v: number) => `R$ ${(Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+const hh = (iso?: string | null) => iso ? new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : ""
+const dataBRT = (o = 0) => new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(new Date(Date.now() + o * 86_400_000))
+const minDesde = (iso?: string | null) => iso ? Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000)) : 0
+const tempo = (m: number) => m < 60 ? `${m} min` : m < 1440 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}` : `${Math.floor(m / 1440)} d`
+const FORMA: Record<string, string> = { pix: "Pix", cartao: "Cartão", dinheiro: "Dinheiro", maquininha: "Maquininha", pix_loja: "Pix na loja", google_pay: "Google Pay" }
+
+function rangeDatas(p: Periodo, ci: string, cf: string) {
+  const d = p === "7d" ? -6 : p === "15d" ? -14 : p === "30d" ? -29 : 0
+  if (p === "custom" && ci && cf) return { inicio: `${ci}T03:00:00`, fim: `${somaDia(cf)}T02:59:59` }
+  return { inicio: `${dataBRT(d)}T03:00:00`, fim: `${dataBRT(1)}T02:59:59` }
 }
+const somaDia = (ymd: string) => { const x = new Date(`${ymd}T12:00:00Z`); x.setUTCDate(x.getUTCDate() + 1); return x.toISOString().slice(0, 10) }
 
-// Retorna "YYYY-MM-DD" no fuso de Brasília (UTC-3, sem DST desde 2019)
-function dataBRT(offsetDias = 0): string {
-  const d = new Date(Date.now() + offsetDias * 86_400_000)
-  return new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(d)
+// Etapas da esteira. ts = de quando conta o tempo na etapa; lim = minutos até ficar atrasado.
+const COLUNAS = [
+  { id: "pag", nome: "Aguardando pagamento", cor: "#706C64", st: ["aguardando_pagamento"], ts: "criado_em", lim: 10 },
+  { id: "loja", nome: "Esperando a loja", cor: "#F5B700", st: ["pendente"], ts: "criado_em", lim: 5 },
+  { id: "cozinha", nome: "Na cozinha", cor: "#1F5FBF", st: ["aceito", "preparando"], ts: "aceito_em", lim: 40 },
+  { id: "pronto", nome: "Pronto, sem motoboy", cor: "#D7261E", st: ["pronto", "aguardando_aceite"], ts: "pronto_em", lim: 8 },
+  { id: "buscar", nome: "Motoboy indo buscar", cor: "#6B3FC4", st: ["indo_para_loja", "na_loja"], ts: "pronto_em", lim: 20 },
+  { id: "rua", nome: "Saiu pra entrega", cor: "#1E8A4C", st: ["coletado", "em_rota"], ts: "coletado_em", lim: 40 },
+] as const
+// Última coluna da esteira: entregues do período (não conta como em andamento nem atrasa)
+const COL_ENTREGUE = { id: "entregue", nome: "Entregue", cor: "#34B86E" }
+const NOME_ST: Record<string, [string, string]> = {
+  aguardando_pagamento: ["Aguardando pagamento", "cinza"], pendente: ["Esperando a loja", "amarelo"], aceito: ["Aceito pela loja", "azul"], preparando: ["Na cozinha", "azul"],
+  pronto: ["Pronto, sem motoboy", "vermelho"], aguardando_aceite: ["Chamando motoboy", "vermelho"], indo_para_loja: ["Motoboy indo à loja", "roxo"], na_loja: ["Motoboy na loja", "roxo"],
+  coletado: ["Coletado", "verde"], em_rota: ["Saiu pra entrega", "verde"], entregue: ["Entregue", "verde"], cancelado: ["Cancelado", "vermelho"],
 }
+const AVULSA_COL: Record<string, string> = { aguardando: "pronto", aguardando_aceite: "pronto", aceito: "buscar", coletado: "rua", em_rota: "rua" }
+const AVULSA_ST: Record<string, string> = { aguardando: "Esperando motoboy", aguardando_aceite: "Esperando motoboy", aceito: "Motoboy indo à loja", coletado: "Coletado", em_rota: "Em rota", entregue: "Entregue", cancelado: "Cancelado" }
+const AVANCA_LOJA: Record<string, string> = { pendente: "Aceitar no lugar da loja", aceito: "Iniciar preparo", preparando: "Marcar pronto" }
+const AVANCA_AVULSA: Record<string, string> = { aceito: "Marcar coletado", coletado: "Saiu pra entrega", em_rota: "Marcar entregue" }
+const REESCALA = ["pronto", "aguardando_aceite", "indo_para_loja", "na_loja"]
+const FORCA = ["pronto", "aguardando_aceite", "indo_para_loja", "na_loja", "em_rota", "coletado"]
 
-// criado_em é timestamptz em UTC no Supabase.
-// 00:00 BRT = 03:00 UTC | 23:59:59 BRT = 02:59:59 UTC do dia seguinte.
-function rangeDatas(periodo: Periodo, ci: string, cf: string) {
-  if (periodo === "hoje") return {
-    inicio: `${dataBRT()}T03:00:00`,
-    fim:    `${dataBRT(1)}T02:59:59`,
-  }
-  if (periodo === "7d") return {
-    inicio: `${dataBRT(-6)}T03:00:00`,
-    fim:    `${dataBRT(1)}T02:59:59`,
-  }
-  if (periodo === "15d") return {
-    inicio: `${dataBRT(-14)}T03:00:00`,
-    fim:    `${dataBRT(1)}T02:59:59`,
-  }
-  if (periodo === "30d") return {
-    inicio: `${dataBRT(-29)}T03:00:00`,
-    fim:    `${dataBRT(1)}T02:59:59`,
-  }
-  if (ci && cf) return { inicio: `${ci}T03:00:00`, fim: `${cf}T02:59:59` }  // custom: datas já em BRT
-  return { inicio: `${dataBRT()}T03:00:00`, fim: `${dataBRT(1)}T02:59:59` }
+// Retirada na loja: não chama motoboy; pronto = esperando o cliente buscar (31/10/2026)
+const ehRetirada = (p: any) => p?.tipo_entrega === "retirada" || !!p?.endereco_entrega?.includes("Retirada")
+function colDe(p: any) { return COLUNAS.find(c => (c.st as readonly string[]).includes(p.status)) }
+function atraso(p: any) { const c = colDe(p); if (!c) return { m: 0, atrasado: false }; const m = minDesde(p[c.ts] ?? p.atualizado_em ?? p.criado_em); const lim = c.id === "pronto" && ehRetirada(p) ? 30 : c.lim; return { m, atrasado: m >= lim } }
+const wa = (tel?: string | null, msg = "") => { const t = (tel ?? "").replace(/\D/g, ""); return t ? `https://wa.me/55${t}?text=${encodeURIComponent(msg)}` : null }
+
+async function post(url: string, body: object) {
+  const r = await fetch(url, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+  return { ok: r.ok, j: await r.json().catch(() => ({})) as any }
 }
 
 export default function PedidosPage() {
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [avulsas, setAvulsas] = useState<any[]>([])
-  const [lojaFone,    setLojaFone]    = useState<Record<string, string>>({})
-  const [motoboyFone, setMotoboyFone] = useState<Record<string, string>>({})
-  const [motoboyNome, setMotoboyNome] = useState<Record<string, string>>({})
-  const [loading, setLoading]  = useState(true)
-  const [filtro, setFiltro]    = useState<Filtro>("todos")
-  const [expandido, setExpandido] = useState<string | null>(null)
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
-  const [deletando, setDeletando] = useState(false)
+  const [fones, setFones] = useState<{ loja: Record<string, string>; mb: Record<string, { nome: string; tel: string }> }>({ loja: {}, mb: {} })
+  const [carregou, setCarregou] = useState(false)
+  // "Agora no app": clientes com o app aberto nos últimos 2 min (31/10/2026)
+  const [online, setOnline] = useState<{ total: number; lojas: number; checkout: number; pedido: number } | null>(null)
+  useEffect(() => {
+    const ler = () => fetch("/api/admin/online", { credentials: "include" }).then(r => r.ok ? r.json() : null).then(j => j && setOnline(j)).catch(() => {})
+    ler(); const iv = setInterval(ler, 30_000); return () => clearInterval(iv)
+  }, [])
+  const [periodo, setPeriodo] = useState<Periodo>("hoje")
+  const [ci, setCi] = useState(""), [cf, setCf] = useState("")
+  const [filtro, setFiltro] = useState<Filtro>("andamento")
+  const [visao, setVisao] = useState<"colunas" | "lista">("colunas")
+  const [busca, setBusca] = useState("")
+  const [colCel, setColCel] = useState("loja")
+  const [aberto, setAberto] = useState<string | null>(null)
+  const [avisos, setAvisos] = useState<Record<string, { t: string; ok: boolean }>>({})
+  const [ocupado, setOcupado] = useState<string | null>(null)
 
-  async function excluirPedido(id: string) {
-    setDeletando(true)
-    const res = await fetch("/api/chego-ctrl/excluir-pedido", {
-      method: "DELETE", credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pedido_id: id }),
-    }).catch(() => null)
-    // Só remove da tela se o servidor confirmou — senão a próxima atualização
-    // automática (15s) traz o pedido de volta e parece que "voltou sozinho".
-    if (res?.ok) {
-      setPedidos(prev => prev.filter(p => p.id !== id))
-      setConfirmDelete(null)
-    }
-    setDeletando(false)
-  }
-  const [periodo, setPeriodo]  = useState<Periodo>("hoje")
-  const [customInicio, setCustomInicio] = useState("")
-  const [customFim,    setCustomFim]    = useState("")
-
-  async function load(per = periodo, ci = customInicio, cf = customFim) {
+  async function load(per = periodo) {
     const { inicio, fim } = rangeDatas(per, ci, cf)
-    const [{ data: pedData }, { data: avData }] = await Promise.all([
-      supabase
-        .from("pedidos")
-        .select("*, loja:lojas(nome, telefone), motoboy:motoboys(nome, telefone), itens:itens_pedido(*)")
-        .gte("criado_em", inicio)
-        .lte("criado_em", fim)
-        .order("criado_em", { ascending: false })
-        .limit(1000),
-      supabase
-        .from("entregas_avulsas")
-        .select("*")
-        .gte("criado_em", inicio)
-        .lte("criado_em", fim)
-        .order("criado_em", { ascending: false })
-        .limit(1000),
+    const [{ data: ped }, { data: av }] = await Promise.all([
+      supabase.from("pedidos").select("*, loja:lojas(nome, telefone, logo_url), motoboy:motoboys(nome, telefone), itens:itens_pedido(*)")
+        .gte("criado_em", inicio).lte("criado_em", fim).order("criado_em", { ascending: false }).limit(1000),
+      supabase.from("entregas_avulsas").select("*").gte("criado_em", inicio).lte("criado_em", fim).order("criado_em", { ascending: false }).limit(1000),
     ])
-    setPedidos((pedData as Pedido[]) ?? [])
-
-    const avList = avData ?? []
-    setAvulsas(avList)
-
-    // Busca telefones das lojas e motoboys das avulsas
-    const lojaIds    = [...new Set(avList.map((a: any) => a.loja_id).filter(Boolean))]
-    const motoboyIds = [...new Set(avList.map((a: any) => a.motoboy_id).filter(Boolean))]
-
-    const [{ data: lojasData }, { data: motoboysData }] = await Promise.all([
-      lojaIds.length    > 0 ? supabase.from("lojas").select("id, telefone").in("id", lojaIds)             : Promise.resolve({ data: [] }),
-      motoboyIds.length > 0 ? supabase.from("motoboys").select("id, nome, telefone").in("id", motoboyIds) : Promise.resolve({ data: [] }),
+    setPedidos((ped as Pedido[]) ?? [])
+    const avl = av ?? []; setAvulsas(avl)
+    const lIds = [...new Set(avl.map((a: any) => a.loja_id).filter(Boolean))], mIds = [...new Set(avl.map((a: any) => a.motoboy_id).filter(Boolean))]
+    const [{ data: ls }, { data: ms }] = await Promise.all([
+      lIds.length ? supabase.from("lojas").select("id, telefone").in("id", lIds) : Promise.resolve({ data: [] as any[] }),
+      mIds.length ? supabase.from("motoboys").select("id, nome, telefone").in("id", mIds) : Promise.resolve({ data: [] as any[] }),
     ])
-
-    const fones: Record<string, string> = {}
-    for (const l of lojasData ?? []) { if (l.telefone) fones[l.id] = l.telefone }
-    setLojaFone(fones)
-
-    const mFones: Record<string, string> = {}
-    const mNomes: Record<string, string> = {}
-    for (const m of motoboysData ?? []) {
-      if (m.telefone) mFones[m.id] = m.telefone
-      if (m.nome) mNomes[m.id] = m.nome
-    }
-    setMotoboyFone(mFones)
-    setMotoboyNome(mNomes)
-
-    setLoading(false)
+    setFones({ loja: Object.fromEntries((ls ?? []).map((l: any) => [l.id, l.telefone])), mb: Object.fromEntries((ms ?? []).map((m: any) => [m.id, { nome: m.nome, tel: m.telefone }])) })
+    setCarregou(true)
   }
 
   useEffect(() => {
-    if (periodo === "custom" && (!customInicio || !customFim)) return
-    load(periodo, customInicio, customFim)
-    if (periodo === "hoje") {
-      const iv = setInterval(() => load("hoje", "", ""), 5_000)
-      return () => clearInterval(iv)
-    }
-  }, [periodo, customInicio, customFim])
+    if (periodo === "custom" && (!ci || !cf)) return
+    load(periodo)
+    if (periodo === "hoje") { const iv = setInterval(() => load("hoje"), 8_000); return () => clearInterval(iv) }
+  }, [periodo, ci, cf])
 
-  const totalPeriodo = pedidos
-    .filter(p => p.status === "entregue")
-    .reduce((s, p) => s + p.total, 0)
+  // Abrir direto pelo código (links do Início, Ao vivo e da busca ⌘K)
+  useEffect(() => {
+    const cod = new URLSearchParams(window.location.search).get("codigo")
+    if (!cod || !carregou) return
+    const p = pedidos.find(x => x.codigo === cod)
+    if (p) { setAberto(p.id); return }
+    supabase.from("pedidos").select("criado_em").eq("codigo", cod).maybeSingle().then(({ data }) => {
+      if (data && periodo === "hoje") { const d = new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo" }).format(new Date((data as any).criado_em)); setCi(d); setCf(d); setPeriodo("custom"); setFiltro("todos") }
+    })
+  }, [carregou])
+  useEffect(() => { const cod = new URLSearchParams(window.location.search).get("codigo"); if (cod && !aberto) { const p = pedidos.find(x => x.codigo === cod); if (p) setAberto(p.id) } }, [pedidos])
 
-  const fmt = (iso: string) =>
-    new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-  const diffMin = (a: string, b: string) =>
-    Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60000)
+  const aviso = (id: string, t: string, ok: boolean) => setAvisos(a => ({ ...a, [id]: { t, ok } }))
+  const muda = (id: string, campos: Partial<Pedido>) => setPedidos(ps => ps.map(x => x.id === id ? { ...x, ...campos } as Pedido : x))
 
-  // ── Definição das colunas do kanban ─────────────────────────────────────────
-  const COLUNAS = [
-    { id: "aguardando_pagamento", label: "Aguard. Pagamento", color: "#f59e0b", statuses: ["aguardando_pagamento"], tsKey: "criado_em",   tsLabel: "Criado"   },
-    { id: "pendente",   label: "Pendente",   color: "#f97316", statuses: ["pendente"],                                    tsKey: "criado_em",   tsLabel: "Criado"   },
-    { id: "aceito",     label: "Aceito",     color: "#3b82f6", statuses: ["aceito"],                                      tsKey: "aceito_em",   tsLabel: "Aceito"   },
-    { id: "preparando", label: "Preparando", color: "#8b5cf6", statuses: ["preparando"],                                  tsKey: "aceito_em",   tsLabel: "Iniciado" },
-    { id: "pronto",     label: "Pronto",     color: "#06b6d4", statuses: ["pronto","aguardando_aceite","indo_para_loja","na_loja"], tsKey: "pronto_em", tsLabel: "Pronto" },
-    { id: "coletado",   label: "Coletado",   color: "#f97316", statuses: ["em_rota","coletado"],                          tsKey: "coletado_em", tsLabel: "Coletado" },
-    { id: "entregue",   label: "Entregue",   color: "#22c55e", statuses: ["entregue"],                                    tsKey: "entregue_em", tsLabel: "Entregue" },
-  ] as const
-
-  // Mapeia status da entrega avulsa para coluna do kanban
-  function avulsaColuna(status: string): string {
-    if (status === "aguardando" || status === "aguardando_aceite") return "pendente"
-    if (status === "aceito") return "aceito"
-    if (status === "coletado" || status === "em_rota") return "coletado"
-    if (status === "entregue") return "entregue"
-    return ""
+  async function avancar(p: Pedido) {
+    setOcupado(p.id); const { ok, j } = await post("/api/admin/avancar-pedido", { pedido_id: p.id }); setOcupado(null)
+    if (ok) { muda(p.id, { status: j.pedido.status }); aviso(p.id, `Avançado: ${NOME_ST[j.pedido.status]?.[0] ?? j.pedido.status}.`, true) } else aviso(p.id, j.error ?? "Não deu certo.", false)
+  }
+  async function chamarOutro(p: Pedido) {
+    setOcupado(p.id); const { ok, j } = await post("/api/escalada", { pedido_id: p.id, motoboy_recusou_id: p.motoboy_id ?? undefined }); setOcupado(null)
+    aviso(p.id, ok && j.broadcast ? `Chamando ${j.broadcast} motoboy(s) de novo.` : ok ? (j.msg ?? "Nada a fazer agora.") : (j.error ?? "Não deu certo."), ok); if (ok) load()
+  }
+  async function forcarEntregue(p: Pedido) {
+    setOcupado(p.id); const { ok, j } = await post("/api/admin/completar-pedido", { pedido_id: p.id }); setOcupado(null)
+    if (ok && j.ok) { muda(p.id, { status: "entregue" as StatusPedido, entregue_em: new Date().toISOString() } as any); aviso(p.id, "Marcado como entregue.", true) } else aviso(p.id, j.error ?? "Não deu certo.", false)
+  }
+  async function conferirCartao(p: Pedido) {
+    setOcupado(p.id); const { j } = await post("/api/pagamento/verificar", { pedido_id: p.id }); setOcupado(null)
+    if (j.confirmado) { muda(p.id, { status: "pendente" as StatusPedido }); aviso(p.id, "O Asaas confirmou. Pedido liberado pra loja.", true) }
+    else aviso(p.id, j.status === "cancelado" ? "O Asaas recusou o cartão." : "O Asaas ainda não confirmou.", false)
+  }
+  async function confirmarManual(p: Pedido, comprovante = "") {
+    setOcupado(p.id); const { ok, j } = await post("/api/admin/confirmar-pagamento-manual", { pedido_id: p.id, comprovante }); setOcupado(null)
+    if (ok && j.ok) { muda(p.id, { status: "pendente" as StatusPedido }); aviso(p.id, "Pagamento confirmado. A loja foi avisada.", true) } else aviso(p.id, j.error ?? "Não deu certo.", false)
+  }
+  async function excluir(p: Pedido) {
+    setOcupado(p.id)
+    const r = await fetch("/api/chego-ctrl/excluir-pedido", { method: "DELETE", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pedido_id: p.id }) }).catch(() => null)
+    setOcupado(null)
+    if (r?.ok) { setPedidos(ps => ps.filter(x => x.id !== p.id)); setAberto(null) } else aviso(p.id, "Não foi possível excluir.", false)
+  }
+  async function avancarAvulsa(a: any) {
+    setOcupado(a.id); const { ok, j } = await post("/api/admin/avancar-avulsa", { avulsa_id: a.id }); setOcupado(null)
+    if (ok && j.ok) setAvulsas(xs => xs.map(x => x.id === a.id ? { ...x, status: j.avulsa.status } : x)); else aviso(a.id, j.error ?? "Não deu certo.", false)
+  }
+  async function chamarOutroAvulsa(a: any) {
+    setOcupado(a.id); const { ok, j } = await post("/api/escalada-avulsa", { avulsa_id: a.id }); setOcupado(null)
+    aviso(a.id, ok ? (j.msg ?? "Chamando outros motoboys.") : (j.error ?? "Não deu certo."), ok); if (ok) load()
   }
 
-  const cancelados = pedidos.filter(p => p.status === "cancelado")
-  const avulsasCanceladas = avulsas.filter((a: any) => a.status === "cancelado")
+  const q = busca.trim().toLowerCase()
+  const bate = (p: any) => !q || [p.codigo, p.loja?.nome, p.nome_cliente, p.loja_nome, p.cliente_nome].some(x => String(x ?? "").toLowerCase().includes(q))
+  const vivos = pedidos.filter(p => colDe(p) && bate(p))
+  const lista = useMemo(() => {
+    const b = pedidos.filter(bate)
+    if (filtro === "andamento") return b.filter(p => colDe(p))
+    if (filtro === "atrasados") return b.filter(p => atraso(p).atrasado)
+    if (filtro === "entregues") return b.filter(p => p.status === "entregue")
+    if (filtro === "cancelados") return b.filter(p => p.status === "cancelado")
+    return b
+  }, [pedidos, filtro, q])
+  const avs = avulsas.filter(bate)
+  const ent = pedidos.filter(p => p.status === "entregue")
+  const nAtras = pedidos.filter(p => atraso(p).atrasado).length
+  const p = pedidos.find(x => x.id === aberto) ?? null
+  const usaColunas = visao === "colunas" && filtro === "andamento"
+  // No celular, abre na primeira etapa que tem pedido
+  useEffect(() => { const c = COLUNAS.find(c => pedidos.some(x => colDe(x)?.id === c.id)); if (c && !pedidos.some(x => colDe(x)?.id === colCel)) setColCel(c.id) }, [pedidos])
+
+  const Cartao = ({ p }: { p: any }) => {
+    const a = atraso(p), act = AVANCA_LOJA[p.status], it: any[] = p.itens ?? []
+    return (
+      <button className={`ped ${a.atrasado ? "atrasado" : ""}`} onClick={() => setAberto(p.id)}>
+        <span className="ped-cab"><span className="cod">#{p.codigo}</span>{ehRetirada(p) && <span className="selo amarelo">🏪 Retirada</span>}<span className="tempo" style={{ color: a.atrasado ? "var(--pimenta)" : "var(--suave)" }}>{tempo(a.m)}</span></span>
+        <span className="ped-loja">{p.loja?.logo_url ? <img src={p.loja.logo_url} alt="" /> : <i>{(p.loja?.nome ?? "?")[0]}</i>}<b>{p.loja?.nome ?? "—"}</b></span>
+        <span className="cli">Pra {p.nome_cliente ?? "cliente"}{p.endereco_entrega?.includes("Retirada") ? ", retira na loja" : ""}</span>
+        {it.length > 0 && <span className="itens">{it.slice(0, 2).map(i => `${i.quantidade}× ${i.nome}`).join(", ")}{it.length > 2 ? ` e mais ${it.length - 2}` : ""}</span>}
+        <span className="rodape"><span className="selo cinza">{ehDividido(p) ? rotuloPagamento(p) : FORMA[p.forma_pagamento] ?? p.forma_pagamento}</span><span className="total num">{brl(p.total)}</span></span>
+        {p.motoboy?.nome && <span className="mb-linha"><span className="av">{p.motoboy.nome[0]}</span>{p.motoboy.nome}</span>}
+        {avisos[p.id] && <span className={`aviso ${avisos[p.id].ok ? "vd" : "vm"}`} style={{ display: "block", marginTop: 8, fontSize: 13, padding: "8px 10px" }}>{avisos[p.id].t}</span>}
+        {act && <span role="button" tabIndex={0} className="btn btn-p acao" aria-disabled={ocupado === p.id} onClick={e => { e.stopPropagation(); if (ocupado !== p.id) avancar(p) }}>{ocupado === p.id ? "Avançando…" : act}</span>}
+        {(p.status === "pronto" || p.status === "aguardando_aceite") && ehRetirada(p) && <span className="t14 mut" style={{ display: "block", marginTop: 8 }}>Pronto. Esperando o cliente buscar na loja.</span>}
+        {(p.status === "pronto" || p.status === "aguardando_aceite") && ehRetirada(p) && <span role="button" tabIndex={0} className="btn btn-s acao" onClick={e => { e.stopPropagation(); if (ocupado !== p.id) forcarEntregue(p) }}>{ocupado === p.id ? "Marcando…" : "Cliente retirou"}</span>}
+        {(p.status === "pronto" || p.status === "aguardando_aceite") && !p.motoboy_id && !ehRetirada(p) && <span role="button" tabIndex={0} className="btn btn-p acao" onClick={e => { e.stopPropagation(); if (ocupado !== p.id) chamarOutro(p) }}>{ocupado === p.id ? "Chamando…" : "Chamar motoboys de novo"}</span>}
+        {p.status === "aguardando_pagamento" && <span className="btn btn-s acao">Ver pagamento</span>}
+      </button>
+    )
+  }
+  const CartaoAvulsa = ({ a }: { a: any }) => {
+    const mb = fones.mb[a.motoboy_id]
+    return (
+      <div className="ped avulsa">
+        <span className="ped-cab"><span className="cod">#{a.codigo}</span><span className="selo roxo">Avulsa</span><span className="tempo" style={{ color: "var(--suave)" }}>{hh(a.criado_em)}</span></span>
+        <span className="ped-loja"><i>{(a.loja_nome ?? "?")[0]}</i><b>{a.loja_nome ?? "—"}</b></span>
+        <span className="cli">Pra {a.cliente_nome ?? "cliente"}, {AVULSA_ST[a.status] ?? a.status}</span>
+        <span className="rodape"><span className="t14 mut">Entrega</span><span className="total num">{brl(a.taxa_entrega)}</span></span>
+        {mb && <span className="mb-linha"><span className="av">{mb.nome[0]}</span>{mb.nome}</span>}
+        {avisos[a.id] && <span className={`aviso ${avisos[a.id].ok ? "vd" : "vm"}`} style={{ display: "block", marginTop: 8, fontSize: 13, padding: "8px 10px" }}>{avisos[a.id].t}</span>}
+        <span className="ped-links">
+          {wa(fones.loja[a.loja_id], `Entrega avulsa *#${a.codigo}*`) && <a href={wa(fones.loja[a.loja_id], `Entrega avulsa *#${a.codigo}*`)!} target="_blank" rel="noreferrer">WhatsApp loja</a>}
+          {wa(a.cliente_tel, `Entrega avulsa *#${a.codigo}*`) && <a href={wa(a.cliente_tel, `Entrega avulsa *#${a.codigo}*`)!} target="_blank" rel="noreferrer">Cliente</a>}
+          {mb && wa(mb.tel, `Entrega avulsa *#${a.codigo}*`) && <a href={wa(mb.tel, `Entrega avulsa *#${a.codigo}*`)!} target="_blank" rel="noreferrer">Motoboy</a>}
+        </span>
+        {a.motoboy_id && AVANCA_AVULSA[a.status] && <button className="btn btn-s acao" disabled={ocupado === a.id} onClick={() => avancarAvulsa(a)}>{ocupado === a.id ? "Avançando…" : AVANCA_AVULSA[a.status]}</button>}
+        {["aguardando", "aceito"].includes(a.status) && <button className="btn btn-s acao" disabled={ocupado === a.id} onClick={() => { if (!a.motoboy_id || confirm(`Tirar a entrega do ${mb?.nome ?? "motoboy"} e chamar outro?`)) chamarOutroAvulsa(a) }}>Chamar outro motoboy</button>}
+      </div>
+    )
+  }
 
   return (
-    <div style={{ padding: "24px 24px 40px" }}>
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
-          <h1 style={{ color: "#0F172A", fontSize: 22, fontWeight: 900, margin: 0 }}>Pipeline de Pedidos</h1>
-          <span style={{ color: "#22c55e", fontWeight: 800, fontSize: 15 }}>
-            R$ {totalPeriodo.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-          </span>
-          <span style={{ color: "#94a3b8", fontSize: 12 }}>
-            ({pedidos.filter(p => p.status === "entregue").length} entregues · {pedidos.length} total)
-          </span>
-        </div>
-
-        {/* Seletor de período */}
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {(["hoje", "7d", "15d", "30d", "custom"] as Periodo[]).map(p => (
-            <button key={p} onClick={() => setPeriodo(p)} style={{
-              fontSize: 11, padding: "4px 12px", borderRadius: 20, border: "1px solid",
-              background:   periodo === p ? "rgba(99,102,241,0.1)" : "#f8fafc",
-              color:        periodo === p ? "#6366f1" : "#64748b",
-              borderColor:  periodo === p ? "rgba(99,102,241,0.4)" : "#e2e8f0",
-              fontWeight:   periodo === p ? 700 : 400, cursor: "pointer",
-            }}>
-              {PERIODO_LABELS[p]}
-            </button>
-          ))}
-        </div>
-        {periodo === "custom" && (
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
-            <input type="date" value={customInicio} onChange={e => setCustomInicio(e.target.value)}
-              style={{ fontSize: 12, padding: "5px 8px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#0F172A" }} />
-            <span style={{ fontSize: 12, color: "#94a3b8" }}>até</span>
-            <input type="date" value={customFim} onChange={e => setCustomFim(e.target.value)}
-              style={{ fontSize: 12, padding: "5px 8px", borderRadius: 8, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#0F172A" }} />
+    <>
+      <div className="pd-topo">
+        <div className="pd-resumo"><b className="num">{brl(ent.reduce((s, x) => s + x.total, 0))}</b><span>{ent.length} entregues de {pedidos.length} pedidos {periodo === "hoje" ? "hoje" : "no período"}</span></div>
+        {online && (
+          <div className="pd-resumo" title="Clientes com o app aberto nos últimos 2 minutos">
+            <b className="num" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}><span aria-hidden="true" style={{ width: 9, height: 9, borderRadius: "50%", background: "var(--folha)", boxShadow: "0 0 0 3px rgba(30,138,76,.18)" }} />{online.total} {online.total === 1 ? "pessoa" : "pessoas"} no app agora</b>
+            <span>{online.lojas} olhando lojas, {online.checkout} finalizando, {online.pedido} acompanhando pedido</span>
           </div>
         )}
+        <input className="pd-busca" placeholder="Buscar código, loja ou cliente" value={busca} onChange={e => setBusca(e.target.value)} />
       </div>
+      <div className="pd-filtros">
+        <div className="chips-l">
+          {([["andamento", "Em andamento", vivos.length], ["atrasados", "Atrasados", nAtras], ["entregues", "Entregues", ent.length], ["cancelados", "Cancelados", pedidos.filter(x => x.status === "cancelado").length], ["todos", "Todos", pedidos.length], ["avulsas", "Avulsas", avulsas.length]] as [Filtro, string, number][]).map(([k, n, c]) => (
+            <button key={k} className={`chip ${k === "atrasados" && c ? "quente" : ""}`} aria-pressed={filtro === k} onClick={() => setFiltro(k)}>{n} <span className="pd-n">{c}</span></button>))}
+        </div>
+        <div className="chips-l" style={{ marginLeft: "auto" }}>
+          <select className="pd-sel" value={periodo} onChange={e => setPeriodo(e.target.value as Periodo)}>
+            <option value="hoje">Hoje</option><option value="7d">7 dias</option><option value="15d">15 dias</option><option value="30d">30 dias</option><option value="custom">Escolher datas</option>
+          </select>
+          {filtro === "andamento" && <div className="pd-vis">{(["colunas", "lista"] as const).map(v => <button key={v} aria-pressed={visao === v} onClick={() => setVisao(v)}>{v === "colunas" ? "Colunas" : "Lista"}</button>)}</div>}
+        </div>
+      </div>
+      {periodo === "custom" && <div className="lin" style={{ gap: 8, marginBottom: 12, flexWrap: "wrap" }}><input type="date" className="pd-sel" value={ci} onChange={e => setCi(e.target.value)} /><span className="mut">até</span><input type="date" className="pd-sel" value={cf} onChange={e => setCf(e.target.value)} /></div>}
 
-      {/* ── Kanban ─────────────────────────────────────────────────────────── */}
-      {loading ? (
-        <p style={{ color: "#94a3b8", fontSize: 13 }}>Carregando...</p>
-      ) : (
+      {!carregou ? <p className="mut">Carregando…</p> : filtro === "avulsas" ? (
+        <div className="pd-grade">{avs.length ? avs.map(a => <CartaoAvulsa key={a.id} a={a} />) : <p className="vazio">Nenhuma entrega avulsa no período.</p>}</div>
+      ) : usaColunas ? (
         <>
-          {/* Board sempre horizontal (lado a lado), com scroll — inclusive no mobile,
-              pra acompanhar o pipeline completo mesmo com volume alto de pedidos */}
-          <div style={{ display: "flex", gap: 14, overflowX: "auto", paddingBottom: 16, alignItems: "flex-start" }}>
-            {COLUNAS.map(col => {
-              const cards = pedidos
-                .filter(p => (col.statuses as readonly string[]).includes(p.status))
-                .sort((a, b) => b.criado_em.localeCompare(a.criado_em))
-              const avulsasCol = avulsas
-                .filter((a: any) => avulsaColuna(a.status) === col.id)
-                .sort((a: any, b: any) => b.criado_em.localeCompare(a.criado_em))
-              const totalCol = cards.length + avulsasCol.length
+          {/* Celular: todas as etapas à vista numa grade, com a cor, a quantidade e quantos estão atrasados (21/10/2026) */}
+          <div className="abas-col">{COLUNAS.map(c => {
+            const n = vivos.filter(x => colDe(x)?.id === c.id).length + avs.filter(a => AVULSA_COL[a.status] === c.id).length
+            const atr = vivos.filter(x => colDe(x)?.id === c.id && atraso(x).atrasado).length
+            return <button key={c.id} aria-pressed={colCel === c.id} className={n ? "" : "zero"} onClick={() => setColCel(c.id)}>
+              <i style={{ background: c.cor }} /><span className="nm">{c.nome}</span>
+              <span className="n num">{n}</span>{atr > 0 && <span className="atr">{atr} {atr === 1 ? "atrasado" : "atrasados"}</span>}
+            </button> })}
+            <button aria-pressed={colCel === "entregue"} className={ent.length ? "" : "zero"} onClick={() => setColCel("entregue")}><i style={{ background: COL_ENTREGUE.cor }} /><span className="nm">Entregue</span><span className="n num">{ent.length}</span></button></div>
+          <div className="colunas pd-esteira">
+            {COLUNAS.map(c => {
+              const cs = vivos.filter(x => colDe(x)?.id === c.id).sort((a, b) => atraso(b).m - atraso(a).m)
+              const as = avs.filter(a => AVULSA_COL[a.status] === c.id)
               return (
-                <div key={col.id} style={{ minWidth: 240, maxWidth: 260, flex: "0 0 250px", display: "flex", flexDirection: "column", gap: 10 }}>
-                  {/* Cabeçalho da coluna */}
-                  <div style={{
-                    padding: "8px 12px", borderRadius: 10,
-                    background: `${col.color}15`,
-                    border: `1px solid ${col.color}35`,
-                    display: "flex", justifyContent: "space-between", alignItems: "center",
-                  }}>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: col.color }}>{col.label}</span>
-                    <span style={{
-                      fontSize: 11, fontWeight: 900, color: "white",
-                      background: col.color, borderRadius: 20, padding: "1px 8px", minWidth: 22, textAlign: "center",
-                    }}>{totalCol}</span>
-                  </div>
-
-                  {/* Cards avulsas (roxo) */}
-                  {avulsasCol.map((a: any) => (
-                    <div key={a.id} style={{
-                      background: "white", borderRadius: 12,
-                      border: "1px solid rgba(139,92,246,0.25)",
-                      borderTop: "3px solid #8b5cf6",
-                      padding: "10px 12px",
-                      boxShadow: "0 1px 4px rgba(139,92,246,0.08)",
-                    }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                        <span style={{ fontSize: 13, fontWeight: 900, color: "#0F172A" }}>#{a.codigo}</span>
-                        <span style={{ fontSize: 9, fontWeight: 800, color: "#8b5cf6", background: "rgba(139,92,246,0.1)", borderRadius: 5, padding: "1px 6px" }}>🛵 AVULSA</span>
-                      </div>
-                      <p style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {a.loja_nome ?? "—"}
-                      </p>
-                      {a.cliente_nome && (
-                        <p style={{ fontSize: 11, color: "#64748b", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.cliente_nome}</p>
-                      )}
-                      {a.motoboy_id && motoboyNome[a.motoboy_id] && (
-                        <p style={{ fontSize: 11, fontWeight: 700, color: "#8b5cf6", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          🛵 {motoboyNome[a.motoboy_id]}
-                        </p>
-                      )}
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
-                        <span style={{ fontSize: 13, fontWeight: 900, color: "#8b5cf6" }}>R$ {(a.taxa_entrega ?? 0).toFixed(2)}</span>
-                        <span style={{ fontSize: 10, color: "#94a3b8" }}>🕐 {fmt(a.criado_em)}</span>
-                      </div>
-                      <div style={{ display: "flex", gap: 4, marginTop: 6, flexWrap: "wrap" }} onClick={e => e.stopPropagation()}>
-                        <BotaoWA telefone={lojaFone[a.loja_id]} label="Loja" msg={`Entrega avulsa *#${a.codigo}*`} />
-                        <BotaoWA telefone={a.cliente_tel} label="Cliente" msg={`Entrega avulsa *#${a.codigo}*`} />
-                        <BotaoWA telefone={motoboyFone[a.motoboy_id]} label="Motoboy" msg={`Entrega avulsa *#${a.codigo}*`} />
-                        {a.motoboy_id && (
-                          <AvancarAvulsaBtn avulsaId={a.id} statusAtual={a.status} onAvancado={novoStatus =>
-                            setAvulsas(prev => prev.map(x => x.id === a.id ? { ...x, status: novoStatus } : x))
-                          } />
-                        )}
-                        {["aguardando", "aceito"].includes(a.status) && (
-                          <ChamarOutroMotoboyAvulsaBtn avulsaId={a.id} motoboyAtualId={a.motoboy_id} onChamado={() => load()} />
-                        )}
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Cards pedidos normais */}
-                  {totalCol === 0 ? (
-                    <div style={{ padding: "16px 0", textAlign: "center" }}>
-                      <span style={{ fontSize: 11, color: "#cbd5e1" }}>Vazio</span>
-                    </div>
-                  ) : cards.map(p => {
-                    const aberto = expandido === p.id
-                    const itens: any[] = (p as any).itens ?? []
-                    const ts = col.tsKey ? (p as any)[col.tsKey] : null
-                    return (
-                      <div key={p.id} style={{
-                        background: "white", borderRadius: 12,
-                        border: `1px solid #e2e8f0`,
-                        borderTop: `3px solid ${col.color}`,
-                        overflow: "hidden",
-                        boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
-                      }}>
-                        {/* Card header */}
-                        <div
-                          onClick={() => setExpandido(aberto ? null : p.id)}
-                          style={{ padding: "10px 12px", cursor: "pointer" }}
-                        >
-                          {/* Código + timestamp + lixeira */}
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
-                            <span style={{ fontSize: 13, fontWeight: 900, color: "#0F172A" }}>#{p.codigo}</span>
-                            <div style={{ display: "flex", alignItems: "center", gap: 4 }} onClick={e => e.stopPropagation()}>
-                              {ts && (
-                                <span style={{
-                                  fontSize: 10, fontWeight: 700,
-                                  background: `${col.color}15`, color: col.color,
-                                  borderRadius: 6, padding: "2px 7px",
-                                }}>
-                                  {col.tsLabel} {fmt(ts)}
-                                </span>
-                              )}
-                              {confirmDelete === p.id ? (
-                                <div style={{ display: "flex", gap: 3 }}>
-                                  <button
-                                    onClick={() => excluirPedido(p.id)}
-                                    disabled={deletando}
-                                    style={{
-                                      fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 5, border: "none",
-                                      background: "#ef4444", color: "white", cursor: "pointer",
-                                    }}
-                                  >
-                                    {deletando ? "..." : "Confirmar"}
-                                  </button>
-                                  <button
-                                    onClick={() => setConfirmDelete(null)}
-                                    style={{
-                                      fontSize: 10, padding: "2px 6px", borderRadius: 5, border: "1px solid #e2e8f0",
-                                      background: "#f8fafc", color: "#64748b", cursor: "pointer",
-                                    }}
-                                  >
-                                    Cancelar
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={() => setConfirmDelete(p.id)}
-                                  title="Excluir pedido"
-                                  style={{
-                                    background: "none", border: "none", cursor: "pointer",
-                                    padding: "2px 4px", borderRadius: 4,
-                                    color: "#cbd5e1", lineHeight: 1,
-                                  }}
-                                >
-                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-                                  </svg>
-                                </button>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Loja */}
-                          <p style={{ fontSize: 12, fontWeight: 700, color: "#334155", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {(p.loja as any)?.nome ?? "—"}
-                          </p>
-
-                          {/* Cliente */}
-                          {p.nome_cliente && (
-                            <p style={{ fontSize: 11, color: "#64748b", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {p.nome_cliente}
-                            </p>
-                          )}
-
-                          {/* Motoboy */}
-                          {(p.motoboy as any)?.nome && (
-                            <p style={{ fontSize: 11, color: "#8b5cf6", marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              🛵 {(p.motoboy as any).nome}
-                            </p>
-                          )}
-
-                          {/* Valor + pagamento */}
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
-                            <span style={{ fontSize: 14, fontWeight: 900, color: "#0F172A" }}>
-                              R$ {p.total.toFixed(2)}
-                            </span>
-                            <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600 }}>
-                              {PAGAMENTO_ICON[p.forma_pagamento]}
-                            </span>
-                          </div>
-
-                          {/* Timeline de horários */}
-                          <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: "3px 8px" }}>
-                            <span style={{ fontSize: 10, color: "#94a3b8" }}>🕐 {fmt(p.criado_em)}</span>
-                            {(p as any).aceito_em   && <span style={{ fontSize: 10, color: "#3b82f6" }}>✓ {fmt((p as any).aceito_em)}</span>}
-                            {(p as any).pronto_em   && <span style={{ fontSize: 10, color: "#06b6d4" }}>📦 {fmt((p as any).pronto_em)}</span>}
-                            {(p as any).coletado_em && <span style={{ fontSize: 10, color: "#f97316" }}>🛵 {fmt((p as any).coletado_em)}</span>}
-                            {(p as any).entregue_em && <span style={{ fontSize: 10, color: "#22c55e" }}>✅ {fmt((p as any).entregue_em)}</span>}
-                          </div>
-
-                          {/* WhatsApp */}
-                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 8 }} onClick={e => e.stopPropagation()}>
-                            <BotaoWA telefone={(p.loja as any)?.telefone} label="Loja" msg={`Pedido *#${p.codigo}*`} />
-                            <BotaoWA telefone={p.telefone_cliente} label="Cliente" msg={`Pedido *#${p.codigo}*`} />
-                            <BotaoWA telefone={(p.motoboy as any)?.telefone} label="Motoboy" msg={`Entrega *#${p.codigo}*`} />
-                          </div>
-
-                          {/* Avançar etapa (pendente/aceito/preparando) no lugar da loja */}
-                          {STATUSES_AVANCAVEIS_ADMIN.includes(p.status) && (
-                            <div style={{ marginTop: 6, display: "flex", gap: 4 }} onClick={e => e.stopPropagation()}>
-                              <AvancarPedidoBtn pedidoId={p.id} statusAtual={p.status} onAvancado={novoStatus => setPedidos(prev =>
-                                prev.map(x => x.id === p.id ? { ...x, status: novoStatus as StatusPedido } as Pedido : x)
-                              )} />
-                            </div>
-                          )}
-
-                          {/* Chamar outro motoboy + Forçar avanço p/ pedidos travados no fluxo de entrega */}
-                          {(STATUSES_REESCALAVEIS.includes(p.status) || STATUSES_FORCAVEIS.includes(p.status)) && (
-                            <div style={{ marginTop: 6, display: "flex", gap: 4, flexWrap: "wrap" }} onClick={e => e.stopPropagation()}>
-                              {STATUSES_REESCALAVEIS.includes(p.status) && (
-                                <ChamarOutroMotoboyBtn pedidoId={p.id} motoboyAtualId={p.motoboy_id} onChamado={() => load()} />
-                              )}
-                              {STATUSES_FORCAVEIS.includes(p.status) && (
-                                <ForcarEntregaBtn pedidoId={p.id} onForcado={() => setPedidos(prev =>
-                                  prev.map(x => x.id === p.id ? { ...x, status: "entregue" as StatusPedido, entregue_em: new Date().toISOString() } as Pedido : x)
-                                )} />
-                              )}
-                            </div>
-                          )}
-
-                          {p.status === "aguardando_pagamento" && (
-                            <div onClick={e => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
-                              {p.forma_pagamento === "cartao" && (
-                                <ConfirmarCartaoBtn pedidoId={p.id} onConfirmado={() => setPedidos(prev =>
-                                  prev.map(x => x.id === p.id ? { ...x, status: "pendente" as StatusPedido } : x)
-                                )} />
-                              )}
-                              <ConfirmarPagamentoManualBtn pedidoId={p.id} onConfirmado={() => setPedidos(prev =>
-                                prev.map(x => x.id === p.id ? { ...x, status: "pendente" as StatusPedido } : x)
-                              )} />
-                            </div>
-                          )}
-
-                          <p style={{ fontSize: 10, color: "#94a3b8", marginTop: 6, textAlign: "right" }}>
-                            {aberto ? "▲ fechar" : "▼ ver itens"}
-                          </p>
-                        </div>
-
-                        {/* Itens expandidos */}
-                        {aberto && (
-                          <div style={{ borderTop: "1px solid #f1f5f9", padding: "10px 12px 12px", background: "#f8fafc" }}>
-                            {itens.length === 0 ? (
-                              <p style={{ fontSize: 12, color: "#94a3b8" }}>Sem itens.</p>
-                            ) : (
-                              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                                {itens.map((it: any, i: number) => (
-                                  <div key={it.id ?? i} style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
-                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                      <p style={{ fontSize: 12, fontWeight: 700, color: "#0F172A" }}>{it.quantidade}x {it.nome}</p>
-                                      {Array.isArray(it.adicionais) && it.adicionais.length > 0 && it.adicionais.map((ad: any, j: number) => (
-                                        <p key={j} style={{ fontSize: 10, color: "#64748b" }}>+ {ad.nome ?? ad}{ad.preco > 0 ? ` R$ ${Number(ad.preco).toFixed(2)}` : ""}</p>
-                                      ))}
-                                      {it.observacao && <p style={{ fontSize: 10, color: "#f97316" }}>Obs: {it.observacao}
-                                </p>
-                              }
-                            </div>
-                            <p style={{ fontSize: 13, fontWeight: 700, color: "#0F172A", flexShrink: 0 }}>
-                              R$ {(it.preco * it.quantidade).toFixed(2)}
-                            </p>
-                          </div>
-                        ))}
-                        <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 8, display: "flex", justifyContent: "space-between" }}>
-                          <span style={{ fontSize: 12, color: "#64748b" }}>Subtotal</span>
-                          <span style={{ fontSize: 12, fontWeight: 700 }}>R$ {p.subtotal.toFixed(2)}</span>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between" }}>
-                          <span style={{ fontSize: 12, color: "#64748b" }}>Taxa entrega</span>
-                          <span style={{ fontSize: 12, fontWeight: 700 }}>R$ {p.taxa_entrega.toFixed(2)}</span>
-                        </div>
-                        {p.observacao && (
-                          <p style={{ fontSize: 11, color: "#f97316", background: "rgba(249,115,22,0.06)", padding: "6px 10px", borderRadius: 6, border: "1px solid rgba(249,115,22,0.15)" }}>
-                            Obs do cliente: {p.observacao}
-                          </p>
-                        )}
-
-                        {/* Percurso */}
-                        {(p.coletado_em || p.entregue_em) && (
-                          <div style={{ marginTop: 4 }}>
-                            <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>
-                              Percurso
-                            </p>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                              {/* Pedido criado */}
-                              <PercursoItem cor="#94a3b8" label="Pedido criado" hora={fmt(p.criado_em)} linha />
-                              {/* Coletado na loja */}
-                              {p.coletado_em && (
-                                <PercursoItem cor="#f97316" label="Saiu para entrega" hora={fmt(p.coletado_em)} linha={!!p.entregue_em} />
-                              )}
-                              {/* Entregue */}
-                              {p.entregue_em && (
-                                <PercursoItem cor="#22c55e" label="Entregue ao cliente" hora={fmt(p.entregue_em)} linha={false} />
-                              )}
-                            </div>
-                            {p.coletado_em && p.entregue_em && (
-                              <div style={{ marginTop: 10, padding: "6px 12px", borderRadius: 8, background: "rgba(34,197,94,0.07)", border: "1px solid rgba(34,197,94,0.15)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <span style={{ fontSize: 11, color: "#64748b" }}>Tempo de entrega</span>
-                                <span style={{ fontSize: 13, fontWeight: 900, color: "#22c55e" }}>{diffMin(p.coletado_em, p.entregue_em)} min</span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })
-        }
+                <div key={c.id} className={`col ${colCel === c.id ? "ativa" : ""}`}>
+                  <div className="col-cab"><i style={{ background: c.cor }} /><b>{c.nome}</b><span className="n">{cs.length + as.length}</span></div>
+                  {cs.map(x => <Cartao key={x.id} p={x} />)}
+                  {as.map(a => <CartaoAvulsa key={a.id} a={a} />)}
+                  {!cs.length && !as.length && <p className="pd-vazio">Nada aqui</p>}
                 </div>
               )
             })}
+            {(() => { const es = pedidos.filter(x => x.status === "entregue" && bate(x)).sort((a: any, b: any) => String(b.entregue_em ?? b.criado_em).localeCompare(String(a.entregue_em ?? a.criado_em))), ea = avs.filter(a => a.status === "entregue"); return (
+              <div className={`col col-entregue ${colCel === "entregue" ? "ativa" : ""}`}>
+                <div className="col-cab"><i style={{ background: COL_ENTREGUE.cor }} /><b>{COL_ENTREGUE.nome}</b><span className="n">{es.length + ea.length}</span></div>
+                {es.slice(0, 40).map((x: any) => (
+                  <button key={x.id} className="ped feito" onClick={() => setAberto(x.id)}>
+                    <span className="ped-cab"><span className="cod">#{x.codigo}</span><span className="tempo" style={{ color: "var(--folha)" }}>{hh(x.entregue_em)}</span></span>
+                    <span className="ped-loja">{x.loja?.logo_url ? <img src={x.loja.logo_url} alt="" /> : <i>{(x.loja?.nome ?? "?")[0]}</i>}<b>{x.loja?.nome ?? "—"}</b></span>
+                    <span className="rodape"><span className="t12 mut">{x.motoboy?.nome ?? (x.endereco_entrega?.includes("Retirada") ? "retirada" : "")}{x.coletado_em && x.entregue_em ? `, ${Math.round((new Date(x.entregue_em).getTime() - new Date(x.coletado_em).getTime()) / 60000)} min na rua` : ""}</span><span className="total num">{brl(x.total)}</span></span>
+                  </button>))}
+                {ea.map(a => <CartaoAvulsa key={a.id} a={a} />)}
+                {es.length > 40 && <button className="btn btn-l" style={{ width: "100%" }} onClick={() => setFiltro("entregues")}>Ver os {es.length} entregues</button>}
+                {!es.length && !ea.length && <p className="pd-vazio">Nenhum entregue ainda</p>}
+              </div>) })()}
           </div>
-
-          {/* ── Cancelados ─────────────────────────────────────────────── */}
-          {cancelados.length > 0 && (
-            <div style={{ marginTop: 28 }}>
-              <h3 style={{ fontSize: 13, fontWeight: 800, color: "#ef4444", marginBottom: 10 }}>
-                ✕ Cancelados ({cancelados.length})
-              </h3>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                {cancelados.map(p => (
-                  <div key={p.id} style={{
-                    background: "white", borderRadius: 10,
-                    border: "1px solid #fee2e2", borderLeft: "3px solid #ef4444",
-                    padding: "10px 14px", minWidth: 200, maxWidth: 240,
-                  }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                      <span style={{ fontSize: 13, fontWeight: 900, color: "#0F172A" }}>#{p.codigo}</span>
-                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <span style={{ fontSize: 10, color: "#94a3b8" }}>{fmt(p.criado_em)}</span>
-                        {confirmDelete === p.id ? (
-                          <div style={{ display: "flex", gap: 3 }}>
-                            <button onClick={() => excluirPedido(p.id)} disabled={deletando}
-                              style={{ fontSize: 10, fontWeight: 800, padding: "2px 7px", borderRadius: 5, border: "none", background: "#ef4444", color: "white", cursor: "pointer" }}>
-                              {deletando ? "..." : "Confirmar"}
-                            </button>
-                            <button onClick={() => setConfirmDelete(null)}
-                              style={{ fontSize: 10, padding: "2px 6px", borderRadius: 5, border: "1px solid #e2e8f0", background: "#f8fafc", color: "#64748b", cursor: "pointer" }}>
-                              Cancelar
-                            </button>
-                          </div>
-                        ) : (
-                          <button onClick={() => setConfirmDelete(p.id)} title="Excluir pedido"
-                            style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 4px", borderRadius: 4, color: "#cbd5e1", lineHeight: 1 }}>
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
-                            </svg>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    <p style={{ fontSize: 12, color: "#64748b", margin: 0 }}>{(p.loja as any)?.nome}</p>
-                    {p.nome_cliente && <p style={{ fontSize: 11, color: "#94a3b8", margin: "2px 0 0" }}>{p.nome_cliente}</p>}
-                    <p style={{ fontSize: 13, fontWeight: 800, color: "#ef4444", marginTop: 4 }}>R$ {p.total.toFixed(2)}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
         </>
+      ) : (
+        <div className="cartao" style={{ padding: 6, overflow: "auto" }}>
+          <table className="tabela pd-tab"><thead><tr><th>Hora</th><th>Pedido</th><th>Loja</th><th className="esconde-cel">Cliente</th><th>Situação</th><th className="esconde-cel">Motoboy</th><th style={{ textAlign: "right" }}>Total</th></tr></thead>
+            <tbody>{lista.map((x: any) => { const st = NOME_ST[x.status] ?? [x.status, "cinza"], a = atraso(x); return (
+              <tr key={x.id} onClick={() => setAberto(x.id)} style={{ cursor: "pointer" }}>
+                <td className="num mut">{periodo === "hoje" ? hh(x.criado_em) : new Date(x.criado_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</td>
+                <td><b>#{x.codigo}</b></td><td>{x.loja?.nome ?? "—"}</td><td className="esconde-cel">{x.nome_cliente ?? "—"}</td>
+                <td><span className={`selo ${st[1]}`}>{st[0]}</span>{a.atrasado && <small className="pd-atr">há {tempo(a.m)}</small>}</td>
+                <td className="esconde-cel">{x.motoboy?.nome ?? <span className="mut">—</span>}</td>
+                <td className="num" style={{ textAlign: "right", fontWeight: 800 }}>{brl(x.total)}</td></tr>) })}
+              {!lista.length && <tr><td colSpan={7} className="vazio">Nenhum pedido aqui.</td></tr>}
+            </tbody></table>
+        </div>
       )}
-    </div>
+
+      <div className={`veu ${p ? "on" : ""}`} onClick={() => setAberto(null)} style={p ? undefined : { display: "none" }} />
+      <aside className={`gaveta ${p ? "on" : ""}`} aria-hidden={!p}>
+        {p && <Gaveta p={p as any} ocupado={ocupado === p.id} aviso={avisos[p.id]} onFechar={() => setAberto(null)}
+          acoes={{ avancar: () => avancar(p), chamarOutro: () => chamarOutro(p), forcar: () => forcarEntregue(p), cartao: () => conferirCartao(p), manual: () => confirmarManual(p), manualCom: (t: string) => confirmarManual(p, t), excluir: () => excluir(p) }} />}
+      </aside>
+    </>
+  )
+}
+
+function Gaveta({ p, ocupado, aviso, onFechar, acoes }: { p: any; ocupado: boolean; aviso?: { t: string; ok: boolean }; onFechar: () => void; acoes: Record<string, (...a: any[]) => void> }) {
+  const [confirma, setConfirma] = useState<string | null>(null)
+  const [comprovante, setComprovante] = useState("")
+  const [mais, setMais] = useState(false)
+  useEffect(() => { setConfirma(null); setMais(false); setComprovante("") }, [p.id])
+  // Liberou: fecha a caixa; se o servidor pediu comprovante, ela fica aberta com o aviso em cima
+  useEffect(() => { if (p.status !== "aguardando_pagamento") setConfirma(c => c === "manual" ? null : c) }, [p.status])
+  const st = NOME_ST[p.status] ?? [p.status, "cinza"], it: any[] = p.itens ?? []
+  const retirada = p.endereco_entrega?.includes("Retirada")
+  const etapas: [string, string | null][] = retirada
+    ? [["Pedido feito", p.criado_em], ["Loja aceitou", p.aceito_em], ["Pronto pra retirar", p.pronto_em], ["Retirado", p.entregue_em]]
+    : [["Pedido feito", p.criado_em], ["Loja aceitou", p.aceito_em], ["Pronto", p.pronto_em], ["Motoboy coletou", p.coletado_em], ["Entregue", p.entregue_em]]
+  const iAtual = p.status === "cancelado" ? -1 : etapas.findIndex(e => !e[1])
+  const Conf = ({ k, txt, sim, fn, perigo }: { k: string; txt: string; sim: string; fn: () => void; perigo?: boolean }) => confirma === k
+    ? <div className={`aviso ${perigo ? "vm" : "am"}`} style={{ marginTop: 8 }}>{txt}<div className="lin" style={{ gap: 8, marginTop: 8 }}><button className={`btn ${perigo ? "btn-p" : "btn-v"}`} style={{ minHeight: 40, flex: 1 }} disabled={ocupado} onClick={() => { fn(); setConfirma(null) }}>{ocupado ? "…" : sim}</button><button className="btn btn-s" style={{ minHeight: 40, flex: 1 }} onClick={() => setConfirma(null)}>Voltar</button></div></div>
+    : null
+  const linkWa = (tel: string | null | undefined, rot: string, msg: string) => { const u = wa(tel, msg); return u ? <a className="btn btn-s gav-wa" href={u} target="_blank" rel="noreferrer">{rot}</a> : null }
+
+  return (
+    <>
+      <div className="gav-cab">
+        <span style={{ flex: 1, minWidth: 0 }}><b className="t20">Pedido #{p.codigo}</b><br /><span className={`selo ${st[1]}`}>{st[0]}</span> <span className="t14 mut">{new Date(p.criado_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span></span>
+        <button className="btn btn-s" style={{ minHeight: 40, padding: "0 12px" }} onClick={onFechar} aria-label="Fechar">Fechar</button>
+      </div>
+      <div className="gav-corpo">
+        {aviso && <div className={`aviso ${aviso.ok ? "vd" : "vm"}`} style={{ marginBottom: 12 }}>{aviso.t}</div>}
+        {p.status === "cancelado"
+          ? <div className="aviso vm" style={{ marginBottom: 14 }}>Pedido cancelado{p.motivo_cancelamento ? `: ${p.motivo_cancelamento}` : "."}</div>
+          : <ul className="linha-tempo" style={{ marginBottom: 6 }}>{etapas.map(([n, ts], i) => <li key={n} className={ts ? "feito" : i === iAtual ? "agora" : ""}>{n}<small>{ts ? hh(ts) : i === iAtual ? "esperando" : "ainda não"}</small></li>)}</ul>}
+        {p.coletado_em && p.entregue_em && <p className="t14 mut" style={{ marginBottom: 12 }}>Entrega levou <b style={{ color: "var(--grafite)" }}>{Math.round((new Date(p.entregue_em).getTime() - new Date(p.coletado_em).getTime()) / 60000)} min</b> da loja até o cliente.</p>}
+
+        <div className="gav-sec"><small>Loja</small><b>{p.loja?.nome ?? "—"}</b>{linkWa(p.loja?.telefone, "WhatsApp da loja", `Pedido *#${p.codigo}*`)}</div>
+        <div className="gav-sec"><small>Cliente</small><b>{p.nome_cliente ?? "—"}</b><span className="t14">{p.endereco_entrega}</span>{linkWa(p.telefone_cliente, "WhatsApp do cliente", `Pedido *#${p.codigo}*`)}</div>
+        <div className="gav-sec"><small>Motoboy</small>{p.motoboy?.nome ? <><b>{p.motoboy.nome}</b>{linkWa(p.motoboy?.telefone, "WhatsApp do motoboy", `Entrega *#${p.codigo}*`)}</> : <span className="t14 mut">{retirada ? "Cliente retira na loja." : "Ninguém pegou ainda."}</span>}</div>
+
+        <div className="gav-sec"><small>Itens</small>
+          {it.length === 0 ? <span className="t14 mut">Sem itens.</span> : it.map((x: any, i: number) => (
+            <div key={x.id ?? i} className="gav-item"><span><b>{x.quantidade}× {x.nome}</b>
+              {Array.isArray(x.adicionais) && x.adicionais.map((ad: any, j: number) => <small key={j}>+ {ad.nome ?? ad}{ad.preco > 0 ? ` ${brl(ad.preco)}` : ""}</small>)}
+              {x.observacao && <small style={{ color: "var(--pimenta-esc)" }}>Obs: {x.observacao}</small>}</span><b className="num">{brl(x.preco * x.quantidade)}</b></div>))}
+          <div className="gav-tot"><span>Produtos</span><b className="num">{brl(p.subtotal)}</b></div>
+          <div className="gav-tot"><span>Entrega</span><b className="num">{brl(p.taxa_entrega)}</b></div>
+          {Number(p.desconto) > 0 && <div className="gav-tot"><span>Desconto{p.cupom_codigo ? ` (${p.cupom_codigo})` : ""}</span><b className="num">−{brl(p.desconto)}</b></div>}
+          <div className="gav-tot forte"><span>Total, {ehDividido(p) ? rotuloPagamento(p) : (FORMA[p.forma_pagamento] ?? p.forma_pagamento)}</span><b className="num">{brl(p.total)}</b></div>
+          {p.observacao && <div className="aviso am" style={{ marginTop: 8 }}>Obs do cliente: {p.observacao}</div>}
+        </div>
+
+        <div className="gav-sec"><small>O que o admin pode fazer</small>
+          <div className="gav-acoes">
+            {!["pendente", "aguardando_pagamento"].includes(p.status) && <a className="btn btn-s" href={`/chego-ctrl?reembolsos=1&codigo=${p.codigo}`}>Reembolsar</a>}
+            {p.status === "aguardando_pagamento" && <>
+              {temForma(p, "cartao") && <button className="btn btn-s" disabled={ocupado} onClick={acoes.cartao}>Conferir cartão no Asaas</button>}
+              <button className="btn btn-v" disabled={ocupado} onClick={() => setConfirma("manual")}>Já recebi, liberar pedido</button>
+            </>}
+            {AVANCA_LOJA[p.status] && <button className="btn btn-p" disabled={ocupado} onClick={acoes.avancar}>{ocupado ? "Avançando…" : AVANCA_LOJA[p.status]}</button>}
+            {REESCALA.includes(p.status) && !ehRetirada(p) && <button className="btn btn-s" disabled={ocupado} onClick={() => p.motoboy_id ? setConfirma("outro") : acoes.chamarOutro()}>{p.motoboy_id ? "Tirar do motoboy e chamar outro" : "Chamar motoboys de novo"}</button>}
+            {FORCA.includes(p.status) && <button className="btn btn-s" disabled={ocupado} onClick={() => setConfirma("forca")}>{ehRetirada(p) ? "Cliente retirou" : "Marcar como entregue"}</button>}
+            {!AVANCA_LOJA[p.status] && !REESCALA.includes(p.status) && !FORCA.includes(p.status) && p.status !== "aguardando_pagamento" && <span className="t14 mut">Nada pendente nesse pedido.</span>}
+          </div>
+          {confirma === "manual" && <div className="aviso am" style={{ marginTop: 8 }}>
+            Se o Mercado Pago já mostra o Pix como pago, o pedido vai direto pra loja. Se ainda não mostra, escreva onde você viu o dinheiro.
+            <textarea value={comprovante} onChange={e => setComprovante(e.target.value)} rows={2} placeholder="Ex.: comprovante no WhatsApp, R$ 36,99, 21h05, Nubank" style={{ width: "100%", marginTop: 8, padding: 8, borderRadius: 8, border: "1px solid var(--linha)", font: "inherit" }} />
+            <div className="lin" style={{ gap: 8, marginTop: 8 }}><button className="btn btn-v" style={{ minHeight: 40, flex: 1 }} disabled={ocupado} onClick={() => acoes.manualCom(comprovante.trim())}>{ocupado ? "…" : "Liberar pedido"}</button><button className="btn btn-s" style={{ minHeight: 40, flex: 1 }} onClick={() => setConfirma(null)}>Voltar</button></div>
+          </div>}
+          <Conf k="outro" txt={`Tirar o pedido do ${p.motoboy?.nome ?? "motoboy"} e chamar outro? Ele recebe um aviso.`} sim="Tirar e chamar outro" fn={acoes.chamarOutro} />
+          <Conf k="forca" txt="Marcar como entregue sem o motoboy confirmar? Use só se o cliente já recebeu." sim="Marcar entregue" fn={acoes.forcar} />
+        </div>
+
+        <button className="btn btn-l" style={{ padding: 0 }} onClick={() => setMais(!mais)}>{mais ? "Esconder mais opções" : "Mais opções"}</button>
+        {mais && <div className="gav-sec" style={{ borderColor: "var(--pimenta-claro)" }}>
+          <span className="t14 mut">Excluir apaga o pedido de vez, inclusive do financeiro. Prefira cancelar com o cliente.</span>
+          <button className="btn btn-s" style={{ marginTop: 8, color: "var(--pimenta-esc)" }} onClick={() => setConfirma("excluir")}>Excluir pedido</button>
+          <Conf k="excluir" txt={`Excluir o pedido #${p.codigo} de vez? Não dá pra desfazer.`} sim="Excluir" fn={acoes.excluir} perigo />
+        </div>}
+      </div>
+    </>
   )
 }

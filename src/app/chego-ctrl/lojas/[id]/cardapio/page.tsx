@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
 import type { Produto, CategoriaProduto, AdicionalProduto, GrupoAdicional } from "@/types"
+import { ncmParaFormulario, ncmAoSalvar } from "@/lib/ncmProduto"
 
 const DIAS = [
   { v: 1, l: "Seg" }, { v: 2, l: "Ter" }, { v: 3, l: "Qua" },
@@ -20,6 +21,9 @@ type ProdutoForm = {
   dias_semana: number[]
   ncm: string
 }
+// Valores em reais com máscara ao digitar (20/10/2026): "2990" vira "29,90"
+const mascara = (v: string) => { const d = v.replace(/\D/g, "").slice(0, 8); if (!d) return ""; return (Number(d) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
+const reais = (v: string) => Number(String(v).replace(/\./g, "").replace(",", ".")) || 0
 const FORM_VAZIO: ProdutoForm = { nome: "", descricao: "", preco: "", categoria_id: "", disponivel: true, foto_url: "", dias_semana: [], ncm: "" }
 
 async function uploadFoto(file: File, lojaId: string, produtoId: string): Promise<{ url: string; erro?: string }> {
@@ -47,6 +51,7 @@ export default function AdminCardapioPage() {
   const [categorias, setCategorias] = useState<CategoriaProduto[]>([])
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [loading, setLoading] = useState(true)
+  const [erroCarga, setErroCarga] = useState("")
 
   const [modalProd, setModalProd] = useState(false)
   const [modalCat, setModalCat] = useState(false)
@@ -83,7 +88,14 @@ export default function AdminCardapioPage() {
       fetch(`/api/admin/loja/${lojaId}/categorias`, { credentials: "include" }),
       fetch(`/api/admin/loja/${lojaId}/produtos`, { credentials: "include" }),
     ])
-    const [cats, prods] = await Promise.all([catRes.json(), prodRes.json()])
+    const [cats, prods] = await Promise.all([catRes.json().catch(() => null), prodRes.json().catch(() => null)])
+    if (catRes.status === 401 || prodRes.status === 401) {
+      setErroCarga("Sua sessão de admin expirou ou foi trocada por outra conta. Saia e entre de novo como admin para ver o cardápio.")
+    } else if (!catRes.ok || !prodRes.ok) {
+      setErroCarga("Não foi possível carregar o cardápio. Tente de novo em instantes.")
+    } else {
+      setErroCarga("")
+    }
     setCategorias(Array.isArray(cats) ? cats : [])
     setProdutos(Array.isArray(prods) ? prods : [])
     setLoading(false)
@@ -134,7 +146,7 @@ export default function AdminCardapioPage() {
     setAdicionais(prev => [...prev, {
       id: uid(),
       nome: novoAdicNome.trim(),
-      preco: parseFloat(novoAdicPreco),
+      preco: reais(novoAdicPreco),
     }])
     setNovoAdicNome("")
     setNovoAdicPreco("")
@@ -161,7 +173,7 @@ export default function AdminCardapioPage() {
   function adicionarItemGrupo(grupoId: string) {
     const nome = (itemGrupoNome[grupoId] ?? "").trim()
     if (!nome) return
-    const preco = parseFloat(itemGrupoPreco[grupoId] ?? "") || 0
+    const preco = reais(itemGrupoPreco[grupoId] ?? "")
     setGrupos(prev => prev.map(g => g.id === grupoId ? { ...g, itens: [...g.itens, { id: uid(), nome, preco }] } : g))
     setItemGrupoNome(prev => ({ ...prev, [grupoId]: "" }))
     setItemGrupoPreco(prev => ({ ...prev, [grupoId]: "" }))
@@ -191,12 +203,12 @@ export default function AdminCardapioPage() {
     setEditando(p)
     setFormProd({
       nome: p.nome ?? "", descricao: p.descricao ?? "",
-      preco: p.preco.toFixed(2),
+      preco: mascara(String(Math.round(p.preco * 100))),
       categoria_id: p.categoria_id ?? "",
       disponivel: p.disponivel,
       foto_url: p.foto_url ?? "",
       dias_semana: p.dias_semana ?? [],
-      ncm: p.ncm ?? "",
+      ncm: ncmParaFormulario(p.ncm),
     })
     setFotoFile(null)
     setFotoPreview(p.foto_url ?? "")
@@ -243,13 +255,13 @@ export default function AdminCardapioPage() {
       id: editando?.id,
       nome: formProd.nome.trim(),
       descricao: formProd.descricao.trim(),
-      preco: parseFloat(formProd.preco),
+      preco: reais(formProd.preco),
       categoria_id: formProd.categoria_id || null,
       disponivel: formProd.disponivel,
       foto_url: fotoUrlFinal || null,
       adicionais: [...adicionais, ...grupos],
       dias_semana: formProd.dias_semana,
-      ncm: formProd.ncm.replace(/\D/g, "") || null,
+      ncm: ncmAoSalvar(formProd.ncm, editando?.ncm),
     }
 
     const res = await fetch(`/api/admin/loja/${lojaId}/produtos`, {
@@ -310,26 +322,26 @@ export default function AdminCardapioPage() {
   return (
     <div style={{ padding: "20px 16px", maxWidth: 900, margin: "0 auto" }}>
       {/* Breadcrumb */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, fontSize: 13, color: "#94a3b8" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, fontSize: 13, color: "var(--suave)" }}>
         <button
           onClick={() => router.push("/chego-ctrl/lojas")}
-          style={{ background: "none", border: "none", color: "#f97316", fontWeight: 700, cursor: "pointer", fontSize: 13, padding: 0 }}
+          style={{ background: "none", border: "none", color: "var(--pimenta)", fontWeight: 700, cursor: "pointer", fontSize: 13, padding: 0 }}
         >
           Lojas
         </button>
         <span>/</span>
-        <span style={{ color: "#64748b", fontWeight: 600 }}>{nomeLoja || lojaId}</span>
+        <span style={{ color: "var(--suave)", fontWeight: 600 }}>{nomeLoja || lojaId}</span>
         <span>/</span>
-        <span style={{ color: "#0F172A", fontWeight: 700 }}>Cardápio</span>
+        <span style={{ color: "var(--grafite)", fontWeight: 700 }}>Cardápio</span>
       </div>
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20, gap: 12, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 900, color: "#111827", margin: 0 }}>
+          <h1 style={{ fontSize: 20, fontWeight: 900, color: "var(--grafite)", margin: 0 }}>
             Cardápio — {nomeLoja || "…"}
           </h1>
-          <p style={{ fontSize: 13, color: "#6B7280", marginTop: 2 }}>
+          <p style={{ fontSize: 13, color: "var(--suave)", marginTop: 2 }}>
             {produtos.length} produto{produtos.length !== 1 ? "s" : ""} · {categorias.length} categoria{categorias.length !== 1 ? "s" : ""}
           </p>
         </div>
@@ -344,12 +356,17 @@ export default function AdminCardapioPage() {
       </div>
 
       {loading ? (
-        <p style={{ color: "#9CA3AF" }}>Carregando…</p>
+        <p style={{ color: "var(--suave)" }}>Carregando…</p>
+      ) : erroCarga ? (
+        <div className="card" style={{ padding: "28px 20px", textAlign: "center" }}>
+          <p style={{ fontSize: 15, fontWeight: 800, color: "var(--pimenta-esc)", marginBottom: 12 }}>{erroCarga}</p>
+          <button onClick={carregarTudo} className="btn-ghost" style={{ fontSize: 13 }}>Tentar de novo</button>
+        </div>
       ) : produtos.length === 0 && categorias.length === 0 ? (
         <div className="card" style={{ padding: "40px 20px", textAlign: "center" }}>
           <p style={{ fontSize: 36, marginBottom: 12 }}>🍽️</p>
-          <p style={{ fontSize: 16, fontWeight: 900, color: "#111827", marginBottom: 8 }}>Cardápio vazio</p>
-          <p style={{ fontSize: 13, color: "#6B7280", marginBottom: 20 }}>
+          <p style={{ fontSize: 16, fontWeight: 900, color: "var(--grafite)", marginBottom: 8 }}>Cardápio vazio</p>
+          <p style={{ fontSize: 13, color: "var(--suave)", marginBottom: 20 }}>
             Crie categorias (ex: Lanches, Bebidas) e adicione produtos.
           </p>
           <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
@@ -362,17 +379,17 @@ export default function AdminCardapioPage() {
           {porCategoria.map(({ cat, items }) => (
             <div key={cat.id}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
-                <h2 style={{ fontSize: 15, fontWeight: 900, color: "#111827", margin: 0 }}>{cat.nome}</h2>
-                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: "#F3F4F6", color: "#6B7280" }}>
+                <h2 style={{ fontSize: 15, fontWeight: 900, color: "var(--grafite)", margin: 0 }}>{cat.nome}</h2>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: "var(--cartao-2)", color: "var(--suave)" }}>
                   {items.length}
                 </span>
                 <button onClick={() => deletarCategoria(cat.id)}
-                  style={{ marginLeft: "auto", fontSize: 12, color: "#9CA3AF", background: "none", border: "none", cursor: "pointer" }}>
+                  style={{ marginLeft: "auto", fontSize: 12, color: "var(--suave)", background: "none", border: "none", cursor: "pointer" }}>
                   Deletar categoria
                 </button>
               </div>
               {items.length === 0 ? (
-                <p style={{ fontSize: 13, color: "#9CA3AF" }}>Nenhum produto nesta categoria.</p>
+                <p style={{ fontSize: 13, color: "var(--suave)" }}>Nenhum produto nesta categoria.</p>
               ) : (
                 <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))" }}>
                   {items.map(p => <ProdutoCard key={p.id} p={p} onEdit={abrirEditarProduto} onToggle={toggleDisponivel} onDelete={deletarProduto} />)}
@@ -384,8 +401,8 @@ export default function AdminCardapioPage() {
           {semCategoria.length > 0 && (
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                <h2 style={{ fontSize: 15, fontWeight: 900, color: "#111827", margin: 0 }}>Sem categoria</h2>
-                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: "#F3F4F6", color: "#6B7280" }}>
+                <h2 style={{ fontSize: 15, fontWeight: 900, color: "var(--grafite)", margin: 0 }}>Sem categoria</h2>
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: "var(--cartao-2)", color: "var(--suave)" }}>
                   {semCategoria.length}
                 </span>
               </div>
@@ -407,12 +424,12 @@ export default function AdminCardapioPage() {
               <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
                 <div style={{
                   width: 88, height: 88, borderRadius: 12, overflow: "hidden", flexShrink: 0,
-                  background: "#F3F4F6", border: "2px dashed #D1D5DB",
+                  background: "var(--cartao-2)", border: "2px dashed #D1D5DB",
                   display: "flex", alignItems: "center", justifyContent: "center",
                 }}>
                   {fotoPreview
                     ? <img src={fotoPreview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    : <span style={{ fontSize: 26, color: "#D1D5DB" }}>📷</span>}
+                    : <span style={{ fontSize: 26, color: "var(--linha)" }}>📷</span>}
                 </div>
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
                   <input ref={fotoInputRef} type="file" accept="image/*" style={{ display: "none" }}
@@ -430,11 +447,11 @@ export default function AdminCardapioPage() {
                   {fotoPreview && (
                     <button type="button"
                       onClick={() => { setFotoFile(null); setFotoPreview(""); setFormProd(f => ({ ...f, foto_url: "" })); if (fotoInputRef.current) fotoInputRef.current.value = "" }}
-                      style={{ fontSize: 11, color: "#9CA3AF", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                      style={{ fontSize: 11, color: "var(--suave)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
                       Remover foto
                     </button>
                   )}
-                  <p style={{ fontSize: 11, color: "#D1D5DB" }}>JPG, PNG ou WEBP · máx. 5MB</p>
+                  <p style={{ fontSize: 11, color: "var(--linha)" }}>JPG, PNG ou WEBP · máx. 5MB</p>
                 </div>
               </div>
             </div>
@@ -452,10 +469,10 @@ export default function AdminCardapioPage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div>
                 <label className="label">Preço (R$) *</label>
-                <input className="input" type="number" step="0.50" min="0" placeholder="0,00" value={formProd.preco}
-                  onChange={e => setFormProd(f => ({ ...f, preco: e.target.value }))} />
+                <input className="input" inputMode="numeric" placeholder="R$ 0,00" value={formProd.preco}
+                  onChange={e => setFormProd(f => ({ ...f, preco: mascara(e.target.value) }))} />
                 {grupos.length > 0 && (
-                  <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>
+                  <p style={{ fontSize: 11, color: "var(--suave)", marginTop: 4 }}>
                     Pode deixar 0,00 aqui se o preço real vem das opções da categoria de
                     escolha abaixo (ex: "Escolha o sabor") — o cliente vê "A partir de R$
                     [menor opção]".
@@ -473,18 +490,18 @@ export default function AdminCardapioPage() {
             </div>
             <label style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
               <div onClick={() => setFormProd(f => ({ ...f, disponivel: !f.disponivel }))}
-                style={{ width: 40, height: 22, borderRadius: 11, transition: "background 0.2s", background: formProd.disponivel ? "#f97316" : "#E5E7EB", position: "relative", cursor: "pointer" }}>
-                <div style={{ width: 18, height: 18, borderRadius: "50%", background: "#fff", position: "absolute", top: 2, transition: "left 0.2s", left: formProd.disponivel ? 20 : 2 }} />
+                style={{ width: 40, height: 22, borderRadius: 11, transition: "background 0.2s", background: formProd.disponivel ? "var(--pimenta)" : "var(--linha)", position: "relative", cursor: "pointer" }}>
+                <div style={{ width: 18, height: 18, borderRadius: "50%", background: "var(--cartao)", position: "absolute", top: 2, transition: "left 0.2s", left: formProd.disponivel ? 20 : 2 }} />
               </div>
-              <span style={{ fontSize: 14, fontWeight: 600, color: "#374151" }}>
+              <span style={{ fontSize: 14, fontWeight: 600, color: "var(--texto)" }}>
                 {formProd.disponivel ? "Disponível para pedidos" : "Indisponível (oculto no cardápio)"}
               </span>
             </label>
 
             {/* Dias da semana */}
             <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16 }}>
-              <p style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 4 }}>Dias disponíveis</p>
-              <p style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 10 }}>Deixe todos desmarcados para aparecer em todos os dias</p>
+              <p style={{ fontSize: 14, fontWeight: 700, color: "var(--grafite)", marginBottom: 4 }}>Dias disponíveis</p>
+              <p style={{ fontSize: 12, color: "var(--suave)", marginBottom: 10 }}>Deixe todos desmarcados para aparecer em todos os dias</p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {DIAS.map(d => {
                   const sel = formProd.dias_semana.includes(d.v)
@@ -497,8 +514,8 @@ export default function AdminCardapioPage() {
                       style={{
                         padding: "6px 14px", borderRadius: 20, fontSize: 13, fontWeight: 700,
                         border: sel ? "none" : "1.5px solid #E5E7EB",
-                        background: sel ? "#f97316" : "transparent",
-                        color: sel ? "#fff" : "#6B7280",
+                        background: sel ? "var(--pimenta)" : "transparent",
+                        color: sel ? "var(--cartao)" : "var(--suave)",
                         cursor: "pointer",
                       }}>
                       {d.l}
@@ -510,7 +527,7 @@ export default function AdminCardapioPage() {
 
             {/* NCM */}
             <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16 }}>
-              <label className="label">Código NCM <span style={{ fontWeight: 400, color: "#9CA3AF" }}>(para nota fiscal)</span></label>
+              <label className="label">Código NCM <span style={{ fontWeight: 400, color: "var(--suave)" }}>(para nota fiscal)</span></label>
               <input
                 className="input"
                 value={formProd.ncm}
@@ -520,28 +537,28 @@ export default function AdminCardapioPage() {
                 inputMode="numeric"
                 style={{ fontSize: 14 }}
               />
-              <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 4 }}>
+              <p style={{ fontSize: 11, color: "var(--suave)", marginTop: 4 }}>
                 Restaurantes: 21069090 · Bebidas: 22029000 · Deixe em branco se não souber
               </p>
             </div>
 
             {/* Adicionais */}
             <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16 }}>
-              <p style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 10 }}>Adicionais (opcional)</p>
+              <p style={{ fontSize: 14, fontWeight: 700, color: "var(--grafite)", marginBottom: 10 }}>Adicionais (opcional)</p>
               {adicionais.length > 0 && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
                   {adicionais.map(a => (
                     <div key={a.id} style={{
                       display: "flex", alignItems: "center", justifyContent: "space-between",
-                      padding: "8px 12px", borderRadius: 8, background: "#F9FAFB", border: "1px solid #E5E7EB",
+                      padding: "8px 12px", borderRadius: 8, background: "var(--cartao-2)", border: "1px solid #E5E7EB",
                     }}>
-                      <span style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>{a.nome}</span>
+                      <span style={{ fontSize: 13, color: "var(--texto)", fontWeight: 500 }}>{a.nome}</span>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <span style={{ fontSize: 13, color: "#f97316", fontWeight: 700 }}>R$ {a.preco.toFixed(2)}</span>
+                        <span style={{ fontSize: 13, color: "var(--pimenta)", fontWeight: 700 }}>R$ {a.preco.toFixed(2)}</span>
                         <button
                           type="button"
                           onClick={() => setAdicionais(prev => prev.filter(x => x.id !== a.id))}
-                          style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 0 }}>
+                          style={{ background: "none", border: "none", color: "var(--pimenta)", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 0 }}>
                           ✕
                         </button>
                       </div>
@@ -560,12 +577,10 @@ export default function AdminCardapioPage() {
                 />
                 <input
                   className="input"
-                  type="number"
-                  step="0.50"
-                  min="0"
-                  placeholder="R$"
+                  inputMode="numeric"
+                  placeholder="R$ 0,00"
                   value={novoAdicPreco}
-                  onChange={e => setNovoAdicPreco(e.target.value)}
+                  onChange={e => setNovoAdicPreco(mascara(e.target.value))}
                   onKeyDown={e => e.key === "Enter" && adicionarAdicional()}
                   style={{ flex: 1, fontSize: 13 }}
                 />
@@ -582,8 +597,8 @@ export default function AdminCardapioPage() {
 
             {/* Categorias de escolha (grupos de adicionais) */}
             <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 16 }}>
-              <p style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 4 }}>Categorias de escolha (opcional)</p>
-              <p style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 10 }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: "var(--grafite)", marginBottom: 4 }}>Categorias de escolha (opcional)</p>
+              <p style={{ fontSize: 12, color: "var(--suave)", marginBottom: 10 }}>
                 Ex: "Escolha o tamanho do copo" (300ml/400ml/500ml) ou "Escolha seus acompanhamentos"
               </p>
 
@@ -593,13 +608,13 @@ export default function AdminCardapioPage() {
                     <div key={g.id} style={{ border: "1px solid #E5E7EB", borderRadius: 10, padding: 10 }}>
                       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8, gap: 8 }}>
                         <div>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{g.nome}</span>
-                          <span style={{ fontSize: 11, color: "#9CA3AF", marginLeft: 6 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--grafite)" }}>{g.nome}</span>
+                          <span style={{ fontSize: 11, color: "var(--suave)", marginLeft: 6 }}>
                             {g.obrigatorio ? "Obrigatório" : "Opcional"} · máx. {g.maximo}
                           </span>
                         </div>
                         <button type="button" onClick={() => deletarGrupo(g.id)}
-                          style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 0, flexShrink: 0 }}>
+                          style={{ background: "none", border: "none", color: "var(--pimenta)", cursor: "pointer", fontSize: 15, lineHeight: 1, padding: 0, flexShrink: 0 }}>
                           ✕
                         </button>
                       </div>
@@ -607,14 +622,14 @@ export default function AdminCardapioPage() {
                       {g.itens.length > 0 && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
                           {g.itens.map(it => (
-                            <div key={it.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", borderRadius: 8, background: "#F9FAFB" }}>
-                              <span style={{ fontSize: 13, color: "#374151" }}>{it.nome}</span>
+                            <div key={it.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", borderRadius: 8, background: "var(--cartao-2)" }}>
+                              <span style={{ fontSize: 13, color: "var(--texto)" }}>{it.nome}</span>
                               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                <span style={{ fontSize: 12, color: "#f97316", fontWeight: 700 }}>
+                                <span style={{ fontSize: 12, color: "var(--pimenta)", fontWeight: 700 }}>
                                   {it.preco > 0 ? `+ R$ ${it.preco.toFixed(2)}` : "grátis"}
                                 </span>
                                 <button type="button" onClick={() => removerItemGrupo(g.id, it.id)}
-                                  style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 0 }}>
+                                  style={{ background: "none", border: "none", color: "var(--pimenta)", cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 0 }}>
                                   ✕
                                 </button>
                               </div>
@@ -634,12 +649,10 @@ export default function AdminCardapioPage() {
                         />
                         <input
                           className="input"
-                          type="number"
-                          step="0.50"
-                          min="0"
-                          placeholder="R$ (opcional)"
+                          inputMode="numeric"
+                          placeholder="R$ 0,00 (opcional)"
                           value={itemGrupoPreco[g.id] ?? ""}
-                          onChange={e => setItemGrupoPreco(prev => ({ ...prev, [g.id]: e.target.value }))}
+                          onChange={e => setItemGrupoPreco(prev => ({ ...prev, [g.id]: mascara(e.target.value) }))}
                           onKeyDown={e => e.key === "Enter" && adicionarItemGrupo(g.id)}
                           style={{ flex: 1, fontSize: 13 }}
                         />
@@ -669,10 +682,10 @@ export default function AdminCardapioPage() {
                   <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
                     <input type="checkbox" checked={novoGrupo.obrigatorio}
                       onChange={e => setNovoGrupo(f => ({ ...f, obrigatorio: e.target.checked }))} />
-                    <span style={{ fontSize: 12, color: "#374151" }}>Obrigatório escolher</span>
+                    <span style={{ fontSize: 12, color: "var(--texto)" }}>Obrigatório escolher</span>
                   </label>
                   <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 12, color: "#6B7280" }}>Máx. opções</span>
+                    <span style={{ fontSize: 12, color: "var(--suave)" }}>Máx. opções</span>
                     <input className="input" type="number" min="1" value={novoGrupo.maximo}
                       onChange={e => setNovoGrupo(f => ({ ...f, maximo: e.target.value }))}
                       style={{ width: 56, fontSize: 12, padding: "4px 6px" }} />
@@ -686,7 +699,7 @@ export default function AdminCardapioPage() {
             </div>
 
             {erroSalvar && (
-              <p style={{ color: "#ef4444", fontSize: 13, fontWeight: 600, background: "rgba(239,68,68,0.08)", padding: "10px 14px", borderRadius: 10 }}>
+              <p style={{ color: "var(--pimenta)", fontSize: 13, fontWeight: 600, background: "rgba(239,68,68,0.08)", padding: "10px 14px", borderRadius: 10 }}>
                 ⚠️ {erroSalvar}
               </p>
             )}
@@ -712,7 +725,7 @@ export default function AdminCardapioPage() {
                 onKeyDown={e => e.key === "Enter" && salvarCategoria()} autoFocus />
             </div>
             {erroSalvar && (
-              <p style={{ color: "#ef4444", fontSize: 13, fontWeight: 600, background: "rgba(239,68,68,0.08)", padding: "10px 14px", borderRadius: 10 }}>
+              <p style={{ color: "var(--pimenta)", fontSize: 13, fontWeight: 600, background: "rgba(239,68,68,0.08)", padding: "10px 14px", borderRadius: 10 }}>
                 ⚠️ {erroSalvar}
               </p>
             )}
@@ -743,27 +756,27 @@ function ProdutoCard({ p, onEdit, onToggle, onDelete }: {
           <img src={p.foto_url} alt={p.nome} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         </div>
       ) : (
-        <div style={{ width: "100%", height: 70, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <span style={{ fontSize: 26, color: "#D1D5DB" }}>📷</span>
+        <div style={{ width: "100%", height: 70, background: "var(--cartao-2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <span style={{ fontSize: 26, color: "var(--linha)" }}>📷</span>
         </div>
       )}
 
       <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontWeight: 700, color: "#111827", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nome}</p>
+            <p style={{ fontWeight: 700, color: "var(--grafite)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nome}</p>
             {p.descricao && (
-              <p style={{ fontSize: 12, color: "#6B7280", marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const, overflow: "hidden" }}>
+              <p style={{ fontSize: 12, color: "var(--suave)", marginTop: 2, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const, overflow: "hidden" }}>
                 {p.descricao}
               </p>
             )}
             {p.dias_semana && p.dias_semana.length > 0 && (
-              <p style={{ fontSize: 11, color: "#9CA3AF", marginTop: 3 }}>
+              <p style={{ fontSize: 11, color: "var(--suave)", marginTop: 3 }}>
                 📅 {DIAS.filter(d => p.dias_semana!.includes(d.v)).map(d => d.l).join(" · ")}
               </p>
             )}
           </div>
-          <p style={{ fontSize: 15, fontWeight: 900, color: "#f97316", flexShrink: 0 }}>
+          <p style={{ fontSize: 15, fontWeight: 900, color: "var(--pimenta)", flexShrink: 0 }}>
             R$ {p.preco.toFixed(2).replace(".", ",")}
           </p>
         </div>
@@ -771,15 +784,15 @@ function ProdutoCard({ p, onEdit, onToggle, onDelete }: {
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <button onClick={() => onToggle(p)} style={{
             flex: 1, fontSize: 11, fontWeight: 700, padding: "7px 0", borderRadius: 8, border: "none", cursor: "pointer",
-            background: p.disponivel ? "rgba(34,197,94,0.1)" : "#F3F4F6",
-            color: p.disponivel ? "#22c55e" : "#9CA3AF",
+            background: p.disponivel ? "rgba(34,197,94,0.1)" : "var(--cartao-2)",
+            color: p.disponivel ? "var(--folha)" : "var(--suave)",
           }}>
             {p.disponivel ? "✓ Disponível" : "✗ Indisponível"}
           </button>
           <button onClick={() => onEdit(p)} className="btn-ghost" style={{ fontSize: 12, padding: "7px 10px" }}>
             Editar
           </button>
-          <button onClick={() => onDelete(p.id)} style={{ padding: "7px 10px", borderRadius: 8, border: "none", background: "rgba(239,68,68,0.08)", color: "#ef4444", cursor: "pointer", fontSize: 13 }}>
+          <button onClick={() => onDelete(p.id)} style={{ padding: "7px 10px", borderRadius: 8, border: "none", background: "rgba(239,68,68,0.08)", color: "var(--pimenta)", cursor: "pointer", fontSize: 13 }}>
             ✕
           </button>
         </div>
@@ -794,8 +807,8 @@ function Modal({ title, children, onClose }: { title: string; children: React.Re
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="card" style={{ width: "100%", maxWidth: "min(520px, 100vw)", margin: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0, padding: "20px 16px 32px", maxHeight: "90vh", overflowY: "auto", WebkitOverflowScrolling: "touch", boxSizing: "border-box" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-          <p style={{ fontWeight: 900, fontSize: 16, color: "#111827", margin: 0 }}>{title}</p>
-          <button onClick={onClose} style={{ color: "#9CA3AF", fontSize: 20, lineHeight: 1, background: "none", border: "none", cursor: "pointer" }}>✕</button>
+          <p style={{ fontWeight: 900, fontSize: 16, color: "var(--grafite)", margin: 0 }}>{title}</p>
+          <button onClick={onClose} style={{ color: "var(--suave)", fontSize: 20, lineHeight: 1, background: "none", border: "none", cursor: "pointer" }}>✕</button>
         </div>
         {children}
       </div>

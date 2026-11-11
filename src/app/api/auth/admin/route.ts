@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
-import { sessionResponse, unauthorized } from "@/lib/session"
+import { sessionResponse, unauthorized, requireAdmin, versaoAdmin } from "@/lib/session"
+
+// Confere se o cookie de admin ainda vale. O painel guarda "sou admin" no aparelho, mas o
+// servidor só aceita o cookie: se ele expirou ou foi trocado por um login de loja/motoboy no
+// mesmo celular, toda ação dava "Não autorizado" com a tela aberta (Vida, 26/10/2026).
+export async function GET(req: NextRequest) {
+  return requireAdmin(req) ? NextResponse.json({ ok: true }) : unauthorized("Sessão de admin expirada.")
+}
 import { checkRateLimit } from "@/lib/rate-limit"
 
 export async function POST(req: NextRequest) {
@@ -29,5 +36,5 @@ export async function POST(req: NextRequest) {
     return unauthorized("Credenciais inválidas.")
   }
 
-  return sessionResponse({ role: "admin" }, { ok: true, role: "admin" })
+  return sessionResponse({ role: "admin", av: versaoAdmin() }, { ok: true, role: "admin" })
 }

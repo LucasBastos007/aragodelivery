@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
   // Busca o pedido — sem colunas opcionais que podem não existir
   const { data: pedido, error: pedidoErr } = await supabase
     .from("pedidos")
-    .select("id, codigo, motoboy_id, status, loja_id, taxa_entrega, loja_lat, loja_lng, endereco_entrega, loja:lojas(lat, lng, endereco, cidade)")
+    .select("id, codigo, motoboy_id, status, loja_id, taxa_entrega, taxa_dinamica, loja_lat, loja_lng, endereco_entrega, loja:lojas(lat, lng, endereco, cidade)")
     .eq("id", pedido_id)
     .single()
 
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
   // Busca motoboys disponíveis e ativos
   const { data: motoboyData } = await supabase
     .from("motoboys")
-    .select("id, lat, lng, push_subscription, raio_km, cidade_fixa")
+    .select("id, lat, lng, push_subscription, raio_km, cidade_fixa, limite_pedidos_simultaneos")
     .eq("disponivel", true)
     .eq("status", "ativo")
 
@@ -118,7 +118,20 @@ export async function POST(req: NextRequest) {
     .in("status", ["indo_para_loja", "na_loja", "em_rota", "aguardando_aceite", "coletado"])
     .neq("id", pedido_id)
 
-  const ocupados = new Set((comEntrega ?? []).map((p: any) => p.motoboy_id).filter(Boolean))
+  // "Ocupado" = já no limite de corridas simultâneas, o mesmo limite que
+  // /api/motoboy/aceitar-corrida aplica (individual em limite_pedidos_simultaneos, senão
+  // configuracoes.max_pedidos_motoboy, senão 2). Antes qualquer motoboy com 1 entrega em
+  // andamento ficava fora da chamada (incidente real, 2026-10-15: Henrique com 2 corridas
+  // e limite 7, lojista e admin viam "sem motoboy disponível").
+  const { data: cfgMax } = await supabase.from("configuracoes").select("valor").eq("chave", "max_pedidos_motoboy").maybeSingle()
+  const limiteGlobal = cfgMax ? parseInt(cfgMax.valor, 10) || 2 : 2
+  const ativosPorMotoboy = new Map<string, number>()
+  for (const p of comEntrega ?? []) {
+    if (p.motoboy_id) ativosPorMotoboy.set(p.motoboy_id, (ativosPorMotoboy.get(p.motoboy_id) ?? 0) + 1)
+  }
+  const ocupados = new Set(motoboys
+    .filter(m => (ativosPorMotoboy.get(m.id) ?? 0) >= (m.limite_pedidos_simultaneos ?? limiteGlobal))
+    .map(m => m.id))
 
   // Ignora o motoboy que recusou nesta tentativa
   const ignorar = new Set<string>()
@@ -187,6 +200,7 @@ export async function POST(req: NextRequest) {
   await supabase.from("pedidos").update({
     motoboy_id: null,
     status: "aguardando_aceite",
+    atualizado_em: new Date().toISOString(), // marca a oferta — sem isso o pedido parecia "preso" pra sempre
     ...(lojaLatSalvar != null ? { loja_lat: lojaLatSalvar } : {}),
     ...(lojaLngSalvar != null ? { loja_lng: lojaLngSalvar } : {}),
   }).eq("id", pedido_id).eq("status", pedido.status)
@@ -195,7 +209,7 @@ export async function POST(req: NextRequest) {
   if (initVapid()) {
     const pushPayload = JSON.stringify({
       title:      "Nova corrida disponível!",
-      body:       `Pedido #${pedido.codigo} — R$ ${(pedido.taxa_entrega ?? 0).toFixed(2)}`,
+      body:       `Pedido #${pedido.codigo} — R$ ${(Number(pedido.taxa_entrega ?? 0) + Number((pedido as any).taxa_dinamica ?? 0)).toFixed(2)}${Number((pedido as any).taxa_dinamica ?? 0) > 0 ? " (com dinâmica de chuva)" : ""}`,
       tag:        "corrida-nova",
       url:        `/motoboy?pedido_id=${pedido_id}`,
       pedido_id,
@@ -236,25 +250,10 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // Re-escalada em background: pedidos presos em aguardando_aceite há mais de 60s
-  void (async () => {
-    const limite = new Date(Date.now() - 60_000).toISOString()
-    const { data: presos } = await supabase
-      .from("pedidos")
-      .select("id, motoboy_id, endereco_entrega")
-      .eq("status", "aguardando_aceite")
-      .lt("atualizado_em", limite)
-      .not("endereco_entrega", "ilike", "%Retirada%")
-      .neq("id", pedido_id) // não re-escalar o próprio pedido que acabou de ser tratado
-
-    for (const preso of presos ?? []) {
-      fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? "https://chegodelivery.com"}/api/escalada`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-internal-secret": process.env.INTERNAL_API_SECRET ?? "" },
-        body: JSON.stringify({ pedido_id: preso.id, motoboy_recusou_id: preso.motoboy_id ?? undefined }),
-      }).catch(() => {})
-    }
-  })()
+  // Pedidos presos em aguardando_aceite são reoferecidos SÓ pelo cron /api/cron/re-escalar
+  // (1x por minuto). Antes esta rota reescalava os outros pedidos em background e cada
+  // reescalada disparava outra rodada — em 31/10/2026 isso virou ~80 mil req/5min e travou
+  // o banco (cliente, loja e admin fora do ar por ~50 min). Não voltar a chamar /api/escalada daqui.
 
   return NextResponse.json({ ok: true, broadcast: candidatos.length })
 }

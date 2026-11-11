@@ -1,0 +1,193 @@
+/* Tema escuro do admin 2.0 (escolhido pelo Lucas em 20/10/2026). Gerado por gerar_escuro.py. */
+.adm{
+  --pedra:#121110; --cartao:#1C1B19; --cartao-2:#24221F; --fundo-col:#171614; --branco:#1C1B19;
+  --grafite:#F5F3EF; --texto:#D9D5CE; --suave:#9E988F; --linha:#2E2C28;
+  --pimenta:#E8352C; --pimenta-esc:#FF8079; --pimenta-claro:rgba(232,53,44,.16);
+  --pequi:#F5B700; --pequi-claro:rgba(245,183,0,.14); --azul:#5B91E6; --azul-claro:rgba(91,145,230,.16);
+  --roxo:#9B7BEA; --roxo-claro:rgba(155,123,234,.18); --folha:#34B86E; --folha-claro:rgba(52,184,110,.15);
+  --c-loja:#5B91E6; --c-mb:#9B7BEA; --c-res:#7D776E; --c-app:#34B86E;
+  --sombra:0 0 0 1px rgba(255,255,255,.05),0 10px 30px rgba(0,0,0,.35);
+  color-scheme:dark;
+}
+.adm .btn-g{color:#141312}
+.adm .btn-s{background:var(--cartao)}
+.adm .cartao{background:var(--cartao)}
+.adm .chip{background:var(--cartao)}
+.adm .chip[aria-pressed=true]{color:#141312}
+.adm .campo input,.adm .campo textarea,.adm .campo select{background:var(--cartao)}
+.adm .sw::after{background:var(--cartao)}
+.adm .lateral{color:#141312}
+.adm .lat-loja img{background:var(--cartao)}
+.adm .lat-nav button[aria-current=true]{background:var(--cartao)}
+.adm .loja-st{background:var(--cartao)}
+.adm .preparo{background:var(--cartao)}
+.adm .ic-bt{background:var(--cartao)}
+.adm .alarme .btn{background:var(--cartao)}
+.adm .col{background:var(--fundo-col)}
+.adm .col-cab .n{background:var(--cartao)}
+.adm .ped{background:var(--cartao)}
+.adm .gaveta{background:var(--cartao)}
+.adm .modal .caixa{background:var(--cartao)}
+.adm .comanda{background:var(--cartao-2)}
+.adm .toast{color:#141312}
+.adm .prod{background:var(--cartao)}
+.adm .barras-h .b i{background:#34312D}
+.adm .tabela tr:hover td{background:var(--cartao-2)}
+.adm .entrar-arte .marca small{background:var(--cartao)}
+.adm .telas-lista{background:var(--cartao)}
+@media (max-width:900px){.adm .abas-col button{background:var(--cartao)}}
+@media (max-width:900px){.adm .abas-col button[aria-pressed=true]{color:#141312}}
+@media (max-width:900px){.adm .nav-cel{background:var(--cartao)}}
+.adm .mapa-op{background:#1A1917}
+.adm .legenda{background:var(--cartao)}
+.adm .pin-lj{background:var(--cartao)}
+.adm .alerta{background:var(--cartao)}
+.adm .desp-it{background:var(--cartao)}
+.adm .vista button[aria-pressed=true]{background:var(--cartao)}
+.adm .id-mb.verdeazul{background:var(--cartao-2)}
+.adm .sup-it{background:var(--cartao)}
+.adm .sup-msgs{background:var(--cartao-2)}
+.adm .bal.ele{background:var(--cartao)}
+.adm .bal.eu{color:#141312}
+.adm .sup-rapidas button{background:var(--cartao)}
+.adm .abas-fin button{background:var(--cartao)}
+.adm .fin-adi .btn{background:var(--cartao)}
+.adm .busca-bt{background:var(--cartao)}
+.adm .busca-g{background:var(--cartao)}
+.adm .div-l li button:hover{background:var(--cartao-2)}
+.adm .sub-l button{background:var(--cartao)}
+.adm .rank .pos,.adm .dest-l .pos{color:#141312}
+.adm .ic-bt.peq{background:var(--cartao)}
+.adm .sec-ic.mini{color:#141312}
+.adm .ag-data{color:#141312}
+.adm .lat-nav a[aria-current=true]{background:var(--cartao)}
+.adm .mais-folha{background:var(--cartao)}
+.adm .busca-caixa{background:var(--cartao)}
+.adm .ini-dia{color:#141312}
+.adm .dsp-n{background:var(--cartao)}
+.adm .dsp-ped.atrasado{background:rgba(215,38,30,.08)}
+.adm .pd-busca{background:var(--cartao)}
+.adm .pd-sel{background:var(--cartao)}
+.adm .pd-vis{background:var(--fundo-col)}
+.adm .pd-vis button[aria-pressed=true]{background:var(--cartao)}
+.adm .ct-saldo{background:var(--cartao)}
+.adm .ct-saldo.verde em{background:var(--cartao)}
+.adm .fg-avulsa{background:var(--cartao)}
+.adm .rl-ped{background:var(--cartao)}
+.adm .lj-ass{background:var(--cartao)}
+.adm .lj-senha{background:var(--cartao)}
+.adm .ct-fech{background:var(--cartao)}
+.adm .nt-not img{background:var(--cartao)}
+.adm .rp-chave select,.adm .rp-chave input{background:var(--cartao)}
+/* ── acabamento à mão do tema escuro ── */
+.adm{background:var(--pedra)}
+.adm body,.adm .principal{background:var(--pedra)}
+/* menu lateral e barra de cima */
+.adm .lateral{background:#0B0A09;border-right:1px solid var(--linha)}
+.adm .lat-nav a[aria-current=true]{background:rgba(232,53,44,.14);color:#fff;box-shadow:inset 3px 0 0 var(--pimenta)}
+.adm .lat-nav a:hover{background:rgba(255,255,255,.05)}
+.adm .barra{background:rgba(18,17,16,.85);backdrop-filter:blur(10px);border-bottom:1px solid var(--linha)}
+.adm .busca-bt{background:var(--cartao);border-color:var(--linha);color:var(--suave)}
+.adm .busca-bt kbd{background:var(--cartao-2);color:var(--suave)}
+.adm .nav-cel{background:#0B0A09;border-top:1px solid var(--linha)}
+.adm .nav-cel-bt[aria-current=true]{color:var(--pimenta)}
+.adm .mais-folha{background:var(--cartao)}
+.adm .ao-vivo{background:var(--folha-claro);color:var(--folha)}
+/* cabeçalho de cada tela: sem faixa clara, só ícone e título */
+.adm .sec-cab{background:transparent;border:0;padding:4px 0 6px;margin:0 0 14px}
+.adm .sec-cab b{font-size:26px;letter-spacing:-.02em}
+.adm .sec-ic{box-shadow:0 0 0 6px color-mix(in srgb,var(--acento) 16%,transparent)}
+/* cartões, campos, botões */
+.adm .cartao,.adm .kpi2,.adm .ct-t,.adm .ped,.adm .gaveta,.adm .busca-caixa{border:1px solid var(--linha)}
+.adm .kpi2 b,.adm .ct-t b{color:#fff}
+.adm .btn-s{background:var(--cartao-2);border-color:var(--linha);color:var(--grafite)}
+.adm .btn-s:hover{border-color:var(--suave)}
+.adm .btn-g{background:#F5F3EF;color:#141312}
+.adm .chip{background:var(--cartao);border-color:var(--linha);color:var(--texto)}
+.adm .chip[aria-pressed=true],.adm .conteudo .chip[aria-pressed=true]{background:var(--pimenta);border-color:var(--pimenta);color:#fff}
+.adm .pd-vis{background:var(--cartao)}.adm .pd-vis button[aria-pressed=true]{background:var(--cartao-2);color:#fff;box-shadow:none}
+.adm .per-chips button[aria-pressed=true]{background:var(--pimenta)!important;border-color:var(--pimenta)!important;color:#fff!important}
+.adm input,.adm select,.adm textarea{color:var(--grafite);background:var(--cartao-2)}
+.adm .campo input,.adm .campo select,.adm .campo textarea,.adm .pd-busca,.adm .pd-sel{background:var(--cartao-2);border-color:var(--linha);color:var(--grafite)}
+.adm .tabela th{border-color:var(--linha)}
+.adm .tabela tr:hover td{background:rgba(255,255,255,.03)}
+.adm .tabela tr.sub td{background:var(--fundo-col)}
+.adm .sub-l button,.adm .rl-ped{background:var(--cartao-2)}
+.adm .veu.on{background:rgba(0,0,0,.6)}
+.adm .selo.cinza{background:rgba(255,255,255,.07);color:var(--texto)}
+.adm .aviso.am{color:#F7CE5B}.adm .aviso.vd{color:#5FD394}
+/* mapa escuro */
+.adm .mapa-op .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.82) contrast(.9) saturate(.6)}
+.adm .mapa-op{background:#1A1917}
+.adm .mapa-leg{background:rgba(28,27,25,.92);color:var(--texto)}
+.adm .leaflet-bar a{background:var(--cartao);color:var(--grafite);border-color:var(--linha)}
+.adm .leaflet-popup-content-wrapper,.adm .leaflet-popup-tip{background:var(--cartao);color:var(--grafite)}
+.adm .pino-loja{border-color:#1C1B19;background:#F5F3EF}.adm .pino-loja.on{background:var(--pimenta)}
+/* Início: cartão do dia e saldos */
+.adm .ini-dia,.adm .ct-saldo.escuro{background:radial-gradient(120% 140% at 100% 0,rgba(232,53,44,.35),transparent 55%),linear-gradient(160deg,#25211E,#161513);color:#fff;border:1px solid rgba(232,53,44,.25)}
+.adm .ct-saldo.escuro>b{color:#fff}
+.adm .ini-dia::after{display:none}
+.adm .ini-ok{background:var(--folha-claro);color:#5FD394}
+.adm .ct-saldo.verde{background:linear-gradient(160deg,rgba(52,184,110,.18),var(--cartao));border:1px solid rgba(52,184,110,.25)}
+.adm .ct-saldo.verde>b{color:#5FD394}
+.adm .ct-saldo{border:1px solid var(--linha)}
+.adm .ct-mini i{background:var(--pimenta)}
+.adm .ini-col.hoje .ini-barra i{background:var(--pimenta)}
+/* esteira de pedidos */
+.adm .col{background:var(--fundo-col);border:1px solid var(--linha)}
+.adm .col-cab .n{background:var(--cartao-2)}
+.adm .ped{background:var(--cartao)}
+.adm .ped.atrasado{border-color:var(--pequi);box-shadow:0 0 0 1px rgba(245,183,0,.25)}
+.adm .mb-linha{background:var(--azul-claro);color:#9CC0F5}
+.adm .dsp-ped.atrasado{background:rgba(232,53,44,.06)}
+.adm .gaveta{background:var(--cartao)}
+.adm .gav-cab,.adm .gav-pe{border-color:var(--linha)}
+.adm .linha-tempo li::before{background:var(--linha)}
+/* gráficos */
+.adm .graf-ac .g{stroke:var(--linha)}.adm .graf-ac text{fill:var(--suave)}
+.adm .barra-div{background:var(--cartao-2)}
+.adm .lat-marca b{color:#fff}.adm .lat-marca small{color:rgba(255,255,255,.55)}
+/* Fechamento diário (CSS próprio da tela, fundo branco fixo) no tema escuro */
+.adm .fg-kpi,.adm .fg-panel,.adm .fg-toolbar,.adm .fg-dest-card,.adm .fg-avulsa{background:var(--cartao)!important;color:var(--texto)}
+.adm .fg-kpi strong,.adm .fg-dest-card strong,.adm .fg h2,.adm .fg h3,.adm .fg-heading strong,.adm .fg-line b,.adm .fg-dest-card small b{color:var(--grafite)}
+.adm .fg-orange{background:radial-gradient(120% 140% at 100% 0,rgba(232,53,44,.35),transparent 55%),linear-gradient(160deg,#25211E,#161513)!important;border:1px solid rgba(232,53,44,.25)!important}
+.adm .fg-orange strong{color:#fff!important}.adm .fg-orange span,.adm .fg-orange small{color:rgba(255,255,255,.7)!important}
+.adm .fg button{background:var(--cartao-2);color:var(--grafite);border-color:var(--linha)}
+.adm .fg button:disabled{opacity:.5}
+.adm .fg .fg-primary{background:var(--pimenta);color:#fff;border-color:var(--pimenta)}
+.adm .fg input{background:var(--cartao-2);color:var(--grafite);border-color:var(--linha);color-scheme:dark}
+.adm .fg th{background:var(--cartao-2);color:var(--suave)}
+.adm .fg td{border-color:var(--linha);color:var(--texto)}
+.adm .fg-line{border-color:var(--linha)}
+.adm .fg-profit{background:var(--cartao-2)}
+.adm .fg-stacked{background:var(--cartao-2)}
+.adm .fg-alert{background:var(--pequi-claro);color:#F7CE5B}
+.adm .fg-dest-aviso{background:var(--pequi-claro)!important;color:#F7CE5B!important}
+.adm .fg-green{background:var(--folha-claro)}
+.adm .fg-concil.ok{background:var(--folha-claro);border-color:rgba(52,184,110,.3);color:var(--texto)}
+.adm .fg-concil.erro{background:var(--pimenta-claro);border-color:rgba(232,53,44,.3);color:var(--texto)}
+.adm .fg-tabs{border-color:var(--linha)}
+.adm .fg-bar-col>div{background:#5A5650}.adm .fg-bar-col:last-child>div{background:var(--pimenta)}
+.adm .fg-bars{border-color:var(--linha)}
+.adm .fg-tabs button{background:transparent!important}
+.adm .ag-data{background:var(--cartao-2)!important;color:var(--grafite)!important;border:1px solid var(--linha)}.adm .ag-data b,.adm .ag-data small{color:var(--grafite)!important}
+
+/* Carteira 2 no escuro */
+.adm .cw-saldo{background:linear-gradient(135deg,#24211D,#16130F)!important;border:1px solid rgba(255,255,255,.08)}
+.adm .cw-ic.saida{background:rgba(255,120,100,.14)!important}
+.adm .cw-ic.entrada{background:rgba(80,200,130,.14)!important}
+.adm a.cw-it:hover{background:rgba(255,255,255,.05)!important}
+
+/* Repasses no escuro */
+.adm .rp-k.forte{background:#2A2622!important;border:1px solid rgba(255,255,255,.1)}
+.adm .rp-saque{background:rgba(245,183,0,.12)!important}
+.adm .rp-ped>div.al,.adm .rp-diag>div.al,.adm .rp-ciente{background:rgba(255,120,100,.14)!important}
+.adm .rp-conta{background:rgba(255,255,255,.05)!important}
+.adm .rp-conta>div.f{border-top-color:rgba(255,255,255,.6)!important}
+.adm .ini-reemb.tem .ic{background:rgba(245,183,0,.14)!important;color:#F5C84B!important}
+.adm .nt-not{background:rgba(255,255,255,.9)!important;color:#1d1b18!important}
+.adm .nt-not b{color:#1d1b18!important}
+.adm .rb-achado{background:rgba(255,255,255,.05)!important}
+.adm .rp-chave{background:rgba(255,255,255,.05)!important}
+.adm .rp-dia-cab{background:rgba(255,255,255,.06)!important}
+.adm .rp-diag>div.al{background:rgba(255,120,100,.14)!important}

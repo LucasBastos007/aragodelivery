@@ -1,0 +1,508 @@
+/* Painel do lojista, layout novo (proposta aprovada, 20/10/2026). Tudo dentro de .lj pra não
+   mexer em nenhuma outra tela (cliente, motoboy, admin). Gerado da proposta (proto_loja/telas.css)
+   por gerar_lj_css.py: ajuste a proposta e gere de novo, em vez de editar aqui. */
+.lj{
+  --pimenta:#D7261E; --pimenta-esc:#B01D16; --pimenta-claro:#FDECEB;
+  --pequi:#F5B700; --pequi-claro:#FFF6D6; --azul:#1F5FBF; --azul-claro:#E8F0FB; --roxo:#6B3FC4; --roxo-claro:#F0EAFB;
+  --grafite:#22201C; --texto:#3D3A35; --suave:#706C64; --linha:#E6E5E1;
+  --pedra:#F2F2EF; --branco:#FFFFFF; --folha:#1E8A4C; --folha-claro:#E6F4EC;
+  --sombra:0 1px 2px rgba(34,32,28,.06),0 6px 18px rgba(34,32,28,.07);
+  --display:var(--font-display),system-ui,sans-serif; --corpo:var(--font-corpo),system-ui,sans-serif;
+  font-family:var(--corpo);color:var(--texto);background:var(--pedra);-webkit-font-smoothing:antialiased;font-size:16px;line-height:1.5;min-height:100vh
+}
+.lj *{box-sizing:border-box}
+.lj button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.lj input,.lj textarea,.lj select{font:inherit;color:var(--grafite)}
+.lj a{color:inherit;text-decoration:none}
+.lj ul,.lj ol{margin:0;padding:0}
+.lj h1,.lj h2,.lj h3,.lj p{margin:0}
+.lj :focus-visible{outline:3px solid var(--pequi);outline-offset:2px;border-radius:6px}
+.lj .num{font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){.lj *{animation:none!important;transition:none!important}}
+/* ── tipografia ── */
+.lj .t40{font-family:var(--display);font-weight:800;font-size:40px;line-height:1.05;letter-spacing:-.02em;color:var(--grafite)}
+.lj .t28{font-family:var(--display);font-weight:800;font-size:28px;line-height:1.1;letter-spacing:-.02em;color:var(--grafite)}
+.lj .t20{font-family:var(--display);font-weight:700;font-size:20px;line-height:1.2;letter-spacing:-.01em;color:var(--grafite)}
+.lj .t16b{font-weight:700;font-size:16px;color:var(--grafite)}
+.lj .t14{font-size:14px}
+.lj .t12{font-size:12px}
+.lj .mut{color:var(--suave)}
+
+
+/* ── peças ── */
+.lj .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;border-radius:14px;font-weight:800;font-size:16px;padding:0 18px;white-space:nowrap}
+.lj .btn-p{background:var(--pimenta);color:#fff}
+.lj .btn-p:hover{background:var(--pimenta-esc)}
+.lj .btn-v{background:var(--folha);color:#fff}
+.lj .btn-g{background:var(--grafite);color:#fff}
+.lj .btn-s{background:#fff;color:var(--grafite);border:1.5px solid var(--linha)}
+.lj .btn-s:hover{border-color:var(--grafite)}
+.lj .btn-l{color:var(--pimenta);min-height:40px;padding:0 8px}
+.lj .btn[disabled]{opacity:.45;cursor:not-allowed}
+.lj .btn.cheio{width:100%}
+.lj .cartao{background:#fff;border-radius:18px;box-shadow:var(--sombra)}
+.lj .lin{display:flex;align-items:center;gap:12px}
+.lj .chip{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:999px;background:#fff;border:1.5px solid var(--linha);font-size:14px;font-weight:700;color:var(--grafite);white-space:nowrap}
+.lj .chip[aria-pressed=true]{background:var(--grafite);color:#fff;border-color:var(--grafite)}
+.lj .selo{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:800;padding:4px 10px;border-radius:999px;white-space:nowrap}
+.lj .selo.verde{background:var(--folha-claro);color:var(--folha)}
+.lj .selo.amarelo{background:var(--pequi-claro);color:#8A6500}
+.lj .selo.azul{background:var(--azul-claro);color:var(--azul)}
+.lj .selo.roxo{background:var(--roxo-claro);color:var(--roxo)}
+.lj .selo.vermelho{background:var(--pimenta-claro);color:var(--pimenta-esc)}
+.lj .selo.cinza{background:var(--pedra);color:var(--suave)}
+.lj .campo{display:block;margin-bottom:14px}
+.lj .campo>span{display:block;font-size:14px;font-weight:700;color:var(--texto);margin-bottom:6px}
+.lj .campo input,.lj .campo textarea,.lj .campo select{width:100%;height:50px;border-radius:12px;border:1.5px solid var(--linha);background:#fff;padding:0 14px;font-size:16px;outline:0}
+.lj .campo textarea{height:86px;padding:12px 14px;resize:none}
+.lj .campo input:focus,.lj .campo textarea:focus,.lj .campo select:focus{border-color:var(--grafite)}
+.lj .sw{width:52px;height:30px;border-radius:15px;background:var(--linha);position:relative;flex-shrink:0;transition:.2s}
+.lj .sw::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:.2s}
+.lj .sw[aria-checked=true]{background:var(--folha)}
+.lj .sw[aria-checked=true]::after{left:25px}
+.lj .aviso{padding:12px 14px;border-radius:12px;font-size:14px;line-height:1.45}
+.lj .aviso.am{background:var(--pequi-claro);color:#6B5100}
+.lj .aviso.vm{background:var(--pimenta-claro);color:var(--pimenta-esc)}
+.lj .aviso.vd{background:var(--folha-claro);color:var(--folha)}
+.lj .vazio{padding:28px 12px;text-align:center;color:var(--suave);font-size:14px}
+
+
+/* ── estrutura do app ── */
+.lj .app{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
+.lj .lateral{position:sticky;top:0;height:100vh;background:var(--grafite);color:#fff;display:flex;flex-direction:column;padding:18px 12px}
+.lj .lat-marca{display:flex;align-items:center;gap:10px;padding:2px 8px 18px}
+.lj .lat-marca img{width:40px;height:40px;border-radius:12px}
+.lj .lat-marca b{font-family:var(--display);font-weight:800;font-size:20px;line-height:1}
+.lj .lat-marca small{display:block;font-size:12px;color:rgba(255,255,255,.6);font-weight:600}
+.lj .lat-loja{display:flex;align-items:center;gap:10px;padding:10px;border-radius:14px;background:rgba(255,255,255,.07);margin-bottom:14px}
+.lj .lat-loja img{width:36px;height:36px;border-radius:10px;background:#fff;object-fit:cover}
+.lj .lat-loja b{font-size:14px;line-height:1.2;display:block}
+.lj .lat-loja small{font-size:12px;color:rgba(255,255,255,.6)}
+.lj .lat-nav{display:flex;flex-direction:column;gap:2px;overflow:auto}
+.lj .lat-nav button{display:flex;align-items:center;gap:12px;height:44px;padding:0 12px;border-radius:12px;font-weight:700;font-size:14px;color:rgba(255,255,255,.75);text-align:left}
+.lj .lat-nav button:hover{background:rgba(255,255,255,.06);color:#fff}
+.lj .lat-nav button[aria-current=true]{background:#fff;color:var(--grafite)}
+.lj .lat-nav .badge{margin-left:auto;background:var(--pimenta);color:#fff;font-size:12px;font-weight:800;min-width:22px;height:22px;border-radius:11px;display:grid;place-items:center;padding:0 6px}
+.lj .lat-pe{margin-top:auto;font-size:12px;color:rgba(255,255,255,.5);padding:8px}
+.lj .principal{min-width:0;display:flex;flex-direction:column}
+.lj .barra{position:sticky;top:0;z-index:20;background:rgba(242,242,239,.92);backdrop-filter:blur(8px);display:flex;align-items:center;gap:12px;padding:14px 24px;border-bottom:1px solid var(--linha);flex-wrap:wrap}
+.lj .barra .tit{font-family:var(--display);font-weight:800;font-size:28px;letter-spacing:-.02em;color:var(--grafite);margin-right:auto}
+.lj .loja-st{display:flex;align-items:center;gap:10px;height:44px;padding:0 8px 0 14px;border-radius:22px;background:#fff;border:1.5px solid var(--linha);font-weight:800;font-size:14px}
+.lj .loja-st.aberta{border-color:var(--folha);color:var(--folha)}
+.lj .loja-st.fechada{border-color:var(--pimenta);color:var(--pimenta)}
+.lj .loja-st.pausada{border-color:#B98A00;color:#8A6500}
+.lj .preparo{display:flex;align-items:center;gap:4px;height:44px;padding:0 6px;border-radius:22px;background:#fff;border:1.5px solid var(--linha);font-weight:700;font-size:14px}
+.lj .preparo button{width:32px;height:32px;border-radius:50%;background:var(--pedra);font-weight:800;font-size:16px}
+.lj .preparo b{min-width:96px;text-align:center}
+.lj .ic-bt{width:44px;height:44px;border-radius:50%;background:#fff;border:1.5px solid var(--linha);display:grid;place-items:center;color:var(--grafite)}
+.lj .ic-bt.off{color:var(--suave);text-decoration:line-through}
+.lj .conteudo{padding:20px 24px 40px;min-width:0}
+
+
+/* ── alarme de pedido novo ── */
+.lj .alarme{display:flex;align-items:center;gap:14px;background:var(--pimenta);color:#fff;border-radius:16px;padding:12px 16px;margin-bottom:16px;animation:pulsa 1.2s ease-in-out infinite}
+.lj .alarme b{font-size:16px}
+.lj .alarme .btn{margin-left:auto;background:#fff;color:var(--pimenta);min-height:40px}
+@keyframes pulsa{50%{box-shadow:0 0 0 8px rgba(215,38,30,.18)}}
+
+
+/* ── colunas de pedidos ── */
+.lj .colunas{display:grid;grid-template-columns:repeat(5,minmax(210px,1fr));gap:12px;align-items:start}
+.lj .col{background:#E9E8E3;border-radius:18px;padding:10px;min-height:300px}
+.lj .col-cab{display:flex;align-items:center;gap:8px;padding:6px 6px 10px}
+.lj .col-cab b{font-size:16px;color:var(--grafite)}
+.lj .col-cab .n{margin-left:auto;background:#fff;border-radius:999px;font-size:12px;font-weight:800;padding:2px 10px}
+.lj .col-cab i{width:10px;height:10px;border-radius:50%}
+.lj .ped{width:100%;text-align:left;background:#fff;border-radius:14px;padding:12px;margin-bottom:10px;box-shadow:var(--sombra);border:2px solid transparent;display:block}
+.lj .ped:hover{border-color:var(--linha)}
+.lj .ped.novo{border-color:var(--pimenta);animation:pulsa 1.2s ease-in-out infinite}
+.lj .ped.atrasado{border-color:#E8A400}
+.lj .ped-cab{display:flex;align-items:center;gap:8px}
+.lj .ped-cab .cod{font-family:var(--display);font-weight:800;font-size:16px;color:var(--grafite)}
+.lj .ped-cab .tempo{margin-left:auto;font-size:14px;font-weight:800}
+.lj .ped .cli{font-size:14px;color:var(--suave);margin:4px 0 8px}
+.lj .ped .itens{font-size:14px;color:var(--texto);line-height:1.4;margin-bottom:8px}
+.lj .ped .rodape{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.lj .ped .rodape .total{margin-left:auto;font-weight:800;color:var(--grafite)}
+.lj .ped .acao{margin-top:10px;width:100%;min-height:44px}
+.lj .mb-linha{display:flex;align-items:center;gap:8px;margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--azul-claro);color:var(--azul);font-size:14px;font-weight:700}
+.lj .mb-linha .av{width:24px;height:24px;border-radius:50%;background:var(--azul);color:#fff;font-size:12px;display:grid;place-items:center;flex-shrink:0}
+.lj .abas-col{display:none}
+
+
+/* ── gaveta (detalhe) ── */
+.lj .veu{position:fixed;inset:0;background:rgba(20,18,15,.4);z-index:50;opacity:0;pointer-events:none;transition:.2s}
+.lj .veu.on{opacity:1;pointer-events:auto}
+.lj .gaveta{position:fixed;top:0;right:0;bottom:0;width:min(480px,100%);background:#fff;z-index:60;transform:translateX(102%);transition:transform .3s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;box-shadow:-10px 0 30px rgba(0,0,0,.15)}
+.lj .gaveta.on{transform:none}
+.lj .gav-cab{display:flex;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--linha)}
+.lj .gav-corpo{flex:1;overflow:auto;padding:18px 20px}
+.lj .gav-pe{padding:14px 20px 20px;border-top:1px solid var(--linha);display:flex;gap:10px;flex-wrap:wrap}
+.lj .gav-pe .btn{flex:1}
+.lj .fechar{width:40px;height:40px;border-radius:50%;background:var(--pedra);display:grid;place-items:center;margin-left:auto}
+.lj .bloco{margin-bottom:18px}
+.lj .bloco>.tit{font-size:14px;font-weight:800;color:var(--suave);margin-bottom:8px}
+.lj .it-l{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--linha)}
+.lj .it-l .q{font-weight:800;color:var(--pimenta);min-width:28px}
+.lj .it-l .ops{font-size:14px;color:var(--suave)}
+.lj .it-l .obs{display:inline-block;margin-top:4px;font-size:14px;font-weight:700;background:var(--pequi-claro);color:#6B5100;padding:2px 8px;border-radius:6px}
+.lj .it-l .v{margin-left:auto;font-weight:700;white-space:nowrap}
+.lj .contas div{display:flex;justify-content:space-between;padding:4px 0;font-size:14px}
+.lj .contas .tot{font-weight:800;font-size:16px;color:var(--grafite);border-top:1px solid var(--linha);margin-top:6px;padding-top:10px}
+.lj .linha-tempo{list-style:none;position:relative}
+.lj .linha-tempo li{position:relative;padding:0 0 14px 26px;font-size:14px}
+.lj .linha-tempo li::before{content:"";position:absolute;left:5px;top:5px;width:12px;height:12px;border-radius:50%;background:var(--linha)}
+.lj .linha-tempo li.feito::before{background:var(--folha)}
+.lj .linha-tempo li.agora::before{background:var(--pimenta);box-shadow:0 0 0 4px var(--pimenta-claro)}
+.lj .linha-tempo li:not(:last-child)::after{content:"";position:absolute;left:10px;top:18px;bottom:2px;width:2px;background:var(--linha)}
+.lj .linha-tempo small{display:block;color:var(--suave)}
+
+
+/* ── modal ── */
+.lj .modal{position:fixed;inset:0;z-index:70;display:grid;place-items:center;padding:16px;pointer-events:none}
+.lj .modal .caixa{background:#fff;border-radius:22px;width:min(460px,100%);max-height:90vh;overflow:auto;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,.25);transform:scale(.96);opacity:0;transition:.2s;pointer-events:none}
+.lj .modal.on .caixa{transform:none;opacity:1;pointer-events:auto}
+.lj .motivos{display:flex;flex-direction:column;gap:8px;margin:14px 0}
+.lj .motivos button{text-align:left;padding:14px;border-radius:12px;border:1.5px solid var(--linha);font-weight:700}
+.lj .motivos button[aria-pressed=true]{border-color:var(--pimenta);background:var(--pimenta-claro);color:var(--pimenta-esc)}
+.lj .comanda{background:#FFFEF8;border:1px dashed #CFCBC0;border-radius:8px;padding:16px;font-size:14px;line-height:1.5;width:280px;margin:12px auto}
+.lj .comanda b{font-size:16px}
+.lj .comanda hr{border:0;border-top:1px dashed #CFCBC0;margin:8px 0}
+
+
+/* ── toast ── */
+.lj .toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,20px);background:var(--grafite);color:#fff;font-size:14px;font-weight:700;padding:12px 18px;border-radius:12px;z-index:90;opacity:0;transition:.25s;pointer-events:none;max-width:calc(100% - 32px);text-align:center}
+.lj .toast.on{opacity:1;transform:translate(-50%,0)}
+
+
+/* ── cardápio ── */
+.lj .card-grade{display:grid;grid-template-columns:220px 1fr;gap:16px;align-items:start}
+.lj .cats-l{position:sticky;top:90px;padding:8px}
+.lj .cats-l button{display:flex;width:100%;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;font-size:14px;font-weight:700;text-align:left}
+.lj .cats-l button[aria-pressed=true]{background:var(--pedra);color:var(--grafite)}
+.lj .cats-l button small{margin-left:auto;color:var(--suave);font-weight:700}
+.lj .prods{display:flex;flex-direction:column;gap:8px}
+.lj .prod{display:flex;align-items:center;gap:14px;padding:10px 12px;background:#fff;border-radius:14px;box-shadow:var(--sombra)}
+.lj .prod img{width:56px;height:56px;border-radius:10px;object-fit:cover;background:var(--pedra);flex-shrink:0}
+.lj .prod .tx{flex:1;min-width:0}
+.lj .prod .tx b{display:block;font-size:16px;color:var(--grafite);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lj .prod .tx small{font-size:14px;color:var(--suave)}
+.lj .prod .preco{font-weight:800;color:var(--grafite);white-space:nowrap}
+.lj .prod.off{opacity:.55}
+.lj .saude{padding:16px;margin-bottom:16px}
+.lj .saude li{list-style:none;display:flex;gap:10px;align-items:flex-start;padding:8px 0;font-size:14px;border-top:1px solid var(--linha)}
+.lj .saude li:first-child{border-top:0}
+.lj .grupo-ed{border:1.5px solid var(--linha);border-radius:14px;padding:12px;margin-bottom:12px}
+.lj .grupo-ed .op{display:grid;grid-template-columns:1fr 110px 36px;gap:8px;margin-top:8px}
+.lj .grupo-ed .op input{height:42px;border-radius:10px;border:1.5px solid var(--linha);padding:0 10px;font-size:16px;width:100%}
+.lj .grupo-ed .op button{height:42px;border-radius:10px;background:var(--pedra);font-weight:800}
+.lj .mm{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
+
+/* ── desempenho e financeiro ── */
+.lj .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.lj .kpi{padding:16px}
+.lj .kpi b{display:block;font-family:var(--display);font-weight:800;font-size:28px;color:var(--grafite);line-height:1.1}
+.lj .kpi small{font-size:14px;color:var(--suave)}
+.lj .kpi .var{font-size:12px;font-weight:800}
+.lj .dupla{display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-top:12px}
+.lj .barras-h{display:flex;align-items:flex-end;gap:6px;height:180px;padding-top:22px}
+.lj .barras-h .b{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end;position:relative}
+.lj .barras-h .b i{width:100%;max-width:26px;border-radius:5px 5px 2px 2px;background:#D9D6CE;min-height:3px}
+.lj .barras-h .b.pico i{background:var(--pimenta)}
+.lj .barras-h .b small{font-size:12px;color:var(--suave)}
+.lj .barras-h .b em{position:absolute;top:0;font-style:normal;font-size:12px;font-weight:800;color:var(--grafite);opacity:0}
+.lj .barras-h .b:hover em,.lj .barras-h .b.pico em{opacity:1}
+.lj .top-l li{list-style:none;display:flex;gap:12px;align-items:center;padding:10px 0;border-top:1px solid var(--linha);font-size:14px}
+.lj .top-l li:first-child{border-top:0}
+.lj .top-l img{width:40px;height:40px;border-radius:8px;object-fit:cover}
+.lj .top-l .pos{font-family:var(--display);font-weight:800;color:var(--suave);width:18px}
+.lj .mov li{list-style:none;display:flex;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--linha)}
+.lj .mov li:first-child{border-top:0}
+.lj .mov .v{margin-left:auto;font-weight:800;white-space:nowrap}
+.lj .tabela{width:100%;border-collapse:collapse;font-size:14px}
+.lj .tabela th{text-align:left;font-size:12px;color:var(--suave);font-weight:800;padding:10px 12px;border-bottom:1px solid var(--linha)}
+.lj .tabela td{padding:12px;border-bottom:1px solid var(--linha)}
+.lj .tabela tr:hover td{background:#FBFAF7}
+.lj .horarios .h{display:grid;grid-template-columns:90px 52px 1fr 1fr;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--linha)}
+.lj .horarios input[type=time]{height:42px;border-radius:10px;border:1.5px solid var(--linha);padding:0 8px;font-size:16px;width:100%}
+.lj .aval{padding:16px;margin-bottom:10px}
+.lj .estrelas{color:#E8A400}
+
+
+/* ── lançar pedido ── */
+.lj .lancar{display:grid;grid-template-columns:1.2fr 1fr;gap:16px;align-items:start}
+.lj .busca-prod{max-height:340px;overflow:auto;margin-top:8px}
+.lj .busca-prod button{display:flex;width:100%;align-items:center;gap:10px;padding:8px;border-radius:10px;text-align:left}
+.lj .busca-prod button:hover{background:var(--pedra)}
+.lj .busca-prod img{width:40px;height:40px;border-radius:8px;object-fit:cover}
+.lj .qtd{display:inline-flex;align-items:center;gap:8px}
+.lj .qtd button{width:32px;height:32px;border-radius:50%;background:var(--pedra);font-weight:800}
+
+
+/* ── entrar ── */
+.lj .entrar{min-height:100vh;display:grid;grid-template-columns:1fr 1fr}
+.lj .entrar-arte{background:radial-gradient(120% 100% at 80% 0%,#EF4A3F 0%,#C8211A 50%,#8E140E 100%);color:#fff;padding:48px;display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden}
+.lj .entrar-arte .marca{display:flex;align-items:center;gap:14px}
+.lj .entrar-arte .marca img{width:72px;height:72px;border-radius:20px;box-shadow:0 12px 30px rgba(0,0,0,.3)}
+.lj .entrar-arte .marca b{font-family:var(--display);font-weight:800;font-size:28px;line-height:1}
+.lj .entrar-arte .marca small{display:inline-block;margin-top:6px;font-size:12px;font-weight:800;background:#fff;color:var(--pimenta);padding:3px 10px;border-radius:999px}
+.lj .entrar-arte h1{font-family:var(--display);font-weight:800;font-size:40px;line-height:1.05;letter-spacing:-.02em;max-width:460px}
+.lj .entrar-arte p{opacity:.9;margin-top:10px;max-width:420px}
+.lj .entrar-arte .mini{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}
+.lj .entrar-arte .mini span{background:rgba(255,255,255,.14);border-radius:12px;padding:10px 14px;font-size:14px;font-weight:700}
+.lj .entrar-form{display:grid;place-items:center;padding:32px 20px}
+.lj .entrar-form .caixa{width:min(380px,100%)}
+
+
+/* ── mapa de telas (pra navegar a proposta) ── */
+.lj .telas-bt{position:fixed;left:16px;bottom:16px;z-index:80;background:var(--pequi);color:var(--grafite);font-weight:800;font-size:14px;border-radius:999px;padding:10px 16px;box-shadow:var(--sombra)}
+.lj .telas-lista{position:fixed;left:16px;bottom:64px;z-index:80;background:#fff;border-radius:16px;box-shadow:0 14px 40px rgba(0,0,0,.25);padding:10px;width:260px;max-height:70vh;overflow:auto;display:none}
+.lj .telas-lista.on{display:block}
+.lj .telas-lista button{display:block;width:100%;text-align:left;padding:9px 10px;border-radius:8px;font-size:14px;font-weight:600}
+.lj .telas-lista button:hover{background:var(--pedra)}
+.lj .telas-lista p{font-size:12px;color:var(--suave);padding:6px 10px 8px;line-height:1.4}
+
+
+/* ── tablet e celular ── */
+.lj .nav-cel{display:none}
+@media (max-width:1180px){.lj .colunas{grid-template-columns:repeat(2,minmax(0,1fr))}
+.lj .dupla{grid-template-columns:1fr}
+.lj .lancar{grid-template-columns:1fr}}
+@media (max-width:900px){.lj .app{grid-template-columns:1fr}
+.lj .lateral{display:none}
+.lj .barra{padding:12px 14px;padding-top:calc(env(safe-area-inset-top,0px) + 12px);gap:8px}
+.lj .barra .tit{font-size:20px;flex-basis:100%}
+.lj .preparo b{min-width:80px}
+.lj .conteudo{padding:14px 14px 110px}
+.lj .colunas{grid-template-columns:1fr}
+.lj .colunas .col{display:none;min-height:0;background:none;padding:0}
+.lj .colunas .col.ativa{display:block}
+.lj .colunas .col-cab{display:none}
+.lj .abas-col{display:flex;gap:6px;overflow-x:auto;margin-bottom:12px;scrollbar-width:none}
+.lj .abas-col button{flex-shrink:0;height:40px;padding:0 14px;border-radius:999px;background:#fff;border:1.5px solid var(--linha);font-weight:800;font-size:14px;display:flex;align-items:center;gap:6px}
+.lj .abas-col button[aria-pressed=true]{background:var(--grafite);color:#fff;border-color:var(--grafite)}
+.lj .abas-col .n{background:var(--pimenta);color:#fff;border-radius:999px;font-size:12px;padding:0 7px}
+.lj .card-grade{grid-template-columns:1fr}
+.lj .cats-l{position:static;display:flex;overflow-x:auto;gap:6px;padding:6px}
+.lj .cats-l button{width:auto;flex-shrink:0;white-space:nowrap}
+.lj .nav-cel{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:40;background:#fff;border-top:1px solid var(--linha);padding:8px 4px calc(env(safe-area-inset-bottom,0px) + 8px)}
+.lj .nav-cel button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12px;font-weight:700;color:var(--suave);position:relative}
+.lj .nav-cel button[aria-current=true]{color:var(--pimenta)}
+.lj .nav-cel .badge{position:absolute;top:-4px;right:calc(50% - 22px);background:var(--pimenta);color:#fff;font-size:12px;font-weight:800;min-width:18px;height:18px;border-radius:9px;display:grid;place-items:center;padding:0 4px}
+.lj .entrar{grid-template-columns:1fr}
+.lj .entrar-arte{padding:28px 22px;padding-top:calc(env(safe-area-inset-top,0px) + 24px);min-height:300px}
+.lj .entrar-arte h1{font-size:28px;margin-top:28px}
+.lj .telas-bt{bottom:84px}
+.lj .telas-lista{bottom:132px}
+.lj .tabela .esconde{display:none}
+.lj .horarios .h{grid-template-columns:70px 52px 1fr 1fr}}
+.lj .ped{cursor:pointer}
+.lj .gaveta:not(.on){visibility:hidden;transition:transform .3s cubic-bezier(.2,.8,.2,1),visibility 0s .3s}
+.lj .gaveta.on{visibility:visible;transition:transform .3s cubic-bezier(.2,.8,.2,1)}
+.lj .dupla>*,.lj .lancar>*,.lj .card-grade>*,.lj .kpis>*{min-width:0}
+.lj .horarios .h{grid-template-columns:90px 52px minmax(0,1fr) minmax(0,1fr)}
+.lj .horarios input[type=time]{min-width:0}
+@media (max-width:600px){.lj .prod{flex-wrap:wrap;row-gap:8px}
+.lj .prod .tx{flex:1 1 calc(100% - 72px)}
+.lj .prod .preco{margin-left:70px;margin-right:auto}
+.lj .horarios .h{grid-template-columns:44px 52px minmax(0,1fr) minmax(0,1fr);gap:6px}
+.lj .horarios input[type=time]{padding:0 4px;font-size:16px}
+.lj .barras-h{gap:3px}
+.lj .kpis{grid-template-columns:1fr 1fr}
+.lj .kpi b{font-size:20px}}
+@media (max-width:900px){.lj .telas-bt{left:auto;right:12px;bottom:auto;top:calc(env(safe-area-inset-top,0px) + 12px);padding:8px 12px;font-size:12px}
+.lj .telas-lista{left:auto;right:12px;bottom:auto;top:calc(env(safe-area-inset-top,0px) + 54px)}}
+
+/* suporte do lojista */
+.lj .suporte-l{display:grid;grid-template-columns:280px 1fr;gap:12px;align-items:start}
+.lj .suporte-l>*{min-width:0}
+.lj .sl-it{display:block;width:100%;text-align:left;background:#fff;border-radius:14px;padding:12px;margin-bottom:8px;box-shadow:var(--sombra);border:2px solid transparent}
+.lj .sl-it[aria-pressed=true]{border-color:var(--grafite)}
+.lj .sl-it b{display:block;color:var(--grafite)}
+.lj .sl-it span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lj .sl-conv{display:flex;flex-direction:column;height:min(620px,calc(100vh - 150px))}
+.lj .sup-cab{display:flex;flex-direction:column;padding:14px 16px;border-bottom:1px solid var(--linha)}
+.lj .sup-msgs{flex:1;overflow:auto;padding:14px 16px;display:flex;flex-direction:column;gap:8px;background:#FBFAF7}
+.lj .bal{max-width:78%;padding:10px 14px;border-radius:16px;font-size:16px;line-height:1.4}
+.lj .bal.ele{background:#fff;color:var(--grafite);border-bottom-left-radius:4px;box-shadow:var(--sombra)}
+.lj .bal.eu{background:var(--grafite);color:#fff;margin-left:auto;border-bottom-right-radius:4px}
+.lj .sup-rapidas{display:flex;gap:6px;overflow-x:auto;padding:10px 12px 0;scrollbar-width:none}
+.lj .sup-rapidas button{flex-shrink:0;height:36px;padding:0 12px;border-radius:18px;border:1.5px solid var(--linha);font-size:14px;font-weight:700;background:#fff}
+.lj .sup-escrever{display:flex;gap:8px;padding:10px 12px 12px}
+.lj .sup-escrever input{flex:1;min-width:0;height:44px;border-radius:22px;border:1.5px solid var(--linha);padding:0 16px;font-size:16px}
+.lj .av-l{width:36px;height:36px;border-radius:50%;background:var(--azul);color:#fff;font-weight:800;display:grid;place-items:center;flex-shrink:0}
+@media (max-width:900px){.lj .suporte-l{grid-template-columns:1fr}
+.lj .sl-lista{display:flex;gap:8px;overflow-x:auto}
+.lj .sl-it{min-width:200px}
+.lj .sl-conv{height:520px}
+.lj .kpi[style*="span 2"]{grid-column:span 2}}
+
+/* ═════ identidade de cada categoria ═════ */
+.lj .sec-cab{display:flex;align-items:center;gap:14px;margin:-4px 0 18px;padding:14px 16px;border-radius:18px;background:linear-gradient(90deg,color-mix(in srgb,var(--acento) 12%,#fff),#fff 70%);border:1px solid color-mix(in srgb,var(--acento) 18%,#fff)}
+.lj .sec-ic{width:46px;height:46px;border-radius:14px;background:var(--acento);color:#fff;display:grid;place-items:center;flex-shrink:0;box-shadow:0 6px 14px color-mix(in srgb,var(--acento) 35%,transparent)}
+.lj .sec-ic svg{width:22px;height:22px}
+.lj .sec-cab b{display:block;font-family:var(--display);font-weight:800;font-size:20px;color:var(--grafite);line-height:1.2}
+.lj .sec-cab span>span{display:block;font-size:14px;color:var(--suave)}
+.lj .conteudo .chip[aria-pressed=true],.lj .conteudo .abas-fin button[aria-pressed=true]{background:var(--acento);border-color:var(--acento);color:#fff}
+.lj .conteudo .btn-p{background:var(--acento)}
+
+/* financeiro estilo app de delivery */
+.lj .abas-fin{display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;scrollbar-width:none}
+.lj .abas-fin button{flex-shrink:0;height:40px;padding:0 16px;border-radius:999px;background:#fff;border:1.5px solid var(--linha);font-weight:800;font-size:14px}
+.lj .fin-heroi{display:flex;gap:18px;align-items:flex-end;flex-wrap:wrap;padding:22px;border-radius:22px;color:#fff;background:linear-gradient(135deg,#1E8A4C,#14633A);margin-bottom:12px;box-shadow:0 12px 30px rgba(30,138,76,.25)}
+.lj .fin-heroi small{font-size:14px;opacity:.85}
+.lj .fin-heroi b{display:block;font-family:var(--display);font-weight:800;font-size:40px;line-height:1.05;margin:4px 0 8px}
+.lj .fin-heroi p{font-size:14px;opacity:.85;margin-top:8px;max-width:420px}
+.lj .fin-heroi .selo{background:rgba(255,255,255,.18);color:#fff}
+.lj .fin-adi{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:6px;max-width:260px;text-align:right}
+.lj .fin-adi .btn{background:#fff}
+.lj .cascata{list-style:none;margin-top:10px}
+.lj .cascata li{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--linha)}
+.lj .cascata li:first-child{border-top:0}
+.lj .cascata b{display:block;font-size:16px;color:var(--grafite);font-weight:700}
+.lj .cascata small{display:block;font-size:12px;color:var(--suave)}
+.lj .cascata .num{font-weight:800;white-space:nowrap;color:var(--folha)}
+.lj .cascata .menos .num{color:var(--pimenta-esc)}
+.lj .cascata .total{border-top:2px solid var(--grafite);margin-top:4px}
+.lj .cascata .total b,.lj .cascata .total .num{font-size:20px;color:var(--grafite)}
+.lj .forma{margin-bottom:12px}
+.lj .forma-b{display:block;height:10px;border-radius:5px;background:var(--pedra);overflow:hidden;margin-top:4px}
+.lj .forma-b i{display:block;height:100%;border-radius:5px}
+@media (max-width:600px){.lj .fin-heroi b{font-size:28px}
+.lj .fin-adi{margin-left:0;align-items:flex-start;text-align:left}
+.lj .sec-cab{padding:12px}}
+
+/* Ganho por dia: valor em cima de cada barra */
+.lj .barras-h.todos{height:200px}
+.lj .barras-h.todos .b em{position:static;opacity:1;font-size:12px;white-space:nowrap}
+.lj .barras-h.todos .b i{max-height:calc(100% - 42px)}
+@media (max-width:700px){.lj .barras-h.todos .b em{font-size:10px}}
+
+/* Suporte flutuante no canto inferior direito (com o mascote quando tiver a arte), 20/10/2026 */
+.lj .fab-sup{position:fixed;right:22px;bottom:22px;z-index:45;display:flex;align-items:center;gap:8px;background:var(--pimenta);color:#fff;border-radius:999px;padding:8px 18px 8px 8px;box-shadow:0 6px 20px rgba(215,38,30,.35);font-weight:800;font-size:15px}
+.lj .fab-sup .fab-ic{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.18);display:grid;place-items:center}
+.lj .fab-sup img{width:58px;height:58px;border-radius:50%;object-fit:cover;object-position:center top;background:#fff;margin:-14px 0 -14px -8px;box-shadow:0 2px 10px rgba(0,0,0,.2);border:3px solid #fff}
+.lj .fab-sup:active{transform:scale(.97)}
+@media (max-width:860px){.lj .fab-sup{bottom:calc(env(safe-area-inset-bottom,0px) + 84px);right:14px;padding:6px}
+.lj .fab-sup .fab-tx{display:none}}
+
+/* Ganho por dia: o gráfico ocupa a altura do card e o número do dia fica embaixo do nome */
+.lj .cartao.graf-dia{display:flex;flex-direction:column}
+.lj .graf-dia .barras-h.todos{flex:1;height:auto;min-height:220px;margin-top:10px}
+.lj .graf-dia .barras-h.todos .b i{max-height:calc(100% - 64px);max-width:44px}
+.lj .barras-h .b small.dia{display:flex;flex-direction:column;align-items:center;line-height:1.25}
+.lj .barras-h .b small.dia b{font-size:15px;color:var(--grafite);font-weight:800}
+.lj .barras-h .b.pico small.dia b{color:var(--pimenta)}
+
+/* Ganho por dia em linha (30 dias) */
+.lj .linha30{flex:1;display:flex;flex-direction:column;margin-top:10px;min-height:240px}
+.lj .linha30 svg{width:100%;height:auto;overflow:visible}
+.lj .linha30 .grade{stroke:var(--linha);stroke-width:1}
+.lj .linha30 .area{fill:rgba(215,38,30,.08)}
+.lj .linha30 .traco{fill:none;stroke:var(--pimenta);stroke-width:2.5;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.lj .linha30 .pt circle{fill:#fff;stroke:var(--pimenta);stroke-width:2;vector-effect:non-scaling-stroke}
+.lj .linha30 .pt.max circle{fill:var(--pimenta)}
+.lj .linha30 .pt .val{font-size:12px;font-weight:800;fill:var(--grafite);opacity:0;pointer-events:none}
+.lj .linha30 .pt.max .val,.lj .linha30 .pt:hover .val,.lj .linha30 .pt:focus .val{opacity:1}
+.lj .linha30 .pt:hover circle,.lj .linha30 .pt:focus circle{r:5}
+.lj .linha30 .pt{outline:none;cursor:pointer}
+.lj .linha30 .eixo{font-size:12px;fill:var(--suave)}
+@media (max-width:860px){.lj .fab-sup{padding:3px;background:#fff}
+.lj .fab-sup img{margin:0;width:62px;height:62px;border:3px solid var(--pimenta)}}
+
+/* Desempenho: navegação de mês/período e gráfico largo com todos os valores (20/10/2026) */
+.lj .mes-nav{display:flex;align-items:flex-end;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.lj .mes-nav .ic-bt{font-size:22px;font-weight:800}
+.lj .mes-nav .ic-bt[disabled]{opacity:.35;cursor:not-allowed}
+.lj .mes-nav .campo input{height:44px}
+.lj .graf-largo{width:100%}
+.lj .linha-mes{overflow-x:auto;margin-top:10px;-webkit-overflow-scrolling:touch}
+.lj .linha-mes svg{width:100%;height:auto;display:block}
+.lj .linha-mes .grade{stroke:var(--linha);stroke-width:1}
+.lj .linha-mes .area{fill:rgba(215,38,30,.07)}
+.lj .linha-mes .traco{fill:none;stroke:var(--pimenta);stroke-width:2.5;stroke-linejoin:round}
+.lj .linha-mes .pt circle{fill:#fff;stroke:var(--pimenta);stroke-width:2}
+.lj .linha-mes .pt.max circle{fill:var(--pimenta)}
+.lj .linha-mes .val{font-size:13px;font-weight:800;fill:var(--grafite);font-variant-numeric:tabular-nums}
+.lj .linha-mes .pt.max .val{fill:var(--pimenta);font-size:14px}
+.lj .linha-mes .eixo{font-size:13px;fill:var(--grafite);font-weight:700}
+.lj .linha-mes .eixo.sem{font-size:11px;fill:var(--suave);font-weight:500}
+.lj .linha-mes .eixo.hj{fill:var(--pimenta)}
+
+/* Financeiro: ciclo de sexta a quinta (saldo recomeça do zero depois do repasse) */
+.lj .ciclo{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:14px;max-width:560px}
+.lj .ciclo span{background:rgba(255,255,255,.12);border-radius:10px;padding:6px 4px;text-align:center;font-size:12px;font-variant-numeric:tabular-nums;color:rgba(255,255,255,.75)}
+.lj .ciclo span b{display:block;font-size:12px;color:#fff}
+.lj .ciclo span.feito{background:rgba(255,255,255,.22);color:#fff}
+.lj .ciclo span.hoje{outline:2px solid #fff}
+.lj .tabela tfoot td{border-top:2px solid var(--grafite);border-bottom:0}
+
+/* Financeiro: período em destaque e linhas que abrem a lista de pedidos */
+.lj .periodo-fin{display:inline-block;background:rgba(255,255,255,.18);color:#fff;font-weight:800;font-size:16px;padding:6px 12px;border-radius:10px}
+.lj .cascata li.abre{display:block;padding:0}
+.lj .cascata li.abre>button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:12px 0}
+.lj .cascata li.abre>button>span:first-child{flex:1}
+.lj .cascata li.abre .seta{color:var(--suave);font-size:14px;width:16px;text-align:center}
+.lj .cascata li.abre .qtd{font-size:12px;font-weight:700;color:var(--suave);background:var(--pedra);border-radius:999px;padding:2px 8px;margin-left:6px;white-space:nowrap}
+.lj .cascata li.abre:hover>button{background:#FBFAF7}
+.lj .abre-lista{max-height:320px;overflow:auto;margin:0 0 10px;border:1px solid var(--linha);border-radius:12px}
+.lj .tabela.mini{font-size:13px}
+.lj .tabela.mini td,.lj .tabela.mini th{padding:8px 10px}
+
+/* Cardápio: "Mais pedidos" escolhidos pela loja */
+.lj .dest-card{padding:18px;margin-bottom:12px}
+.lj .dest-l{list-style:none;display:flex;flex-direction:column;gap:8px}
+.lj .dest-l li{display:flex;align-items:center;gap:10px;padding:8px;border-radius:12px;background:var(--pedra)}
+.lj .dest-l .pos{width:26px;height:26px;border-radius:50%;background:var(--grafite);color:#fff;font-weight:800;font-size:13px;display:grid;place-items:center;flex-shrink:0}
+.lj .dest-l img{width:44px;height:44px;border-radius:10px;object-fit:cover;flex-shrink:0}
+.lj .dest-l .tx{flex:1;min-width:0}
+.lj .dest-l .tx b{display:block;font-size:14px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lj .dest-l .tx small{font-size:12px;color:var(--suave)}
+.lj .ic-bt.peq{width:36px;height:36px;font-weight:800;font-size:16px}
+.lj .ic-bt.peq[disabled]{opacity:.3;cursor:not-allowed}
+.lj .estrela{width:40px;height:40px;border-radius:50%;font-size:22px;line-height:1;color:#C9C5BC;flex-shrink:0}
+.lj .estrela.on{color:#E8A400}
+
+/* Barras clicáveis e "vendas do dia" pra conferência */
+.lj .barras-h button.b{background:none;border:0;padding:0;cursor:pointer;border-radius:10px}
+.lj .barras-h button.b:hover i{filter:brightness(.92)}
+.lj .barras-h .b.sel i{background:var(--grafite)}
+.lj .barras-h .b.sel small.dia b{color:var(--grafite);text-decoration:underline}
+.lj .dia-vendas{margin-top:14px;border-top:1px solid var(--linha);padding-top:14px}
+.lj .dia-vendas .lin .btn svg{width:18px;height:18px}
+.lj .dia-grade{display:grid;grid-template-columns:1.6fr 1fr;gap:18px}
+@media (max-width:860px){.lj .dia-grade{grid-template-columns:1fr}}
+.lj .dia-peds{display:flex;flex-direction:column;gap:8px;max-height:420px;overflow:auto;padding-right:4px}
+.lj .dia-ped{border:1px solid var(--linha);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:4px}
+.lj .dia-ped .lin{gap:8px}
+.lj .dia-prods{list-style:none;max-height:420px;overflow:auto}
+.lj .dia-prods li{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--linha);font-size:14px}
+.lj .dia-prods li span{flex:1}
+
+/* Vendas por período (estilo app de investimentos) */
+.lj .kpi-bt{text-align:left;cursor:pointer;border:1.5px solid transparent}
+.lj .kpi-bt:hover{border-color:var(--folha)}
+.lj .kpi-mais{display:block;margin-top:6px;font-size:13px;font-weight:800;color:var(--folha)}
+.lj .perf-v{padding:18px;margin-bottom:12px}
+.lj .per-chips{display:flex;gap:6px;margin:12px 0 6px;overflow-x:auto;scrollbar-width:none}
+.lj .per-chips button{flex-shrink:0;min-width:56px;height:40px;padding:0 14px;border-radius:12px;font-weight:800;font-size:15px;color:var(--suave)}
+.lj .per-chips button[aria-pressed=true]{background:var(--folha-claro);color:var(--folha);outline:2px solid var(--folha)}
+.lj .perf-tot{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:6px 0 4px}
+.lj .perf-tot b{font-family:var(--display);font-weight:800;font-size:28px;color:var(--grafite)}
+.lj .perf-graf svg{width:100%;height:auto;display:block}
+.lj .perf-graf .g{stroke:var(--linha);stroke-width:1}
+.lj .perf-graf .lv{fill:none;stroke:var(--folha);stroke-width:3;stroke-linejoin:round;stroke-linecap:round}
+.lj .perf-graf .pf{fill:var(--folha);stroke:#fff;stroke-width:2}
+.lj .perf-graf .ey{font-size:13px;fill:var(--suave);font-variant-numeric:tabular-nums}
+.lj .perf-graf .ex{font-size:13px;fill:var(--suave)}
+.lj .resumo-t{margin:14px -18px 0;padding:10px 18px;background:var(--pedra);font-weight:800;color:var(--suave);font-size:14px}
+.lj .pontilhado{list-style:none;margin-top:6px}
+.lj .pontilhado li{display:flex;align-items:baseline;gap:8px;padding:9px 0;font-size:16px}
+.lj .pontilhado li span{color:var(--texto);white-space:nowrap}
+.lj .pontilhado li i{flex:1;border-bottom:2px dotted #CFCBC2;transform:translateY(-4px);min-width:16px}
+.lj .pontilhado li b{color:var(--grafite);white-space:nowrap}
+.lj .pontilhado li.verde b{color:var(--folha)}
+.lj .pontilhado li.verm b{color:var(--pimenta-esc)}
+@media (max-width:700px){.lj .pontilhado li{font-size:15px}
+.lj .perf-tot b{font-size:24px}}

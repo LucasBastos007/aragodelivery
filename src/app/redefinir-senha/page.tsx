@@ -1,114 +1,71 @@
 "use client"
 
-import { useState, Suspense } from "react"
+// Redefinir senha (21/10/2026): mesmo visual da entrada nova do lojista e do admin.
+// Funciona igual a antes: o link do e-mail traz o token; a senha nova vai pra /api/redefinir-senha.
+// O token diz se é lojista ou motoboy, pra voltar pra entrada certa.
+import { useState, Suspense, useMemo } from "react"
 import { useSearchParams } from "next/navigation"
-import Image from "next/image"
 import Link from "next/link"
+import "../chego-ctrl-login/login.css"
 
-function RedefinirForm() {
+function tipoDoToken(token: string): "lojista" | "motoboy" | null {
+  try {
+    const p = token.split(".")[0].replace(/-/g, "+").replace(/_/g, "/")
+    const j = JSON.parse(atob(p + "===".slice((p.length + 3) % 4)))
+    return j?.tipo === "motoboy" ? "motoboy" : j?.tipo === "lojista" ? "lojista" : null
+  } catch { return null }
+}
+
+function RedefinirSenha() {
   const params = useSearchParams()
-  const token  = params.get("token") ?? ""
+  const token = params.get("token") ?? ""
+  const tipo = useMemo(() => tipoDoToken(token), [token])
+  const voltar = tipo === "motoboy" ? "/entrar/motoboy" : "/loja/entrar"
+  const [senha, setSenha] = useState(""), [confirma, setConfirma] = useState(""), [ver, setVer] = useState(false)
+  const [loading, setLoading] = useState(false), [erro, setErro] = useState(""), [ok, setOk] = useState(false)
 
-  const [senha,    setSenha]    = useState("")
-  const [confirma, setConfirma] = useState("")
-  const [loading,  setLoading]  = useState(false)
-  const [erro,     setErro]     = useState("")
-  const [ok,       setOk]       = useState(false)
-
-  async function salvar() {
-    if (senha.length < 8)        { setErro("A senha deve ter pelo menos 8 caracteres"); return }
-    if (senha !== confirma)      { setErro("As senhas não coincidem"); return }
-    if (!token)                  { setErro("Link inválido"); return }
+  async function salvar(e: React.FormEvent) {
+    e.preventDefault()
+    if (senha.length < 8) { setErro("A senha precisa ter pelo menos 8 caracteres."); return }
+    if (senha !== confirma) { setErro("As duas senhas não são iguais."); return }
+    if (!token) { setErro("Link inválido. Peça um novo em Esqueceu a senha."); return }
     setErro(""); setLoading(true)
-
-    const res  = await fetch("/api/redefinir-senha", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, senha }),
-    })
-    const json = await res.json()
+    const res = await fetch("/api/redefinir-senha", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, senha }) })
+    const json = await res.json().catch(() => ({}))
     setLoading(false)
-    if (!res.ok) { setErro(json.error ?? "Erro ao redefinir senha"); return }
+    if (!res.ok) { setErro(json.error ?? "Não foi possível trocar a senha. Peça um novo link."); return }
     setOk(true)
   }
 
-  const inp: React.CSSProperties = {
-    width: "100%", padding: "12px 14px", borderRadius: 10, fontSize: 14,
-    background: "#F9FAFB", border: "1px solid #E5E7EB",
-    color: "#111827", outline: "none", boxSizing: "border-box",
-  }
-
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 16px" }}>
-      <div style={{ width: "100%", maxWidth: 400 }}>
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: 10 }}>
-            <Image src="/logo-chego.png" alt="Chegô" width={60} height={60} style={{ borderRadius: 16, objectFit: "cover" }} />
-          </div>
-          <p style={{ color: "#f97316", fontWeight: 900, fontSize: 20 }}>Chegô Delivery</p>
-          <p style={{ color: "#9CA3AF", fontSize: 13, marginTop: 4 }}>Redefinição de senha</p>
-        </div>
-
-        <div style={{ background: "#fff", borderRadius: 20, border: "1px solid #e5e7eb", padding: "24px 20px" }}>
-          {ok ? (
-            <div style={{ textAlign: "center" }}>
-              <p style={{ fontSize: 40, marginBottom: 12 }}>✅</p>
-              <p style={{ color: "#111827", fontWeight: 700, fontSize: 16, marginBottom: 8 }}>Senha alterada com sucesso!</p>
-              <p style={{ color: "#6B7280", fontSize: 13, marginBottom: 24 }}>Agora você pode entrar com sua nova senha.</p>
-              <Link href="/entrar" style={{ color: "#f97316", fontWeight: 700, fontSize: 14 }}>← Voltar para o login</Link>
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <div>
-                <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Nova senha</label>
-                <input
-                  type="password" value={senha} onChange={e => setSenha(e.target.value)}
-                  placeholder="Mínimo 8 caracteres"
-                  autoComplete="new-password"
-                  style={inp}
-                />
-              </div>
-              <div>
-                <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Confirmar nova senha</label>
-                <input
-                  type="password" value={confirma} onChange={e => setConfirma(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && salvar()}
-                  placeholder="Repita a senha"
-                  autoComplete="new-password"
-                  style={inp}
-                />
-              </div>
-
-              {erro && (
-                <p style={{ color: "#f87171", fontSize: 13, fontWeight: 500, padding: "10px 12px", background: "rgba(239,68,68,0.08)", borderRadius: 8 }}>
-                  {erro}
-                </p>
-              )}
-
-              <button onClick={salvar} disabled={loading} style={{
-                width: "100%", padding: "13px", borderRadius: 12, border: "none",
-                background: loading ? "rgba(249,115,22,0.4)" : "#f97316",
-                color: "white", fontWeight: 800, fontSize: 15, cursor: loading ? "not-allowed" : "pointer",
-                marginTop: 4,
-              }}>
-                {loading ? "Salvando..." : "Salvar nova senha →"}
-              </button>
-
-              <div style={{ textAlign: "center" }}>
-                <Link href="/entrar" style={{ color: "#9CA3AF", fontSize: 13 }}>← Voltar para o login</Link>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+    <div className="lg">
+      <div className="lg-luz" aria-hidden="true" />
+      <main className="lg-centro">
+        <section className="lg-marca">
+          <img src="/logo-chego-transparente.png" alt="Chegô" className="lg-logo" />
+          <h1>{tipo === "motoboy" ? "App do entregador" : "Painel da loja"}</h1>
+          <p className="lg-frase">Troque sua senha em um minuto.</p>
+        </section>
+        <form className={`lg-cartao ${erro ? "erro" : ""}`} onSubmit={salvar} noValidate>
+          <img src="/mascote/moto.png" alt="" className="lg-mascote" aria-hidden="true" />
+          {ok ? <>
+            <h2>Senha trocada</h2>
+            <p className="lg-sub">Agora é só entrar com a senha nova.</p>
+            <Link className="lg-entrar" href={voltar} style={{ display: "grid", placeItems: "center", textDecoration: "none" }}>Ir para a entrada</Link>
+          </> : <>
+            <h2>Criar senha nova</h2>
+            <p className="lg-sub">Use pelo menos 8 caracteres.</p>
+            <label className="lg-campo"><input type={ver ? "text" : "password"} value={senha} onChange={e => setSenha(e.target.value)} placeholder=" " autoComplete="new-password" autoFocus /><span>Senha nova</span>
+              <button type="button" className="lg-ver" onClick={() => setVer(!ver)} aria-label={ver ? "Esconder senha" : "Mostrar senha"}>{ver ? "Esconder" : "Mostrar"}</button></label>
+            <label className="lg-campo"><input type={ver ? "text" : "password"} value={confirma} onChange={e => setConfirma(e.target.value)} placeholder=" " autoComplete="new-password" /><span>Repita a senha</span></label>
+            {erro && <p className="lg-erro" role="alert">{erro}</p>}
+            <button className="lg-entrar" disabled={loading}>{loading ? <><i className="lg-gira" />Salvando…</> : "Salvar senha nova"}</button>
+            <p className="lg-cadastro"><Link href={voltar}>Voltar para a entrada</Link></p>
+          </>}
+        </form>
+      </main>
     </div>
   )
 }
 
-export default function RedefinirSenhaPage() {
-  return (
-    <Suspense>
-      <RedefinirForm />
-    </Suspense>
-  )
-}
+export default function RedefinirSenhaPage() { return <Suspense><RedefinirSenha /></Suspense> }

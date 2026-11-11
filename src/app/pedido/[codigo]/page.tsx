@@ -1,10 +1,13 @@
 "use client"
 
+import AjudaPagamentoWhats from "@/components/AjudaPagamentoWhats"
 import { useEffect, useRef, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 import type { Pedido, StatusPedido } from "@/types"
+import { brl } from "@/lib/precoExibicao"
+import { partesPagamento, rotuloPagamento, temForma, valorDaForma, ehDividido } from "@/lib/pagamentoDividido"
 import { GoogleMap, useJsApiLoader, OverlayView, DirectionsRenderer } from "@react-google-maps/api"
 
 const GMAPS_LIBS_TRACK: ("geometry" | "places")[] = []
@@ -79,9 +82,19 @@ function MapaRastreamento({
     })
   }, [isLoaded, enderecoEntrega])
 
-  // Rota via Directions Service
+  // Rota via Directions Service. Cada chamada é cobrada pelo Google: antes recalculava a cada
+  // posição nova do motoboy (a cada 4s) e chegou a R$ 1.143 em 40 dias (10/11/2026). Agora calcula
+  // uma vez e só refaz quando o motoboy andou mais de 400 m e já passaram 2 minutos.
+  const ultimaRota = useRef<{ lat: number; lng: number; t: number; dLat: number; dLng: number } | null>(null)
   useEffect(() => {
     if (!isLoaded || !destLat || !destLng) return
+    const u = ultimaRota.current
+    const mesmoDestino = u && u.dLat === destLat && u.dLng === destLng
+    if (mesmoDestino) {
+      const dLat = (motoLat - u.lat) * 111.32, dLng = (motoLng - u.lng) * 111.32 * Math.cos(motoLat * Math.PI / 180)
+      if (Math.hypot(dLat, dLng) < 0.4 || Date.now() - u.t < 120_000) return
+    }
+    ultimaRota.current = { lat: motoLat, lng: motoLng, t: Date.now(), dLat: destLat, dLng: destLng }
     const svc = new google.maps.DirectionsService()
     svc.route({
       origin: { lat: motoLat, lng: motoLng },
@@ -151,107 +164,57 @@ function MapaRastreamento({
   )
 }
 
+
 // ─────────────────────────────────────────────────────────────────────────────
-
-const ETAPAS: { status: StatusPedido; label: string; descricao: string }[] = [
-  { status: "pendente",   label: "Pedido recebido",    descricao: "Seu pedido chegou! A loja está sendo notificada." },
-  { status: "aceito",     label: "Confirmado pela loja", descricao: "A loja confirmou seu pedido e vai começar a preparar em breve." },
-  { status: "preparando", label: "Preparando",          descricao: "A cozinha está preparando seu pedido com todo cuidado." },
-  { status: "pronto",     label: "Pronto para entrega", descricao: "Pedido pronto! Estamos aguardando o entregador retirar." },
-  { status: "coletado",   label: "Saiu para entrega",   descricao: "O motoboy pegou seu pedido e está a caminho da sua casa!" },
-  { status: "entregue",   label: "Entregue!",           descricao: "Pedido entregue com sucesso. Bom apetite!" },
+// Layout novo (proposta aprovada em 19/10/2026): 5 etapas como na proposta.
+// Os status do banco não mudam; só o jeito de mostrar.
+const ETAPAS = [
+  { t: "Pedido enviado", d: "A loja recebeu seu pedido", tit: "Pedido enviado" },
+  { t: "Loja aceitou", d: "Seu pedido foi confirmado", tit: "A loja aceitou seu pedido" },
+  { t: "Preparando", d: "Está sendo feito agora", tit: "Preparando com carinho" },
+  { t: "Saiu para entrega", d: "O entregador está a caminho", tit: "Saiu para entrega" },
+  { t: "Entregue", d: "Bom apetite!", tit: "Pedido entregue" },
 ]
-
-function EtapaIcon({ index, size = 56 }: { index: number; size?: number }) {
-  if (index === 4) {
-    return (
-      <img
-        src="/moto-entrega.svg"
-        alt="Motoboy em rota"
-        width={size * 1.8}
-        height={size}
-        style={{ objectFit: "contain", filter: "drop-shadow(0 4px 12px rgba(220,38,38,0.3))" }}
-      />
-    )
-  }
-  if (index === 5) {
-    return (
-      <svg width={size} height={size} viewBox="0 0 56 56" fill="none">
-        <circle cx="28" cy="28" r="26" fill="#dcfce7" stroke="#22c55e" strokeWidth="2"/>
-        <path d="M 14 28 L 24 38 L 42 20" stroke="#16a34a" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-    )
-  }
-  const icons = [
-    // 0 pendente — documento
-    <svg key={0} width={size} height={size} viewBox="0 0 56 56" fill="none">
-      <circle cx="28" cy="28" r="26" fill="#F3F4F6" stroke="#E5E7EB" strokeWidth="2"/>
-      <rect x="16" y="14" width="24" height="28" rx="3" fill="white" stroke="#D1D5DB" strokeWidth="1.5"/>
-      <line x1="21" y1="21" x2="35" y2="21" stroke="#9CA3AF" strokeWidth="1.5" strokeLinecap="round"/>
-      <line x1="21" y1="26" x2="35" y2="26" stroke="#9CA3AF" strokeWidth="1.5" strokeLinecap="round"/>
-      <line x1="21" y1="31" x2="29" y2="31" stroke="#9CA3AF" strokeWidth="1.5" strokeLinecap="round"/>
-    </svg>,
-    // 1 aceito — loja com check
-    <svg key={1} width={size} height={size} viewBox="0 0 56 56" fill="none">
-      <circle cx="28" cy="28" r="26" fill="#dbeafe" stroke="#3b82f6" strokeWidth="2"/>
-      <path d="M 16 38 L 16 26 L 28 18 L 40 26 L 40 38 Z" fill="white" stroke="#3b82f6" strokeWidth="1.5"/>
-      <path d="M 23 38 L 23 31 L 33 31 L 33 38" fill="#dbeafe" stroke="#3b82f6" strokeWidth="1.5"/>
-      <path d="M 20 29 L 26 35 L 36 25" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>,
-    // 2 preparando — chama/fogo
-    <svg key={2} width={size} height={size} viewBox="0 0 56 56" fill="none">
-      <circle cx="28" cy="28" r="26" fill="#fef9c3" stroke="#eab308" strokeWidth="2"/>
-      <path d="M 28 38 Q 20 32 22 24 Q 25 26 26 29 Q 28 22 24 16 Q 32 20 34 28 Q 35 26 34 22 Q 40 28 38 35 Q 36 38 28 38 Z" fill="#f97316" stroke="#ea580c" strokeWidth="1"/>
-      <path d="M 28 36 Q 24 32 25 27 Q 27 28 27 30 Q 29 26 28 23 Q 32 26 32 30 Q 33 28 32 26 Q 36 30 34 34 Q 32 36 28 36 Z" fill="#fbbf24"/>
-    </svg>,
-    // 3 pronto — caixa
-    <svg key={3} width={size} height={size} viewBox="0 0 56 56" fill="none">
-      <circle cx="28" cy="28" r="26" fill="#ede9fe" stroke="#8b5cf6" strokeWidth="2"/>
-      <rect x="16" y="26" width="24" height="16" rx="2" fill="#8b5cf6"/>
-      <path d="M 14 22 L 42 22 L 40 26 L 16 26 Z" fill="#7c3aed"/>
-      <line x1="28" y1="22" x2="28" y2="16" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round"/>
-      <rect x="24" y="14" width="8" height="6" rx="1" fill="#7c3aed"/>
-      <line x1="24" y1="31" x2="32" y2="31" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-    </svg>,
-  ]
-  return icons[index] ?? null
+const STATUS_ETAPA: Partial<Record<StatusPedido, number>> = {
+  aguardando_pagamento: 0, pendente: 0, aceito: 1, preparando: 2, pronto: 2,
+  aguardando_aceite: 2, indo_para_loja: 2, na_loja: 2, em_rota: 3, coletado: 3, entregue: 4,
 }
-
-const STATUS_INDEX: Partial<Record<StatusPedido, number>> = {
-  pendente: 0, aceito: 1, preparando: 2, pronto: 3,
-  aguardando_aceite: 3, indo_para_loja: 4, na_loja: 4, em_rota: 4,
-  coletado: 4, entregue: 5,
+const DETALHE_STATUS: Partial<Record<StatusPedido, string>> = {
+  pronto: "Pronto, esperando o entregador",
+  aguardando_aceite: "Pronto, chamando um entregador",
+  indo_para_loja: "O entregador está indo buscar",
+  na_loja: "O entregador chegou na loja",
 }
+const POSICAO_MOTO = [6, 22, 38, 70, 94]
 
 const PAGAMENTO_LABEL: Record<string, string> = {
-  pix: "PIX", cartao: "Cartão", dinheiro: "Dinheiro", maquininha: "Maquininha",
+  pix: "Pix", cartao: "Cartão de crédito", dinheiro: "Dinheiro", maquininha: "Maquininha", pix_loja: "Pix (pago à loja)",
+}
+const SUPORTE_WHATS = "5562985845621"
+const MOTIVOS_BONS = ["Comida quentinha", "Bem servido", "Saboroso", "Embalagem caprichada"]
+const MOTIVOS_RUINS = ["Demorou pra preparar", "Veio frio", "Faltou item", "Pedido errado", "Embalagem ruim"]
+
+function horaBrt(d: Date) { return d.toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }) }
+
+function copiarTexto(t: string, ok: () => void) {
+  const antigo = () => {
+    // iPhone sem permissão de área de transferência: copia pelo jeito antigo, que o Safari aceita
+    const x = document.createElement("textarea")
+    x.value = t; x.setAttribute("readonly", ""); x.style.cssText = "position:fixed;top:0;left:0;opacity:0;font-size:16px"
+    document.body.appendChild(x); x.focus(); x.select(); x.setSelectionRange(0, t.length)
+    let r = false; try { r = document.execCommand("copy") } catch {}
+    x.remove(); if (r) ok()
+  }
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(ok, antigo)
+  else antigo()
 }
 
-function StarRow({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
-  const [hover, setHover] = useState(0)
-  const active = hover || value
+function Estrelas({ value, onChange, rotulo }: { value: number; onChange: (v: number) => void; rotulo: string }) {
   return (
-    <div>
-      <p style={{ color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 8 }}>{label}</p>
-      <div style={{ display: "flex", gap: 6 }}>
-        {[1, 2, 3, 4, 5].map(n => (
-          <button key={n}
-            onClick={() => onChange(n)}
-            onMouseEnter={() => setHover(n)}
-            onMouseLeave={() => setHover(0)}
-            onTouchStart={() => setHover(n)}
-            onTouchEnd={() => { onChange(n); setHover(0) }}
-            style={{
-              background: "none", border: "none", cursor: "pointer", padding: 2,
-              fontSize: 36, lineHeight: 1,
-              color: n <= active ? "#f59e0b" : "#D1D5DB",
-              transition: "color 0.1s, transform 0.1s",
-              transform: hover === n ? "scale(1.25)" : "scale(1)",
-            }}>
-            ★
-          </button>
-        ))}
-      </div>
+    <div className="estrelas" role="radiogroup" aria-label={rotulo}>
+      {[1, 2, 3, 4, 5].map(n => (
+        <button key={n} type="button" className={value >= n ? "on" : ""} onClick={() => onChange(n)} aria-label={`${n} ${n === 1 ? "estrela" : "estrelas"}`}>★</button>
+      ))}
     </div>
   )
 }
@@ -274,42 +237,33 @@ function CartaoProcessando({ pedidoId, onConfirmado }: { pedidoId: string; onCon
       if (r.confirmado) { onConfirmado() }
       else if (r.sem_pagamento) { setCancelado(true) }
       else if (r.status === "cancelado") { setErro("Pagamento recusado pela operadora. Tente com outro cartão.") }
-      else { setErro("Pagamento ainda em análise. Aguarde alguns segundos e tente novamente.") }
-    } catch { setErro("Erro ao verificar. Tente novamente.") }
+      else { setErro("Pagamento ainda em análise. Aguarde alguns segundos e tente de novo.") }
+    } catch { setErro("Não deu pra verificar agora. Tente de novo.") }
     finally { setVerificando(false) }
   }
 
   if (cancelado) {
     return (
-      <div style={{ background: "#FEF2F2", border: "1.5px solid #FECACA", borderRadius: 16, padding: "20px 16px", marginBottom: 16, textAlign: "center" }}>
-        <p style={{ fontSize: 28, marginBottom: 8 }}>❌</p>
-        <p style={{ color: "#DC2626", fontWeight: 700, fontSize: 14, marginBottom: 8 }}>Pagamento não foi processado</p>
-        <p style={{ color: "#6B7280", fontSize: 12, marginBottom: 16 }}>Este pedido foi cancelado. Por favor, faça um novo pedido e insira os dados do cartão novamente.</p>
-        <a href="/" onClick={() => localStorage.removeItem("arago_pedido_ativo")} style={{ display: "inline-block", background: "#DC2626", color: "#fff", borderRadius: 12, padding: "10px 24px", fontWeight: 700, fontSize: 14, textDecoration: "none" }}>
-          Fazer novo pedido
-        </a>
+      <div className="cartao" style={{ padding: "20px 16px", textAlign: "center" }}>
+        <div className="h3">O pagamento não foi processado</div>
+        <p className="mut" style={{ fontSize: 13.5, margin: "6px 0 14px", lineHeight: 1.5 }}>Este pedido foi cancelado. Faça um novo pedido e digite os dados do cartão de novo.</p>
+        <a className="btn btn-p" href="/" onClick={() => localStorage.removeItem("arago_pedido_ativo")}>Fazer novo pedido</a>
       </div>
     )
   }
 
   return (
-    <div style={{ background: "#fff", border: "1.5px solid #f97316", borderRadius: 16, padding: "20px 16px", marginBottom: 16, textAlign: "center" }}>
-      <p style={{ fontSize: 28, marginBottom: 8 }}>💳</p>
-      <p style={{ color: "#111827", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Processando pagamento no cartão</p>
-      <p style={{ color: "#6B7280", fontSize: 12, marginBottom: 16 }}>Seu pagamento está sendo analisado. Isso costuma levar alguns segundos.</p>
-      {erro && <p style={{ color: "#DC2626", fontSize: 12, marginBottom: 12 }}>{erro}</p>}
-      <button
-        onClick={verificar}
-        disabled={verificando}
-        style={{ background: verificando ? "#9CA3AF" : "#f97316", color: "#fff", border: "none", borderRadius: 12, padding: "10px 24px", fontWeight: 700, fontSize: 14, cursor: verificando ? "not-allowed" : "pointer" }}
-      >
-        {verificando ? "Verificando..." : "Verificar pagamento"}
-      </button>
+    <div className="cartao" style={{ padding: "20px 16px", textAlign: "center" }}>
+      <div style={{ fontSize: 30 }}>💳</div>
+      <div className="h3" style={{ marginTop: 6 }}>Processando o pagamento no cartão</div>
+      <p className="mut" style={{ fontSize: 13.5, margin: "6px 0 14px" }}>Costuma levar alguns segundos.</p>
+      {erro && <p className="erro-linha" style={{ marginBottom: 10 }}>{erro}</p>}
+      <button className="btn btn-g" onClick={verificar} disabled={verificando}>{verificando ? "Verificando…" : "Verificar pagamento"}</button>
     </div>
   )
 }
 
-function ChatMotoboy({ pedidoId }: { pedidoId: string }) {
+function ChatMotoboy({ pedidoId, nome, veiculo, onFechar }: { pedidoId: string; nome: string; veiculo?: string; onFechar: () => void }) {
   const [msgs, setMsgs]     = useState<{ id: string; remetente: string; texto: string; criado_em: string }[]>([])
   const [texto, setTexto]   = useState("")
   const [enviando, setEnv]  = useState(false)
@@ -337,46 +291,25 @@ function ChatMotoboy({ pedidoId }: { pedidoId: string }) {
   }
 
   return (
-    <div style={{ background: "#ffffff", borderRadius: 16, border: "1px solid #e5e7eb", overflow: "hidden", marginBottom: 16 }}>
-      <div style={{ padding: "12px 16px", borderBottom: "1px solid #F3F4F6", display: "flex", alignItems: "center", gap: 8 }}>
-        <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e" }} />
-        <p style={{ fontWeight: 700, fontSize: 14, color: "#111827" }}>Chat com o entregador</p>
-      </div>
-      <div style={{ padding: "12px 16px", minHeight: 120, maxHeight: 220, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
-        {msgs.length === 0 && (
-          <p style={{ color: "#9CA3AF", fontSize: 13, textAlign: "center", margin: "auto" }}>
-            Nenhuma mensagem ainda. Fale com o entregador!
-          </p>
-        )}
-        {msgs.map(m => (
-          <div key={m.id} style={{
-            alignSelf: m.remetente === "cliente" ? "flex-end" : "flex-start",
-            background: m.remetente === "cliente" ? "#DC2626" : "#F3F4F6",
-            color: m.remetente === "cliente" ? "white" : "#111827",
-            padding: "8px 12px", borderRadius: m.remetente === "cliente" ? "14px 14px 2px 14px" : "14px 14px 14px 2px",
-            fontSize: 13, maxWidth: "78%",
-          }}>
-            {m.texto}
+    <div className="cn-veu on" onClick={onFechar}>
+      <div className="cn folha on chat-folha" onClick={e => e.stopPropagation()}>
+        {/* Conversa em tela cheia, igual à proposta */}
+        <div className="topo branco">
+          <div className="linha-topo">
+            <button className="voltar" onClick={onFechar} aria-label="Voltar"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg></button>
+            <span className="chat-av">{nome.trim().split(/\s+/).map(x => x[0]).slice(0, 2).join("").toUpperCase()}</span>
+            <span style={{ flex: 1, minWidth: 0 }}><b className="h3" style={{ display: "block" }}>{nome}</b><small className="mut">Seu entregador{veiculo ? ` · ${veiculo}` : ""}</small></span>
           </div>
-        ))}
-        <div ref={bottomRef} />
-      </div>
-      <div style={{ padding: "10px 12px", borderTop: "1px solid #F3F4F6", display: "flex", gap: 8 }}>
-        <input
-          value={texto}
-          onChange={e => setTexto(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && enviar()}
-          placeholder="Mensagem..."
-          style={{ flex: 1, padding: "9px 12px", borderRadius: 10, border: "1px solid #E5E7EB", fontSize: 13, outline: "none", color: "#111827", background: "#F9FAFB" }}
-        />
-        <button onClick={enviar} disabled={!texto.trim() || enviando} style={{
-          padding: "9px 16px", borderRadius: 10, border: "none",
-          background: texto.trim() ? "#DC2626" : "#F3F4F6",
-          color: texto.trim() ? "white" : "#9CA3AF",
-          fontWeight: 700, fontSize: 13, cursor: "pointer",
-        }}>
-          Enviar
-        </button>
+        </div>
+        <div className="chat">
+          {msgs.length === 0 && <p className="mut" style={{ textAlign: "center", fontSize: 13.5, margin: "24px 0" }}>Nenhuma mensagem ainda. Mande um oi pro entregador.</p>}
+          {msgs.map(m => <div key={m.id} className={`bal ${m.remetente === "cliente" ? "eu" : "ele"}`}>{m.texto}</div>)}
+          <div ref={bottomRef} />
+        </div>
+        <div className="chat-in">
+          <input value={texto} onChange={e => setTexto(e.target.value)} onKeyDown={e => e.key === "Enter" && enviar()} placeholder="Escreva uma mensagem" />
+          <button onClick={enviar} disabled={!texto.trim() || enviando} aria-label="Enviar"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M4 12 20 4l-4 16-4-7z" /></svg></button>
+        </div>
       </div>
     </div>
   )
@@ -386,6 +319,9 @@ export default function AcompanhamentoPedido() {
   const { codigo } = useParams<{ codigo: string }>()
   const [pedido,   setPedido]   = useState<Pedido | null>(null)
   const [loading,  setLoading]  = useState(true)
+  // Aviso de chuva forte/demanda alta, ligado pelo admin em configuracoes.aviso_chuva (31/10/2026)
+  const [avisoChuva, setAvisoChuva] = useState(false)
+  useEffect(() => { fetch("/api/corrida-dinamica").then(r => r.ok ? r.json() : null).then(j => setAvisoChuva(!!j?.aviso_chuva)).catch(() => {}) }, [])
   const [notFound, setNotFound] = useState(false)
 
   const [etapaExpandida, setEtapaExpandida] = useState<number | null>(null)
@@ -396,6 +332,8 @@ export default function AcompanhamentoPedido() {
   const [comentario,     setComentario]     = useState("")
   const [enviandoAval,   setEnviandoAval]   = useState(false)
   const [avaliacaoOk,    setAvaliacaoOk]    = useState(false)
+  const [motivosLoja,    setMotivosLoja]    = useState<Set<string>>(new Set())
+  const [chatAberto,     setChatAberto]     = useState(false)
 
   const prevStatusRef   = useRef<string | null>(null)
   const audioUnlockedRef = useRef(false)
@@ -417,7 +355,7 @@ export default function AcompanhamentoPedido() {
   async function load() {
     const { data: rows, error } = await supabase
       .from("pedidos")
-      .select("*, itens:itens_pedido(*), loja:lojas(nome, telefone), motoboy:motoboys(*)")
+      .select("*, itens:itens_pedido(*), loja:lojas(nome, telefone, logo_url, tempo_min, tempo_max), motoboy:motoboys(*)")
       .eq("codigo", codigo.toUpperCase())
       .order("criado_em", { ascending: false })
       .limit(1)
@@ -426,7 +364,7 @@ export default function AcompanhamentoPedido() {
     if (!data) {
       const { data: rows2 } = await supabase
         .from("pedidos")
-        .select("*, itens:itens_pedido(*), loja:lojas(nome, telefone)")
+        .select("*, itens:itens_pedido(*), loja:lojas(nome, telefone, logo_url, tempo_min, tempo_max)")
         .eq("codigo", codigo.toUpperCase())
         .order("criado_em", { ascending: false })
         .limit(1)
@@ -480,7 +418,11 @@ export default function AcompanhamentoPedido() {
         const reg = await navigator.serviceWorker.register("/sw.js")
         const existing = await reg.pushManager.getSubscription()
         const sub = existing ?? await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidKey!) })
-        await fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "subscribe", pedido_id: pedido!.id, subscription: sub }) })
+        // Sem o token do pedido a API recusava (400) e nenhuma inscrição era gravada — cliente
+        // nunca recebia aviso de status no celular (achado em 31/10/2026).
+        const token = localStorage.getItem(`arago_tkn_${codigo.toUpperCase()}`)
+        if (!token) return
+        await fetch("/api/push", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "subscribe", pedido_id: pedido!.id, subscription: sub, cliente_push_token: token }) })
         pushDoneRef[0] = true
       } catch {}
     }
@@ -585,47 +527,38 @@ export default function AcompanhamentoPedido() {
   async function enviarAvaliacao() {
     if (!pedido || notaLoja === 0) return
     setEnviandoAval(true)
-    const motoboy = (pedido as any).motoboy
-    await supabase.from("avaliacoes").upsert({
-      pedido_id: pedido.id, loja_id: pedido.loja_id,
-      motoboy_id: motoboy?.id ?? null,
-      nota_loja: notaLoja, nota_motoboy: notaMotoboy || null,
-      comentario: comentario.trim(),
-    })
-    // Atualiza média da loja
-    const { data: avals } = await supabase.from("avaliacoes").select("nota_loja").eq("loja_id", pedido.loja_id)
-    if (avals && avals.length > 0) {
-      const media = avals.reduce((s, a) => s + a.nota_loja, 0) / avals.length
-      await supabase.from("lojas").update({ nota_media: Math.round(media * 10) / 10, total_avaliacoes: avals.length }).eq("id", pedido.loja_id)
-    }
-    // Atualiza média do motoboy (se foi avaliado)
-    if (motoboy?.id && notaMotoboy > 0) {
-      const { data: avalsMoto } = await supabase.from("avaliacoes").select("nota_motoboy").eq("motoboy_id", motoboy.id).not("nota_motoboy", "is", null)
-      if (avalsMoto && avalsMoto.length > 0) {
-        const mediaMoto = avalsMoto.reduce((s, a) => s + (a.nota_motoboy ?? 0), 0) / avalsMoto.length
-        await supabase.from("motoboys").update({ nota_media: Math.round(mediaMoto * 10) / 10, total_avaliacoes: avalsMoto.length }).eq("id", motoboy.id)
-      }
-    }
-    setEnviandoAval(false); setModalAvaliacao(false); setAvaliacaoOk(true); setJaAvaliou(true)
+    // Grava pelo servidor, que também recalcula a nota da loja e do motoboy (20/10/2026)
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch("/api/pedido/avaliar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+      body: JSON.stringify({
+        pedido_id: pedido.id, cliente_push_token: clienteToken,
+        nota_loja: notaLoja, nota_motoboy: notaMotoboy || null,
+        // Motivos tocados na avaliação vão junto no comentário (a tabela não tem campo próprio)
+        comentario: [[...motivosLoja].join(", "), comentario.trim()].filter(Boolean).join(". "),
+      }),
+    }).catch(() => null)
+    setEnviandoAval(false)
+    if (!res || !res.ok) { const j = await res?.json().catch(() => ({})); alert(j?.error ?? "Não foi possível enviar a avaliação. Tente de novo."); return }
+    setModalAvaliacao(false); setAvaliacaoOk(true); setJaAvaliou(true)
   }
 
   if (loading) return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <p style={{ color: "#9CA3AF" }}>Buscando pedido...</p>
-    </div>
+    <div className="cn" style={{ display: "grid", placeItems: "center" }}><p className="mut">Buscando o pedido…</p></div>
   )
 
   if (notFound || !pedido) return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 12, padding: 20 }}>
-      <p style={{ fontSize: 40 }}>🔍</p>
-      <p style={{ color: "#111827", fontWeight: 700 }}>Pedido não encontrado</p>
-      <p style={{ color: "#9CA3AF", fontSize: 13 }}>Código: #{codigo.toUpperCase()}</p>
-      <Link href="/" style={{ color: "#DC2626", fontWeight: 700, marginTop: 8 }}>← Ver lojas</Link>
+    <div className="cn" style={{ display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 10, padding: 20, textAlign: "center" }}>
+      <div style={{ fontSize: 40 }}>🔍</div>
+      <div className="h2">Pedido não encontrado</div>
+      <p className="mut">Código #{codigo.toUpperCase()}</p>
+      <Link className="btn btn-p" href="/" style={{ marginTop: 10, maxWidth: 280 }}>Ver lojas</Link>
     </div>
   )
 
   const aguardandoPagamento = pedido.status === "aguardando_pagamento"
-  const etapaAtual  = STATUS_INDEX[pedido.status] ?? 0
+  const etapaAtual  = STATUS_ETAPA[pedido.status] ?? 0
   const cancelado   = pedido.status === "cancelado"
   const entregue    = pedido.status === "entregue"
   const coletado    = pedido.status === "coletado"
@@ -633,444 +566,260 @@ export default function AcompanhamentoPedido() {
   const loja        = (pedido as any).loja
   const motoboy     = (pedido as any).motoboy
   const podeCancelar = clienteToken && ["aguardando_pagamento","pendente"].includes(pedido.status)
-  const podeReembolso = clienteToken && entregue && !reembolsoOk && !reembolsoStatus && ["pix","cartao"].includes(pedido.forma_pagamento)
+  const podeReembolso = clienteToken && entregue && !reembolsoOk && !reembolsoStatus && (temForma(pedido, "pix") || temForma(pedido, "cartao"))
   const MOTIVOS_REEMBOLSO = ["Recebi errado","Item faltando","Comida estragada","Pedido nunca chegou","Outro"]
 
+  const retirada  = (pedido as any).tipo_entrega === "retirada" || (pedido.endereco_entrega ?? "").includes("Retirada na loja")
+  const etapa     = STATUS_ETAPA[pedido.status] ?? 0
+  const etapas    = retirada ? ETAPAS.map((x, i) => i === 3 ? { t: "Pronto pra retirar", d: "Pode buscar na loja", tit: "Pronto pra retirar" } : i === 4 ? { t: "Retirado", d: "Bom apetite!", tit: "Pedido retirado" } : x) : ETAPAS
+  const etapaRet  = retirada && ["pronto", "aguardando_aceite"].includes(pedido.status) ? 3 : etapa
+  const ativo     = !cancelado && !entregue && !aguardandoPagamento
+  const temMoto   = !!motoboy && !retirada && ["indo_para_loja", "na_loja", "em_rota", "coletado"].includes(pedido.status)
+  const codigoEntrega = ((pedido as any).telefone_cliente ?? "").replace(/\D/g, "").slice(-4)
+  const criado    = new Date((pedido as any).criado_em ?? Date.now())
+  const janela    = loja?.tempo_min && loja?.tempo_max
+    ? `${horaBrt(new Date(criado.getTime() + loja.tempo_min * 60000))} e ${horaBrt(new Date(criado.getTime() + loja.tempo_max * 60000))}` : null
+  const titulo    = cancelado ? "Pedido cancelado" : aguardandoPagamento ? "Falta pagar" : entregue ? etapas[4].tit : etapas[etapaRet].tit
+  const zap       = (num: string, texto: string) => `https://wa.me/${num}?text=${encodeURIComponent(texto)}`
+
   return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc", overflowX: "hidden" }}>
+    <div className="cn acomp-novo">
+      <div className={`acomp-topo ${cancelado ? "cancelado" : ""}`}>
+        <Link className="voltar" href="/" aria-label="Voltar" style={{ background: "rgba(255,255,255,.12)", color: "#fff", boxShadow: "none" }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
+        </Link>
+        <div className="h1" style={{ marginTop: 14 }}>{titulo}</div>
+        <div className="prev">
+          {cancelado ? "Fale com a loja pra saber mais"
+            : aguardandoPagamento ? "O pedido vai pra loja assim que o pagamento cair"
+            : entregue ? "✓ Bom apetite!"
+            : retirada ? `🏪 Retirada em ${loja?.nome ?? "loja"}`
+            : DETALHE_STATUS[pedido.status] ?? (janela ? `🕐 Chega entre ${janela}` : "Acompanhe aqui")}
+        </div>
+        {!retirada && !cancelado && !aguardandoPagamento && (
+          <div className="estrada" aria-hidden="true">
+            <div className="via" /><div className="tracos" />
+            <div className="feito" style={{ width: `calc((100% - 48px) * ${POSICAO_MOTO[etapa] / 100})` }} />
+            <div className="ponto" style={{ left: 24 }}>🏪</div><div className="ponto" style={{ left: "calc(100% - 24px)" }}>🏠</div>
+            <div className={`moto ${etapa === 3 ? "anda" : ""}`} style={{ left: `calc(24px + (100% - 48px) * ${POSICAO_MOTO[etapa] / 100})` }}>🛵</div>
+            <span className="rot" style={{ left: 24 }}>{(loja?.nome ?? "Loja").length > 16 ? (loja?.nome ?? "").slice(0, 15) + "…" : loja?.nome ?? "Loja"}</span>
+            <span className="rot" style={{ left: "calc(100% - 24px)" }}>Você</span>
+          </div>
+        )}
+      </div>
 
-      {/* Modal de Avaliação */}
+      <div style={{ padding: "16px 12px 40px", display: "flex", flexDirection: "column", gap: 12 }}>
+        {entregue && !jaAvaliou && !avaliacaoOk && <button className="btn btn-p" onClick={() => setModalAvaliacao(true)}>Avaliar pedido</button>}
+
+        {avisoChuva && !cancelado && !entregue && (
+          <div className="cartao" role="status" style={{ padding: 16, background: "#EAF2FB", border: "1px solid #B9D3EE", display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <span style={{ fontSize: 28, lineHeight: 1 }} aria-hidden="true">🌧️</span>
+            <div style={{ minWidth: 0 }}>
+              <b style={{ fontSize: 16, color: "#123B66" }}>Chuva forte em Aragoiânia</b>
+              <p style={{ fontSize: 14, lineHeight: 1.5, color: "#1F3A57", marginTop: 4 }}>
+                Hoje está chovendo muito e os pedidos estão acima do normal. A loja e os entregadores estão fazendo o possível para o seu pedido chegar rápido e com segurança.
+              </p>
+              <p style={{ fontSize: 14, lineHeight: 1.5, color: "#1F3A57", marginTop: 6 }}>
+                Pode levar um pouco mais que o normal. Obrigado pela paciência e pela compreensão! 💙
+              </p>
+            </div>
+          </div>
+        )}
+
+        {aguardandoPagamento && temForma(pedido, "pix") && (pedido as any).pix_copia_cola && (
+          <div className="cartao" style={{ padding: 16 }}>
+            <span className="h3">Pagar {ehDividido(pedido) ? brl(valorDaForma(pedido, "pix")) + " " : ""}com Pix</span>
+            <p className="mut" style={{ fontSize: 13.5, margin: "4px 0 12px" }}>Copie o código e cole no app do seu banco.</p>
+            <div className="copia">
+              <span style={{ flex: 1 }}>{String((pedido as any).pix_copia_cola).slice(0, 70)}…</span>
+              <button onClick={() => copiarTexto((pedido as any).pix_copia_cola, () => { setPixCopiado(true); setTimeout(() => setPixCopiado(false), 3000) })} style={{ background: pixCopiado ? "var(--folha)" : undefined }}>{pixCopiado ? "Copiado" : "Copiar"}</button>
+            </div>
+            <p className="mut" style={{ fontSize: 12.5, marginTop: 10, textAlign: "center" }}>Esta tela atualiza sozinha depois do pagamento.</p>
+            <AjudaPagamentoWhats codigo={pedido.codigo} />
+          </div>
+        )}
+        {aguardandoPagamento && temForma(pedido, "cartao") && !temForma(pedido, "pix") && <CartaoProcessando pedidoId={pedido.id} onConfirmado={load} />}
+
+        {temMoto && (
+          <div className="cartao mb">
+            <span className="av">{String(motoboy.nome ?? "?").trim().split(/\s+/).map((x: string) => x[0]).slice(0, 2).join("").toUpperCase()}</span>
+            <span style={{ flex: 1, minWidth: 0 }}><b className="h3">{String(motoboy.nome ?? "").split(" ")[0]}, seu entregador</b><br /><small className="mut">{[motoboy.veiculo, motoboy.placa].filter(Boolean).join(", placa ")}</small></span>
+            <span className="ac"><button onClick={() => setChatAberto(true)} aria-label="Conversar com o entregador">💬</button></span>
+          </div>
+        )}
+
+        {temMoto && codigoEntrega && (
+          <div className="cartao cod-entrega">
+            <span><b className="h3">Código de entrega</b><br /><small className="mut">Fale pro entregador quando ele chegar</small></span>
+            <span className="dg">{codigoEntrega}</span>
+          </div>
+        )}
+
+        {entregasAntes !== null && entregasAntes > 0 && ativo && (
+          <p className="aviso-amarelo" style={{ margin: 0 }}>🛵 {entregasAntes === 1 ? "Tem 1 entrega antes da sua. O entregador já está a caminho." : `Tem ${entregasAntes} entregas antes da sua. O entregador já está chegando.`}</p>
+        )}
+
+        {motoboy && (emRota || coletado) && (
+          <div className="cartao" style={{ overflow: "hidden" }}>
+            {motoboy.lat && motoboy.lng
+              ? <><MapaRastreamento motoboyId={motoboy.id} initialLat={motoboy.lat} initialLng={motoboy.lng} enderecoEntrega={pedido.endereco_entrega} />
+                <p className="mut" style={{ fontSize: 12, padding: "8px 14px" }}>Localização do entregador ao vivo</p></>
+              : <p className="mut" style={{ fontSize: 13.5, padding: 14 }}>Esperando a localização do entregador…</p>}
+          </div>
+        )}
+
+        {cancelado && (
+          <div className="cartao" style={{ padding: 16 }}>
+            <span className="h3">O pedido foi cancelado</span>
+            <p className="mut" style={{ fontSize: 13.5, marginTop: 4, lineHeight: 1.5 }}>Se você pagou por Pix ou cartão, o valor volta automaticamente em até 10 dias úteis.</p>
+          </div>
+        )}
+
+        {!cancelado && !aguardandoPagamento && (
+          <div className="cartao" style={{ padding: 16 }}>
+            <div className="etapas">
+              {etapas.map((x, i) => {
+                const atual = entregue ? 5 : etapaRet
+                return (
+                  <div key={x.t} className={`etapa ${i < atual || entregue ? "feita" : i === atual ? "agora" : ""}`}>
+                    <span className="b" />
+                    <span className="t"><b>{x.t}</b><small>{i === 0 ? `às ${horaBrt(criado)}` : i <= atual ? x.d : ""}</small></span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {(reembolsoStatus || reembolsoOk) && (
+          <div className="cartao" style={{ padding: 16 }}>
+            <b className="h3">{reembolsoStatus === "aprovado" ? "Reembolso aprovado" : reembolsoStatus === "processando" ? "Reembolso em andamento" : reembolsoStatus === "concluido" ? "Reembolso concluído" : reembolsoStatus === "negado" ? "Reembolso negado" : "Reembolso pedido"}</b>
+            <p className="mut" style={{ fontSize: 13.5, marginTop: 4 }}>{reembolsoStatus === "aprovado" ? "O valor vai ser devolvido em breve." : reembolsoStatus === "processando" ? "O valor está sendo devolvido." : reembolsoStatus === "concluido" ? "O valor já foi devolvido." : reembolsoStatus === "negado" ? "Fale com a loja pra saber mais." : "A loja ou o Chegô vai analisar."}</p>
+          </div>
+        )}
+
+        <div className="cartao contas" style={{ padding: "14px 16px" }}>
+          <div style={{ paddingBottom: 10, alignItems: "baseline" }}><b className="h3">{loja?.nome ?? ""}</b><span className="mut" style={{ fontSize: 13 }}>Pedido #{pedido.codigo}</span></div>
+          {pedido.itens?.map((item: any) => (
+            <div key={item.id} style={{ flexWrap: "wrap" }}>
+              <span style={{ flex: 1, minWidth: 0 }}>{item.quantidade}× {item.nome}{item.adicionais?.length ? <small className="mut" style={{ display: "block", fontSize: 12.5 }}>{item.adicionais.map((a: any) => a.nome).join(", ")}</small> : null}</span>
+              <span>{item.preco > 0 ? brl(item.preco * item.quantidade) : ""}</span>
+            </div>
+          ))}
+          <div style={{ borderTop: "1px solid var(--linha)", marginTop: 6, paddingTop: 10 }}><span>Subtotal</span><span>{brl(pedido.subtotal)}</span></div>
+          <div><span>{retirada ? "Retirada" : "Entrega"}</span><span className={pedido.taxa_entrega === 0 || (pedido as any).frete_gratis ? "verde" : ""}>{pedido.taxa_entrega === 0 ? "Grátis" : (pedido as any).frete_gratis ? <>Grátis <s className="mut">{brl(pedido.taxa_entrega)}</s></> : brl(pedido.taxa_entrega)}</span></div>
+          {Number(pedido.taxa_dinamica ?? 0) > 0 && <div><span>Corrida dinâmica (chuva)</span><span>+ {brl(Number(pedido.taxa_dinamica))}</span></div>}
+          <div className="tot"><span>Total</span><span>{brl(pedido.total)}</span></div>
+          {ehDividido(pedido)
+            ? partesPagamento(pedido).map(x => <div key={x.forma}><span className="mut">{PAGAMENTO_LABEL[x.forma] ?? x.forma}</span><span className="mut">{brl(x.valor)}</span></div>)
+            : <p className="mut" style={{ fontSize: 13, marginTop: 6 }}>{PAGAMENTO_LABEL[pedido.forma_pagamento] ?? pedido.forma_pagamento}{["pix", "cartao"].includes(pedido.forma_pagamento) && pedido.status !== "aguardando_pagamento" && pedido.status !== "cancelado" ? " · pago" : ""}</p>}
+        </div>
+
+        <div className="cartao end-card">
+          <span className="ic">{retirada ? "🏪" : "📍"}</span>
+          <span style={{ flex: 1, minWidth: 0 }}><small className="mut">{retirada ? "Retirada na loja" : "Endereço de entrega"}</small><br /><b style={{ color: "var(--grafite)", fontSize: 14.5 }}>{pedido.endereco_entrega}</b></span>
+        </div>
+
+        <div className="cartao menu-l">
+          {podeCancelar && <button onClick={() => setCancelModal(true)}><span className="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 6l12 12M18 6L6 18" /></svg></span>Cancelar pedido</button>}
+          {podeReembolso && <button onClick={() => setReembolsoModal(true)}><span className="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 14 4 9l5-5" /><path d="M4 9h10a6 6 0 0 1 0 12h-3" /></svg></span>Algo deu errado? Pedir reembolso</button>}
+          {/* Só o suporte do Chegô (Lucas, 20/10/2026): o cliente não fala direto com a loja por aqui. */}
+          <a href={`/cliente/suporte?pedido=${pedido.codigo}`}><span className="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5h16v11H9l-5 4z" /><path d="M8 9.5h8M8 12.5h5" /></svg></span>Ajuda do Chegô pelo chat</a>
+        </div>
+
+        <Link className="btn btn-s" href="/" onClick={() => localStorage.removeItem("arago_pedido_ativo")}>Fazer outro pedido</Link>
+      </div>
+
+      {chatAberto && motoboy && <ChatMotoboy pedidoId={pedido.id} nome={String(motoboy.nome ?? "Entregador").split(" ")[0]} veiculo={motoboy.veiculo ? String(motoboy.veiculo) : undefined} onFechar={() => setChatAberto(false)} />}
+
+      {/* Avaliação */}
       {modalAvaliacao && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
-          onClick={() => setModalAvaliacao(false)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: "#ffffff", borderRadius: "24px 24px 0 0", border: "1px solid #e5e7eb", padding: "24px 16px 36px", width: "100%", maxWidth: "min(520px, 100vw)", animation: "slideUp 0.3s ease" }}>
-            {avaliacaoOk ? (
-              <div style={{ textAlign: "center", padding: "24px 0" }}>
-                <p style={{ fontSize: 56, marginBottom: 12 }}>🎉</p>
-                <p style={{ color: "#111827", fontWeight: 900, fontSize: 20, marginBottom: 8 }}>Obrigado!</p>
-                <p style={{ color: "#6B7280", fontSize: 14 }}>Sua avaliação foi enviada com sucesso.</p>
-                <button onClick={() => setModalAvaliacao(false)} style={{ marginTop: 20, padding: "12px 28px", borderRadius: 12, border: "none", background: "#DC2626", color: "white", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>Fechar</button>
+        <div className="cn-veu on" onClick={() => setModalAvaliacao(false)}>
+          {/* Tela cheia "Avaliar pedido", igual à proposta */}
+          <div className="cn folha on tela-cheia" onClick={e => e.stopPropagation()}>
+            <div className="topo branco">
+              <div className="linha-topo">
+                <button className="voltar" onClick={() => setModalAvaliacao(false)} aria-label="Voltar"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg></button>
+                <span className="h2" style={{ flex: 1 }}>Avaliar pedido</span>
               </div>
-            ) : (
-              <>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
-                  <div>
-                    <p style={{ color: "#111827", fontWeight: 900, fontSize: 18 }}>Avalie seu pedido</p>
-                    <p style={{ color: "#6B7280", fontSize: 13, marginTop: 3 }}>Sua opinião ajuda muito!</p>
+            </div>
+            <div className="folha-rolagem" style={{ padding: "14px 14px 10px" }}>
+              {avaliacaoOk ? (
+                <div className="cartao aval-card ok"><span className="ok-ic">✓</span><b className="h3">Avaliação enviada</b><small className="mut">Obrigado! Isso ajuda muito a loja e o entregador.</small></div>
+              ) : (
+                <>
+                  <p className="mut" style={{ textAlign: "center", fontSize: 14, lineHeight: 1.45, margin: "0 6px 12px" }}>Cada avaliação vai separada: a da loja para a loja, a do entregador para o entregador.</p>
+                  <div className="cartao aval-card">
+                    <div className="aval-cab">{loja?.logo_url ? <img className="aval-foto" src={loja.logo_url} alt="" /> : <span className="aval-foto" />}<span><b className="h3" style={{ display: "block" }}>{loja?.nome ?? "Loja"}</b><small className="mut">Comida, embalagem e preparo</small></span></div>
+                    <Estrelas value={notaLoja} onChange={n => { setNotaLoja(n); setMotivosLoja(new Set()) }} rotulo="Nota da loja" />
+                    {notaLoja > 0 && (
+                      <>
+                        <p className="mut" style={{ fontSize: 13, marginBottom: 6 }}>{notaLoja >= 4 ? "O que foi bom?" : "O que pode melhorar?"}</p>
+                        <div className="motivos">{(notaLoja >= 4 ? MOTIVOS_BONS : MOTIVOS_RUINS).map(t => (
+                          <button key={t} className="chip" aria-pressed={motivosLoja.has(t)} onClick={() => setMotivosLoja(s => { const n = new Set(s); n.has(t) ? n.delete(t) : n.add(t); return n })}>{t}</button>
+                        ))}</div>
+                      </>
+                    )}
                   </div>
-                  <button onClick={() => setModalAvaliacao(false)} style={{ background: "#F3F4F6", border: "none", borderRadius: 8, color: "#6B7280", fontSize: 18, cursor: "pointer", padding: "4px 10px" }}>✕</button>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-                  <StarRow label="Como foi a loja?" value={notaLoja} onChange={setNotaLoja} />
-                  {motoboy && <StarRow label="Como foi o motoboy?" value={notaMotoboy} onChange={setNotaMotoboy} />}
-                  <div>
-                    <p style={{ color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Comentário (opcional)</p>
-                    <textarea value={comentario} onChange={e => setComentario(e.target.value)} placeholder="Conte o que achou..." rows={3}
-                      style={{ width: "100%", padding: "10px 13px", borderRadius: 10, fontSize: 14, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", resize: "none", boxSizing: "border-box" }} />
-                  </div>
-                </div>
-                <button onClick={enviarAvaliacao} disabled={enviandoAval || notaLoja === 0} style={{ marginTop: 24, width: "100%", padding: "14px", borderRadius: 14, border: "none", background: notaLoja === 0 || enviandoAval ? "rgba(220,38,38,0.4)" : "#DC2626", color: "white", fontWeight: 800, fontSize: 15, cursor: notaLoja === 0 || enviandoAval ? "not-allowed" : "pointer" }}>
-                  {enviandoAval ? "Enviando..." : "Enviar avaliação"}
-                </button>
-                {notaLoja === 0 && <p style={{ color: "#9CA3AF", fontSize: 12, textAlign: "center", marginTop: 8 }}>Selecione ao menos a nota da loja</p>}
-              </>
-            )}
+                  {motoboy && !retirada && (
+                    <div className="cartao aval-card">
+                      <div className="aval-cab"><span className="aval-foto av-texto">{String(motoboy.nome ?? "?").trim().split(/\s+/).map((x: string) => x[0]).slice(0, 2).join("").toUpperCase()}</span><span><b className="h3" style={{ display: "block" }}>{String(motoboy.nome ?? "").split(" ")[0]}, seu entregador</b><small className="mut">Entrega, cuidado e educação</small></span></div>
+                      <Estrelas value={notaMotoboy} onChange={setNotaMotoboy} rotulo="Nota do entregador" />
+                    </div>
+                  )}
+                  <label className="campo" style={{ marginTop: 4 }}><span>Comentário (opcional)</span>
+                    <textarea value={comentario} onChange={e => setComentario(e.target.value)} rows={3} placeholder="Conte como foi" /></label>
+                  {podeReembolso && <button style={{ display: "block", margin: "14px auto 0", color: "var(--pimenta)", fontWeight: 700, fontSize: 14.5 }} onClick={() => { setModalAvaliacao(false); setReembolsoModal(true) }}>Algo deu errado? Pedir reembolso</button>}
+                  <a style={{ display: "block", textAlign: "center", margin: "12px auto 4px", color: "var(--suave)", fontWeight: 700, fontSize: 14.5 }} href={`/cliente/suporte?pedido=${pedido.codigo}`}>Falar com o suporte pelo chat</a>
+                </>
+              )}
+            </div>
+            <div className="rodape-fixo">
+              {avaliacaoOk
+                ? <button className="btn btn-p" onClick={() => setModalAvaliacao(false)}>Fechar</button>
+                : <button className="btn btn-p" onClick={enviarAvaliacao} disabled={enviandoAval || notaLoja === 0}>{enviandoAval ? "Enviando…" : notaLoja === 0 ? "Dê uma nota pra loja" : "Enviar avaliação"}</button>}
+            </div>
           </div>
         </div>
       )}
 
-      {/* Botão flutuante avaliar */}
-      {entregue && !jaAvaliou && !avaliacaoOk && !modalAvaliacao && (
-        <button onClick={() => setModalAvaliacao(true)} style={{ position: "fixed", bottom: 24, right: 16, zIndex: 50, background: "#DC2626", border: "none", borderRadius: 16, padding: "12px 16px", color: "white", fontWeight: 800, fontSize: 13, cursor: "pointer", boxShadow: "0 4px 20px rgba(220,38,38,0.35)", maxWidth: "calc(100vw - 32px)" }}>
-          ⭐ Avaliar pedido
-        </button>
-      )}
-
-      {/* Modal cancelar pedido */}
+      {/* Cancelar */}
       {cancelModal && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
-          onClick={() => setCancelModal(false)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: "24px 24px 0 0", padding: "24px 20px 36px", width: "100%", maxWidth: "min(520px, 100vw)" }}>
-            <p style={{ fontWeight: 900, fontSize: 18, color: "#111827", marginBottom: 8 }}>Cancelar pedido?</p>
-            <p style={{ color: "#6B7280", fontSize: 13, marginBottom: 24, lineHeight: 1.5 }}>
-              Se o pagamento foi via PIX ou cartão, o valor será estornado automaticamente em até 10 dias úteis.
-            </p>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => setCancelModal(false)} style={{ flex: 1, padding: "13px", borderRadius: 13, border: "1px solid #e5e7eb", background: "white", color: "#374151", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-                Voltar
-              </button>
-              <button onClick={cancelarPedido} disabled={cancelando} style={{ flex: 1, padding: "13px", borderRadius: 13, border: "none", background: "#EF4444", color: "white", fontWeight: 800, fontSize: 14, cursor: "pointer" }}>
-                {cancelando ? "Cancelando..." : "Sim, cancelar"}
-              </button>
-            </div>
+        <div className="cn-veu on" onClick={() => setCancelModal(false)}>
+          <div className="cn folha on" onClick={e => e.stopPropagation()} style={{ padding: "22px 20px calc(env(safe-area-inset-bottom,0px) + 22px)" }}>
+            <div className="h2">Cancelar o pedido?</div>
+            <p className="mut" style={{ margin: "8px 0 20px", lineHeight: 1.5 }}>Se você pagou por Pix ou cartão, o valor volta automaticamente em até 10 dias úteis.</p>
+            <button className="btn btn-p" onClick={cancelarPedido} disabled={cancelando}>{cancelando ? "Cancelando…" : "Sim, cancelar"}</button>
+            <button className="btn btn-s" style={{ marginTop: 10 }} onClick={() => setCancelModal(false)}>Manter o pedido</button>
           </div>
         </div>
       )}
 
-      {/* Modal solicitar reembolso */}
+      {/* Reembolso */}
       {reembolsoModal && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
-          onClick={() => setReembolsoModal(false)}>
-          <div onClick={e => e.stopPropagation()} style={{ background: "#fff", borderRadius: "24px 24px 0 0", padding: "24px 20px 36px", width: "100%", maxWidth: "min(520px, 100vw)", maxHeight: "80vh", overflowY: "auto" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <p style={{ fontWeight: 900, fontSize: 18, color: "#111827" }}>Solicitar reembolso</p>
-              <button onClick={() => setReembolsoModal(false)} style={{ background: "#F3F4F6", border: "none", borderRadius: 8, color: "#6B7280", fontSize: 18, cursor: "pointer", padding: "4px 10px" }}>✕</button>
-            </div>
-
-            <div style={{ marginBottom: 16 }}>
-              <p style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 10 }}>Motivo *</p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {MOTIVOS_REEMBOLSO.map(m => (
-                  <button key={m} onClick={() => setReembolsoMotivo(m)} style={{
-                    padding: "8px 14px", borderRadius: 20, border: "1.5px solid",
-                    borderColor: reembolsoMotivo === m ? "#DC2626" : "#E5E7EB",
-                    background: reembolsoMotivo === m ? "#FEF2F2" : "white",
-                    color: reembolsoMotivo === m ? "#DC2626" : "#6B7280",
-                    fontWeight: reembolsoMotivo === m ? 700 : 500, fontSize: 13, cursor: "pointer",
-                  }}>{m}</button>
-                ))}
+        <div className="cn-veu on" onClick={() => setReembolsoModal(false)}>
+          <div className="cn folha on" onClick={e => e.stopPropagation()}>
+            <div className="folha-rolagem" style={{ padding: "18px 16px 10px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <span className="h2">Pedir reembolso</span>
+                <button className="voltar" onClick={() => setReembolsoModal(false)} aria-label="Fechar">✕</button>
               </div>
-            </div>
-
-            <div style={{ marginBottom: 16 }}>
-              <p style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 8 }}>Descrição (opcional)</p>
-              <textarea value={reembolsoDesc} onChange={e => setReembolsoDesc(e.target.value)}
-                placeholder="Descreva o problema em detalhes..." rows={3}
-                style={{ width: "100%", padding: "10px 13px", borderRadius: 10, fontSize: 13, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", resize: "none", boxSizing: "border-box" }} />
-            </div>
-
-            <div style={{ marginBottom: 24 }}>
-              <p style={{ fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 4 }}>Foto ou vídeo *</p>
-              <p style={{ fontSize: 12, color: "#9CA3AF", marginBottom: 10 }}>Obrigatório — mostre o problema claramente</p>
-              <label style={{
-                display: "flex", alignItems: "center", gap: 10, cursor: "pointer",
-                padding: "12px 16px", borderRadius: 12, border: `1.5px dashed ${reembolsoFoto ? "#22c55e" : "#E5E7EB"}`,
-                background: reembolsoFoto ? "#F0FDF4" : "#F9FAFB",
-              }}>
-                <span style={{ fontSize: 22 }}>{reembolsoFoto ? "✅" : "📎"}</span>
-                <div>
-                  <p style={{ color: reembolsoFoto ? "#15803d" : "#374151", fontWeight: 700, fontSize: 13 }}>
-                    {reembolsoFoto ? reembolsoFoto.name : "Clique para anexar arquivo"}
-                  </p>
-                  <p style={{ color: "#9CA3AF", fontSize: 11, marginTop: 2 }}>Foto ou vídeo (JPG, PNG, MP4, MOV...)</p>
-                </div>
-                <input type="file" accept="image/*,video/*" onChange={e => setReembolsoFoto(e.target.files?.[0] ?? null)}
-                  style={{ display: "none" }} />
+              <span className="h3">O que aconteceu? *</span>
+              <div className="motivos" style={{ justifyContent: "flex-start" }}>{MOTIVOS_REEMBOLSO.map(m => <button key={m} className="chip" aria-pressed={reembolsoMotivo === m} onClick={() => setReembolsoMotivo(m)}>{m}</button>)}</div>
+              <label className="campo" style={{ marginTop: 6 }}><span>Conte mais (opcional)</span>
+                <textarea value={reembolsoDesc} onChange={e => setReembolsoDesc(e.target.value)} rows={3} placeholder="Descreva o problema" /></label>
+              <label className={`anexar ${reembolsoFoto ? "ok" : ""}`} style={{ marginTop: 14 }}>
+                <span style={{ fontSize: 22 }}>{reembolsoFoto ? "✅" : "📷"}</span>
+                <span style={{ flex: 1, minWidth: 0 }}><b>{reembolsoFoto ? reembolsoFoto.name : "Anexar foto ou vídeo *"}</b><small className="mut" style={{ display: "block" }}>Mostre o problema com clareza</small></span>
+                <input type="file" accept="image/*,video/*" onChange={e => setReembolsoFoto(e.target.files?.[0] ?? null)} style={{ display: "none" }} />
               </label>
             </div>
-
-            <button onClick={enviarReembolso} disabled={!reembolsoMotivo || !reembolsoFoto || envReembolso} style={{
-              width: "100%", padding: "14px", borderRadius: 14, border: "none",
-              background: !reembolsoMotivo || !reembolsoFoto || envReembolso ? "rgba(220,38,38,0.4)" : "#DC2626",
-              color: "white", fontWeight: 800, fontSize: 15, cursor: !reembolsoMotivo || !reembolsoFoto || envReembolso ? "not-allowed" : "pointer",
-            }}>
-              {envReembolso ? "Enviando..." : "Enviar solicitação"}
-            </button>
+            <div className="rodape-fixo">
+              <button className="btn btn-p" onClick={enviarReembolso} disabled={!reembolsoMotivo || !reembolsoFoto || envReembolso}>{envReembolso ? "Enviando…" : "Enviar pedido de reembolso"}</button>
+            </div>
           </div>
         </div>
       )}
-
-      {/* Navbar */}
-      <nav style={{ background: "#ffffff", borderBottom: "1px solid #e5e7eb", padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
-        <Link href="/" style={{ color: "#9CA3AF", fontSize: 20, textDecoration: "none" }}>←</Link>
-        <p style={{ color: "#DC2626", fontWeight: 900, fontSize: 16 }}>Chegô Delivery</p>
-      </nav>
-
-      <div style={{ maxWidth: 520, margin: "0 auto", padding: "24px 16px" }}>
-
-        {/* Código */}
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <p style={{ color: "#9CA3AF", fontSize: 13, marginBottom: 6 }}>Pedido</p>
-          <p style={{ color: "#DC2626", fontWeight: 900, fontSize: 40, letterSpacing: 4 }}>#{pedido.codigo}</p>
-          {loja && <p style={{ color: "#6B7280", fontSize: 13, marginTop: 4 }}>{loja.nome}</p>}
-        </div>
-
-        {cancelado ? (
-          <div style={{ borderRadius: 16, padding: "20px 24px", marginBottom: 24, textAlign: "center", background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)" }}>
-            <p style={{ fontSize: 36, marginBottom: 8 }}>❌</p>
-            <p style={{ color: "#EF4444", fontWeight: 800, fontSize: 18 }}>Pedido cancelado</p>
-            <p style={{ color: "#6B7280", fontSize: 13, marginTop: 6 }}>Entre em contato com a loja para mais informações.</p>
-            {loja?.telefone && (
-              <a href={`https://wa.me/55${loja.telefone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer"
-                style={{ display: "inline-block", marginTop: 14, color: "#16a34a", fontWeight: 700, fontSize: 13 }}>
-                Falar com a loja via WhatsApp
-              </a>
-            )}
-          </div>
-        ) : aguardandoPagamento ? (
-          <div style={{ marginBottom: 24 }}>
-            {/* Banner aguardando pagamento */}
-            <div style={{ background: "#FFFBEB", border: "1.5px solid #FDE68A", borderRadius: 20, padding: "24px 20px", marginBottom: 16, textAlign: "center" }}>
-              <p style={{ fontSize: 44, marginBottom: 10 }}>⏳</p>
-              <p style={{ color: "#92400E", fontWeight: 900, fontSize: 18, marginBottom: 6 }}>Pagamento pendente</p>
-              <p style={{ color: "#78350F", fontSize: 13, lineHeight: 1.5 }}>
-                Seu pedido foi criado mas ainda não foi pago.<br />
-                Finalize o pagamento para confirmar o pedido.
-              </p>
-            </div>
-
-            {/* PIX copia e cola */}
-            {pedido.forma_pagamento === "pix" && (pedido as any).pix_copia_cola && (
-              <div style={{ background: "#fff", border: "1.5px solid #E5E7EB", borderRadius: 16, padding: "20px 16px", marginBottom: 16 }}>
-                <p style={{ color: "#111827", fontWeight: 800, fontSize: 15, marginBottom: 4 }}>Pagar com PIX</p>
-                <p style={{ color: "#6B7280", fontSize: 13, marginBottom: 16 }}>Copie o código abaixo e cole no app do seu banco:</p>
-                <div style={{
-                  background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 10,
-                  padding: "12px 14px", fontSize: 11, color: "#374151",
-                  wordBreak: "break-all", fontFamily: "monospace", marginBottom: 12, lineHeight: 1.6,
-                }}>
-                  {(pedido as any).pix_copia_cola}
-                </div>
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText((pedido as any).pix_copia_cola).then(() => {
-                      setPixCopiado(true)
-                      setTimeout(() => setPixCopiado(false), 3000)
-                    })
-                  }}
-                  style={{
-                    width: "100%", padding: "13px", borderRadius: 12, border: "none",
-                    background: pixCopiado ? "#16A34A" : "#111827",
-                    color: "#fff", fontWeight: 800, fontSize: 15, cursor: "pointer",
-                    transition: "background 0.2s",
-                  }}
-                >
-                  {pixCopiado ? "✓ Código copiado!" : "📋 Copiar código PIX"}
-                </button>
-                <p style={{ color: "#9CA3AF", fontSize: 11, textAlign: "center", marginTop: 10 }}>
-                  Esta página atualiza automaticamente após o pagamento
-                </p>
-              </div>
-            )}
-
-            {pedido.forma_pagamento === "cartao" && (
-              <CartaoProcessando pedidoId={pedido.id} onConfirmado={load} />
-            )}
-            {pedido.forma_pagamento !== "pix" && pedido.forma_pagamento !== "cartao" && (
-              <div style={{ background: "#fff", border: "1.5px solid #E5E7EB", borderRadius: 16, padding: "20px 16px", marginBottom: 16, textAlign: "center" }}>
-                <p style={{ color: "#6B7280", fontSize: 13 }}>Volte ao app para finalizar o pagamento com {pedido.forma_pagamento}.</p>
-              </div>
-            )}
-          </div>
-        ) : (
-          <>
-            {/* Progresso */}
-            <div style={{ background: "#ffffff", borderRadius: 20, padding: "24px 20px", marginBottom: 20, border: entregue ? "1px solid rgba(34,197,94,0.3)" : "1px solid #e5e7eb", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
-              <div style={{ textAlign: "center", marginBottom: 28 }}>
-                <div style={{ display: "flex", justifyContent: "center", alignItems: "center", marginBottom: 12, minHeight: 64 }}>
-                  <EtapaIcon index={etapaAtual} size={56} />
-                </div>
-                <p style={{ color: "#111827", fontWeight: 800, fontSize: 18 }}>{ETAPAS[etapaAtual]?.label}</p>
-                <p style={{ color: "#9CA3AF", fontSize: 12, marginTop: 4 }}>Atualiza em tempo real · toque para detalhes</p>
-              </div>
-              <style>{`
-                @keyframes stepPulse { 0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,0.4)} 50%{box-shadow:0 0 0 8px rgba(220,38,38,0)} }
-                @keyframes descFade { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
-              `}</style>
-              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                {ETAPAS.map((etapa, i) => {
-                  const feita = i < etapaAtual, atual = i === etapaAtual
-                  const clicavel = feita || atual
-                  const expandida = etapaExpandida === i
-                  return (
-                    <div key={etapa.status}>
-                      <div
-                        onClick={() => clicavel && setEtapaExpandida(expandida ? null : i)}
-                        style={{ display: "flex", alignItems: "flex-start", gap: 14, cursor: clicavel ? "pointer" : "default", borderRadius: 10, padding: "3px 8px", margin: "0 -8px", background: expandida ? "rgba(220,38,38,0.05)" : "transparent", transition: "background 0.2s" }}
-                      >
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, width: 22 }}>
-                          <div style={{
-                            width: 22, height: 22, borderRadius: "50%", flexShrink: 0,
-                            background: feita ? "#22c55e" : atual ? "#DC2626" : "#E5E7EB",
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            fontSize: 10, color: "white", fontWeight: 700,
-                            animation: atual ? "stepPulse 2s ease-in-out infinite" : "none",
-                          }}>
-                            {feita ? "✓" : atual ? "●" : ""}
-                          </div>
-                          {i < ETAPAS.length - 1 && (
-                            <div style={{ width: 2, height: expandida ? 36 : 28, marginTop: 2, background: feita ? "#22c55e" : "#E5E7EB", transition: "height 0.25s, background 0.4s" }} />
-                          )}
-                        </div>
-                        <div style={{ flex: 1, paddingBottom: i < ETAPAS.length - 1 ? (expandida ? 0 : 0) : 0 }}>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 2 }}>
-                            <p style={{ fontSize: 13, fontWeight: atual ? 700 : feita ? 600 : 500, color: feita ? "#16a34a" : atual ? "#111827" : "#9CA3AF" }}>
-                              {etapa.label}
-                            </p>
-                            {clicavel && (
-                              <span style={{ color: "#D1D5DB", fontSize: 11, marginLeft: 6, transition: "transform 0.2s", display: "inline-block", transform: expandida ? "rotate(180deg)" : "rotate(0deg)" }}>▾</span>
-                            )}
-                          </div>
-                          {expandida && (
-                            <p style={{ fontSize: 12, color: "#6B7280", marginTop: 4, marginBottom: 4, lineHeight: 1.5, animation: "descFade 0.2s ease" }}>
-                              {etapa.descricao}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      {i < ETAPAS.length - 1 && <div style={{ height: expandida ? 4 : 0 }} />}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Código p/ motoboy — os 4 últimos dígitos do telefone do cliente, não o
-                código do pedido (esse é só pro lojista) — mais fácil de lembrar/falar. */}
-            {coletado && (
-              <div style={{ background: "#ffffff", border: "2px solid rgba(220,38,38,0.35)", borderRadius: 20, padding: "24px 16px", marginBottom: 16, textAlign: "center", boxShadow: "0 2px 12px rgba(0,0,0,0.06)", overflowX: "hidden" }}>
-                <p style={{ color: "#6B7280", fontSize: 13, marginBottom: 10 }}>Confirme com o entregador os 4 últimos números do seu telefone:</p>
-                <p style={{ color: "#DC2626", fontWeight: 900, fontSize: "clamp(36px, 14vw, 64px)", letterSpacing: "clamp(4px, 2vw, 12px)", lineHeight: 1, marginBottom: 8 }}>
-                  {((pedido as any).telefone_cliente ?? "").replace(/\D/g, "").slice(-4) || pedido.codigo}
-                </p>
-                <p style={{ color: "#9CA3AF", fontSize: 12 }}>O motoboy confirma esse número ao chegar para garantir que a entrega é pra você</p>
-              </div>
-            )}
-
-            {/* Chat com motoboy */}
-            {coletado && <ChatMotoboy pedidoId={pedido.id} />}
-
-            {/* Banner: há entregas antes da sua */}
-            {entregasAntes !== null && entregasAntes > 0 && !entregue && !cancelado && (
-              <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 14, padding: "12px 16px", marginBottom: 12, display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 20 }}>🛵</span>
-                <p style={{ color: "#92400e", fontSize: 13, fontWeight: 600, lineHeight: 1.4 }}>
-                  {entregasAntes === 1
-                    ? "Há 1 entrega antes da sua. O motoboy está a caminho!"
-                    : `Há ${entregasAntes} entregas antes da sua. O motoboy está chegando!`}
-                </p>
-              </div>
-            )}
-
-            {/* Motoboy + mapa Google Maps */}
-            {motoboy && (emRota || coletado) && (
-              <div style={{ background: "#ffffff", borderRadius: 16, marginBottom: 16, border: "1px solid rgba(220,38,38,0.2)", overflow: "hidden", boxShadow: "0 2px 12px rgba(0,0,0,0.06)" }}>
-                <div style={{ padding: "12px 18px", display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ position: "relative", width: 8, height: 8, flexShrink: 0 }}>
-                    <div style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "#DC2626" }} />
-                    <div className="ping-slow" style={{ position: "absolute", inset: 0, borderRadius: "50%", background: "#DC2626" }} />
-                  </div>
-                  <p style={{ color: "#111827", fontWeight: 700, fontSize: 14 }}>{motoboy.nome} está a caminho</p>
-                </div>
-                {motoboy.lat && motoboy.lng ? (
-                  <>
-                    <MapaRastreamento
-                      motoboyId={motoboy.id}
-                      initialLat={motoboy.lat}
-                      initialLng={motoboy.lng}
-                      enderecoEntrega={pedido.endereco_entrega}
-                    />
-                    <div style={{ padding: "10px 18px", background: "#F9FAFB" }}>
-                      <p style={{ color: "#9CA3AF", fontSize: 11 }}>Localização em tempo real · atualiza automaticamente</p>
-                    </div>
-                  </>
-                ) : (
-                  <div style={{ padding: "14px 18px", paddingTop: 0 }}>
-                    <p style={{ color: "#9CA3AF", fontSize: 13 }}>Aguardando localização GPS do entregador...</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </>
-        )}
-
-        {/* Botão cancelar pedido */}
-        {podeCancelar && (
-          <button onClick={() => setCancelModal(true)} style={{
-            width: "100%", padding: "13px", borderRadius: 14, border: "1.5px solid #fca5a5",
-            background: "#FEF2F2", color: "#DC2626", fontWeight: 700, fontSize: 14, cursor: "pointer", marginBottom: 12,
-          }}>
-            Cancelar pedido
-          </button>
-        )}
-
-        {/* Botão solicitar reembolso */}
-        {podeReembolso && (
-          <button onClick={() => setReembolsoModal(true)} style={{
-            width: "100%", padding: "13px", borderRadius: 14, border: "1.5px solid #fdba74",
-            background: "#FFF7ED", color: "#ea580c", fontWeight: 700, fontSize: 14, cursor: "pointer", marginBottom: 12,
-          }}>
-            Solicitar reembolso
-          </button>
-        )}
-
-        {/* Status do reembolso */}
-        {(reembolsoStatus || reembolsoOk) && (
-          <div style={{
-            background: reembolsoStatus === "negado" ? "#FEF2F2" : "#F0FDF4",
-            border: `1px solid ${reembolsoStatus === "negado" ? "#fca5a5" : "#bbf7d0"}`,
-            borderRadius: 14, padding: "14px 16px", marginBottom: 12,
-            display: "flex", alignItems: "center", gap: 10,
-          }}>
-            <span style={{ fontSize: 20 }}>
-              {reembolsoStatus === "solicitado" && "🕐"}
-              {reembolsoStatus === "aprovado" && "✅"}
-              {reembolsoStatus === "processando" && "⏳"}
-              {reembolsoStatus === "concluido" && "💸"}
-              {reembolsoStatus === "negado" && "❌"}
-              {!reembolsoStatus && "✅"}
-            </span>
-            <div>
-              <p style={{ fontWeight: 700, fontSize: 13, color: reembolsoStatus === "negado" ? "#DC2626" : "#15803d" }}>
-                {reembolsoStatus === "solicitado" && "Reembolso solicitado"}
-                {reembolsoStatus === "aprovado" && "Reembolso aprovado"}
-                {reembolsoStatus === "processando" && "Reembolso em processamento"}
-                {reembolsoStatus === "concluido" && "Reembolso concluído"}
-                {reembolsoStatus === "negado" && "Reembolso negado"}
-                {!reembolsoStatus && "Solicitação enviada!"}
-              </p>
-              <p style={{ fontSize: 12, color: "#6B7280", marginTop: 2 }}>
-                {reembolsoStatus === "solicitado" && "Em análise pela loja ou administrador"}
-                {reembolsoStatus === "aprovado" && "Será processado em breve"}
-                {reembolsoStatus === "processando" && "O valor está sendo devolvido"}
-                {reembolsoStatus === "concluido" && "Valor devolvido com sucesso"}
-                {reembolsoStatus === "negado" && "Entre em contato com a loja para mais informações"}
-                {!reembolsoStatus && "Aguarde a análise em breve"}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Resumo */}
-        <div style={{ background: "#ffffff", borderRadius: 16, border: "1px solid #e5e7eb", overflow: "hidden", marginBottom: 16, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
-          <div style={{ padding: "14px 18px", borderBottom: "1px solid #F3F4F6" }}>
-            <p style={{ color: "#111827", fontWeight: 700, fontSize: 14 }}>Resumo do pedido</p>
-          </div>
-          <div style={{ padding: "12px 18px", display: "flex", flexDirection: "column", gap: 8 }}>
-            {pedido.itens?.map((item: any) => (
-              <div key={item.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                <span style={{ color: "#374151" }}>{item.quantidade}× {item.nome}</span>
-                <span style={{ color: "#6B7280" }}>R$ {(item.preco * item.quantidade).toFixed(2)}</span>
-              </div>
-            ))}
-          </div>
-          <div style={{ padding: "12px 18px", borderTop: "1px solid #F3F4F6", display: "flex", flexDirection: "column", gap: 5 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#9CA3AF" }}>
-              <span>Subtotal</span><span>R$ {pedido.subtotal.toFixed(2)}</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#9CA3AF" }}>
-              <span>Entrega</span>
-              <span style={{ color: pedido.taxa_entrega === 0 ? "#16a34a" : undefined }}>
-                {pedido.taxa_entrega === 0 ? "Grátis" : `R$ ${pedido.taxa_entrega.toFixed(2)}`}
-              </span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 800, color: "#111827", fontSize: 15, marginTop: 4 }}>
-              <span>Total</span><span>R$ {pedido.total.toFixed(2)}</span>
-            </div>
-            <p style={{ color: "#9CA3AF", fontSize: 12, marginTop: 2 }}>{PAGAMENTO_LABEL[pedido.forma_pagamento] ?? pedido.forma_pagamento}</p>
-          </div>
-        </div>
-
-        {/* Endereço */}
-        <div style={{ background: "#ffffff", borderRadius: 16, border: "1px solid #e5e7eb", padding: "14px 18px", marginBottom: 20, boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
-          <p style={{ color: "#9CA3AF", fontSize: 12, marginBottom: 4 }}>Endereço de entrega</p>
-          <p style={{ color: "#111827", fontSize: 14 }}>📍 {pedido.endereco_entrega}</p>
-        </div>
-
-        <Link href="/" onClick={() => localStorage.removeItem("arago_pedido_ativo")} style={{ display: "block", textAlign: "center", padding: "13px", borderRadius: 12, background: "#ffffff", color: "#6B7280", fontWeight: 700, fontSize: 14, textDecoration: "none", border: "1px solid #e5e7eb" }}>
-          Fazer outro pedido
-        </Link>
-      </div>
     </div>
   )
 }

@@ -1,6 +1,9 @@
 export const dynamic = "force-dynamic"
+import { jaFezPedido, MSG_SO_PRIMEIRO } from "@/lib/primeiroPedido"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { cupomValeNoRaio } from "@/lib/cupomRaio"
+import { ehCupomFreteAniversario, cupomFreteAniversarioNoPrazo, lojaComPonto, distanciaRetaKm, CUPOM_FRETE_ANIVERSARIO, MSG_CUPOM_FORA_DO_PRAZO, MSG_CUPOM_FORA_DO_RAIO } from "@/lib/freteGratisCampanha"
 
 function sb() {
   return createClient(
@@ -8,14 +11,6 @@ function sb() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false, autoRefreshToken: false } }
   )
-}
-
-function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number) {
-  const R = 6371
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLng = (lng2 - lng1) * Math.PI / 180
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
 // GET /api/cupom/validar?codigo=XXX&loja_id=YYY&subtotal=ZZZ&lat=AA&lng=BB
@@ -26,6 +21,7 @@ export async function GET(req: NextRequest) {
   const subtotal = parseFloat(searchParams.get("subtotal") ?? "0")
   const lat      = searchParams.get("lat") ? parseFloat(searchParams.get("lat")!) : null
   const lng      = searchParams.get("lng") ? parseFloat(searchParams.get("lng")!) : null
+  const cidade   = searchParams.get("cidade")
 
   if (!codigo) return NextResponse.json({ error: "Código obrigatório" }, { status: 400 })
 
@@ -35,7 +31,7 @@ export async function GET(req: NextRequest) {
   // pode valer por loja_id único, por uma lista (lojas_ids) ou global.
   const { data: cupom, error } = await client
     .from("cupons")
-    .select("id, codigo, tipo, valor, pedido_minimo, validade, ativo, usos, max_usos, loja_id, lojas_ids, centro_lat, centro_lng, raio_km")
+    .select("id, codigo, tipo, valor, pedido_minimo, validade, ativo, usos, max_usos, loja_id, lojas_ids, centro_lat, centro_lng, raio_km, so_primeiro_pedido")
     .eq("codigo", codigo)
     .eq("ativo", true)
     .maybeSingle()
@@ -54,8 +50,22 @@ export async function GET(req: NextRequest) {
   if (!valeParaLoja) return NextResponse.json({ error: "Cupom não é válido para esta loja." }, { status: 422 })
 
   if (cupom.raio_km != null && cupom.centro_lat != null && cupom.centro_lng != null) {
-    if (lat == null || lng == null || haversineKm(cupom.centro_lat, cupom.centro_lng, lat, lng) > cupom.raio_km) {
-      return NextResponse.json({ error: "Cupom não é válido para o seu endereço de entrega." }, { status: 422 })
+    const { data: loja } = loja_id
+      ? await client.from("lojas").select("lat, lng, cidade").eq("id", loja_id).maybeSingle()
+      : { data: null }
+    if (!cupomValeNoRaio(cupom, loja, { lat, lng, cidade })) {
+      return NextResponse.json({ error: "Cupom não é válido para esta entrega (fora da área do cupom)." }, { status: 422 })
+    }
+  }
+
+  // Cupom ARAGO68: prazo com hora (11/11 0h até 14/11 23h) e até 5 km da loja. Aqui é a prévia
+  // (linha reta); o /api/pedido/criar mede pela rota e confere de novo.
+  if (ehCupomFreteAniversario(codigo)) {
+    if (!cupomFreteAniversarioNoPrazo()) return NextResponse.json({ error: MSG_CUPOM_FORA_DO_PRAZO }, { status: 422 })
+    const { data: loja } = loja_id ? await client.from("lojas").select("lat, lng").eq("id", loja_id).maybeSingle() : { data: null }
+    if (loja && !lojaComPonto(loja.lat, loja.lng)) return NextResponse.json({ error: "Essa loja ainda não marcou o ponto no mapa, então o cupom ARAGO68 não vale para ela." }, { status: 422 })
+    if (loja && lat != null && lng != null && distanciaRetaKm(Number(loja.lat), Number(loja.lng), lat, lng) > CUPOM_FRETE_ANIVERSARIO.raioKm) {
+      return NextResponse.json({ error: MSG_CUPOM_FORA_DO_RAIO }, { status: 422 })
     }
   }
 
@@ -72,6 +82,16 @@ export async function GET(req: NextRequest) {
   }
   if (cupom.pedido_minimo > 0 && subtotal < cupom.pedido_minimo) {
     return NextResponse.json({ error: `Pedido mínimo de R$ ${Number(cupom.pedido_minimo).toFixed(2)} para este cupom.` }, { status: 422 })
+  }
+
+  // Primeiro pedido: confere a conta LOGADA (token do login), nunca um telefone vindo da URL,
+  // pra rota pública não dizer se um número já pediu. O /api/pedido/criar confere de novo.
+  if (cupom.so_primeiro_pedido) {
+    const token = (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "")
+    const { data: u } = token ? await client.auth.getUser(token) : { data: null }
+    if (!u?.user) return NextResponse.json({ error: "Entre na sua conta para usar o cupom de primeiro pedido." }, { status: 422 })
+    const { data: cli } = await client.from("clientes").select("telefone").eq("id", u.user.id).maybeSingle()
+    if (await jaFezPedido(client, cli?.telefone, u.user.id)) return NextResponse.json({ error: MSG_SO_PRIMEIRO }, { status: 422 })
   }
 
   return NextResponse.json({

@@ -1,9 +1,18 @@
 export const dynamic = "force-dynamic"
+import { saldoDoMotoboy } from "@/lib/saldosRepasse"
+import { ymdBrt } from "@/lib/repasseLoja"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { getSession, unauthorized } from "@/lib/session"
 import { notificarSaqueSolicitado } from "@/lib/email"
-import { ganhoMotoboy } from "@/lib/comissao"
+import { diaEMinutosAgoraBrt } from "@/lib/periodoBrt"
+
+// Regra do Chegô (Lucas, 20/10/2026), igual à do lojista: o motoboy não saca quando quer.
+// O repasse é feito toda sexta-feira. Na terça existe um saque avulso opcional (adiantamento)
+// que cobra R$ 5,00. A taxa fica em saques.taxa_saque; do saldo sai o valor pedido e o
+// motoboy recebe o valor menos a taxa (o painel /chego-ctrl/saques já mostra o líquido).
+const TAXA_SAQUE_TERCA = 5
+const TERCA = 2
 
 function adminSb() {
   return createClient(
@@ -23,6 +32,15 @@ export async function POST(req: NextRequest) {
   if (!valor || valor <= 0) {
     return NextResponse.json({ error: "Valor inválido" }, { status: 400 })
   }
+  if (diaEMinutosAgoraBrt().diaSemana !== TERCA) {
+    return NextResponse.json(
+      { error: "O saque avulso é só na terça-feira, com taxa de R$ 5,00. Seu repasse cai toda sexta, sem precisar pedir." },
+      { status: 422 }
+    )
+  }
+  if (!(Number(valor) > TAXA_SAQUE_TERCA)) {
+    return NextResponse.json({ error: "O valor precisa ser maior que a taxa de R$ 5,00" }, { status: 400 })
+  }
 
   const sb = adminSb()
 
@@ -35,44 +53,41 @@ export async function POST(req: NextRequest) {
   if (!mb) return NextResponse.json({ error: "Motoboy não encontrado" }, { status: 404 })
   if (!mb.pix_key) return NextResponse.json({ error: "Cadastre sua chave PIX antes de solicitar" }, { status: 422 })
 
-  // Calcula saldo real a partir de pedidos entregues, entregas avulsas, saques anteriores e
-  // ajustes manuais de saldo — mesma fórmula canônica (src/lib/comissao.ts) usada nas telas
-  // de ganhos do motoboy, senão o saldo mostrado na tela diverge do que o servidor libera aqui.
-  // Ajuste positivo = crédito a favor do motoboy (ex: compensação por corrida mais longa que
-  // o calculado); negativo = débito. Só entram os ainda não quitados.
-  const [{ data: pedidos }, { data: avulsas }, { data: saquesAnt }, { data: ajustes }] = await Promise.all([
-    sb.from("pedidos").select("taxa_entrega, criado_em").eq("motoboy_id", motoboy_id).eq("status", "entregue"),
-    sb.from("entregas_avulsas").select("taxa_entrega, criado_em").eq("motoboy_id", motoboy_id).eq("status", "entregue"),
-    sb.from("saques").select("valor, status").eq("motoboy_id", motoboy_id).eq("tipo", "motoboy"),
-    sb.from("saldo_ajustes").select("valor").eq("motoboy_id", motoboy_id).eq("tipo", "motoboy").is("quitado_em", null),
-  ])
-  const ganhos =
-    (pedidos ?? []).reduce((s, p) => s + ganhoMotoboy(p.taxa_entrega ?? 0, p.criado_em), 0) +
-    (avulsas ?? []).reduce((s, a) => s + ganhoMotoboy(a.taxa_entrega ?? 0, a.criado_em), 0) +
-    (ajustes ?? []).reduce((s, a) => s + Number(a.valor ?? 0), 0)
-  const pagos      = (saquesAnt ?? []).filter(s => s.status === "pago").reduce((s, x) => s + x.valor, 0)
-  const solicitado = (saquesAnt ?? []).filter(s => s.status === "solicitado").reduce((s, x) => s + x.valor, 0)
-  const saldo      = Math.max(0, ganhos - pagos - solicitado)
-
+  // Saldo = a mesma conta do fechamento e do admin, desde 16/10 (decisão do Lucas, 20/10/2026):
+  // ganhos − o que já foi pago (saque ou pagamento pelo painel) + ajustes desde 16/10, menos saque
+  // já pedido. Antes somava desde julho e não via os pagamentos feitos por fora.
+  const { livre: saldo } = await saldoDoMotoboy(sb, motoboy_id, ymdBrt())
   if (valor > saldo + 0.001) return NextResponse.json({ error: "Valor maior que o saldo disponível" }, { status: 422 })
 
+  const liquido = Math.round((Number(valor) - TAXA_SAQUE_TERCA) * 100) / 100
   const { data: saque, error } = await sb
     .from("saques")
-    .insert({ tipo: "motoboy", motoboy_id, valor, pix_chave: mb.pix_key, status: "solicitado" })
+    .insert({
+      tipo: "motoboy", motoboy_id, valor, pix_chave: mb.pix_key, status: "solicitado",
+      taxa_saque: TAXA_SAQUE_TERCA,
+      observacao: `Saque de terça: transferir R$ ${liquido.toFixed(2)} (pedido R$ ${Number(valor).toFixed(2)} menos taxa de R$ ${TAXA_SAQUE_TERCA.toFixed(2)})`,
+    })
     .select("id")
     .single()
 
   if (error || !saque) {
     return NextResponse.json({ error: "Erro ao criar saque" }, { status: 500 })
   }
+  // Trava contra toque duplo: com o saque gravado, o reservado não pode passar do que ele tem.
+  // Se dois pedidos entraram juntos e estouraram o saldo, este é desfeito.
+  const depois = await saldoDoMotoboy(sb, motoboy_id, ymdBrt())
+  if (depois.reservado > depois.pendente + 0.001) {
+    await sb.from("saques").delete().eq("id", (saque as any).id).eq("status", "solicitado")
+    return NextResponse.json({ error: "Você já pediu esse saque. Aguarde o pagamento." }, { status: 409 })
+  }
 
   // Notifica o admin por email (não bloqueia a resposta)
   notificarSaqueSolicitado({
     nomeMotoboy: mb.nome,
-    valor,
+    valor: liquido, // o que deve ser transferido (já sem a taxa de terça)
     pixChave: mb.pix_key,
     saqueId: saque.id,
   }).catch(() => {})
 
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, liquido, taxa: TAXA_SAQUE_TERCA })
 }

@@ -1,6 +1,10 @@
 "use client"
 
+import { descontoPromo, PROMO_PRODUTOS } from "@/lib/promoChego"
+import { usePromoUsados, recarregarPromoUsados } from "@/components/cliente/PrecoPromo"
+import AjudaPagamentoWhats from "@/components/AjudaPagamentoWhats"
 import { useEffect, useRef, useState } from "react"
+import { lerCupomSacola, limparCupomSacola, validarCupom, descricaoCupom } from "@/lib/cupomSacola"
 import { useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
 import Link from "next/link"
@@ -9,6 +13,7 @@ import { useCart } from "@/lib/cart"
 import { useClienteAuth } from "@/lib/auth-cliente"
 import { useIsMobile } from "@/lib/use-mobile"
 import type { FormaPagamento } from "@/types"
+import { brl } from "@/lib/precoExibicao"
 
 // Leaflet não funciona no SSR — importa só no client
 const MapaPicker = dynamic(() => import("@/components/MapaPicker"), { ssr: false })
@@ -21,24 +26,18 @@ const PAGAMENTOS: { value: FormaPagamento; label: string; platforms: ("ios"|"and
   { value: "maquininha", label: "Maquininha", platforms: ["ios","android","other"] },
 ]
 
+// Máscara de dinheiro ao digitar: "1234" → "12,34", "123456" → "1.234,56"
+function mascaraBRL(v: string): string {
+  const d = v.replace(/\D/g, "").replace(/^0+/, "").slice(0, 9)
+  if (!d) return ""
+  const n = Number(d) / 100
+  return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 // Logo PIX — diamante arredondado + 2 lentes diagonais brancas (padrão oficial BCB)
-function PixLogo() {
-  return (
-    <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-      <defs>
-        <clipPath id="pix-clip">
-          <rect x="7" y="7" width="22" height="22" rx="5" transform="rotate(45 18 18)"/>
-        </clipPath>
-      </defs>
-      <rect x="7" y="7" width="22" height="22" rx="5" transform="rotate(45 18 18)" fill="#32BCAD"/>
-      {/* Lente diagonal NW→SE (cria pétalas N e S) */}
-      <path d="M10,10 C22,8 28,14 26,26 C14,28 8,22 10,10 Z"
-            fill="white" clipPath="url(#pix-clip)"/>
-      {/* Lente diagonal NE→SW (cria pétalas L e O) */}
-      <path d="M26,10 C28,22 22,28 10,26 C8,14 14,8 26,10 Z"
-            fill="white" clipPath="url(#pix-clip)"/>
-    </svg>
-  )
+// Símbolo oficial do Pix (o mesmo arquivo da proposta aprovada, public/pix-icone.svg).
+function PixLogo({ t = 24 }: { t?: number }) {
+  return <img src="/pix-icone.svg" alt="Pix" width={t} height={t} style={{ display: "inline-block", verticalAlign: "middle" }} />
 }
 
 // Cartão com chip dourado + Mastercard
@@ -72,13 +71,20 @@ function GooglePayLogo() {
   )
 }
 
-function PaymentIcon({ method }: { method: FormaPagamento }) {
-  if (method === "pix")        return <PixLogo />
-  if (method === "cartao")     return <CardLogo />
+// Ícones de traço da proposta (cartão, dinheiro, maquininha, loja); Pix e Google Pay com a marca.
+const ICO_PG: Record<string, React.ReactNode> = {
+  cartao: <><rect x="2.5" y="5" width="19" height="14" rx="2.5" /><path d="M2.5 10h19M6.5 15h4" /></>,
+  dinheiro: <><rect x="2.5" y="6" width="19" height="12" rx="2" /><circle cx="12" cy="12" r="2.8" /><path d="M6 9v.01M18 15v.01" /></>,
+  maquininha: <><rect x="6" y="2.5" width="12" height="19" rx="2.5" /><rect x="8.5" y="5" width="7" height="4.5" rx="1" /><path d="M9 13h.01M12 13h.01M15 13h.01M9 16h.01M12 16h.01M15 16h.01" /></>,
+  loja: <><path d="M4 10v10h16V10" /><path d="M3 10l1.5-6h15L21 10a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z" /><path d="M10 20v-5h4v5" /></>,
+}
+function PaymentIcon({ method, naLoja, pequeno }: { method: FormaPagamento; naLoja?: boolean; pequeno?: boolean }) {
+  const t = pequeno ? 20 : 22
+  if (method === "pix")        return <PixLogo t={pequeno ? 20 : 24} />
   if (method === "google_pay") return <GooglePayLogo />
-  if (method === "dinheiro")   return <span style={{ fontSize: 22 }}>💵</span>
-  if (method === "maquininha") return <span style={{ fontSize: 22 }}>💳</span>
-  return null
+  const ic = ICO_PG[method === "maquininha" && naLoja ? "loja" : method]
+  if (!ic) return null
+  return <svg width={t} height={t} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--grafite)" }}>{ic}</svg>
 }
 
 // Aragoiânia, GO — coordenadas padrão quando GPS não está disponível.
@@ -130,6 +136,10 @@ function EnderecoMapa({ onResult, fallbackLat, fallbackLng }: {
   const [geocodando, setGeocodando] = useState(false)
   const [numero, setNumero]         = useState("")
   const [complemento, setComplemento] = useState("")
+  // Rua/bairro digitados pelo cliente quando o mapa não identifica (condomínio, zona rural,
+  // rua nova). Pedido #5VKMCR (2026-10-06) saiu só com "00 — Condomínio" e o motoboy não achou.
+  const [ruaManual, setRuaManual]       = useState("")
+  const [bairroManual, setBairroManual] = useState("")
   const geocodingTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Tenta GPS ao montar
@@ -143,10 +153,11 @@ function EnderecoMapa({ onResult, fallbackLat, fallbackLng }: {
         geocodePonto(pos.coords.latitude, pos.coords.longitude)
       },
       () => {
+        // Sem GPS o pino começa na loja: não vale como endereço até o cliente arrastar até a casa dele
+        // (antes o ponto da loja virava o endereço e o frete saía no mínimo, ex. H9E3AA)
         setGpsStatus("denied")
         setLat(latFallback)
         setLng(lngFallback)
-        geocodePonto(latFallback, lngFallback)
       },
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
     )
@@ -154,15 +165,18 @@ function EnderecoMapa({ onResult, fallbackLat, fallbackLng }: {
 
   // Notifica pai quando geo/numero/complemento mudam
   useEffect(() => {
-    if (geo) onResult(geo, numero, complemento)
-  }, [geo, numero, complemento])
+    if (geo) onResult({ ...geo, rua: geo.rua || ruaManual.trim(), bairro: geo.bairro || bairroManual.trim() }, numero, complemento)
+  }, [geo, numero, complemento, ruaManual, bairroManual])
 
   async function geocodePonto(lt: number, ln: number) {
     setGeocodando(true)
     try {
       const result = await reverseGeocode(lt, ln)
       setGeo(result)
-    } catch {}
+    } catch {
+      // Sem resposta do mapa: abre os campos de rua e bairro pro cliente digitar
+      setGeo({ rua: "", bairro: "", cidade: "", lat: lt, lng: ln })
+    }
     setGeocodando(false)
   }
 
@@ -175,69 +189,56 @@ function EnderecoMapa({ onResult, fallbackLat, fallbackLng }: {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {/* Status GPS — só mostra enquanto detecta */}
-      {gpsStatus === "loading" && (
-        <div style={{ background: "rgba(220,38,38,0.04)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: 12, padding: "10px 14px" }}>
-          <p style={{ color: "#6B7280", fontSize: 13 }}>📡 Detectando sua localização...</p>
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {gpsStatus === "loading" && <p className="mut" style={{ fontSize: 13.5 }}>📡 Procurando sua localização…</p>}
+      {gpsStatus === "denied" && !geo && <p style={{ fontSize: 13.5, fontWeight: 700, color: "#B01D16", background: "#FDECEB", borderRadius: 10, padding: "10px 12px" }}>Não conseguimos sua localização. Arraste o pino até a sua casa ou toque no mapa onde é a entrega.</p>}
+
+      <div className="mapa-ck">
+        <MapaPicker lat={lat} lng={lng} onMove={handleMapMove} />
+        <div className="mapa-ck-rotulo">
+          {geocodando ? <span className="mut">📍 Identificando endereço…</span>
+            : geo?.rua ? <b>📍 {geo.rua}{geo.bairro ? `, ${geo.bairro}` : ""}</b>
+            : <span className="mut">📍 Mova o pino até o local da entrega</span>}
+        </div>
+      </div>
+      <p className="mut" style={{ fontSize: 12.5, textAlign: "center" }}>Arraste o pino ou toque no mapa pra ajustar o local</p>
+
+      {/* Rua / bairro — só aparecem quando o mapa não identificou */}
+      {geo && !geocodando && (!geo.rua || !geo.bairro) && (
+        <div style={{ display: "grid", gridTemplateColumns: !geo.rua && !geo.bairro ? "1fr 1fr" : "1fr", gap: 10 }}>
+          {!geo.rua && (
+            <label className={`campo ${ruaManual.trim() ? "" : "falta"}`}><span>Rua *</span>
+              <input value={ruaManual} onChange={e => setRuaManual(e.target.value)} placeholder="Rua, avenida ou quadra" /></label>
+          )}
+          {!geo.bairro && (
+            <label className={`campo ${bairroManual.trim() ? "" : "falta"}`}><span>Bairro ou condomínio *</span>
+              <input value={bairroManual} onChange={e => setBairroManual(e.target.value)} placeholder="Ex.: Cond. Quintas do Lago" /></label>
+          )}
         </div>
       )}
 
-      {/* Mapa */}
-      <div style={{ borderRadius: 14, overflow: "hidden", border: "1px solid #E5E7EB", position: "relative" }}>
-        <MapaPicker lat={lat} lng={lng} onMove={handleMapMove} />
-        <div style={{ position: "absolute", bottom: 8, left: 8, right: 8, zIndex: 999, pointerEvents: "none" }}>
-          <div style={{ background: "rgba(255,255,255,0.95)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", borderRadius: 10, padding: "7px 12px" }}>
-            {geocodando ? (
-              <p style={{ color: "#6B7280", fontSize: 12 }}>📍 Identificando endereço...</p>
-            ) : geo?.rua ? (
-              <p style={{ color: "#111827", fontSize: 12, fontWeight: 600 }}>
-                📍 {geo.rua}{geo.bairro ? `, ${geo.bairro}` : ""}
-              </p>
-            ) : (
-              <p style={{ color: "#6B7280", fontSize: 12 }}>📍 Mova o pin para o local de entrega</p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <p style={{ color: "#9CA3AF", fontSize: 11, textAlign: "center" }}>
-        Arraste o pin laranja ou toque no mapa para ajustar o local
-      </p>
-
-      {/* Número + Complemento */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10 }}>
-        <div>
-          <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Número *</label>
-          <input
-            value={numero}
-            onChange={e => setNumero(e.target.value)}
-            placeholder="42"
-            inputMode="numeric"
-            style={{
-              width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 14,
-              background: "#F9FAFB",
-              border: numero ? "1px solid rgba(34,197,94,0.4)" : "1px solid #E5E7EB",
-              color: "#111827", outline: "none", boxSizing: "border-box",
-            }}
-          />
-        </div>
-        <div>
-          <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Complemento</label>
-          <input
-            value={complemento}
-            onChange={e => setComplemento(e.target.value)}
-            placeholder="Apto 3, casa dos fundos..."
-            style={{
-              width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 14,
-              background: "#F9FAFB", border: "1px solid #E5E7EB",
-              color: "#111827", outline: "none", boxSizing: "border-box",
-            }}
-          />
-        </div>
+        <label className="campo"><span>Número *</span>
+          <input value={numero} onChange={e => setNumero(e.target.value)} placeholder="42 ou S/N" /></label>
+        <label className="campo"><span>Complemento ou referência *</span>
+          <input value={complemento} onChange={e => setComplemento(e.target.value)} placeholder="Qd 5 Lt 10, casa azul…" /></label>
       </div>
     </div>
   )
+}
+
+/** Endereço de entrega completo o bastante pro motoboy achar o cliente — rua, bairro,
+ * número real (não "0"/"00"; "S/N" vale) e complemento/ponto de referência. Retorna a
+ * mensagem de erro, ou null se estiver ok. */
+function erroEnderecoEntrega(rua: string, bairro: string, numero: string, complemento: string): string | null {
+  const n = numero.trim().toUpperCase().replace(/\s+/g, "")
+  if (!rua.trim()) return "Informe o nome da rua do endereço de entrega"
+  if (!bairro.trim()) return "Informe o bairro ou condomínio do endereço de entrega"
+  if (!n) return "Informe o número da sua casa/apto no campo Número (ou S/N se não tiver)"
+  const semNumero = n === "S/N" || n === "SN" || n === "S.N."
+  if (!semNumero && (!/\d/.test(n) || /^0+$/.test(n))) return "Número inválido — informe o número real da casa (ou S/N se não tiver)"
+  if (complemento.trim().length < 3) return "Informe o complemento ou um ponto de referência (ex: Qd 5 Lt 10, casa azul, perto da praça)"
+  return null
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────
@@ -255,14 +256,26 @@ export default function CheckoutPage() {
   const [precisaTroco, setPrecisaTroco] = useState(false)
   const [trocoPara, setTrocoPara]       = useState("")
   const [tipoMaquininha, setTipoMaquininha] = useState<"credito" | "debito">("credito")
+  const promoUsadosConta = usePromoUsados()
+  const [usadosPromo, setUsadosPromo] = useState<string[]>([])
+  useEffect(() => { setUsadosPromo(u => Array.from(new Set([...u, ...promoUsadosConta]))) }, [promoUsadosConta])
+  // Pagamento em 2 formas (20/10/2026): 1ª forma = `pagamento`, com o valor digitado; o resto
+  // vai na 2ª forma. O servidor recalcula a 2ª parte (total − 1ª).
+  const [dividir, setDividir] = useState(false)
+  const [pagamento2, setPagamento2] = useState<FormaPagamento | null>(null)
+  const [valor1Txt, setValor1Txt] = useState("")
   const [obs, setObs]             = useState("")
   const [enviando, setEnviando]   = useState(false)
   const [pedidoCodigo, setPedidoCodigo] = useState<string | null>(null)
   const [pedidoId,     setPedidoId]     = useState<string | null>(null)
   const [erro, setErro]           = useState("")
   const [tipoEntrega, setTipoEntrega] = useState<"entrega" | "retirada">("entrega")
+  // "Mora em zona rural / estrada de chão?" — obrigatória na entrega (2026-10-06). null =
+  // ainda não respondeu. "Sim" soma R$5 + R$1/km acima de 5km na taxa (lib/frete.ts).
+  const [zonaRural, setZonaRural] = useState<boolean | null>(null)
+  // Detalhes de como chegar (só quando "Sim") — vai na observação do pedido, que o motoboy vê.
+  const [detalheRural, setDetalheRural] = useState("")
 
-  const [cupomInput,   setCupomInput]   = useState("")
   const [cupomValido,  setCupomValido]  = useState<{ id: string; codigo: string; tipo: "percentual" | "fixo" | "frete_gratis" | "frete_percentual"; valor: number } | null>(null)
   const [cupomErro,    setCupomErro]    = useState("")
   const [validandoCupom, setValidandoCupom] = useState(false)
@@ -298,6 +311,16 @@ export default function CheckoutPage() {
   const [clienteCoords, setClienteCoords] = useState<{lat:number;lng:number}|null>(null)
 
   const geoRef = useRef<{ geo: GeoResult; numero: string; complemento: string } | null>(null)
+  // O que o cliente marcou/digitou no mapa. Separado do geoRef porque o perfil recarrega sozinho
+  // quando o app volta pra tela (renovação do login no Supabase) e os efeitos do endereço salvo
+  // regravavam o geoRef com o endereço antigo incompleto: o checkout pedia tudo de novo mesmo com
+  // o mapa preenchido (Bar do Marcão 21/10 e cliente do Monte Sinai 22/10).
+  const mapaRef = useRef<{ geo: GeoResult; numero: string; complemento: string } | null>(null)
+  const editandoRef = useRef(false)
+  useEffect(() => {
+    editandoRef.current = editandoEndereco
+    if (editandoEndereco) mapaRef.current = null  // mapa novo na tela: vale só o que for marcado nele
+  }, [editandoEndereco])
 
   // Detecta plataforma para mostrar o método de pagamento correto
   useEffect(() => {
@@ -319,7 +342,7 @@ export default function CheckoutPage() {
       const raw = localStorage.getItem("arago_endereco_salvo")
       if (raw) cache = JSON.parse(raw)
     } catch {}
-    if (!cache) return
+    if (!cache || editandoRef.current) return
 
     const norm = (s?: string) => (s ?? "").trim().toLowerCase()
     const perfilTemEndereco = !!perfil?.endereco_rua
@@ -348,7 +371,7 @@ export default function CheckoutPage() {
 
   // Se não há endereço salvo mas o perfil tem endereço cadastrado, geocodifica para obter lat/lng
   useEffect(() => {
-    if (!perfil?.endereco_rua || enderecoSalvo) return
+    if (!perfil?.endereco_rua || enderecoSalvo || editandoRef.current) return
     const addrBase: EnderecoSalvo = {
       display: [perfil.endereco_rua, perfil.endereco_numero, perfil.endereco_bairro, perfil.endereco_cidade].filter(Boolean).join(", "),
       rua:         perfil.endereco_rua        ?? "",
@@ -439,12 +462,37 @@ export default function CheckoutPage() {
   const clienteBairroAtual = editandoEndereco ? clienteBairro : (enderecoSalvo?.bairro || clienteBairro)
 
   const [taxaEntrega, setTaxaEntrega] = useState<number>(6.00)
+  // Frete grátis do aniversário de Aragoiânia (lib/freteGratisCampanha): o servidor decide pela distância
+  const [freteCampanha, setFreteCampanha] = useState(false)
+  const [taxaDinamica, setTaxaDinamica] = useState<number>(0)
+
+  // Guarda a escolha "Retirar na loja" enquanto o checkout está aberto — sair pra "Editar"
+  // dados/Perfil e voltar (ou o celular recarregar o app) remontava a página com o padrão
+  // "entrega" sem o cliente perceber, e o pedido saía como entrega com taxa e motoboy
+  // (pedidos BZEX48 e LTM77H, 2026-10-02).
+  const tipoEntregaRestaurado = useRef(false)
+  useEffect(() => {
+    if (!loja_id || tipoEntregaRestaurado.current) return
+    tipoEntregaRestaurado.current = true
+    try {
+      const salvo = sessionStorage.getItem(`checkout_tipo_entrega_${loja_id}`)
+      if (salvo === "retirada" || salvo === "entrega") setTipoEntrega(salvo)
+    } catch {}
+  }, [loja_id])
+  useEffect(() => {
+    if (!loja_id || !tipoEntregaRestaurado.current) return
+    try { sessionStorage.setItem(`checkout_tipo_entrega_${loja_id}`, tipoEntrega) } catch {}
+  }, [loja_id, tipoEntrega])
 
   // Prévia da taxa de entrega — sempre pelo mesmo cálculo do servidor usado na criação
   // real do pedido (rota real via Mapbox, com fallback), pra nunca divergir do que é cobrado.
+  // `cancelado`: troca entrega→retirada com o cálculo de frete da entrega ainda em
+  // andamento fazia a resposta atrasada sobrescrever o R$0 da retirada — tela mostrava
+  // "Retirada · Grátis" mas o total somava a taxa (bug real reportado, 2026-10-02).
   useEffect(() => {
     if (!loja_id) return
-    if (tipoEntrega === "retirada") { setTaxaEntrega(0); return }
+    if (tipoEntrega === "retirada") { setTaxaEntrega(0); setTaxaCalculando(false); return }
+    let cancelado = false
     setTaxaCalculando(true)
     const params = new URLSearchParams({ loja_id, tipo_entrega: tipoEntrega })
     if (clienteLatAtual && clienteLngAtual) {
@@ -454,12 +502,19 @@ export default function CheckoutPage() {
     if (clienteCidadeAtual) params.set("cidade", clienteCidadeAtual)
     if (clienteBairroAtual) params.set("bairro", clienteBairroAtual)
     if (user?.id) params.set("cliente_id", user.id)
+    if (zonaRural) params.set("zona_rural", "1")
     fetch(`/api/frete/calcular?${params}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(json => { if (json && typeof json.taxa_entrega === "number") setTaxaEntrega(json.taxa_entrega) })
+      .then(r => r.json().catch(() => null))
+      .then(json => {
+        if (cancelado || !json) return
+        if (typeof json.taxa_entrega === "number") { setTaxaEntrega(json.taxa_entrega); setFreteCampanha(json.frete_gratis === true); setTaxaDinamica(Number(json.taxa_dinamica) || 0) }
+        // Ponto de entrega incoerente / zona rural sem ponto: avisa antes do cliente tentar pagar (2026-10-28)
+        else if (typeof json.error === "string" && json.error.includes("marque no mapa")) setErro(json.error)
+      })
       .catch(() => {})
-      .finally(() => setTaxaCalculando(false))
-  }, [loja_id, tipoEntrega, clienteLatAtual, clienteLngAtual, clienteCidadeAtual, clienteBairroAtual, user?.id])
+      .finally(() => { if (!cancelado) setTaxaCalculando(false) })
+    return () => { cancelado = true }
+  }, [loja_id, tipoEntrega, clienteLatAtual, clienteLngAtual, clienteCidadeAtual, clienteBairroAtual, user?.id, zonaRural])
 
   // Polling PIX — verifica a cada 4s se o pagamento foi confirmado
   useEffect(() => {
@@ -469,7 +524,8 @@ export default function CheckoutPage() {
       if (data?.status && data.status !== "aguardando_pagamento") {
         clearInterval(interval)
         setPixModal(false)
-        clear()
+        clear(); limparCupomSacola()
+        try { localStorage.removeItem("arago_pix_pendente") } catch {}
         const stored = JSON.parse(localStorage.getItem("arago_pedido_ativo") ?? "{}")
         router.push(`/pedido/${stored.codigo || pedidoId}`)
       }
@@ -478,8 +534,8 @@ export default function CheckoutPage() {
   }, [pixModal, pedidoId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const taxaBase       = taxaEntrega
-  const freteGratis    = cupomValido?.tipo === "frete_gratis"
-  const freteComDesconto = cupomValido?.tipo === "frete_percentual"
+  const freteGratis    = cupomValido?.tipo === "frete_gratis" || (freteCampanha && tipoEntrega !== "retirada")
+  const freteComDesconto = !freteGratis && cupomValido?.tipo === "frete_percentual"
   const taxa           = freteGratis ? 0
     : freteComDesconto ? Math.round(taxaBase * (1 - cupomValido!.valor / 100) * 100) / 100
     : taxaBase
@@ -489,22 +545,34 @@ export default function CheckoutPage() {
       ? Math.round(subtotal * (cupomValido.valor / 100) * 100) / 100
       : Math.min(cupomValido.valor, subtotal)
     : 0
-  const totalFinal  = Math.max(0, subtotal - desconto) + taxa
+  const dinamica    = tipoEntrega === "retirada" ? 0 : taxaDinamica
+  // Promoção Chegô 10% (lib/promoChego): o servidor confere e devolve 409 se o cadastro já usou
+  const promo       = descontoPromo(items.map(i => ({ produto_id: i.produto_id ?? i.id, preco: i.preco, quantidade: i.quantidade })), usadosPromo)
+  const descPromo   = Math.min(promo.total, Math.max(0, subtotal - desconto))
+  const totalFinal  = Math.max(0, subtotal - desconto - descPromo) + taxa + dinamica
+  const divide      = dividir && !!pagamento2 && pagamento !== "google_pay"
+  const valor1      = divide ? Number(valor1Txt.replace(/\./g, "").replace(",", ".")) || 0 : totalFinal
+  const valor2      = divide ? Math.round((totalFinal - valor1) * 100) / 100 : 0
+  const usaForma    = (f: string) => pagamento === f || (divide && pagamento2 === f)
+  const valorDe     = (f: string) => !divide ? (pagamento === f ? totalFinal : 0) : (pagamento === f ? valor1 : 0) + (pagamento2 === f ? valor2 : 0)
 
-  async function aplicarCupom() {
-    if (!cupomInput.trim()) return
-    setValidandoCupom(true); setCupomErro(""); setCupomValido(null)
-    const params = new URLSearchParams({
-      codigo:   cupomInput.trim().toUpperCase(),
-      subtotal: String(subtotal),
-      ...(loja_id ? { loja_id } : {}),
-      ...(clienteCoords?.lat && clienteCoords.lng ? { lat: String(clienteCoords.lat), lng: String(clienteCoords.lng) } : {}),
-    })
-    const res  = await fetch(`/api/cupom/validar?${params}`)
-    const json = await res.json()
-    if (!res.ok) { setCupomErro(json.error ?? "Cupom inválido."); setValidandoCupom(false); return }
-    setCupomValido(json); setValidandoCupom(false)
-  }
+  // Cupom vem da Sacola (layout da proposta). Aqui só confere de novo com o endereço escolhido
+  // e com o subtotal atual; se não valer mais, avisa e o pedido segue sem desconto.
+  const codigoSacola = typeof window !== "undefined" ? lerCupomSacola(loja_id) : null
+  useEffect(() => {
+    if (!codigoSacola || !loja_id || subtotal <= 0) { setCupomValido(null); setCupomErro(""); return }
+    let cancelado = false
+    setValidandoCupom(true)
+    validarCupom({ codigo: codigoSacola, lojaId: loja_id, subtotal, lat: clienteLatAtual, lng: clienteLngAtual, cidade: clienteCidadeAtual})
+      .then(r => {
+        if (cancelado) return
+        if (r.ok) { setCupomValido(r.cupom); setCupomErro("") }
+        else { setCupomValido(null); setCupomErro(`O cupom ${codigoSacola} não vale neste pedido: ${r.erro}`) }
+      })
+      .finally(() => { if (!cancelado) setValidandoCupom(false) })
+    return () => { cancelado = true }
+  }, [codigoSacola, loja_id, subtotal, clienteLatAtual, clienteLngAtual, clienteCidadeAtual])
+
 
   function fmtCardNumber(v: string) {
     return v.replace(/\D/g, "").slice(0, 16).replace(/(.{4})/g, "$1 ").trim()
@@ -516,190 +584,30 @@ export default function CheckoutPage() {
 
   if (items.length === 0 && !pedidoCodigo) {
     return (
-      <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
-        <svg width="72" height="72" viewBox="0 0 72 72" fill="none">
-          <circle cx="36" cy="36" r="34" fill="#f3f4f6" stroke="#e5e7eb" strokeWidth="2"/>
-          <path d="M 20 24 L 24 24 L 30 46 L 50 46 L 54 30 L 28 30" stroke="#9CA3AF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-          <circle cx="31" cy="50" r="3" fill="#9CA3AF"/>
-          <circle cx="47" cy="50" r="3" fill="#9CA3AF"/>
-          <line x1="24" y1="24" x2="19" y2="20" stroke="#9CA3AF" strokeWidth="2.5" strokeLinecap="round"/>
-        </svg>
-        <p style={{ color: "#6B7280", fontWeight: 600 }}>Seu carrinho está vazio</p>
-        <Link href="/" style={{ color: "#DC2626", fontWeight: 700 }}>← Ver lojas</Link>
+      <div className="cn checkout-novo">
+        <div className="vazio" style={{ paddingTop: 120 }}>
+          <div style={{ fontSize: 52 }}>🛍️</div>
+          <div className="h2" style={{ margin: "12px 0 6px" }}>Sua sacola está vazia</div>
+          <Link className="btn btn-p" href="/" style={{ marginTop: 18 }}>Ver lojas</Link>
+        </div>
       </div>
     )
   }
 
   if (pedidoCodigo) {
     return (
-      <div style={{ minHeight: "100vh", background: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-        <style>{`
-          @keyframes confettiFall0{0%{transform:translateY(-10px) rotate(0deg);opacity:1}100%{transform:translateY(80px) rotate(360deg);opacity:0}}
-          @keyframes confettiFall1{0%{transform:translateY(-10px) rotate(0deg);opacity:1}100%{transform:translateY(70px) rotate(-270deg);opacity:0}}
-          @keyframes confettiFall2{0%{transform:translateY(-8px) rotate(0deg);opacity:1}100%{transform:translateY(90px) rotate(400deg);opacity:0}}
-          @keyframes confettiFall3{0%{transform:translateY(-12px) rotate(45deg);opacity:1}100%{transform:translateY(75px) rotate(-330deg);opacity:0}}
-          @keyframes confettiFall4{0%{transform:translateY(-6px) rotate(20deg);opacity:1}100%{transform:translateY(85px) rotate(300deg);opacity:0}}
-          @keyframes floatIcon{0%,100%{transform:translateY(0px) rotate(-5deg)}50%{transform:translateY(-8px) rotate(3deg)}}
-          @keyframes successPulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,0.3)}50%{box-shadow:0 0 0 12px rgba(220,38,38,0)}}
-        `}</style>
+      <div className="cn checkout-novo" style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 22 }}>
         <div style={{ maxWidth: 400, width: "100%", textAlign: "center" }}>
-
-          {/* Ícone de celebração — confete + corneta ultrarrealista */}
-          <div style={{ position: "relative", display: "inline-block", marginBottom: 20 }}>
-            {/* Partículas de confete animadas */}
-            {[
-              { color: "#f97316", shape: "rect", x: -28, delay: "0s", dur: "2.2s", anim: 0 },
-              { color: "#3b82f6", shape: "circle", x: 30, delay: "0.3s", dur: "2.5s", anim: 1 },
-              { color: "#a855f7", shape: "rect", x: -42, delay: "0.6s", dur: "1.9s", anim: 2 },
-              { color: "#ec4899", shape: "star", x: 48, delay: "0.1s", dur: "2.8s", anim: 3 },
-              { color: "#22c55e", shape: "rect", x: 14, delay: "0.8s", dur: "2.1s", anim: 4 },
-              { color: "#eab308", shape: "circle", x: -16, delay: "0.4s", dur: "2.4s", anim: 1 },
-              { color: "#DC2626", shape: "rect", x: 38, delay: "0.9s", dur: "2.3s", anim: 0 },
-            ].map((p, i) => (
-              <div key={i} style={{
-                position: "absolute", top: 0, left: "50%",
-                marginLeft: p.x, marginTop: -18,
-                animation: `confettiFall${p.anim} ${p.dur} ${p.delay} ease-in infinite`,
-                pointerEvents: "none",
-              }}>
-                {p.shape === "rect" && <div style={{ width: 7, height: 10, background: p.color, borderRadius: 2, transform: `rotate(${i * 37}deg)` }} />}
-                {p.shape === "circle" && <div style={{ width: 8, height: 8, background: p.color, borderRadius: "50%" }} />}
-                {p.shape === "star" && (
-                  <svg width="10" height="10" viewBox="0 0 10 10"><polygon points="5,1 6.2,4 9.5,4 7,6 8,9 5,7 2,9 3,6 0.5,4 3.8,4" fill={p.color}/></svg>
-                )}
-              </div>
-            ))}
-
-            {/* Corneta de festa SVG ultrarrealista */}
-            <div style={{ animation: "floatIcon 3s ease-in-out infinite", display: "inline-block" }}>
-              <svg width="96" height="96" viewBox="0 0 100 100" fill="none">
-                <defs>
-                  <linearGradient id="coneGold" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stopColor="#FFD700"/>
-                    <stop offset="40%" stopColor="#FFC107"/>
-                    <stop offset="100%" stopColor="#F59E0B"/>
-                  </linearGradient>
-                  <linearGradient id="coneShad" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="rgba(0,0,0,0.18)"/>
-                    <stop offset="100%" stopColor="transparent"/>
-                  </linearGradient>
-                  <linearGradient id="ribbonBlue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#60a5fa"/>
-                    <stop offset="100%" stopColor="#2563eb"/>
-                  </linearGradient>
-                  <linearGradient id="ribbonPink" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#f472b6"/>
-                    <stop offset="100%" stopColor="#db2777"/>
-                  </linearGradient>
-                </defs>
-
-                {/* Sombra da corneta */}
-                <ellipse cx="42" cy="88" rx="20" ry="5" fill="rgba(0,0,0,0.12)"/>
-
-                {/* Corpo da corneta (cone) */}
-                <path d="M 18 78 L 62 32 L 72 42 Z" fill="url(#coneGold)"/>
-                {/* Listras da corneta */}
-                <path d="M 24 72 L 58 38" stroke="#B8860B" strokeWidth="3.5" strokeLinecap="round" opacity="0.4"/>
-                <path d="M 32 80 L 66 46" stroke="#B8860B" strokeWidth="3.5" strokeLinecap="round" opacity="0.4"/>
-                <path d="M 40 85 L 70 55" stroke="#B8860B" strokeWidth="3" strokeLinecap="round" opacity="0.3"/>
-                {/* Sombra lateral */}
-                <path d="M 18 78 L 62 32 L 72 42 Z" fill="url(#coneShad)"/>
-                {/* Boca da corneta */}
-                <ellipse cx="67" cy="37" rx="8" ry="8" fill="#E6B800" stroke="#B8860B" strokeWidth="1.5"/>
-                <ellipse cx="67" cy="37" rx="5" ry="5" fill="#FFD700"/>
-                {/* Ponta da corneta */}
-                <circle cx="19" cy="79" r="4" fill="#F59E0B" stroke="#D97706" strokeWidth="1"/>
-                <circle cx="19" cy="79" r="2" fill="#FFD700"/>
-
-                {/* Fitas saindo */}
-                {/* Fita azul */}
-                <path d="M 62 28 Q 50 15 58 5 Q 66 -2 72 8" stroke="url(#ribbonBlue)" strokeWidth="3.5" fill="none" strokeLinecap="round"/>
-                {/* Fita rosa */}
-                <path d="M 68 32 Q 82 18 76 8 Q 70 0 80 5" stroke="url(#ribbonPink)" strokeWidth="3" fill="none" strokeLinecap="round"/>
-                {/* Fita laranja */}
-                <path d="M 72 38 Q 88 28 85 16 Q 83 8 92 12" stroke="#f97316" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
-
-                {/* Confetes explodindo da boca */}
-                {/* Quadrado laranja */}
-                <rect x="55" y="14" width="7" height="7" rx="1" fill="#f97316" transform="rotate(25 58 17)"/>
-                {/* Círculo verde */}
-                <circle cx="76" cy="16" r="4.5" fill="#22c55e"/>
-                {/* Losango azul */}
-                <rect x="82" y="22" width="6" height="6" rx="1" fill="#3b82f6" transform="rotate(45 85 25)"/>
-                {/* Círculo rosa */}
-                <circle cx="52" cy="8" r="3.5" fill="#ec4899"/>
-                {/* Estrela amarela */}
-                <polygon points="88,8 89.5,12.5 94,12.5 90.5,15 92,19.5 88,17 84,19.5 85.5,15 82,12.5 86.5,12.5" fill="#eab308"/>
-                {/* Pontinhos de brilho */}
-                <circle cx="46" cy="20" r="2" fill="white" opacity="0.9"/>
-                <circle cx="79" cy="28" r="2" fill="white" opacity="0.8"/>
-                <circle cx="60" cy="6" r="1.5" fill="white" opacity="0.7"/>
-              </svg>
-            </div>
+          <div className="ok-ic grande">✓</div>
+          <h1 className="h1" style={{ marginTop: 14 }}>Pedido feito!</h1>
+          <p className="mut" style={{ marginTop: 6, fontSize: 15 }}>A loja vai confirmar em instantes.</p>
+          <div className="cartao" style={{ padding: "20px 18px", margin: "22px 0 18px" }}>
+            <p className="mut" style={{ fontSize: 13 }}>Código do pedido</p>
+            <p className="codigo-grande">#{pedidoCodigo}</p>
+            <p className="mut" style={{ fontSize: 12.5, marginTop: 6 }}>Guarde pra acompanhar e confirmar a entrega.</p>
           </div>
-
-          <h1 style={{ color: "#111827", fontWeight: 900, fontSize: 26, marginBottom: 8 }}>Pedido realizado!</h1>
-          <p style={{ color: "#6B7280", marginBottom: 28, fontSize: 15 }}>
-            Aguarde a confirmação da loja.
-          </p>
-
-          {/* Card do código */}
-          <div style={{
-            background: "linear-gradient(135deg, rgba(220,38,38,0.05), rgba(220,38,38,0.08))",
-            border: "1.5px solid rgba(220,38,38,0.2)", borderRadius: 20,
-            padding: "22px 28px", marginBottom: 20,
-            boxShadow: "0 4px 20px rgba(220,38,38,0.08)",
-          }}>
-            <p style={{ color: "#9CA3AF", fontSize: 12, fontWeight: 600, letterSpacing: 0.5, marginBottom: 6, textTransform: "uppercase" }}>Código do pedido</p>
-            <p style={{ color: "#DC2626", fontWeight: 900, fontSize: "clamp(28px, 9vw, 42px)", letterSpacing: "clamp(4px, 2vw, 10px)", lineHeight: 1, marginBottom: 8 }}>#{pedidoCodigo}</p>
-            <div style={{ height: 1, background: "rgba(220,38,38,0.12)", marginBottom: 10 }} />
-            <p style={{ color: "#D1D5DB", fontSize: 11 }}>Guarde este código para rastrear e confirmar a entrega</p>
-          </div>
-
-          {/* Botão acompanhar */}
-          <Link href={`/pedido/${pedidoCodigo}`} style={{
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-            padding: "15px 24px", borderRadius: 16, background: "#DC2626",
-            color: "white", fontWeight: 800, textDecoration: "none", fontSize: 15, marginBottom: 10,
-            boxShadow: "0 4px 16px rgba(220,38,38,0.35)",
-            animation: "successPulse 2.5s ease-in-out infinite",
-          }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/>
-              <circle cx="12" cy="10" r="3" fill="white" stroke="none"/>
-            </svg>
-            Acompanhar pedido →
-          </Link>
-
-          {user && (
-            <Link href="/cliente/perfil" style={{
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-              padding: "14px 24px", borderRadius: 16,
-              background: "#ffffff", border: "1.5px solid #e5e7eb",
-              color: "#374151", fontWeight: 700, textDecoration: "none", fontSize: 14, marginBottom: 10,
-              boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
-            }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6B7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="8" r="4"/>
-                <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
-              </svg>
-              Ver meu perfil
-            </Link>
-          )}
-
-          <Link href="/" style={{
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-            padding: "14px 24px", borderRadius: 16,
-            background: "#F9FAFB", border: "1.5px solid #e5e7eb",
-            color: "#9CA3AF", fontWeight: 600, textDecoration: "none", fontSize: 14,
-          }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z"/>
-              <path d="M3 9V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2"/>
-              <line x1="12" y1="12" x2="12" y2="19"/>
-            </svg>
-            Fazer novo pedido
-          </Link>
+          <Link className="btn btn-p" href={`/pedido/${pedidoCodigo}`}>Acompanhar pedido</Link>
+          <Link className="btn btn-s" href="/" style={{ marginTop: 10 }}>Voltar pro início</Link>
         </div>
       </div>
     )
@@ -744,8 +652,10 @@ export default function CheckoutPage() {
         const { codigo: codigoAtivo, id: idAtivo } = JSON.parse(storedAtivo)
         if (idAtivo) {
           const { data } = await supabase.from("pedidos").select("status").eq("id", idAtivo).maybeSingle()
-          const statusAtivo = ["pendente","aceito","em_preparo","pronto","em_rota"]
-          if (data?.status && statusAtivo.includes(data.status)) {
+          // Qualquer status em andamento. A lista antiga tinha "em_preparo" (não existe; o certo é
+          // "preparando") e não avisava com o pedido em preparo: foi assim que saiu o #CNW8GC
+          // repetindo o #ZT62CC já pago (Dudu Lanches, 05/11/2026).
+          if (data?.status && !["entregue", "cancelado"].includes(data.status)) {
             setPedidoAtivoCodigo(codigoAtivo || idAtivo)
             setPedidoAtivoModal(true)
             return
@@ -754,6 +664,8 @@ export default function CheckoutPage() {
       } catch { /* localStorage corrompido — ignora */ }
     }
 
+    if (tipoEntrega === "entrega" && zonaRural === null) { setErro("Informe se você mora em zona rural ou estrada de chão"); return }
+    if (tipoEntrega === "entrega" && zonaRural && detalheRural.trim().length < 5) { setErro("Descreva como chegar no seu endereço (zona rural)"); return }
     if (nome.trim().length < 5) { setErro("Informe seu nome completo"); return }
     const telDigits = telefone.replace(/\D/g, "")
     if (telDigits.length < 10) { setErro("Informe seu telefone com DDD (ex: 62 9 9999-9999)"); return }
@@ -768,7 +680,7 @@ export default function CheckoutPage() {
     }
 
     // PIX exige CPF (obrigação Asaas/Banco Central para pagamentos PIX)
-    if (pagamento === "pix" && cpfFinal.length !== 11) {
+    if (usaForma("pix") && cpfFinal.length !== 11) {
       setErro("Informe seu CPF para pagar via PIX (obrigatório pelo Banco Central)")
       return
     }
@@ -780,11 +692,19 @@ export default function CheckoutPage() {
     if (tipoEntrega === "retirada") {
       enderecoFinal = `🏪 Retirada na loja — ${lojaData?.endereco ?? ""}`
     } else {
-      const geo    = geoRef.current?.geo
-      const numero = geoRef.current?.numero ?? ""
-      const comp   = geoRef.current?.complemento ?? ""
+      const fonte  = (editandoEndereco || !enderecoSalvo) && mapaRef.current ? mapaRef.current : geoRef.current
+      if (fonte !== geoRef.current) geoRef.current = fonte
+      const geo    = fonte?.geo
+      const numero = fonte?.numero ?? ""
+      const comp   = fonte?.complemento ?? ""
 
-      if (!numero.trim()) { setErro("Informe o número da sua casa/apto no campo Número"); return }
+      const erroEnd = erroEnderecoEntrega(geo?.rua ?? "", geo?.bairro ?? "", numero, comp)
+      if (erroEnd) {
+        // Endereço salvo incompleto → abre o mapa pra completar
+        if (enderecoSalvo && !editandoEndereco) { setEditandoEndereco(true); setErro(`${erroEnd}. Complete o endereço abaixo.`) }
+        else setErro(erroEnd)
+        return
+      }
 
       if (geo && geo.lat !== 0) {
         enderecoFinal = [
@@ -793,7 +713,11 @@ export default function CheckoutPage() {
           [geo.bairro, geo.cidade].filter(Boolean).join(", "),
         ].filter(Boolean).join(" — ")
       } else {
-        enderecoFinal = `Nº ${numero.trim()}${comp ? `, ${comp}` : ""}`
+        enderecoFinal = [
+          [geo?.rua, numero.trim()].filter(Boolean).join(", "),
+          comp.trim(),
+          [geo?.bairro, geo?.cidade].filter(Boolean).join(", "),
+        ].filter(Boolean).join(" — ")
       }
       latFinal = geo?.lat && geo.lat !== 0 ? geo.lat : null
       lngFinal = geo?.lng && geo.lng !== 0 ? geo.lng : null
@@ -801,9 +725,14 @@ export default function CheckoutPage() {
 
     if (!loja_id) { setErro("Erro: loja não identificada"); return }
 
-    if (pagamento === "dinheiro" && precisaTroco) {
-      const valor = parseFloat(trocoPara.replace(",", "."))
-      if (!valor || valor <= totalFinal) { setErro(`Informe um valor maior que o total (R$ ${totalFinal.toFixed(2)}) pra calcular o troco`); return }
+    if (dividir && pagamento === "google_pay") { setErro("Google Pay não pode ser dividido. Escolha outra forma."); return }
+    if (dividir && !pagamento2) { setErro("Escolha a segunda forma de pagamento."); return }
+    if (divide && (valor1 < 1 || valor2 < 1)) { setErro(`Cada forma precisa ser de pelo menos R$ 1,00. O total é ${brl(totalFinal)}.`); return }
+
+    if (usaForma("dinheiro") && precisaTroco) {
+      const valor = parseFloat(trocoPara.replace(/\./g, "").replace(",", "."))
+      const emDinheiro = valorDe("dinheiro")
+      if (!valor || valor <= emDinheiro) { setErro(`Informe um valor maior que ${brl(emDinheiro)} pra calcular o troco`); return }
     }
 
     setErro("")
@@ -819,12 +748,13 @@ export default function CheckoutPage() {
       `Cliente: ${nome.trim()}`,
       `Tel: ${telefone.trim()}`,
       tipoEntrega === "retirada" ? "🏪 RETIRADA NA LOJA" : "",
-      pagamento === "maquininha" ? `💳 Maquininha: ${tipoMaquininha === "credito" ? "Crédito" : "Débito"}` : "",
+      usaForma("maquininha") ? `💳 Maquininha: ${tipoMaquininha === "credito" ? "Crédito" : "Débito"}` : "",
+      tipoEntrega === "entrega" && zonaRural ? `🚜 Zona rural / estrada de chão — Como chegar: ${detalheRural.trim()}` : "",
       obs.trim(),
     ].filter(Boolean).join(" | ")
 
-    const trocoParaEnviar = pagamento === "dinheiro" && precisaTroco && trocoPara
-      ? parseFloat(trocoPara.replace(",", "."))
+    const trocoParaEnviar = usaForma("dinheiro") && precisaTroco && trocoPara
+      ? parseFloat(trocoPara.replace(/\./g, "").replace(",", "."))
       : null
 
     // Cria pedido via API server-side — preços validados no servidor, nunca no cliente
@@ -836,7 +766,10 @@ export default function CheckoutPage() {
         cliente_id:       user?.id ?? null,
         items:            items.map(i => ({ produto_id: i.produto_id ?? i.id, quantidade: i.quantidade, observacao: i.observacao ?? "", adicionais: i.adicionais ?? [] })),
         forma_pagamento:  pagamento,
+        forma_pagamento_2: divide ? pagamento2 : null,
+        valor_pagamento_1: divide ? valor1 : null,
         tipo_entrega:     tipoEntrega,
+        zona_rural:       tipoEntrega === "entrega" ? zonaRural === true : false,
         endereco_entrega: enderecoFinal,
         lat_entrega:      latFinal,
         lng_entrega:      lngFinal,
@@ -845,6 +778,7 @@ export default function CheckoutPage() {
         observacao:       obsCompleta,
         troco_para:       trocoParaEnviar,
         cupom_codigo:     cupomValido?.codigo ?? null,
+        desconto_promo_visto: descPromo,
         nome_cliente:     nome.trim() || null,
         telefone_cliente: telefone.trim() || null,
         email_cliente:    user?.email ?? null,
@@ -853,62 +787,22 @@ export default function CheckoutPage() {
     }).then(r => r.json())
 
     if (criarRes.error || !criarRes.pedido_id) {
+      // Promoção Chegô: cadastro já usou ou a campanha acabou; recalcula o total na tela
+      if (Array.isArray(criarRes.promo_usados)) setUsadosPromo(Number(criarRes.promo_desconto) === 0 ? Object.keys(PROMO_PRODUTOS) : criarRes.promo_usados)
+      // Ponto de entrega incoerente ou zona rural sem ponto: abre o mapa pra marcar (2026-10-28)
+      if (typeof criarRes.error === "string" && criarRes.error.includes("marque no mapa") && tipoEntrega === "entrega") setEditandoEndereco(true)
       setErro(criarRes.error ?? "Erro ao criar pedido. Tente novamente.")
       setEnviando(false)
       return
     }
 
     const { pedido_id: pedidoIdNovo, codigo, total: totalServidor, cliente_push_token } = criarRes
+    if (Number(criarRes.desconto_promo ?? descPromo) > 0) recarregarPromoUsados()
     const pedido = { id: pedidoIdNovo }
     if (cliente_push_token) localStorage.setItem(`arago_tkn_${codigo}`, cliente_push_token)
 
-    // ─── PIX: gera QR code e abre modal ──────────────────────────────────
-    if (pagamento === "pix") {
-      const pixRes = await fetch("/api/pagamento/pix", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          pedido_id:   pedido.id,
-          valor:       totalServidor,
-          nome:        nome.trim(),
-          telefone:    telefone.trim(),
-          email:       user?.email,
-          cpf_cliente: cpfFinal || null,
-          loja_id,
-        }),
-      }).then(r => r.json())
-
-      if (pixRes.error) {
-        setErro("Erro ao gerar PIX: " + pixRes.error)
-        setEnviando(false)
-        return
-      }
-
-      setPedidoId(pedido.id)
-      localStorage.setItem("arago_pedido_ativo", JSON.stringify({ codigo, id: pedido.id }))
-      // Salva no histórico de pedidos de visitantes
-      try {
-        const rawGuest = localStorage.getItem("arago_pedidos_guest")
-        const pedidosGuest: Array<{ codigo: string; id: string; loja_nome: string; total: number; criado_em: string }> =
-          rawGuest ? JSON.parse(rawGuest) : []
-        pedidosGuest.unshift({
-          codigo,
-          id: pedido.id,
-          loja_nome: items[0]?.loja_nome ?? "",
-          total: totalServidor,
-          criado_em: new Date().toISOString(),
-        })
-        localStorage.setItem("arago_pedidos_guest", JSON.stringify(pedidosGuest.slice(0, 20)))
-      } catch {}
-      setPixQrcode(pixRes.qrcode)
-      setPixCopiaECola(pixRes.copia_cola)
-      setPixModal(true)
-      setEnviando(false)
-      return
-    }
-
     // ─── Cartão: processa via Asaas ──────────────────────────────────────
-    if (pagamento === "cartao") {
+    if (usaForma("cartao")) {
       const cpfCartao = (usarSalvo && cardToken) ? (cardCpf || cpfFinal) : cardCpf
       if (cpfCartao.replace(/\D/g, "").length !== 11) {
         setErro("Informe o CPF do titular do cartão")
@@ -982,7 +876,7 @@ export default function CheckoutPage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ pedido_id: pedido.id }),
           }).then(r => r.json()).catch(() => ({}))
-          if (verificar.confirmado) { confirmado = true; break }
+          if (verificar.confirmado || (cartaoRes.payment_id && verificar.confirmados?.includes(cartaoRes.payment_id))) { confirmado = true; break }
           if (verificar.status === "cancelado") {
             setErro("Pagamento recusado. Verifique os dados do cartão e tente novamente.")
             setEnviando(false)
@@ -994,6 +888,54 @@ export default function CheckoutPage() {
           return
         }
       }
+    }
+
+    // ─── PIX: gera QR code e abre modal (depois do cartão quando o pedido tem os dois) ──────────────────────────────────
+    if (usaForma("pix")) {
+      const pixRes = await fetch("/api/pagamento/pix", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pedido_id:   pedido.id,
+          valor:       totalServidor,
+          nome:        nome.trim(),
+          telefone:    telefone.trim(),
+          email:       user?.email,
+          cpf_cliente: cpfFinal || null,
+          loja_id,
+        }),
+      }).then(r => r.json())
+
+      if (pixRes.error) {
+        setErro("Erro ao gerar PIX: " + pixRes.error)
+        setEnviando(false)
+        return
+      }
+
+      setPedidoId(pedido.id)
+      localStorage.setItem("arago_pedido_ativo", JSON.stringify({ codigo, id: pedido.id }))
+      // Salva no histórico de pedidos de visitantes
+      try {
+        const rawGuest = localStorage.getItem("arago_pedidos_guest")
+        const pedidosGuest: Array<{ codigo: string; id: string; loja_nome: string; total: number; criado_em: string }> =
+          rawGuest ? JSON.parse(rawGuest) : []
+        pedidosGuest.unshift({
+          codigo,
+          id: pedido.id,
+          loja_nome: items[0]?.loja_nome ?? "",
+          total: totalServidor,
+          criado_em: new Date().toISOString(),
+        })
+        localStorage.setItem("arago_pedidos_guest", JSON.stringify(pedidosGuest.slice(0, 20)))
+      } catch {}
+      // Sacola só esvazia quando o Pix for pago; se o cliente sair desta tela (foi pagar no app do
+      // banco), o CartProvider confere isso quando ele voltar (lib/cart.tsx)
+      try { localStorage.setItem("arago_pix_pendente", pedido.id) } catch {}
+      setPixQrcode(pixRes.qrcode)
+      setPixCopiaECola(pixRes.copia_cola)
+      setPixModal(true)
+      setEnviando(false)
+      return
     }
 
     if (tipoEntrega === "entrega" && geoRef.current?.geo?.rua) {
@@ -1024,7 +966,7 @@ export default function CheckoutPage() {
     }
 
     // Salva cartão (sem CVV, com token se disponível) se LGPD consentido
-    if (pagamento === "cartao" && salvarCartao && lgpdConsent) {
+    if (usaForma("cartao") && salvarCartao && lgpdConsent) {
       const digits = cardNumber.replace(/\D/g, "")
       const last4  = digits.length >= 4 ? digits.slice(-4) : cartaoSalvo?.last4 ?? ""
       if (last4) {
@@ -1053,7 +995,7 @@ export default function CheckoutPage() {
       })
     } catch {}
 
-    clear()
+    clear(); limparCupomSacola()
     setPedidoCodigo(codigo)
     setPedidoId(pedido.id)
     setEnviando(false)
@@ -1076,654 +1018,416 @@ export default function CheckoutPage() {
     } catch {}
   }
 
-  return (
-    <div style={{ minHeight: "100vh", background: "#f8fafc", overflowX: "hidden" }}>
-      {/* Navbar */}
-      <nav style={{ background: "#ffffff", borderBottom: "1px solid #e5e7eb", position: "sticky", top: 0, zIndex: 40 }}>
-        <div style={{ maxWidth: 680, margin: "0 auto", padding: "14px 20px", display: "flex", alignItems: "center", gap: 12 }}>
-          <button onClick={() => router.back()} style={{ background: "none", border: "none", color: "#6B7280", fontSize: 20, cursor: "pointer" }}>←</button>
-          <p style={{ color: "#111827", fontWeight: 800, fontSize: 16, flex: 1 }}>Finalizar pedido</p>
-          {user ? (
-            <Link href="/cliente/perfil" style={{ color: "#DC2626", fontSize: 12, fontWeight: 700, textDecoration: "none" }}>👤 Perfil</Link>
+  const naLoja = tipoEntrega === "retirada"
+  const descPagamento: Record<string, string> = {
+    pix: "Aprovação na hora",
+    cartao: cartaoSalvo ? `Final ${cartaoSalvo.last4}, pelo app` : "Crédito, pelo app",
+    google_pay: "Pague com sua conta Google",
+    dinheiro: naLoja ? "Pague quando retirar" : "Pague ao entregador",
+    maquininha: naLoja ? "Crédito ou débito, na retirada" : "O entregador leva",
+  }
+  const nomePagamento: Record<string, string> = {
+    pix: "Pix", cartao: "Cartão de crédito", google_pay: "Google Pay",
+    dinheiro: naLoja ? "Dinheiro no balcão" : "Dinheiro",
+    maquininha: naLoja ? "Cartão no balcão" : "Maquininha na entrega",
+  }
+  const opcoesPg = PAGAMENTOS.filter(p => p.platforms.includes(plataforma))
+  // Detalhes de cada forma (layout da proposta, 20/10/2026): aparecem embaixo da forma escolhida,
+  // tanto na lista normal quanto nos blocos de "Pagar com 2 formas".
+  const detalheCartao = (
+        <div className="sub-op" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {cartaoSalvo && usarSalvo && cardToken ? (
+            <>
+              <div className="cartao-salvo">
+                <CardLogo />
+                <span style={{ flex: 1 }}><b>•••• •••• •••• {cartaoSalvo.last4}</b><small>{cartaoSalvo.nome}, validade {cartaoSalvo.validade}</small></span>
+                <button onClick={() => { setCartaoSalvo(null); setCardToken(null); setUsarSalvo(false); localStorage.removeItem("arago_cartao") }}>Trocar</button>
+              </div>
+              {cardCpf.replace(/\D/g, "").length !== 11 && cpf.replace(/\D/g, "").length !== 11 && (perfil?.cpf ?? "").replace(/\D/g, "").length !== 11 && (
+                <label className="campo"><span>CPF do titular *</span>
+                  <input value={cardCpf} onChange={e => {
+                    const d = e.target.value.replace(/\D/g, "").slice(0, 11)
+                    setCardCpf(d.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, "$1.$2.$3-$4").replace(/(\d{3})(\d{3})(\d{1,3})$/, "$1.$2.$3"))
+                  }} placeholder="000.000.000-00" inputMode="numeric" /></label>
+              )}
+            </>
           ) : (
-            <Link href="/cliente/entrar" style={{ color: "#9CA3AF", fontSize: 12, fontWeight: 600, textDecoration: "none" }}>Entrar</Link>
-          )}
-        </div>
-      </nav>
-
-      <div style={{ maxWidth: 680, margin: "0 auto", padding: "24px 20px", display: "flex", flexDirection: "column", gap: 20 }}>
-
-        {/* Toggle Retirada / Entrega */}
-        <div style={{ background: "#ffffff", borderRadius: 16, border: "1px solid #e5e7eb", padding: "18px" }}>
-          <p style={{ color: "#6B7280", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 12 }}>Como você quer receber?</p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
-            {([
-              { value: "entrega", label: "🛵 Receber em casa", sub: "Motoboy leva até você" },
-              { value: "retirada", label: "🏪 Retirar na loja", sub: "Você busca no local · Grátis" },
-            ] as const).map(opt => (
-              <button key={opt.value} onClick={() => setTipoEntrega(opt.value)} style={{
-                padding: "12px", borderRadius: 12, cursor: "pointer", textAlign: "left", transition: "all 0.15s",
-                background: tipoEntrega === opt.value ? "rgba(220,38,38,0.08)" : "#F9FAFB",
-                border: tipoEntrega === opt.value ? "1px solid rgba(220,38,38,0.4)" : "1px solid #E5E7EB",
-              }}>
-                <p style={{ color: tipoEntrega === opt.value ? "#DC2626" : "#111827", fontWeight: 700, fontSize: 13 }}>{opt.label}</p>
-                <p style={{ color: tipoEntrega === opt.value ? "rgba(220,38,38,0.7)" : "#6B7280", fontSize: 11, marginTop: 3 }}>{opt.sub}</p>
-              </button>
-            ))}
-          </div>
-          {tipoEntrega === "retirada" && lojaData?.endereco && (
-            <div style={{ marginTop: 12, padding: "10px 14px", borderRadius: 10, background: "rgba(220,38,38,0.04)", border: "1px solid rgba(220,38,38,0.2)" }}>
-              <p style={{ color: "#6B7280", fontSize: 11, fontWeight: 600, marginBottom: 2 }}>Endereço da loja</p>
-              <p style={{ color: "#111827", fontSize: 13, fontWeight: 600 }}>📍 {lojaData.endereco}</p>
-            </div>
-          )}
-        </div>
-
-        {/* Resumo */}
-        <div style={{ background: "#ffffff", borderRadius: 16, border: "1px solid #e5e7eb", overflow: "hidden" }}>
-          <div style={{ padding: "14px 18px", borderBottom: "1px solid #F3F4F6" }}>
-            <p style={{ color: "#111827", fontWeight: 700, fontSize: 14 }}>🛒 Resumo do pedido</p>
-            {items[0] && <p style={{ color: "#9CA3AF", fontSize: 12, marginTop: 2 }}>{items[0].loja_nome}</p>}
-          </div>
-          <div style={{ padding: "12px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
-            {items.map(i => (
-              <div key={i.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0, flex: 1 }}>
-                  <span style={{ background: "rgba(220,38,38,0.10)", color: "#DC2626", fontWeight: 700, fontSize: 12, padding: "2px 8px", borderRadius: 6, flexShrink: 0 }}>
-                    {i.quantidade}×
-                  </span>
-                  <span style={{ color: "#374151", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{i.nome}</span>
-                </div>
-                <span style={{ color: "#6B7280", fontSize: 14, flexShrink: 0 }}>R$ {(i.preco * i.quantidade).toFixed(2)}</span>
+            <>
+              <label className="campo"><span>Número do cartão *</span>
+                <input value={cardNumber} onChange={e => setCardNumber(fmtCardNumber(e.target.value))} placeholder="0000 0000 0000 0000" inputMode="numeric" autoComplete="cc-number" /></label>
+              <label className="campo"><span>Nome no cartão *</span>
+                <input value={cardName} onChange={e => setCardName(e.target.value.toUpperCase())} placeholder="JOÃO A SILVA" autoCapitalize="characters" autoComplete="cc-name" /></label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <label className="campo"><span>Validade *</span>
+                  <input value={cardExpiry} onChange={e => setCardExpiry(fmtExpiry(e.target.value))} placeholder="MM/AA" inputMode="numeric" autoComplete="cc-exp" /></label>
+                <label className="campo"><span>CVV *</span>
+                  <input value={cardCvv} onChange={e => setCardCvv(e.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="•••" type="password" inputMode="numeric" autoComplete="cc-csc" /></label>
               </div>
-            ))}
-          </div>
-          <div style={{ padding: "12px 18px", borderTop: "1px solid #F3F4F6", display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#9CA3AF" }}>
-              <span>Subtotal</span><span>R$ {subtotal.toFixed(2)}</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#9CA3AF" }}>
-              <span>Taxa de entrega</span>
-              <span style={{ color: taxa === 0 ? "#22c55e" : freteComDesconto ? "#22c55e" : undefined }}>
-                {tipoEntrega === "retirada" ? "🏪 Retirada · Grátis"
-                  : freteGratis ? <>🎟️ Grátis <s style={{ opacity: 0.5 }}>R$ {taxaBase.toFixed(2)}</s></>
-                  : taxaCalculando ? "Calculando..."
-                  : freteComDesconto ? <>🎟️ R$ {taxa.toFixed(2)} <s style={{ opacity: 0.5 }}>R$ {taxaBase.toFixed(2)}</s></>
-                  : taxa === 0 ? "Grátis"
-                  : `R$ ${taxa.toFixed(2)}`}
-              </span>
-            </div>
-            {desconto > 0 && (
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#22c55e" }}>
-                <span>🎟️ Cupom {cupomValido?.codigo}</span>
-                <span>− R$ {desconto.toFixed(2)}</span>
-              </div>
-            )}
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 16, fontWeight: 800, color: "#111827", marginTop: 4 }}>
-              <span>Total</span><span>R$ {totalFinal.toFixed(2)}</span>
-            </div>
-          </div>
-
-          {/* Cupom */}
-          <div style={{ padding: "14px 18px", borderTop: "1px solid #F3F4F6" }}>
-            {cupomValido ? (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderRadius: 10, background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}>
-                <p style={{ color: "#22c55e", fontWeight: 700, fontSize: 13 }}>
-                  🎟️ {cupomValido.codigo} — {cupomValido.tipo === "percentual" ? `${cupomValido.valor}% de desconto`
-                    : cupomValido.tipo === "frete_gratis" ? "Frete grátis"
-                    : cupomValido.tipo === "frete_percentual" ? `${cupomValido.valor}% de desconto no frete`
-                    : `R$ ${cupomValido.valor.toFixed(2)} de desconto`}
-                </p>
-                <button onClick={() => { setCupomValido(null); setCupomInput("") }} style={{ background: "none", border: "none", color: "#9CA3AF", cursor: "pointer", fontSize: 16 }}>✕</button>
-              </div>
-            ) : (
-              <div style={{ display: "flex", gap: 8 }}>
-                <input
-                  value={cupomInput}
-                  onChange={e => { setCupomInput(e.target.value.toUpperCase()); setCupomErro("") }}
-                  onKeyDown={e => e.key === "Enter" && aplicarCupom()}
-                  placeholder="Código do cupom"
-                  style={{
-                    flex: 1, padding: "10px 14px", borderRadius: 10, fontSize: 14, fontFamily: "monospace", letterSpacing: 1,
-                    background: "#F9FAFB", border: cupomErro ? "1px solid rgba(239,68,68,0.4)" : "1px solid #E5E7EB",
-                    color: "#111827", outline: "none",
-                  }}
-                />
-                <button onClick={aplicarCupom} disabled={!cupomInput.trim() || validandoCupom} style={{
-                  padding: "10px 16px", borderRadius: 10, border: "1px solid #E5E7EB",
-                  background: cupomInput.trim() ? "rgba(220,38,38,0.08)" : "#F5F5F5",
-                  color: cupomInput.trim() ? "#DC2626" : "#9CA3AF",
-                  fontWeight: 700, fontSize: 13, cursor: cupomInput.trim() ? "pointer" : "default",
-                }}>
-                  {validandoCupom ? "..." : "Aplicar"}
-                </button>
-              </div>
-            )}
-            {cupomErro && <p style={{ color: "#EF4444", fontSize: 12, marginTop: 6, fontWeight: 600 }}>{cupomErro}</p>}
-          </div>
-        </div>
-
-        {/* Dados */}
-        <div style={{ background: "#ffffff", borderRadius: 16, border: "1px solid #e5e7eb", padding: "18px 18px", display: "flex", flexDirection: "column", gap: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <p style={{ color: "#111827", fontWeight: 700, fontSize: 14 }}>📋 Seus dados</p>
-            {!user && (
-              <Link href="/cliente/entrar" style={{ color: "#DC2626", fontSize: 12, fontWeight: 700, textDecoration: "none" }}>
-                Entrar para salvar dados →
-              </Link>
-            )}
-          </div>
-
-          {user && (nome || perfil?.nome) ? (
-            /* Usuário logado — mostra dados do perfil, sem redigitar (nome só) */
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <div style={{ background: "#f8fafc", borderRadius: 12, padding: "14px 16px", border: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(220,38,38,0.08)", border: "2px solid rgba(220,38,38,0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  {user.user_metadata?.avatar_url
-                    ? <img src={user.user_metadata.avatar_url} style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} />
-                    : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ color: "#111827", fontWeight: 700, fontSize: 14 }}>{nome || perfil?.nome}</p>
-                  {(telefone || perfil?.telefone) && <p style={{ color: "#9CA3AF", fontSize: 12 }}>{telefone || perfil?.telefone}</p>}
-                </div>
-                <Link href="/cliente/alterar-dados" style={{ color: "#DC2626", fontSize: 12, fontWeight: 700, textDecoration: "none", flexShrink: 0 }}>
-                  Editar
-                </Link>
-              </div>
-              {/* Cadastro antigo sem telefone salvo — pede aqui mesmo, sem sair do checkout */}
-              {!(telefone || perfil?.telefone) && (
-                <div>
-                  <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
-                    Seu WhatsApp * <span style={{ fontWeight: 400, color: "#9CA3AF" }}>(seu cadastro está sem telefone)</span>
-                  </label>
-                  <input
-                    value={telefone} onChange={e => setTelefone(e.target.value)}
-                    placeholder="(64) 9 9999-1234" inputMode="tel"
-                    style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 16, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", boxSizing: "border-box" }}
-                  />
-                </div>
-              )}
-            </div>
-          ) : (
-            /* Não logado — pede os dados */
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
-                <div>
-                  <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Seu nome *</label>
-                  <input
-                    value={nome} onChange={e => setNome(e.target.value)}
-                    placeholder="João Silva"
-                    style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 16, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", boxSizing: "border-box" }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
-                    WhatsApp *
-                  </label>
-                  <input
-                    value={telefone} onChange={e => setTelefone(e.target.value)}
-                    placeholder="(64) 9 9999-1234" inputMode="tel"
-                    style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 16, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", boxSizing: "border-box" }}
-                  />
-                </div>
-              </div>
-              {/* CPF: sempre visível no PIX, oculto nos outros meios quando já salvo */}
-              {(pagamento === "pix" || !(user && (perfil?.cpf || user?.user_metadata?.cpf))) && (
-                <div>
-                  <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>
-                    CPF{pagamento === "pix"
-                      ? <span style={{ color: "#DC2626", fontWeight: 600 }}> * obrigatório para PIX</span>
-                      : <span style={{ color: "#9CA3AF", fontWeight: 400 }}> (opcional)</span>
-                    }
-                  </label>
-                  <input
-                    value={cpf} onChange={e => setCpf(e.target.value)}
-                    placeholder="000.000.000-00" inputMode="numeric" maxLength={14}
-                    style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 16, background: "#F9FAFB", border: `1px solid ${pagamento === "pix" && cpf.replace(/\D/g,"").length !== 11 ? "#FCA5A5" : "#E5E7EB"}`, color: "#111827", outline: "none", boxSizing: "border-box" }}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Endereço — só para entrega */}
-          {tipoEntrega === "entrega" && (
-            <div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                <label style={{ color: "#6B7280", fontSize: 12, fontWeight: 600 }}>📍 Local de entrega *</label>
-                {enderecoSalvo && !editandoEndereco && (
-                  <button
-                    onClick={() => setEditandoEndereco(true)}
-                    style={{ background: "none", border: "none", color: "#DC2626", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 0 }}>
-                    Editar
-                  </button>
-                )}
-              </div>
-
-              {enderecoSalvo && !editandoEndereco ? (
-                /* Card do endereço salvo */
-                <div style={{
-                  background: "#F9FAFB", border: "1px solid #E5E7EB", borderRadius: 12,
-                  padding: "14px 16px", display: "flex", alignItems: "flex-start", gap: 10,
-                }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(220,38,38,0.08)", border: "1px solid rgba(220,38,38,0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
-                    </svg>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ color: "#111827", fontSize: 14, fontWeight: 700, marginBottom: 2 }}>
-                      {enderecoSalvo.rua}{enderecoSalvo.numero ? `, ${enderecoSalvo.numero}` : ""}
-                    </p>
-                    <p style={{ color: "#6B7280", fontSize: 12 }}>
-                      {[enderecoSalvo.complemento, enderecoSalvo.bairro, enderecoSalvo.cidade].filter(Boolean).join(" · ")}
-                    </p>
-                    <p style={{ color: "#22c55e", fontSize: 11, fontWeight: 600, marginTop: 4 }}>
-                      ✓ Endereço salvo
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                /* Mapa completo */
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  <EnderecoMapa
-                    fallbackLat={lojaData?.lat}
-                    fallbackLng={lojaData?.lng}
-                    onResult={(geo, numero, complemento) => {
-                      geoRef.current = { geo, numero, complemento }
-                      if (geo.lat && geo.lng) setClienteCoords({ lat: geo.lat, lng: geo.lng })
-                      if (geo.cidade) setClienteCidade(geo.cidade)
-                      if (geo.bairro) setClienteBairro(geo.bairro)
-                    }}
-                  />
-                  {editandoEndereco && (
-                    <button
-                      onClick={() => {
-                        const g = geoRef.current
-                        if (g) {
-                          const novoEndereco: EnderecoSalvo = {
-                            display: [g.geo.rua, g.numero, g.geo.bairro, g.geo.cidade].filter(Boolean).join(", "),
-                            rua: g.geo.rua,
-                            numero: g.numero,
-                            bairro: g.geo.bairro,
-                            cidade: g.geo.cidade,
-                            complemento: g.complemento,
-                            lat: g.geo.lat,
-                            lng: g.geo.lng,
-                          }
-                          setEnderecoSalvo(novoEndereco)
-                          localStorage.setItem("arago_endereco_salvo", JSON.stringify(novoEndereco))
-                          // Persiste no banco para outros dispositivos
-                          if (user && perfil) {
-                            salvarPerfil(perfil.nome, perfil.telefone, {
-                              rua: g.geo.rua, numero: g.numero, bairro: g.geo.bairro,
-                              cidade: g.geo.cidade, complemento: g.complemento,
-                            }).catch(() => {})
-                          }
-                        }
-                        setEditandoEndereco(false)
-                      }}
-                      style={{
-                        width: "100%", padding: "12px", borderRadius: 12, border: "none",
-                        background: "#DC2626", color: "white", fontWeight: 800, fontSize: 14,
-                        cursor: "pointer",
-                      }}
-                    >
-                      ✓ Usar este endereço
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Pagamento */}
-        <div style={{ background: "#ffffff", borderRadius: 16, border: "1px solid #e5e7eb", overflow: "hidden" }}>
-          <p style={{ color: "#111827", fontWeight: 700, fontSize: 14, padding: "16px 18px 12px" }}>Forma de pagamento</p>
-
-          {/* Lista vertical estilo iFood */}
-          {PAGAMENTOS.filter(p => p.platforms.includes(plataforma)).map((p, idx, arr) => {
-            const ativo = pagamento === p.value
-            const isLast = idx === arr.length - 1
-            return (
-              <button key={p.value} onClick={() => { if (!p.breve) setPagamento(p.value) }} disabled={p.breve} style={{
-                width: "100%", padding: "14px 18px",
-                display: "flex", alignItems: "center", gap: 14,
-                background: ativo ? "rgba(220,38,38,0.05)" : "transparent",
-                border: "none",
-                borderBottom: isLast ? "none" : "1px solid #F3F4F6",
-                cursor: p.breve ? "default" : "pointer", textAlign: "left",
-                opacity: p.breve ? 0.5 : 1,
-              }}>
-                {/* Ícone */}
-                <div style={{
-                  width: p.value === "google_pay" ? 72 : 44,
-                  height: 44, borderRadius: 12, flexShrink: 0,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  background: ativo ? "rgba(220,38,38,0.08)" : "#F9FAFB",
-                  border: ativo ? "1.5px solid rgba(220,38,38,0.25)" : "1px solid #E5E7EB",
-                  overflow: "hidden",
-                  padding: p.value === "google_pay" ? "0 8px" : 0,
-                }}>
-                  <PaymentIcon method={p.value} />
-                </div>
-
-                {/* Texto */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <p style={{ color: ativo ? "#DC2626" : "#111827", fontWeight: 700, fontSize: 14 }}>{p.label}</p>
-                    {p.breve && <span style={{ fontSize: 10, fontWeight: 700, color: "#6B7280", background: "#F3F4F6", borderRadius: 6, padding: "2px 6px" }}>Em breve</span>}
-                  </div>
-                  <p style={{ color: "#9CA3AF", fontSize: 12, marginTop: 2 }}>
-                    {p.value === "pix"        && "Confirmação imediata · sem taxas"}
-                    {p.value === "cartao"     && (cartaoSalvo ? `•••• ${cartaoSalvo.last4} — ${cartaoSalvo.nome}` : "Crédito ou débito")}
-                    {p.value === "google_pay" && "Pague com sua conta Google"}
-                    {p.value === "dinheiro"   && "Pague em dinheiro na entrega"}
-                    {p.value === "maquininha" && "Cartão na maquininha do entregador"}
-                  </p>
-                </div>
-
-                {/* Radio */}
-                <div style={{
-                  width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
-                  border: ativo ? "6px solid #DC2626" : "2px solid #D1D5DB",
-                  background: "white",
-                }} />
-              </button>
-            )
-          })}
-
-          {/* Form de cartão — aparece quando selecionado */}
-          {pagamento === "cartao" && (
-            <div style={{ padding: "16px 18px", borderTop: "1px solid #F3F4F6", display: "flex", flexDirection: "column", gap: 12 }}>
-
-              {/* Cartão salvo com token — UI compacta */}
-              {cartaoSalvo && usarSalvo && cardToken ? (
-                <>
-                  <div style={{ background: "#1E293B", borderRadius: 14, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
-                    <CardLogo />
-                    <div style={{ flex: 1 }}>
-                      <p style={{ color: "white", fontWeight: 700, fontSize: 14 }}>•••• •••• •••• {cartaoSalvo.last4}</p>
-                      <p style={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}>{cartaoSalvo.nome} · {cartaoSalvo.validade}</p>
-                    </div>
-                    <button onClick={() => { setCartaoSalvo(null); setCardToken(null); setUsarSalvo(false); localStorage.removeItem("arago_cartao") }}
-                      style={{ background: "rgba(255,255,255,0.15)", border: "none", color: "white", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>
-                      Trocar
-                    </button>
-                  </div>
-                  {/* CPF do titular só se ainda não tiver */}
-                  {cardCpf.replace(/\D/g, "").length !== 11 && cpf.replace(/\D/g, "").length !== 11 && (perfil?.cpf ?? "").replace(/\D/g, "").length !== 11 && (
-                    <div>
-                      <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>CPF do titular *</label>
-                      <input value={cardCpf} onChange={e => {
-                        const d = e.target.value.replace(/\D/g, "").slice(0, 11)
-                        setCardCpf(d.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, "$1.$2.$3-$4").replace(/(\d{3})(\d{3})(\d{1,3})$/, "$1.$2.$3"))
-                      }} placeholder="000.000.000-00" inputMode="numeric"
-                        style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 14, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", boxSizing: "border-box", fontFamily: "monospace" }} />
-                    </div>
-                  )}
-                </>
-              ) : (
-              <>
-                  {/* Número */}
-                  <div>
-                    <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Número do cartão *</label>
-                    <input
-                      value={cardNumber}
-                      onChange={e => setCardNumber(fmtCardNumber(e.target.value))}
-                      placeholder="0000 0000 0000 0000"
-                      inputMode="numeric"
-                      style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 15, letterSpacing: 2, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", boxSizing: "border-box", fontFamily: "monospace" }}
-                    />
-                  </div>
-
-                  {/* Nome */}
-                  <div>
-                    <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Nome no cartão *</label>
-                    <input
-                      value={cardName}
-                      onChange={e => setCardName(e.target.value.toUpperCase())}
-                      placeholder="JOÃO A SILVA"
-                      autoCapitalize="characters"
-                      style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 14, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", boxSizing: "border-box", letterSpacing: 1 }}
-                    />
-                  </div>
-
-                  {/* Validade + CVV */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                    <div>
-                      <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Validade *</label>
-                      <input
-                        value={cardExpiry}
-                        onChange={e => setCardExpiry(fmtExpiry(e.target.value))}
-                        placeholder="MM/AA"
-                        inputMode="numeric"
-                        style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 14, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", boxSizing: "border-box", fontFamily: "monospace", letterSpacing: 2 }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>CVV *</label>
-                      <input
-                        value={cardCvv}
-                        onChange={e => setCardCvv(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                        placeholder="•••"
-                        type="password"
-                        inputMode="numeric"
-                        style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 14, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", boxSizing: "border-box" }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* CPF do titular */}
-                  <div>
-                    <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>CPF do titular *</label>
-                    <input
-                      value={cardCpf}
-                      onChange={e => {
-                        const d = e.target.value.replace(/\D/g, "").slice(0, 11)
-                        setCardCpf(d.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, "$1.$2.$3-$4").replace(/(\d{3})(\d{3})(\d{1,3})$/, "$1.$2.$3"))
-                      }}
-                      placeholder="000.000.000-00"
-                      inputMode="numeric"
-                      style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 14, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", boxSizing: "border-box", fontFamily: "monospace" }}
-                    />
-                  </div>
-
-                  {/* LGPD */}
-                  <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer", padding: "12px 14px", borderRadius: 10, background: "rgba(37,99,235,0.04)", border: "1px solid rgba(37,99,235,0.12)" }}>
-                    <input
-                      type="checkbox"
-                      checked={lgpdConsent}
-                      onChange={e => { setLgpdConsent(e.target.checked); if (!e.target.checked) setSalvarCartao(false) }}
-                      style={{ width: 16, height: 16, marginTop: 2, accentColor: "#2563EB", flexShrink: 0 }}
-                    />
-                    <span style={{ color: "#374151", fontSize: 12, lineHeight: 1.5 }}>
-                      Autorizo o armazenamento seguro dos dados do cartão para compras futuras, em conformidade com a <strong>LGPD</strong>. O CVV nunca é armazenado.
-                    </span>
-                  </label>
-
-                  {/* Salvar */}
-                  {lgpdConsent && (
-                    <label style={{ display: "flex", gap: 10, alignItems: "center", cursor: "pointer" }}>
-                      <input
-                        type="checkbox"
-                        checked={salvarCartao}
-                        onChange={e => setSalvarCartao(e.target.checked)}
-                        style={{ width: 16, height: 16, accentColor: "#DC2626" }}
-                      />
-                      <span style={{ color: "#374151", fontSize: 13, fontWeight: 600 }}>Salvar cartão para compras futuras</span>
-                    </label>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Troco — só faz sentido pagando em dinheiro na entrega */}
-          {pagamento === "dinheiro" && (
-            <div style={{ padding: "16px 18px", borderTop: "1px solid #F3F4F6", display: "flex", flexDirection: "column", gap: 10 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={precisaTroco}
-                  onChange={e => { setPrecisaTroco(e.target.checked); if (!e.target.checked) setTrocoPara("") }}
-                  style={{ width: 16, height: 16, accentColor: "#DC2626" }}
-                />
-                <span style={{ color: "#374151", fontSize: 13, fontWeight: 600 }}>Precisa de troco?</span>
+              <label className="campo"><span>CPF do titular *</span>
+                <input value={cardCpf} onChange={e => {
+                  const d = e.target.value.replace(/\D/g, "").slice(0, 11)
+                  setCardCpf(d.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, "$1.$2.$3-$4").replace(/(\d{3})(\d{3})(\d{1,3})$/, "$1.$2.$3"))
+                }} placeholder="000.000.000-00" inputMode="numeric" /></label>
+              <label className="marca-linha">
+                <input type="checkbox" checked={lgpdConsent} onChange={e => { setLgpdConsent(e.target.checked); if (!e.target.checked) setSalvarCartao(false) }} />
+                <span>Autorizo guardar os dados do cartão com segurança pra próximas compras (LGPD). O CVV nunca fica salvo.</span>
               </label>
-              {precisaTroco && (
-                <div>
-                  <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Troco para quanto?</label>
-                  <input
-                    value={trocoPara}
-                    onChange={e => setTrocoPara(e.target.value.replace(/[^0-9,]/g, ""))}
-                    placeholder="Ex: 50,00"
-                    inputMode="decimal"
-                    style={{ width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 14, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#111827", outline: "none", boxSizing: "border-box" }}
-                  />
-                </div>
+              {lgpdConsent && (
+                <label className="marca-linha">
+                  <input type="checkbox" checked={salvarCartao} onChange={e => setSalvarCartao(e.target.checked)} />
+                  <span><b>Salvar cartão pra próximas compras</b></span>
+                </label>
               )}
-            </div>
-          )}
-
-          {/* Crédito ou débito — só faz sentido pagando na maquininha do entregador */}
-          {pagamento === "maquininha" && (
-            <div style={{ padding: "16px 18px", borderTop: "1px solid #F3F4F6", display: "flex", flexDirection: "column", gap: 10 }}>
-              <p style={{ color: "#6B7280", fontSize: 12, fontWeight: 600 }}>Crédito ou débito?</p>
-              <div style={{ display: "flex", gap: 10 }}>
-                {(["credito", "debito"] as const).map(t => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setTipoMaquininha(t)}
-                    style={{
-                      flex: 1, padding: "11px 0", borderRadius: 10, fontSize: 13, fontWeight: 700,
-                      border: tipoMaquininha === t ? "1.5px solid #DC2626" : "1px solid #E5E7EB",
-                      background: tipoMaquininha === t ? "rgba(220,38,38,0.05)" : "#F9FAFB",
-                      color: tipoMaquininha === t ? "#DC2626" : "#374151",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {t === "credito" ? "Crédito" : "Débito"}
-                  </button>
-                ))}
-              </div>
-            </div>
+            </>
           )}
         </div>
+  )
+  const detalheMaquininha = (
+        <div className="sub-op">
+          <div className="modo" style={{ margin: 0 }}>
+            {(["credito", "debito"] as const).map(t => (
+              <button key={t} type="button" aria-pressed={tipoMaquininha === t} onClick={() => setTipoMaquininha(t)}>{t === "credito" ? "Crédito" : "Débito"}</button>
+            ))}
+          </div>
+        </div>
+  )
+  const detalheDinheiro = (
+    <div className="sub-op">
+      <label className="campo" style={{ margin: 0 }}><span>Troco pra quanto? <small className="mut">(deixe vazio se não precisar)</small></span>
+        <input value={trocoPara} onChange={e => { const v = mascaraBRL(e.target.value); setTrocoPara(v); setPrecisaTroco(!!v) }} placeholder="Ex.: R$ 100,00" inputMode="numeric" /></label>
+    </div>
+  )
+  const detalheDe = (f: string) => f === "cartao" ? detalheCartao : f === "dinheiro" ? detalheDinheiro : f === "maquininha" && !naLoja ? detalheMaquininha : null
 
-        {/* Observações */}
-        <div style={{ background: "#ffffff", borderRadius: 16, border: "1px solid #e5e7eb", padding: "18px 18px" }}>
-          <label style={{ display: "block", color: "#6B7280", fontSize: 12, fontWeight: 600, marginBottom: 8 }}>💬 Observações (opcional)</label>
-          <textarea
-            value={obs} onChange={e => setObs(e.target.value)}
-            placeholder="Sem cebola, capricha no molho..."
-            rows={3}
-            style={{
-              width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 13, resize: "none",
-              background: "#F9FAFB", border: "1px solid #E5E7EB",
-              color: "#111827", outline: "none", boxSizing: "border-box",
-            }}
-          />
+  const opcaoPagamento = (p: typeof PAGAMENTOS[number]) => (
+    <div key={p.value}>
+      <button className="pg" role="radio" aria-checked={pagamento === p.value} disabled={p.breve} onClick={() => { if (!p.breve) setPagamento(p.value) }}>
+        <span className="ic"><PaymentIcon method={p.value} naLoja={naLoja} /></span>
+        <span className="n"><b>{nomePagamento[p.value]}{p.breve ? " (em breve)" : ""}</b><small>{descPagamento[p.value]}</small></span>
+        <span className="radio" />
+      </button>
+      {pagamento === p.value && detalheDe(p.value)}
+    </div>
+  )
+
+  // Pagar com 2 formas (proposta): bloco "Primeira forma" e "Segunda forma"
+  const FORMAS_DIV: { f: FormaPagamento; n: string }[] = [
+    { f: "pix", n: "Pix" }, { f: "cartao", n: "Cartão" },
+    { f: "maquininha", n: naLoja ? "Cartão balcão" : "Maquininha" }, { f: "dinheiro", n: "Dinheiro" },
+  ]
+  const nomeCurto = (f: string) => FORMAS_DIV.find(x => x.f === f)?.n ?? f
+  const noNa = (f: string) => `${f === "maquininha" && !naLoja ? "na" : "no"} ${f === "pix" ? "Pix" : nomeCurto(f).toLowerCase()}`
+  const blocoParte = (k: 1 | 2) => {
+    const fx = k === 1 ? pagamento : pagamento2
+    const outro = k === 1 ? pagamento2 : pagamento
+    return (
+      <div className="cartao parte">
+        <div className="rot">
+          <b className="h3">{k === 1 ? "Primeira forma" : "Segunda forma"}</b>
+          {k === 1 && <button type="button" style={{ color: "var(--pimenta)", fontWeight: 700, fontSize: 13.5 }} onClick={() => setValor1Txt(mascaraBRL(String(Math.round(totalFinal * 50))))}>Dividir na metade</button>}
+        </div>
+        <div className="formas3">
+          {FORMAS_DIV.map(({ f, n }) => (
+            <button key={f} type="button" aria-pressed={fx === f} disabled={outro === f}
+              onClick={() => k === 1 ? setPagamento(f) : setPagamento2(f)}>
+              <span><PaymentIcon method={f} naLoja={naLoja} pequeno /></span>{n}
+            </button>
+          ))}
+        </div>
+        {k === 1
+          ? <label className="campo" style={{ margin: 0 }}><span>Quanto {noNa(pagamento)}?</span>
+              <input value={valor1Txt} onChange={e => setValor1Txt(mascaraBRL(e.target.value))} placeholder="R$ 0,00" inputMode="numeric" /></label>
+          : <div className="resto"><span>Restante {fx ? noNa(fx) : ""}</span><b>{brl(Math.max(0, Math.round((totalFinal - valor1) * 100) / 100))}</b></div>}
+        {fx && detalheDe(fx)}
+      </div>
+    )
+  }
+
+
+  const copiarPix = () => {
+    const ok = () => { setPixCopiado(true); setTimeout(() => setPixCopiado(false), 3000) }
+    const antigo = () => {
+      // iPhone sem permissão de área de transferência: copia pelo jeito antigo, que o Safari aceita
+      const x = document.createElement("textarea")
+      x.value = pixCopiaECola; x.setAttribute("readonly", ""); x.style.cssText = "position:fixed;top:0;left:0;opacity:0;font-size:16px"
+      document.body.appendChild(x); x.focus(); x.select(); x.setSelectionRange(0, pixCopiaECola.length)
+      let r = false; try { r = document.execCommand("copy") } catch {}
+      x.remove(); if (r) ok()
+    }
+    if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(pixCopiaECola).then(ok, antigo)
+    else antigo()
+  }
+
+  return (
+    <div className="cn checkout-novo">
+      <div className="topo branco">
+        <div className="linha-topo">
+          <button className="voltar" onClick={() => router.back()} aria-label="Voltar"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg></button>
+          <span className="h2" style={{ flex: 1 }}>Finalizar pedido</span>
+          {!user && <Link href="/cliente/entrar" style={{ color: "var(--pimenta)", fontWeight: 700, fontSize: 14 }}>Entrar</Link>}
+        </div>
+      </div>
+
+      <div style={{ padding: "14px 12px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
+
+        <div className="modo" style={{ margin: 0, background: "#E6E5E1" }}>
+          <button aria-pressed={tipoEntrega === "entrega"} onClick={() => setTipoEntrega("entrega")}>Entrega</button>
+          <button aria-pressed={tipoEntrega === "retirada"} onClick={() => setTipoEntrega("retirada")}>Retirar na loja</button>
         </div>
 
-        {erro && (
-          <p style={{ color: "#EF4444", fontSize: 13, fontWeight: 600, textAlign: "center", padding: "10px 16px", background: "rgba(239,68,68,0.08)", borderRadius: 10, border: "1px solid rgba(239,68,68,0.15)" }}>{erro}</p>
+        {/* Onde */}
+        {naLoja ? (
+          <div className="cartao end-card">
+            <span className="ic">🏪</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <b className="h3">{lojaData?.nome ?? items[0]?.loja_nome}</b><br />
+              <small className="mut">{lojaData?.endereco ?? ""}</small><br />
+              <small className="verde" style={{ fontWeight: 700 }}>Retirada grátis</small>
+            </span>
+          </div>
+        ) : enderecoSalvo && !editandoEndereco ? (
+          <div className="cartao end-card">
+            <span className="ic">📍</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <b className="h3">{enderecoSalvo.rua}{enderecoSalvo.numero ? `, ${enderecoSalvo.numero}` : ""}</b><br />
+              <small className="mut">{[enderecoSalvo.complemento, enderecoSalvo.bairro, enderecoSalvo.cidade].filter(Boolean).join(", ")}</small>
+            </span>
+            <button style={{ color: "var(--pimenta)", fontWeight: 700, fontSize: 13.5, flex: "none" }} onClick={() => setEditandoEndereco(true)}>Trocar</button>
+          </div>
+        ) : (
+          <div className="cartao" style={{ padding: 14 }}>
+            <span className="h3" style={{ display: "block", marginBottom: 10 }}>Onde entregar?</span>
+            <EnderecoMapa
+              fallbackLat={lojaData?.lat}
+              fallbackLng={lojaData?.lng}
+              onResult={(geo, numero, complemento) => {
+                geoRef.current = mapaRef.current = { geo, numero, complemento }
+                if (geo.lat && geo.lng) setClienteCoords({ lat: geo.lat, lng: geo.lng })
+                if (geo.cidade) setClienteCidade(geo.cidade)
+                if (geo.bairro) setClienteBairro(geo.bairro)
+              }}
+            />
+            {editandoEndereco && (
+              <button className="btn btn-g" style={{ marginTop: 12 }}
+                onClick={() => {
+                  const g = mapaRef.current ?? geoRef.current
+                  if (g) {
+                    geoRef.current = g
+                    const erroEnd = erroEnderecoEntrega(g.geo.rua, g.geo.bairro, g.numero, g.complemento)
+                    if (erroEnd) { setErro(erroEnd); return }
+                    setErro("")
+                    const novoEndereco: EnderecoSalvo = {
+                      display: [g.geo.rua, g.numero, g.geo.bairro, g.geo.cidade].filter(Boolean).join(", "),
+                      rua: g.geo.rua,
+                      numero: g.numero,
+                      bairro: g.geo.bairro,
+                      cidade: g.geo.cidade,
+                      complemento: g.complemento,
+                      lat: g.geo.lat,
+                      lng: g.geo.lng,
+                    }
+                    setEnderecoSalvo(novoEndereco)
+                    localStorage.setItem("arago_endereco_salvo", JSON.stringify(novoEndereco))
+                    // Persiste no banco para outros dispositivos
+                    if (user && perfil) {
+                      salvarPerfil(perfil.nome, perfil.telefone, {
+                        rua: g.geo.rua, numero: g.numero, bairro: g.geo.bairro,
+                        cidade: g.geo.cidade, complemento: g.complemento,
+                      }).catch(() => {})
+                    }
+                  }
+                  setEditandoEndereco(false)
+                }}>
+                Usar este endereço
+              </button>
+            )}
+            {editandoEndereco && erro && <p className="erro-linha">{erro}</p>}
+          </div>
         )}
 
-        <button onClick={confirmar} disabled={enviando || taxaCalculando} style={{
-          width: "100%", padding: "16px", borderRadius: 14, border: "none",
-          cursor: (enviando || taxaCalculando) ? "not-allowed" : "pointer",
-          background: (enviando || taxaCalculando) ? "rgba(220,38,38,0.5)" : "#DC2626",
-          color: "white", fontWeight: 800, fontSize: 16,
-        }}>
-          {enviando ? "Enviando..."
-            : taxaCalculando ? "Calculando frete..."
-            : `✓ Confirmar pedido · R$ ${totalFinal.toFixed(2)}`}
+        {/* Zona rural / estrada de chão — obrigatória na entrega */}
+        {!naLoja && (
+          <div className={`cartao ${zonaRural === null ? "pede" : ""}`} style={{ padding: 16 }}>
+            <span className="h3" style={{ display: "block", marginBottom: 10 }}>Você mora em zona rural ou estrada de chão? *</span>
+            <div className="modo" style={{ margin: 0 }}>
+              {([[true, "Sim"], [false, "Não"]] as const).map(([v, label]) => (
+                <button key={label} type="button" aria-pressed={zonaRural === v} onClick={() => setZonaRural(v)}>{label}</button>
+              ))}
+            </div>
+            {zonaRural && (
+              <label className={`campo ${detalheRural.trim().length < 5 ? "falta" : ""}`} style={{ marginTop: 12 }}>
+                <span>Como chegar no seu endereço? *</span>
+                <textarea value={detalheRural} onChange={e => setDetalheRural(e.target.value)} maxLength={400} rows={3}
+                  placeholder="Ex.: saindo da GO-040, entrar na estrada de chão depois do posto, 2ª porteira à direita, casa amarela" />
+              </label>
+            )}
+          </div>
+        )}
+
+        {/* Seus dados */}
+        <div className="cartao" style={{ padding: 16 }}>
+          <span className="h3" style={{ display: "block", marginBottom: 10 }}>Seus dados</span>
+          {user && (nome || perfil?.nome) ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span className="avatar-ck">{(nome || perfil?.nome || "?").trim().charAt(0).toUpperCase()}</span>
+                <span style={{ flex: 1, minWidth: 0 }}><b style={{ color: "var(--grafite)" }}>{nome || perfil?.nome}</b>{(telefone || perfil?.telefone) && <small className="mut" style={{ display: "block", fontSize: 13 }}>{telefone || perfil?.telefone}</small>}</span>
+                <Link href="/cliente/alterar-dados" style={{ color: "var(--pimenta)", fontWeight: 700, fontSize: 13.5 }}>Editar</Link>
+              </div>
+              {!(telefone || perfil?.telefone) && (
+                <label className="campo"><span>Seu WhatsApp * <small className="mut">(seu cadastro está sem telefone)</small></span>
+                  <input value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(62) 9 9999-1234" inputMode="tel" /></label>
+              )}
+              {usaForma("pix") && !(user && (perfil?.cpf || user?.user_metadata?.cpf)) && (
+                <label className={`campo ${cpf.replace(/\D/g, "").length !== 11 ? "falta" : ""}`}><span>CPF * <small className="mut">obrigatório pro Pix</small></span>
+                  <input value={cpf} onChange={e => setCpf(e.target.value)} placeholder="000.000.000-00" inputMode="numeric" maxLength={14} /></label>
+              )}
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <label className="campo"><span>Seu nome *</span>
+                <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome e sobrenome" autoComplete="name" /></label>
+              <label className="campo"><span>WhatsApp *</span>
+                <input value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(62) 9 9999-1234" inputMode="tel" autoComplete="tel" /></label>
+              {(usaForma("pix") || !(user && (perfil?.cpf || user?.user_metadata?.cpf))) && (
+                <label className={`campo ${usaForma("pix") && cpf.replace(/\D/g, "").length !== 11 ? "falta" : ""}`}>
+                  <span>CPF {usaForma("pix") ? <small style={{ color: "var(--pimenta)" }}>obrigatório pro Pix</small> : <small className="mut">(opcional)</small>}</span>
+                  <input value={cpf} onChange={e => setCpf(e.target.value)} placeholder="000.000.000-00" inputMode="numeric" maxLength={14} /></label>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Pagamento (layout da proposta): interruptor "Pagar com 2 formas" antes das formas */}
+        <div>
+          <div className="cartao dividir">
+            <span><b className="h3">Pagar com 2 formas</b><small>Ex.: parte no Pix e parte no cartão ou no dinheiro</small></span>
+            <button type="button" className="sw" role="switch" aria-checked={dividir} aria-label="Pagar com 2 formas" onClick={() => {
+              const liga = !dividir
+              setDividir(liga)
+              if (liga) {
+                const f1 = pagamento === "google_pay" ? "pix" : pagamento
+                setPagamento(f1)
+                if (!pagamento2 || pagamento2 === f1) setPagamento2(f1 === "dinheiro" ? "pix" : "dinheiro")
+                if (!valor1Txt) setValor1Txt(mascaraBRL(String(Math.round(totalFinal * 50))))
+              }
+            }} />
+          </div>
+          {dividir ? (
+            <>
+              {blocoParte(1)}
+              {blocoParte(2)}
+              <p className="mut" style={{ fontSize: 12.5, margin: "2px 4px 0", lineHeight: 1.5 }}>
+                {usaForma("pix") || usaForma("cartao")
+                  ? `A parte ${usaForma("pix") && usaForma("cartao") ? "do Pix e a do cartão são pagas" : usaForma("pix") ? "do Pix é paga" : "do cartão é paga"} agora pelo app${usaForma("dinheiro") || usaForma("maquininha") ? `; o resto, ${naLoja ? "no balcão" : "quando o entregador chegar"}.` : "."}`
+                  : `As duas partes são pagas ${naLoja ? "no balcão" : "ao entregador"}.`}
+              </p>
+              {valor1 >= totalFinal && <p className="erro-linha">O valor da primeira forma precisa ser menor que o total ({brl(totalFinal)}).</p>}
+            </>
+          ) : (
+            <>
+              <div className="sec"><span className="h2">Pagar pelo app</span></div>
+              {opcoesPg.filter(p => ["pix", "cartao", "google_pay"].includes(p.value)).map(opcaoPagamento)}
+              <div className="sec"><span className="h2">{naLoja ? "Pagar na loja" : "Pagar na entrega"}</span></div>
+              {["maquininha", "dinheiro"].map(v => opcoesPg.find(p => p.value === v)).filter((p): p is typeof PAGAMENTOS[number] => !!p).map(opcaoPagamento)}
+            </>
+          )}
+        </div>
+
+        <label className="campo">
+          <span>💬 Observação pra loja (opcional)</span>
+          <textarea value={obs} onChange={e => setObs(e.target.value)} rows={3} placeholder="Ex.: capricha no molho, mandar talheres, interfone quebrado" />
+        </label>
+
+
+
+        {/* Resumo */}
+        <div className="cartao contas" style={{ padding: "14px 16px" }}>
+          {items.map(i => <div key={i.id}><span>{i.quantidade}× {i.nome}</span><span>{brl(i.preco * i.quantidade)}</span></div>)}
+          <div style={{ borderTop: "1px solid var(--linha)", marginTop: 6, paddingTop: 10 }}><span>Subtotal</span><span>{brl(subtotal)}</span></div>
+          <div>
+            <span>{naLoja ? "Retirada" : "Entrega"}</span>
+            <span className={taxa === 0 || freteComDesconto ? "verde" : ""}>
+              {naLoja ? "Grátis"
+                : freteGratis ? <>Grátis <s className="mut">{brl(taxaBase)}</s></>
+                : taxaCalculando ? "Calculando…"
+                : freteComDesconto ? <>{brl(taxa)} <s className="mut">{brl(taxaBase)}</s></>
+                : taxa === 0 ? "Grátis"
+                : brl(taxa)}
+            </span>
+          </div>
+          {freteCampanha && !naLoja && !taxaCalculando && <p className="verde" style={{ fontSize: 13, marginTop: 2 }}>Frete grátis no aniversário de Aragoiânia, pago pelo Chegô.</p>}
+          {dinamica > 0 && !taxaCalculando && <div><span>Corrida dinâmica (chuva)</span><span>+ {brl(dinamica)}</span></div>}
+          {desconto > 0 && <div><span>Desconto ({cupomValido?.codigo})</span><span className="verde">− {brl(desconto)}</span></div>}
+          {descPromo > 0 && <div><span>DESCONTO PROMOCIONAL — CUSTEADO PELO CHEGÔ</span><span className="verde">− {brl(descPromo)}</span></div>}
+          {descPromo > 0 && <p className="verde" style={{ fontSize: 13, marginTop: 4 }}>Você economiza {brl(descPromo)} nesse pedido. O desconto vale em 1 unidade de cada produto da promoção e é pago pelo Chegô, não pela loja.</p>}
+          {cupomValido && desconto === 0 && <p className="verde" style={{ fontSize: 13, marginTop: 4 }}>Cupom {cupomValido.codigo}: {descricaoCupom(cupomValido, brl)}</p>}
+          {cupomErro && <p className="aviso-amarelo" style={{ margin: "8px 0 0" }}>{cupomErro}</p>}
+          <div className="tot"><span>Total</span><span>{brl(totalFinal)}</span></div>
+        </div>
+
+      </div>
+
+      <div className="rodape-fixo grudado" style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
+        {/* O aviso também aparece aqui, colado no botão: lá embaixo da página ele ficava fora da
+            tela e parecia que "Fazer pedido" não fazia nada (Lucas, 20/10/2026). */}
+        {erro && !editandoEndereco && <p role="alert" className="aviso-vermelho" style={{ margin: 0, fontSize: 14 }}>{erro}</p>}
+        <button className="btn btn-p" style={{ flex: "none" }} onClick={confirmar} disabled={enviando || taxaCalculando || validandoCupom}>
+          {enviando ? "Enviando…"
+            : taxaCalculando ? "Calculando a entrega…"
+            : `Fazer pedido · ${brl(totalFinal)}`}
         </button>
       </div>
 
-      {/* ═══ MODAL PEDIDO ATIVO ══════════════════════════════════════════ */}
+      {/* Pedido em andamento */}
       {pedidoAtivoModal && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-          <div style={{ background: "#fff", borderRadius: 20, padding: "28px 24px", width: "100%", maxWidth: 360, display: "flex", flexDirection: "column", alignItems: "center", gap: 16, textAlign: "center" }}>
-            <div style={{ fontSize: 40 }}>⚠️</div>
-            <p style={{ fontWeight: 800, fontSize: 17, color: "#111827", lineHeight: 1.3 }}>Você já tem um pedido em andamento</p>
-            <p style={{ fontSize: 13, color: "#6B7280", lineHeight: 1.5 }}>
-              O pedido <strong style={{ color: "#DC2626" }}>#{pedidoAtivoCodigo}</strong> ainda está sendo processado.<br />Tem certeza que quer fazer um novo pedido?
-            </p>
-            <button
-              onClick={() => { setPedidoAtivoModal(false); router.push(`/pedido/${pedidoAtivoCodigo}`) }}
-              style={{ width: "100%", padding: "14px", borderRadius: 12, border: "none", background: "#DC2626", color: "#fff", fontWeight: 800, fontSize: 15, cursor: "pointer" }}
-            >
-              Ver meu pedido ativo
-            </button>
-            <button
-              onClick={() => {
-                localStorage.removeItem("arago_pedido_ativo")
-                setPedidoAtivoModal(false)
-                confirmar()
-              }}
-              style={{ width: "100%", padding: "12px", borderRadius: 12, border: "1.5px solid #E5E7EB", background: "#fff", color: "#374151", fontWeight: 700, fontSize: 14, cursor: "pointer" }}
-            >
-              Continuar mesmo assim
-            </button>
+        <div className="cn-veu on centro">
+          <div className="cn caixa" style={{ textAlign: "center", gap: 12 }}>
+            <div style={{ fontSize: 40 }}>🛵</div>
+            <div className="h2">Você já tem um pedido em andamento</div>
+            <p className="mut" style={{ lineHeight: 1.5, fontSize: 14 }}>O pedido <b style={{ color: "var(--pimenta)" }}>#{pedidoAtivoCodigo}</b> ainda está em andamento. Quer fazer outro pedido mesmo assim?</p>
+            <button className="btn btn-p" onClick={() => { setPedidoAtivoModal(false); router.push(`/pedido/${pedidoAtivoCodigo}`) }}>Ver meu pedido</button>
+            <button className="btn btn-s" onClick={() => { localStorage.removeItem("arago_pedido_ativo"); setPedidoAtivoModal(false); confirmar() }}>Fazer outro pedido</button>
           </div>
         </div>
       )}
 
-      {/* ═══ MODAL PIX ═══════════════════════════════════════════════════ */}
+      {/* Pix */}
       {pixModal && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-          <div style={{ background: "#fff", borderRadius: "24px 24px 0 0", padding: "28px 24px 40px", width: "100%", maxWidth: 480, display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
-            {/* Cabeçalho */}
-            <div style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <p style={{ fontWeight: 800, fontSize: 18, color: "#111827" }}>Pagar com PIX</p>
-              <div style={{ background: "#4DD0C4", borderRadius: 8, padding: "4px 10px" }}>
-                <p style={{ color: "#fff", fontWeight: 800, fontSize: 13 }}>R$ {totalFinal.toFixed(2)}</p>
-              </div>
+        // Tela cheia "Pagamento Pix", igual à proposta (antes era uma folha por cima do Finalizar)
+        <div className="cn pix-tela">
+          <div className="topo branco">
+            <div className="linha-topo">
+              <button className="voltar" aria-label="Ver meu pedido" onClick={() => {
+                const cod = (() => { try { return JSON.parse(localStorage.getItem("arago_pedido_ativo") ?? "{}").codigo } catch { return null } })()
+                router.push(cod ? `/pedido/${cod}` : "/cliente/historico")
+              }}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg></button>
+              <span className="h2" style={{ flex: 1 }}>Pagamento Pix</span>
             </div>
-
-            <p style={{ color: "#6B7280", fontSize: 13, textAlign: "center" }}>
-              Escaneie o QR Code ou copie o código PIX.<br />O pagamento é confirmado automaticamente.
-            </p>
-
-            {/* QR Code */}
-            {pixQrcode ? (
-              <img
-                src={`data:image/png;base64,${pixQrcode}`}
-                alt="QR Code PIX"
-                style={{ width: 220, height: 220, borderRadius: 12, border: "2px solid #E5E7EB" }}
-              />
-            ) : (
-              <div style={{ width: 220, height: 220, borderRadius: 12, background: "#F3F4F6", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <p style={{ color: "#9CA3AF", fontSize: 13 }}>Gerando QR Code…</p>
+          </div>
+          <div style={{ overflowY: "auto", flex: 1 }}>
+            <div style={{ padding: "18px 22px calc(env(safe-area-inset-bottom,0px) + 40px)", textAlign: "center" }}>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}><PixLogo t={44} /></div>
+              <div className="h1" style={{ fontSize: 24 }}>Pague {brl(valorDe("pix") || totalFinal)} com Pix</div>
+              {divide && (usaForma("dinheiro") || usaForma("maquininha")) && <p className="mut" style={{ marginTop: 4 }}>O restante, {brl(valorDe("dinheiro") + valorDe("maquininha"))}, você paga {naLoja ? "no balcão" : "na entrega"} ({usaForma("dinheiro") ? "dinheiro" : "maquininha"}).</p>}
+              <p className="mut" style={{ marginTop: 6 }}>{divide && usaForma("cartao") ? "O cartão já foi aprovado. O pedido vai pra loja assim que o Pix cair." : "O pedido vai pra loja assim que o pagamento cair."}</p>
+              <div className="qr">
+                {pixQrcode ? <img src={`data:image/png;base64,${pixQrcode}`} alt="QR Code do Pix" /> : <span className="mut" style={{ display: "grid", placeItems: "center", height: "100%" }}>Gerando o QR Code…</span>}
               </div>
-            )}
-
-            {/* Copia e Cola */}
-            {pixCopiaECola && (
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(pixCopiaECola).then(() => {
-                    setPixCopiado(true)
-                    setTimeout(() => setPixCopiado(false), 3000)
-                  })
-                }}
-                style={{
-                  width: "100%", padding: "14px 16px", borderRadius: 12, cursor: "pointer", fontWeight: 700, fontSize: 15,
-                  background: pixCopiado ? "#16A34A" : "#111827", color: "#fff", border: "none", transition: "background 0.2s",
-                }}
-              >
-                {pixCopiado ? "✓ Código copiado!" : "📋 Copiar código PIX"}
-              </button>
-            )}
-
-            <p style={{ color: "#9CA3AF", fontSize: 12, textAlign: "center" }}>
-              Aguardando confirmação do pagamento…
-            </p>
+              {pixCopiaECola && (
+                <div className="copia" style={{ margin: "4px 0 16px" }}>
+                  <span style={{ flex: 1 }}>{pixCopiaECola.slice(0, 70)}…</span>
+                  <button onClick={copiarPix} style={{ background: pixCopiado ? "var(--folha)" : undefined }}>{pixCopiado ? "Copiado" : "Copiar"}</button>
+                </div>
+              )}
+              <ol className="passos-pix">
+                <li>Abra o app do seu banco e escolha Pix copia e cola.</li>
+                <li>Cole o código e confira o valor.</li>
+                <li>Pronto. Esta tela atualiza sozinha.</li>
+              </ol>
+              <p className="mut" style={{ fontSize: 13 }}>Aguardando a confirmação do pagamento…</p>
+              <AjudaPagamentoWhats codigo={(() => { try { return JSON.parse(localStorage.getItem("arago_pedido_ativo") ?? "{}").codigo } catch { return null } })()} />
+            </div>
           </div>
         </div>
       )}

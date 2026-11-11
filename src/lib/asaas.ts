@@ -1,3 +1,5 @@
+import { ehIdMp, buscarPagamentoMp, estornarPagamentoMp, cancelarPagamentoMp } from "@/lib/mercadopago"
+
 const BASE = process.env.ASAAS_BASE_URL ?? "https://api.asaas.com/v3"
 const KEY  = process.env.ASAAS_API_KEY!
 
@@ -61,12 +63,15 @@ export async function getPixQrCode(paymentId: string) {
   )
 }
 
+// Cobranças com id "mp_" são do Mercado Pago (Pix desde 22/10/2026): ver lib/mercadopago.
 export async function estornarPagamento(paymentId: string, valor?: number) {
+  if (ehIdMp(paymentId)) return estornarPagamentoMp(paymentId, valor)
   const body = valor != null ? { value: valor } : {}
   return call<{ id: string; status: string }>(`/payments/${paymentId}/refund`, "POST", body)
 }
 
 export async function cancelarPagamento(paymentId: string) {
+  if (ehIdMp(paymentId)) return cancelarPagamentoMp(paymentId)
   return call<{ deleted: boolean }>(`/payments/${paymentId}`, "DELETE")
 }
 
@@ -151,6 +156,7 @@ export async function criarCartaoToken(
 }
 
 export async function buscarPagamento(paymentId: string) {
+  if (ehIdMp(paymentId)) return buscarPagamentoMp(paymentId)
   return call<{ id: string; status: string; externalReference: string }>(`/payments/${paymentId}`)
 }
 
@@ -170,4 +176,31 @@ export async function criarSubconta(dados: {
       ...(dados.tipoEmpresa ? { companyType:  dados.tipoEmpresa                  } : {}),
     }
   )
+}
+
+// ── Repasse semanal (20/10/2026): Pix da conta do Chegô pra chave da loja ──────────────
+export type TipoChavePix = "CPF" | "CNPJ" | "EMAIL" | "PHONE" | "EVP"
+
+/** Saldo disponível na conta Asaas do Chegô. */
+export async function saldoConta() {
+  return call<{ balance: number }>("/finance/balance")
+}
+
+/** Envia um Pix (transferência) pra uma chave. O tipo da chave é confirmado por quem paga. */
+export async function enviarPix(valor: number, chave: string, tipo: TipoChavePix, descricao: string) {
+  const limpa = tipo === "EMAIL" || tipo === "EVP" ? chave.trim()
+    : tipo === "PHONE" ? "+55" + chave.replace(/\D/g, "").replace(/^55(?=\d{10,11}$)/, "")
+    : chave.replace(/\D/g, "")
+  return call<{ id: string; status: string; value: number; bankAccount?: { ownerName?: string } }>("/transfers", "POST", {
+    value: Math.round(valor * 100) / 100,
+    operationType: "PIX",
+    pixAddressKey: limpa,
+    pixAddressKeyType: tipo,
+    description: descricao.slice(0, 140),
+  })
+}
+
+/** Situação de uma transferência e o link do comprovante do Asaas (sai quando o Pix conclui). */
+export async function consultarTransferencia(id: string) {
+  return call<{ id: string; status: string; value: number; transactionReceiptUrl?: string | null; failReason?: string | null }>(`/transfers/${encodeURIComponent(id)}`)
 }

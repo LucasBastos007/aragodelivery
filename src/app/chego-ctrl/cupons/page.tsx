@@ -1,285 +1,148 @@
 "use client"
 
-import { useEffect, useState } from "react"
+// Cupons (admin 2.0, 20/10/2026). Do Chegô (globais, o Chegô paga o desconto) e das lojas (a loja paga),
+// com quanto cada um já custou nos pedidos entregues. Mesmas ações: criar (com lojas e raio), ativar,
+// pausar e excluir (/api/admin/cupons). Valores em reais com máscara.
+import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { R } from "../_dinheiro"
 
 type Tipo = "percentual" | "fixo" | "frete_gratis" | "frete_percentual"
+type Cupom = { id: string; codigo: string; tipo: Tipo; valor: number; loja_id: string | null; pedido_minimo: number; validade: string | null; ativo: boolean; usos: number; criado_em: string; lojas_ids: string[] | null; raio_km: number | null; max_usos: number | null; loja?: { nome: string } | null }
+const TIPO: Record<Tipo, string> = { percentual: "% nos produtos", fixo: "R$ de desconto", frete_gratis: "Frete grátis", frete_percentual: "% no frete" }
+const mascara = (v: string) => { const d = v.replace(/\D/g, "").replace(/^0+/, "").slice(0, 7); return d ? (Number(d) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "" }
+const paraNum = (v: string) => Number(v.replace(/\./g, "").replace(",", ".")) || 0
+const desc = (c: Cupom) => c.tipo === "frete_gratis" ? "Frete grátis" : c.tipo === "fixo" ? `${R(c.valor)} off` : c.tipo === "frete_percentual" ? `${c.valor}% no frete` : `${c.valor}% off`
+const vencido = (c: Cupom) => !!c.validade && c.validade < new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date())
 
-interface Cupom {
-  id: string; codigo: string; tipo: Tipo; valor: number
-  loja_id: string | null; pedido_minimo: number; validade: string | null
-  ativo: boolean; usos: number; criado_em: string
-  lojas_ids: string[] | null; raio_km: number | null
-  loja?: { nome: string }
-}
+export default function CuponsPage() {
+  const [cupons, setCupons] = useState<Cupom[]>([])
+  const [lojas, setLojas] = useState<{ id: string; nome: string }[]>([])
+  const [custo, setCusto] = useState<Record<string, { n: number; v: number }>>({})
+  const [carregou, setCarregou] = useState(false)
+  const [aba, setAba] = useState<"chego" | "lojas">("chego")
+  const [criar, setCriar] = useState(false)
+  const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null)
 
-interface LojaResumo { id: string; nome: string }
-
-// Aragoiânia-GO — mesmo centro usado no checkout, pra enviesar a busca de endereço.
-// ATENÇÃO: valor anterior (-17.6547, -49.4378) era Aloândia-GO, ~82km de Aragoiânia. Corrigido.
-const GEOCODE_BIAS_LAT = -16.9214
-const GEOCODE_BIAS_LNG = -49.4497
-
-const inp: React.CSSProperties = {
-  width: "100%", padding: "10px 13px", borderRadius: 10, fontSize: 14,
-  background: "#F9FAFB", border: "1px solid #E2E8F0",
-  color: "#0F172A", outline: "none", boxSizing: "border-box",
-}
-
-export default function AdminCuponsPage() {
-  const [cupons,  setCupons]  = useState<Cupom[]>([])
-  const [loading, setLoading] = useState(true)
-  const [criando, setCriando] = useState(false)
-
-  const [codigo,   setCodigo]   = useState("")
-  const [tipo,     setTipo]     = useState<Tipo>("percentual")
-  const [valor,    setValor]    = useState("")
-  const [minimo,   setMinimo]   = useState("")
-  const [validade, setValidade] = useState("")
-  const [salvando, setSalvando] = useState(false)
-  const [erro,     setErro]     = useState("")
-
-  // Restrição por loja(s) — vazio = vale pra todas
-  const [lojasDisponiveis, setLojasDisponiveis] = useState<LojaResumo[]>([])
-  const [lojasSelecionadas, setLojasSelecionadas] = useState<string[]>([])
-
-  // Restrição por raio de entrega — endereço central + km de alcance
-  const [enderecoRaio,   setEnderecoRaio]   = useState("")
-  const [buscandoRaio,   setBuscandoRaio]   = useState(false)
-  const [centroResolvido, setCentroResolvido] = useState<{ lat: number; lng: number; display: string } | null>(null)
-  const [raioKm,         setRaioKm]         = useState("")
-  const [erroRaio,       setErroRaio]       = useState("")
-
-  useEffect(() => { carregar(); carregarLojas() }, [])
-
-  async function carregar() {
-    setLoading(true)
-    const { data } = await supabase.from("cupons").select("*, loja:lojas(nome)").is("loja_id", null).order("criado_em", { ascending: false })
-    setCupons((data as Cupom[]) ?? [])
-    setLoading(false)
+  async function load() {
+    const [{ data: cs }, { data: ls }] = await Promise.all([
+      supabase.from("cupons").select("*, loja:lojas(nome)").order("criado_em", { ascending: false }),
+      supabase.from("lojas").select("id, nome").eq("status", "ativo").order("nome"),
+    ])
+    setCupons((cs as Cupom[]) ?? []); setLojas(ls ?? [])
+    const m: Record<string, { n: number; v: number }> = {}
+    for (let i = 0; i < 20000; i += 1000) {
+      const { data } = await supabase.from("pedidos").select("cupom_codigo, desconto").eq("status", "entregue").not("cupom_codigo", "is", null).range(i, i + 999)
+      for (const p of (data ?? []) as any[]) { const k = String(p.cupom_codigo).toUpperCase(); (m[k] ??= { n: 0, v: 0 }); m[k].n++; m[k].v += Number(p.desconto ?? 0) }
+      if ((data ?? []).length < 1000) break
+    }
+    setCusto(m); setCarregou(true)
   }
+  useEffect(() => { load() }, [])
 
-  async function carregarLojas() {
-    const { data } = await supabase.from("lojas").select("id, nome").eq("status", "ativo").order("nome")
-    setLojasDisponiveis((data as LojaResumo[]) ?? [])
+  async function api(metodo: string, body: object) {
+    const r = await fetch("/api/admin/cupons", { method: metodo, credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    return { ok: r.ok, j: await r.json().catch(() => ({})) as any }
   }
+  async function alternar(c: Cupom) { const { ok, j } = await api("PATCH", { id: c.id, ativo: !c.ativo }); if (ok) { setCupons(xs => xs.map(x => x.id === c.id ? { ...x, ativo: !x.ativo } : x)); setMsg({ t: c.ativo ? `${c.codigo} pausado.` : `${c.codigo} ativo de novo.`, ok: true }) } else setMsg({ t: j.error ?? "Não deu certo.", ok: false }) }
+  async function excluir(c: Cupom) { if (!confirm(`Excluir o cupom ${c.codigo}? Quem já usou não perde o desconto.`)) return; const { ok, j } = await api("DELETE", { id: c.id }); if (ok) { setCupons(xs => xs.filter(x => x.id !== c.id)); setMsg({ t: `${c.codigo} excluído.`, ok: true }) } else setMsg({ t: j.error ?? "Não deu certo.", ok: false }) }
 
-  function toggleLoja(id: string) {
-    setLojasSelecionadas(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
-  }
-
-  async function buscarCentroRaio() {
-    if (!enderecoRaio.trim()) return
-    setBuscandoRaio(true); setErroRaio(""); setCentroResolvido(null)
-    const res = await fetch(`/api/geocode/search?q=${encodeURIComponent(enderecoRaio.trim())}&lat=${GEOCODE_BIAS_LAT}&lon=${GEOCODE_BIAS_LNG}`)
-      .then(r => r.json()).catch(() => [])
-    const primeiro = res?.[0]
-    if (!primeiro) { setErroRaio("Endereço não encontrado"); setBuscandoRaio(false); return }
-    setCentroResolvido({ lat: parseFloat(primeiro.lat), lng: parseFloat(primeiro.lon), display: primeiro.display_name })
-    setBuscandoRaio(false)
-  }
-
-  async function handleCriar() {
-    if (!codigo.trim()) { setErro("Informe o código"); return }
-    // Frete grátis não tem "valor" de desconto — zera o frete inteiro, não um número fixo
-    if (tipo !== "frete_gratis" && (!valor || isNaN(Number(valor)) || Number(valor) <= 0)) { setErro("Valor inválido"); return }
-    if (raioKm && !centroResolvido) { setErro("Busque o endereço central do raio antes de salvar"); return }
-    setErro(""); setSalvando(true)
-    const res = await fetch("/api/admin/cupons", {
-      method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        codigo, tipo, valor: tipo === "frete_gratis" ? 0 : Number(valor),
-        pedido_minimo: Number(minimo) || 0, validade: validade || null,
-        lojas_ids: lojasSelecionadas.length > 0 ? lojasSelecionadas : null,
-        centro_lat: centroResolvido && raioKm ? centroResolvido.lat : null,
-        centro_lng: centroResolvido && raioKm ? centroResolvido.lng : null,
-        raio_km:    centroResolvido && raioKm ? Number(raioKm) : null,
-      }),
-    })
-    const json = await res.json()
-    if (!res.ok) { setErro(json.error?.includes("unique") ? "Código já existe." : json.error); setSalvando(false); return }
-    setCodigo(""); setValor(""); setMinimo(""); setValidade(""); setTipo("percentual")
-    setLojasSelecionadas([]); setEnderecoRaio(""); setCentroResolvido(null); setRaioKm(""); setErroRaio("")
-    setCriando(false); setSalvando(false); carregar()
-  }
-
-  async function toggleAtivo(c: Cupom) {
-    await fetch("/api/admin/cupons", {
-      method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: c.id, ativo: !c.ativo }),
-    })
-    setCupons(prev => prev.map(x => x.id === c.id ? { ...x, ativo: !x.ativo } : x))
-  }
-
-  async function excluir(id: string) {
-    if (!confirm("Excluir?")) return
-    await fetch("/api/admin/cupons", {
-      method: "DELETE", credentials: "include", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    })
-    setCupons(prev => prev.filter(x => x.id !== id))
-  }
+  const globais = cupons.filter(c => !c.loja_id), daLoja = cupons.filter(c => c.loja_id)
+  const lista = aba === "chego" ? globais : daLoja
+  const custoChego = globais.reduce((t, c) => t + (custo[c.codigo.toUpperCase()]?.v ?? 0), 0)
+  const nomeLoja = useMemo(() => new Map(lojas.map(l => [l.id, l.nome])), [lojas])
 
   return (
-    <div style={{ padding: "32px 36px", maxWidth: 820 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
-        <div>
-          <h1 style={{ color: "#0F172A", fontWeight: 900, fontSize: 22 }}>🎟️ Cupons globais</h1>
-          <p style={{ color: "#94a3b8", fontSize: 13, marginTop: 3 }}>Válidos em qualquer loja da plataforma</p>
-        </div>
-        <button onClick={() => { setCriando(c => !c); setErro("") }}
-          style={{ padding: "10px 20px", borderRadius: 12, border: "none", background: "#f97316", color: "#0F172A", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-          {criando ? "Cancelar" : "+ Novo cupom"}
-        </button>
+    <>
+      <div className="kpis4">
+        <div className="cartao kpi2"><small>Cupons do Chegô ativos</small><b className="num">{globais.filter(c => c.ativo && !vencido(c)).length}</b><span className="t14 mut">de {globais.length} criados</span></div>
+        <div className="cartao kpi2"><small>Já custaram ao Chegô</small><b className="num">{R(custoChego)}</b><span className="t14 mut">desconto em pedidos entregues</span></div>
+        <div className="cartao kpi2"><small>Cupons das lojas</small><b className="num">{daLoja.filter(c => c.ativo).length}</b><span className="t14 mut">a loja paga o desconto</span></div>
+        <div className="cartao kpi2"><small>Usos no total</small><b className="num">{Object.values(custo).reduce((t, x) => t + x.n, 0)}</b><span className="t14 mut">pedidos com cupom</span></div>
       </div>
+      {msg && <div className={`aviso ${msg.ok ? "vd" : "vm"}`} role="status" style={{ marginBottom: 10 }}>{msg.t}</div>}
+      <div className="lin" style={{ flexWrap: "wrap", gap: 8 }}>
+        <div className="abas-l" style={{ flex: 1, marginBottom: 0 }}><button aria-pressed={aba === "chego"} onClick={() => setAba("chego")}>Do Chegô ({globais.length})</button><button aria-pressed={aba === "lojas"} onClick={() => setAba("lojas")}>Das lojas ({daLoja.length})</button></div>
+        {aba === "chego" && <button className="btn btn-p" style={{ minHeight: 42 }} onClick={() => { setMsg(null); setCriar(true) }}>Criar cupom</button>}
+      </div>
+      <div style={{ height: 12 }} />
+      {!carregou ? <p className="mut">Carregando…</p> : lista.length === 0 ? <div className="cartao dsp-vazio"><b>{aba === "chego" ? "Nenhum cupom do Chegô" : "Nenhuma loja criou cupom"}</b><span>{aba === "chego" ? "Crie um cupom pra trazer cliente novo ou chamar de volta quem sumiu." : "As lojas criam os cupons delas no painel do lojista."}</span></div> : (
+        <div className="cp-grade">{lista.map(c => { const u = custo[c.codigo.toUpperCase()], venc = vencido(c); return (
+          <div key={c.id} className={`cartao cp-card ${!c.ativo || venc ? "off" : ""}`}>
+            <div className="cp-topo"><b className="cp-cod">{c.codigo}</b><span className={`selo ${venc ? "cinza" : c.ativo ? "verde" : "amarelo"}`}>{venc ? "Vencido" : c.ativo ? "Ativo" : "Pausado"}</span></div>
+            <b className="cp-val">{desc(c)}</b>
+            <span className="t14 mut">{[c.pedido_minimo > 0 && `pedido mínimo ${R(c.pedido_minimo)}`, c.validade && `até ${new Date(c.validade + "T12:00:00").toLocaleDateString("pt-BR")}`, c.max_usos && `até ${c.max_usos} usos`].filter(Boolean).join(", ") || "sem mínimo e sem validade"}</span>
+            <span className="t14 mut">{c.loja_id ? `Da loja ${c.loja?.nome ?? nomeLoja.get(c.loja_id) ?? ""}` : c.lojas_ids?.length ? `Só em ${c.lojas_ids.map(id => nomeLoja.get(id) ?? "loja").slice(0, 3).join(", ")}${c.lojas_ids.length > 3 ? ` e mais ${c.lojas_ids.length - 3}` : ""}` : "Vale em todas as lojas"}{c.raio_km ? `, até ${c.raio_km} km` : ""}</span>
+            <div className="cp-uso"><span><b className="num">{u?.n ?? 0}</b> usos</span><span><b className="num">{R(u?.v ?? 0)}</b> {c.loja_id ? "de desconto" : "custou ao Chegô"}</span></div>
+            {!c.loja_id && <div className="lin" style={{ gap: 8, marginTop: 6 }}><button className="btn btn-s" style={{ flex: 1, minHeight: 40 }} onClick={() => alternar(c)}>{c.ativo ? "Pausar" : "Ativar"}</button><button className="btn btn-l" style={{ minHeight: 40, color: "var(--pimenta-esc)" }} onClick={() => excluir(c)}>Excluir</button></div>}
+          </div>) })}</div>)}
+      {criar && <CriarCupom lojas={lojas} onFechar={(m) => { setCriar(false); if (m) { setMsg(m); load() } }} />}
+    </>
+  )
+}
 
-      {criando && (
-        <div style={{ background: "white", borderRadius: 16, border: "1px solid rgba(249,115,22,0.2)", padding: "20px 22px", marginBottom: 24, display: "flex", flexDirection: "column", gap: 14 }}>
-          <p style={{ color: "#0F172A", fontWeight: 700, fontSize: 14 }}>Novo cupom global</p>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div>
-              <label style={{ display: "block", color: "#64748B", fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: "uppercase" }}>Código *</label>
-              <input style={inp} value={codigo} onChange={e => setCodigo(e.target.value.toUpperCase())} placeholder="BEMVINDO20" />
-            </div>
-            <div>
-              <label style={{ display: "block", color: "#64748B", fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: "uppercase" }}>Tipo</label>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {(["percentual", "fixo", "frete_gratis", "frete_percentual"] as Tipo[]).map(t => (
-                  <button key={t} onClick={() => setTipo(t)} style={{
-                    flex: 1, minWidth: 90, padding: "10px", borderRadius: 10, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13,
-                    background: tipo === t ? "rgba(249,115,22,0.15)" : "#F9FAFB",
-                    color: tipo === t ? "#f97316" : "#64748B",
-                    outline: tipo === t ? "1px solid rgba(249,115,22,0.4)" : "none",
-                  }}>
-                    {t === "percentual" ? "%" : t === "fixo" ? "R$" : t === "frete_gratis" ? "🛵 Frete grátis" : "🛵 % no frete"}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {tipo !== "frete_gratis" && (
-              <div>
-                <label style={{ display: "block", color: "#64748B", fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: "uppercase" }}>
-                  {tipo === "percentual" ? "Desconto (%)" : tipo === "frete_percentual" ? "Desconto no frete (%)" : "Desconto (R$)"} *
-                </label>
-                <input style={inp} type="number" min="0" max={tipo === "frete_percentual" ? 100 : undefined} value={valor} onChange={e => setValor(e.target.value)} placeholder={tipo === "percentual" || tipo === "frete_percentual" ? "20" : "10.00"} />
-              </div>
-            )}
-            <div>
-              <label style={{ display: "block", color: "#64748B", fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: "uppercase" }}>Pedido mínimo (R$)</label>
-              <input style={inp} type="number" min="0" value={minimo} onChange={e => setMinimo(e.target.value)} placeholder="0" />
-            </div>
-            <div>
-              <label style={{ display: "block", color: "#64748B", fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: "uppercase" }}>Válido até</label>
-              <input style={inp} type="date" value={validade} onChange={e => setValidade(e.target.value)} />
-            </div>
-          </div>
-
-          {/* Restrição por loja(s) — vazio = vale pra todas */}
-          <div>
-            <label style={{ display: "block", color: "#64748B", fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: "uppercase" }}>
-              Lojas onde vale {lojasSelecionadas.length > 0 && `(${lojasSelecionadas.length} selecionada${lojasSelecionadas.length > 1 ? "s" : ""})`}
-            </label>
-            <p style={{ fontSize: 11, color: "#94a3b8", marginBottom: 8 }}>Nenhuma marcada = vale em todas as lojas</p>
-            <div style={{ maxHeight: 160, overflowY: "auto", border: "1px solid #E2E8F0", borderRadius: 10, padding: 8, display: "flex", flexDirection: "column", gap: 2, background: "#F9FAFB" }}>
-              {lojasDisponiveis.map(l => (
-                <label key={l.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 6px", borderRadius: 7, cursor: "pointer", fontSize: 13, color: "#374151" }}>
-                  <input type="checkbox" checked={lojasSelecionadas.includes(l.id)} onChange={() => toggleLoja(l.id)} />
-                  {l.nome}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Restrição por raio de entrega */}
-          <div>
-            <label style={{ display: "block", color: "#64748B", fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: "uppercase" }}>
-              Raio de alcance (opcional)
-            </label>
-            <p style={{ fontSize: 11, color: "#94a3b8", marginBottom: 8 }}>Só vale se o endereço de entrega do cliente estiver dentro do raio</p>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input style={inp} value={enderecoRaio} onChange={e => { setEnderecoRaio(e.target.value); setCentroResolvido(null) }} placeholder="Endereço central (ex: Praça Central, Aragoiânia)" />
-              <button onClick={buscarCentroRaio} disabled={buscandoRaio} style={{
-                padding: "0 16px", borderRadius: 10, border: "1px solid #E2E8F0", background: "white",
-                color: "#374151", fontWeight: 700, fontSize: 12, cursor: buscandoRaio ? "not-allowed" : "pointer", whiteSpace: "nowrap",
-              }}>
-                {buscandoRaio ? "..." : "Buscar"}
-              </button>
-              <input style={{ ...inp, width: 110, flexShrink: 0 }} type="number" min="0" step="0.5" value={raioKm} onChange={e => setRaioKm(e.target.value)} placeholder="Raio (km)" />
-            </div>
-            {erroRaio && <p style={{ color: "#f87171", fontSize: 12, marginTop: 6 }}>{erroRaio}</p>}
-            {centroResolvido && <p style={{ color: "#22c55e", fontSize: 12, marginTop: 6 }}>✓ Centro: {centroResolvido.display}</p>}
-          </div>
-
-          {erro && <p style={{ color: "#f87171", fontSize: 13, fontWeight: 600 }}>{erro}</p>}
-          <button onClick={handleCriar} disabled={salvando} style={{
-            padding: "12px 24px", borderRadius: 12, border: "none",
-            background: salvando ? "rgba(249,115,22,0.4)" : "#f97316",
-            color: "#0F172A", fontWeight: 800, fontSize: 14, cursor: salvando ? "not-allowed" : "pointer", alignSelf: "flex-start",
-          }}>
-            {salvando ? "Criando..." : "✓ Criar cupom global"}
-          </button>
+function CriarCupom({ lojas, onFechar }: { lojas: { id: string; nome: string }[]; onFechar: (m?: { t: string; ok: boolean }) => void }) {
+  const [codigo, setCodigo] = useState(""), [tipo, setTipo] = useState<Tipo>("percentual"), [valor, setValor] = useState(""), [minimo, setMinimo] = useState(""), [validade, setValidade] = useState("")
+  const [sel, setSel] = useState<string[]>([]), [buscaL, setBuscaL] = useState("")
+  const [end, setEnd] = useState(""), [centro, setCentro] = useState<{ lat: number; lng: number; display: string } | null>(null), [raio, setRaio] = useState("")
+  const [env, setEnv] = useState(false), [erro, setErro] = useState("")
+  const [usos, setUsos] = useState(""), [confirmou, setConfirmou] = useState(false)
+  const dinheiro = tipo === "fixo"
+  const v = dinheiro ? paraNum(valor) : Number(valor.replace(",", "."))
+  const minNum = paraNum(minimo)
+  const pesado = dinheiro && v > 0 && (minNum <= 0 || v / minNum > 0.2)
+  const resumo = tipo === "frete_gratis" ? "Frete grátis" : !(v > 0) ? "" : dinheiro
+    ? `Desconto de ${R(v)}${minNum > 0 ? ` num pedido de ${R(minNum)}: ${Math.round(v / minNum * 100)}% do pedido mínimo` : ", sem pedido mínimo"}`
+    : `${String(valor).replace(".", ",")}% de desconto${minNum > 0 ? `, ${R(minNum * v / 100)} num pedido de ${R(minNum)}` : ""}`
+  async function buscarCentro() {
+    setErro(""); setCentro(null)
+    const r = await fetch(`/api/geocode/search?q=${encodeURIComponent(end.trim())}&lat=-16.9214&lon=-49.4497`).then(r => r.json()).catch(() => [])
+    if (!r?.[0]) { setErro("Endereço não encontrado."); return }
+    setCentro({ lat: parseFloat(r[0].lat), lng: parseFloat(r[0].lon), display: r[0].display_name })
+  }
+  async function salvar() {
+    if (!codigo.trim()) { setErro("Dê um código ao cupom."); return }
+    if (tipo !== "frete_gratis" && !(v > 0)) { setErro("Informe o valor do desconto."); return }
+    if ((tipo === "percentual" || tipo === "frete_percentual") && v > 100) { setErro("Percentual vai até 100."); return }
+    if (raio && !centro) { setErro("Busque o endereço do centro do raio."); return }
+    // Trava do VOLTAGEMERSON (31/10/2026): R$ 10 fixo num mínimo de R$ 30, sem limite de uso,
+    // passou sem ninguém perceber. Desconto em reais acima de 20% do mínimo pede um 2º clique.
+    if (pesado && !confirmou) { setConfirmou(true); return }
+    setEnv(true); setErro("")
+    const r = await fetch("/api/admin/cupons", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ codigo, tipo, valor: tipo === "frete_gratis" ? 0 : v, pedido_minimo: paraNum(minimo), validade: validade || null, lojas_ids: sel.length ? sel : null, centro_lat: centro && raio ? centro.lat : null, centro_lng: centro && raio ? centro.lng : null, raio_km: centro && raio ? Number(raio.replace(",", ".")) : null, max_usos: usos ? Number(usos) : null }) })
+    const j = await r.json().catch(() => ({})); setEnv(false)
+    if (!r.ok) { setErro(String(j.error ?? "").includes("unique") ? "Já existe um cupom com esse código." : j.error ?? "Não deu certo."); return }
+    onFechar({ t: `Cupom ${codigo.toUpperCase()} criado e já vale no app.`, ok: true })
+  }
+  const filtradas = lojas.filter(l => !buscaL.trim() || l.nome.toLowerCase().includes(buscaL.trim().toLowerCase()))
+  return (
+    <div className="veu on" onClick={() => !env && onFechar()}>
+      <div className="busca-caixa mv-form" onClick={e => e.stopPropagation()}>
+        <div className="t20" style={{ marginBottom: 4 }}>Criar cupom do Chegô</div>
+        <p className="t14 mut" style={{ marginBottom: 12 }}>O desconto sai do lucro do app, não da loja.</p>
+        <label className="campo"><span>Código</span><input value={codigo} onChange={e => setCodigo(e.target.value.toUpperCase().replace(/\s/g, ""))} placeholder="Ex.: VOLTA10" /></label>
+        <div className="chips-l" style={{ marginBottom: 12 }}>{(Object.keys(TIPO) as Tipo[]).map(k => <button key={k} className="chip" aria-pressed={tipo === k} onClick={() => { setTipo(k); setValor(""); setConfirmou(false) }}>{TIPO[k]}</button>)}</div>
+        <div className="mv-grade">
+          {tipo !== "frete_gratis" && <label className="campo"><span>{dinheiro ? "Desconto em reais" : "Percentual"}</span><input inputMode="numeric" value={valor} onChange={e => { setValor(dinheiro ? mascara(e.target.value) : e.target.value.replace(/[^\d,]/g, "").slice(0, 5)); setConfirmou(false) }} placeholder={dinheiro ? "R$ 0,00" : "Ex.: 10"} /></label>}
+          <label className="campo"><span>Pedido mínimo</span><input inputMode="numeric" value={minimo} onChange={e => { setMinimo(mascara(e.target.value)); setConfirmou(false) }} placeholder="Sem mínimo" /></label>
+          <label className="campo"><span>Vale até</span><input type="date" value={validade} onChange={e => setValidade(e.target.value)} /></label>
+          <label className="campo"><span>Limite de usos</span><input inputMode="numeric" value={usos} onChange={e => { setUsos(e.target.value.replace(/\D/g, "").slice(0, 5)); setConfirmou(false) }} placeholder="Sem limite" /></label>
         </div>
-      )}
-
-      {loading ? (
-        <p style={{ color: "#94a3b8" }}>Carregando...</p>
-      ) : cupons.length === 0 ? (
-        <div style={{ textAlign: "center", marginTop: 48 }}>
-          <p style={{ fontSize: 36, marginBottom: 12 }}>🎟️</p>
-          <p style={{ color: "#64748B", fontWeight: 600 }}>Nenhum cupom global criado</p>
+        {resumo && <p className="t14" style={{ margin: "0 0 12px" }}><b>{resumo}</b>. {usos ? `Pode ser usado ${usos} ${usos === "1" ? "vez" : "vezes"}.` : "Sem limite de usos: qualquer cliente pode usar quantas vezes quiser."}</p>}
+        <div className="gav-sec" style={{ marginTop: 0 }}><small>Lojas (nenhuma marcada = vale em todas)</small>
+          <input className="pd-busca" style={{ width: "100%", height: 40 }} placeholder="Buscar loja" value={buscaL} onChange={e => setBuscaL(e.target.value)} />
+          <div className="chips-l cp-lojas">{filtradas.map(l => <button key={l.id} className="chip" aria-pressed={sel.includes(l.id)} onClick={() => setSel(s => s.includes(l.id) ? s.filter(x => x !== l.id) : [...s, l.id])}>{l.nome}</button>)}</div>
+          {sel.length > 0 && <span className="t12 mut">{sel.length} {sel.length === 1 ? "loja marcada" : "lojas marcadas"}</span>}
         </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {cupons.map(c => (
-            <div key={c.id} style={{
-              background: "white", borderRadius: 14, padding: "16px 18px",
-              border: `1px solid ${c.ativo ? "#F1F5F9" : "#F1F5F9"}`,
-              opacity: c.ativo ? 1 : 0.5,
-              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
-            }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
-                  <p style={{ color: "#f97316", fontWeight: 900, fontSize: 16, fontFamily: "monospace", letterSpacing: 1 }}>{c.codigo}</p>
-                  <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "rgba(96,165,250,0.12)", color: "#60a5fa" }}>
-                    {c.lojas_ids?.length ? `${c.lojas_ids.length} loja${c.lojas_ids.length > 1 ? "s" : ""}` : "Global"}
-                  </span>
-                  {c.raio_km != null && (
-                    <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: "rgba(139,92,246,0.12)", color: "#8b5cf6" }}>
-                      📍 {c.raio_km}km
-                    </span>
-                  )}
-                  <span style={{
-                    fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999,
-                    background: c.ativo ? "rgba(34,197,94,0.12)" : "#F9FAFB",
-                    color: c.ativo ? "#22c55e" : "#94a3b8",
-                  }}>
-                    {c.ativo ? "Ativo" : "Inativo"}
-                  </span>
-                </div>
-                <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#64748B", flexWrap: "wrap" }}>
-                  <span>
-                    {c.tipo === "percentual" ? `${c.valor}% off`
-                      : c.tipo === "frete_gratis" ? "🛵 Frete grátis"
-                      : c.tipo === "frete_percentual" ? `🛵 ${c.valor}% off no frete`
-                      : `R$ ${Number(c.valor).toFixed(2)} off`}
-                  </span>
-                  {c.pedido_minimo > 0 && <span>· Mín. R$ {Number(c.pedido_minimo).toFixed(2)}</span>}
-                  {c.validade && <span>· Até {new Date(c.validade + "T12:00:00").toLocaleDateString("pt-BR")}</span>}
-                  <span>· {c.usos} usos</span>
-                </div>
-              </div>
-              <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-                <button onClick={() => toggleAtivo(c)} style={{ padding: "7px 14px", borderRadius: 10, border: "1px solid #E2E8F0", background: "transparent", color: "#64748B", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                  {c.ativo ? "Desativar" : "Ativar"}
-                </button>
-                <button onClick={() => excluir(c.id)} style={{ padding: "7px 12px", borderRadius: 10, border: "1px solid rgba(239,68,68,0.2)", background: "rgba(239,68,68,0.06)", color: "#f87171", fontSize: 12, cursor: "pointer" }}>
-                  🗑
-                </button>
-              </div>
-            </div>
-          ))}
+        <div className="gav-sec"><small>Só perto de um lugar (opcional)</small>
+          <div className="lin" style={{ gap: 8 }}><input className="pd-busca" style={{ flex: 1, width: "auto", height: 42 }} placeholder="Endereço do centro" value={end} onChange={e => setEnd(e.target.value)} /><button className="btn btn-s" style={{ minHeight: 42 }} onClick={buscarCentro} disabled={!end.trim()}>Buscar</button></div>
+          {centro && <span className="t12" style={{ color: "var(--folha)" }}>{centro.display}</span>}
+          <input className="pd-busca" style={{ width: 160, height: 42 }} inputMode="decimal" placeholder="Raio em km" value={raio} onChange={e => setRaio(e.target.value.replace(/[^\d,]/g, "").slice(0, 4))} />
         </div>
-      )}
+        {erro && <div className="aviso vm" style={{ marginBottom: 10 }}>{erro}</div>}
+        {confirmou && pesado && <div className="aviso vm" style={{ marginBottom: 10 }}>Desconto alto: {resumo}. {usos ? "" : "E sem limite de usos. "}Confira o valor e toque em Criar mesmo assim.</div>}
+        <div className="lin" style={{ gap: 8 }}><button className="btn btn-s" style={{ flex: 1 }} disabled={env} onClick={() => onFechar()}>Voltar</button><button className="btn btn-p" style={{ flex: 2 }} disabled={env} onClick={salvar}>{env ? "Criando…" : confirmou && pesado ? "Criar mesmo assim" : "Criar cupom"}</button></div>
+      </div>
     </div>
   )
 }

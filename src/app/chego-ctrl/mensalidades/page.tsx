@@ -1,311 +1,102 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+// Mensalidades (admin 2.0, 20/10/2026): planos das lojas e quem está em dia no mês.
+// Mesmas ações de antes (/api/chego-ctrl/mensalidade): confirmar pagamento e mudar o dia do vencimento.
+// Plano Gold não tem mensalidade (cobra comissão). Bloqueio automático 4 dias depois do vencimento.
+import { useCallback, useEffect, useState } from "react"
+import { R } from "../_dinheiro"
 
-const PLANO_VALOR: Record<string, number> = { select: 149, prime: 497, black: 997 }
-const PLANO_LABEL: Record<string, string>  = { select: "Select", prime: "Prime", black: "Black" }
-const PLANO_COR:   Record<string, string>  = { select: "#2563eb", prime: "#7c3aed", black: "#111827" }
-
-const STATUS_CFG: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  pago:      { label: "Em dia",    color: "#059669", bg: "#F0FDF4", border: "#A7F3D0" },
-  pendente:  { label: "Pendente",  color: "#d97706", bg: "#FFFBEB", border: "#FDE68A" },
-  atrasado:  { label: "Atrasado",  color: "#dc2626", bg: "#FEF2F2", border: "#FECACA" },
-  bloqueado: { label: "Bloqueado", color: "#7c3aed", bg: "#F5F3FF", border: "#DDD6FE" },
-}
-
-type Loja = {
-  id: string; nome: string; plano: string; mensalidade_dia: number
-  status: string; logo_url?: string; mensalidade_paga_em?: string
-}
-type Mensalidade = {
-  id: string; loja_id: string; valor: number; mes_referencia: string
-  vencimento: string; pago_em?: string; confirmado_por?: string; status: string
-}
-
-function fmtR(v: number) {
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-}
-function fmtData(iso: string) {
-  return new Date(iso + "T00:00:00").toLocaleDateString("pt-BR")
-}
-function diasAtraso(vencimento: string): number {
-  const hoje = new Date(); hoje.setHours(0,0,0,0)
-  const venc = new Date(vencimento + "T00:00:00")
-  return Math.max(0, Math.floor((hoje.getTime() - venc.getTime()) / 86_400_000))
-}
+const PLANO: Record<string, { n: string; v: number }> = { select: { n: "Select", v: 149 }, prime: { n: "Prime", v: 497 }, black: { n: "Black", v: 997 } }
+const ST: Record<string, [string, string]> = { pago: ["Em dia", "verde"], pendente: ["A vencer", "amarelo"], atrasado: ["Atrasada", "vermelho"], bloqueado: ["Bloqueada", "roxo"] }
+type Loja = { id: string; nome: string; plano: string; mensalidade_dia: number; status: string; logo_url?: string; mensalidade_paga_em?: string }
+type Mens = { id: string; loja_id: string; valor: number; mes_referencia: string; vencimento: string; pago_em?: string; confirmado_por?: string; status: string }
+const dataBr = (ymd: string) => new Date(ymd + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
+const atrasoDe = (venc: string) => { const h = new Date(); h.setHours(0, 0, 0, 0); return Math.max(0, Math.floor((h.getTime() - new Date(venc + "T00:00:00").getTime()) / 86_400_000)) }
+const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
 
 export default function MensalidadesPage() {
-  const [lojas,  setLojas]  = useState<Loja[]>([])
-  const [mens,   setMens]   = useState<Mensalidade[]>([])
-  const [loading, setLoading] = useState(true)
-  const [confirmando, setConfirmando] = useState<string | null>(null)
-  const [editandoDia, setEditandoDia] = useState<string | null>(null)
-  const [novoDia, setNovoDia]         = useState("")
-  const [salvandoDia, setSalvandoDia] = useState(false)
-  const [filtro, setFiltro] = useState<"todos" | "pendente" | "atrasado" | "bloqueado" | "pago">("todos")
+  const [lojas, setLojas] = useState<Loja[]>([])
+  const [mens, setMens] = useState<Mens[]>([])
+  const [carregou, setCarregou] = useState(false)
+  const [filtro, setFiltro] = useState("todos")
+  const [ocupado, setOcupado] = useState<string | null>(null)
+  const [dia, setDia] = useState<{ id: string; v: string } | null>(null)
+  const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null)
 
   const load = useCallback(async () => {
-    setLoading(true)
     const r = await fetch("/api/chego-ctrl/mensalidade", { credentials: "include" })
-    const d = await r.json()
-    setLojas(d.lojas ?? [])
-    setMens(d.mensalidades ?? [])
-    setLoading(false)
+    const d = await r.json().catch(() => ({}))
+    setLojas(d.lojas ?? []); setMens(d.mensalidades ?? []); setCarregou(true)
   }, [])
-
   useEffect(() => { load() }, [load])
 
-  // Merge: loja + mensalidade do mês atual
-  const hoje = new Date()
-  const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`
+  const hoje = new Date(), mes = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}`
+  const ordem: Record<string, number> = { bloqueado: 0, atrasado: 1, pendente: 2, pago: 3 }
+  const rows = lojas.map(l => { const m = mens.find(x => x.loja_id === l.id && x.mes_referencia === mes) ?? null; return { l, m, st: m?.status ?? "pendente", atraso: m ? atrasoDe(m.vencimento) : 0 } })
+    .sort((a, b) => (ordem[a.st] ?? 2) - (ordem[b.st] ?? 2) || b.atraso - a.atraso)
+  const vis = rows.filter(r => filtro === "todos" || r.st === filtro)
+  const valor = (r: typeof rows[number]) => Number(r.m?.valor ?? PLANO[r.l.plano]?.v ?? 0)
+  const recebido = rows.filter(r => r.st === "pago").reduce((t, r) => t + valor(r), 0)
+  const aReceber = rows.filter(r => r.st !== "pago").reduce((t, r) => t + valor(r), 0)
+  const conta = (s: string) => rows.filter(r => s === "todos" || r.st === s).length
 
-  type LojaRow = {
-    loja: Loja
-    mens: Mensalidade | null
-    statusEfetivo: string
-    atraso: number
+  async function post(body: object) {
+    const r = await fetch("/api/chego-ctrl/mensalidade", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    return r.ok
   }
-
-  const rows: LojaRow[] = lojas.map(l => {
-    const m = mens.find(m => m.loja_id === l.id && m.mes_referencia === mesAtual) ?? null
-    const atraso = m ? diasAtraso(m.vencimento) : 0
-    const statusEfetivo = m?.status ?? "pendente"
-    return { loja: l, mens: m, statusEfetivo, atraso }
-  }).sort((a, b) => {
-    const ord = { bloqueado: 0, atrasado: 1, pendente: 2, pago: 3 }
-    return (ord[a.statusEfetivo as keyof typeof ord] ?? 2) - (ord[b.statusEfetivo as keyof typeof ord] ?? 2)
-  })
-
-  const filtradas = filtro === "todos" ? rows : rows.filter(r => r.statusEfetivo === filtro)
-
-  const totais = {
-    emDia:    rows.filter(r => r.statusEfetivo === "pago").length,
-    pendente: rows.filter(r => r.statusEfetivo === "pendente").length,
-    atrasado: rows.filter(r => r.statusEfetivo === "atrasado").length,
-    bloqueado: rows.filter(r => r.statusEfetivo === "bloqueado").length,
-    aReceber: rows.filter(r => r.statusEfetivo !== "pago").reduce((s, r) => s + (PLANO_VALOR[r.loja.plano] ?? 0), 0),
-    recebido:  rows.filter(r => r.statusEfetivo === "pago").reduce((s, r) => s + (PLANO_VALOR[r.loja.plano] ?? 0), 0),
+  async function confirmar(r: typeof rows[number]) {
+    if (!r.m) return
+    if (!confirm(`Confirmar que ${r.l.nome} pagou ${R(valor(r))}?${r.st === "bloqueado" ? " A loja é desbloqueada." : ""}`)) return
+    setOcupado(r.m.id); const ok = await post({ acao: "confirmar_pagamento", mensalidade_id: r.m.id }); await load(); setOcupado(null)
+    setMsg(ok ? { t: `Mensalidade de ${r.l.nome} confirmada.`, ok: true } : { t: "Não deu certo.", ok: false })
   }
-
-  async function confirmarPagamento(mensalidadeId: string) {
-    setConfirmando(mensalidadeId)
-    await fetch("/api/chego-ctrl/mensalidade", {
-      method: "POST", credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ acao: "confirmar_pagamento", mensalidade_id: mensalidadeId }),
-    })
-    await load()
-    setConfirmando(null)
-  }
-
-  async function salvarDia(lojaId: string) {
-    setSalvandoDia(true)
-    await fetch("/api/chego-ctrl/mensalidade", {
-      method: "POST", credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ acao: "atualizar_dia", loja_id: lojaId, dia: Number(novoDia) }),
-    })
-    await load()
-    setEditandoDia(null)
-    setNovoDia("")
-    setSalvandoDia(false)
-  }
-
-  const inp: React.CSSProperties = {
-    padding: "6px 10px", borderRadius: 8, border: "1.5px solid #E2E8F0",
-    fontSize: 13, fontWeight: 600, color: "#374151", outline: "none",
+  async function salvarDia(l: Loja) {
+    const n = Number(dia?.v); if (!(n >= 1 && n <= 28)) { setMsg({ t: "O dia tem que ser de 1 a 28.", ok: false }); return }
+    setOcupado(l.id); const ok = await post({ acao: "atualizar_dia", loja_id: l.id, dia: n }); await load(); setOcupado(null); setDia(null)
+    setMsg(ok ? { t: `${l.nome} agora vence todo dia ${n}.`, ok: true } : { t: "Não deu certo.", ok: false })
   }
 
   return (
-    <div style={{ padding: "32px 36px", minHeight: "100vh" }}>
-
-      {/* Header */}
-      <div style={{ marginBottom: 28 }}>
-        <p style={{ fontSize: 12, fontWeight: 700, color: "#8b5cf6", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>
-          Financeiro
-        </p>
-        <h1 style={{ fontSize: 26, fontWeight: 900, color: "#0F172A", letterSpacing: "-0.5px" }}>Mensalidades</h1>
-        <p style={{ fontSize: 13, color: "#94a3b8", marginTop: 3 }}>
-          {mesAtual.split("-").reverse().join("/")} · vencimento padrão todo dia <strong style={{ color: "#0F172A" }}>10</strong> · bloqueio automático após <strong style={{ color: "#0F172A" }}>4 dias</strong> de atraso
-        </p>
+    <>
+      <div className="kpis4">
+        <div className="cartao kpi2"><small>Recebido em {MESES[hoje.getMonth()]}</small><b className="num">{R(recebido)}</b><span className="t14 mut">{conta("pago")} lojas em dia</span></div>
+        <div className="cartao kpi2"><small>Falta receber</small><b className="num">{R(aReceber)}</b><span className="t14 mut">{conta("pendente")} a vencer</span></div>
+        <div className="cartao kpi2"><small>Atrasadas</small><b className="num" style={{ color: conta("atrasado") ? "var(--pimenta)" : undefined }}>{conta("atrasado")}</b><span className="t14 mut">bloqueia com 4 dias</span></div>
+        <div className="cartao kpi2"><small>Bloqueadas</small><b className="num">{conta("bloqueado")}</b><span className="t14 mut">sem acesso ao painel</span></div>
+      </div>
+      {msg && <div className={`aviso ${msg.ok ? "vd" : "vm"}`} role="status" style={{ marginBottom: 12 }}>{msg.t}</div>}
+      <div className="chips-l" style={{ marginBottom: 12 }}>
+        {["todos", "atrasado", "bloqueado", "pendente", "pago"].map(s => <button key={s} className="chip" aria-pressed={filtro === s} onClick={() => setFiltro(s)}>{s === "todos" ? "Todas" : ST[s][0]} <span className="pd-n">{conta(s)}</span></button>)}
       </div>
 
-      {/* Cards de resumo */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12, marginBottom: 28 }}>
-        {[
-          { label: "Em dia",      value: totais.emDia,    color: "#059669", bg: "#F0FDF4" },
-          { label: "Pendentes",   value: totais.pendente, color: "#d97706", bg: "#FFFBEB" },
-          { label: "Atrasados",   value: totais.atrasado, color: "#dc2626", bg: "#FEF2F2" },
-          { label: "Bloqueados",  value: totais.bloqueado,color: "#7c3aed", bg: "#F5F3FF" },
-          { label: "Recebido",    value: fmtR(totais.recebido),  color: "#059669", bg: "#F0FDF4" },
-          { label: "A receber",   value: fmtR(totais.aReceber),  color: "#d97706", bg: "#FFFBEB" },
-        ].map(c => (
-          <div key={c.label} style={{ background: c.bg, borderRadius: 14, padding: "16px", border: `1.5px solid ${c.color}22` }}>
-            <p style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 }}>{c.label}</p>
-            <p style={{ fontSize: 20, fontWeight: 900, color: c.color }}>{c.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Filtros */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
-        {(["todos", "pendente", "atrasado", "bloqueado", "pago"] as const).map(f => (
-          <button key={f} onClick={() => setFiltro(f)} style={{
-            padding: "6px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700, cursor: "pointer",
-            border: `1.5px solid ${filtro === f ? "#8b5cf6" : "#E2E8F0"}`,
-            background: filtro === f ? "#F5F3FF" : "white",
-            color: filtro === f ? "#7c3aed" : "#64748b",
-          }}>
-            {f === "todos" ? "Todas" : STATUS_CFG[f]?.label ?? f}
-            {f !== "todos" && (
-              <span style={{ marginLeft: 6, opacity: 0.7 }}>
-                ({rows.filter(r => r.statusEfetivo === f).length})
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Tabela */}
-      {loading ? (
-        <div style={{ textAlign: "center", padding: "60px 0", color: "#94a3b8" }}>
-          <div style={{ width: 32, height: 32, border: "3px solid #8b5cf6", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto 12px" }} />
-          <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-          <p style={{ fontSize: 13 }}>Carregando…</p>
-        </div>
-      ) : (
-        <div style={{ background: "white", borderRadius: 16, border: "1.5px solid #F1F5F9", overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
-          {/* Header tabela */}
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 120px 110px 120px 110px 1fr", gap: 0, padding: "10px 20px", background: "#F8FAFC", borderBottom: "1.5px solid #F1F5F9" }}>
-            {["Loja", "Plano", "Vencimento", "Status", "Dias atraso", "Ações"].map((h, i) => (
-              <p key={h} style={{ fontSize: 10, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.8, textAlign: i >= 5 ? "right" : "left" }}>{h}</p>
-            ))}
-          </div>
-
-          {filtradas.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "48px 0", color: "#94a3b8" }}>
-              <p style={{ fontSize: 32, marginBottom: 8 }}>✓</p>
-              <p style={{ fontSize: 14, fontWeight: 700 }}>Nenhuma loja neste filtro</p>
-            </div>
-          ) : filtradas.map((row, idx) => {
-            const { loja, mens: m, statusEfetivo, atraso } = row
-            const cfg = STATUS_CFG[statusEfetivo] ?? STATUS_CFG.pendente
-            const editando = editandoDia === loja.id
-
-            return (
-              <div key={loja.id} style={{ borderBottom: idx < filtradas.length - 1 ? "1px solid #F8FAFC" : "none" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "2fr 120px 110px 120px 110px 1fr", gap: 0, padding: "14px 20px", alignItems: "center" }}>
-
-                  {/* Loja */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    {loja.logo_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={loja.logo_url} alt={loja.nome} style={{ width: 32, height: 32, borderRadius: 9, objectFit: "cover", flexShrink: 0 }} />
-                    ) : (
-                      <div style={{ width: 32, height: 32, borderRadius: 9, background: "#F1F5F9", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900, color: "#64748b", flexShrink: 0 }}>
-                        {loja.nome.slice(0, 2).toUpperCase()}
-                      </div>
-                    )}
-                    <div>
-                      <p style={{ fontSize: 13, fontWeight: 800, color: "#0F172A" }}>{loja.nome}</p>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
-                        <p style={{ fontSize: 10, color: "#94a3b8" }}>Dia {loja.mensalidade_dia ?? 10}</p>
-                        {!editando ? (
-                          <button onClick={() => { setEditandoDia(loja.id); setNovoDia(String(loja.mensalidade_dia ?? 10)) }}
-                            style={{ fontSize: 10, color: "#6366f1", background: "none", border: "none", cursor: "pointer", padding: 0, fontWeight: 700 }}>
-                            alterar
-                          </button>
-                        ) : (
-                          <div style={{ display: "flex", gap: 4 }}>
-                            <input type="number" min={1} max={28} value={novoDia} onChange={e => setNovoDia(e.target.value)}
-                              style={{ ...inp, width: 52, fontSize: 11, padding: "3px 6px" }} />
-                            <button onClick={() => salvarDia(loja.id)} disabled={salvandoDia}
-                              style={{ fontSize: 10, padding: "3px 8px", borderRadius: 6, border: "none", background: "#6366f1", color: "white", fontWeight: 700, cursor: "pointer" }}>
-                              {salvandoDia ? "…" : "OK"}
-                            </button>
-                            <button onClick={() => setEditandoDia(null)}
-                              style={{ fontSize: 10, padding: "3px 6px", borderRadius: 6, border: "1px solid #E2E8F0", background: "white", color: "#94a3b8", cursor: "pointer" }}>
-                              ✕
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Plano */}
-                  <div>
-                    <span style={{
-                      display: "inline-flex", alignItems: "center", gap: 4,
-                      padding: "3px 10px", borderRadius: 50, fontSize: 11, fontWeight: 800,
-                      background: `${PLANO_COR[loja.plano]}15`, color: PLANO_COR[loja.plano],
-                      border: `1px solid ${PLANO_COR[loja.plano]}30`,
-                    }}>
-                      {PLANO_LABEL[loja.plano]}
-                    </span>
-                    <p style={{ fontSize: 11, fontWeight: 700, color: "#374151", marginTop: 3 }}>{fmtR(PLANO_VALOR[loja.plano] ?? 0)}</p>
-                  </div>
-
-                  {/* Vencimento */}
-                  <p style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>
-                    {m ? fmtData(m.vencimento) : `dia ${loja.mensalidade_dia ?? 10}`}
-                  </p>
-
-                  {/* Status */}
-                  <span style={{
-                    display: "inline-flex", alignItems: "center", gap: 5,
-                    padding: "4px 10px", borderRadius: 50, fontSize: 11, fontWeight: 700,
-                    background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`,
-                  }}>
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: cfg.color }} />
-                    {cfg.label}
-                  </span>
-
-                  {/* Dias atraso */}
-                  <p style={{
-                    fontSize: 13, fontWeight: 800,
-                    color: atraso >= 4 ? "#dc2626" : atraso > 0 ? "#d97706" : "#94a3b8",
-                  }}>
-                    {statusEfetivo === "pago" ? "—" : atraso > 0 ? `${atraso}d` : "—"}
-                  </p>
-
-                  {/* Ações */}
-                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
-                    {m && statusEfetivo !== "pago" && (
-                      <button
-                        onClick={() => confirmarPagamento(m.id)}
-                        disabled={confirmando === m.id}
-                        style={{
-                          padding: "6px 12px", borderRadius: 9, border: "none",
-                          background: confirmando === m.id ? "#e5e7eb" : "#059669",
-                          color: confirmando === m.id ? "#9ca3af" : "white",
-                          fontSize: 12, fontWeight: 700,
-                          cursor: confirmando === m.id ? "not-allowed" : "pointer",
-                        }}
-                      >
-                        {confirmando === m.id ? "…" : "✓ Confirmar pgt."}
-                      </button>
-                    )}
-                    {statusEfetivo === "pago" && m?.pago_em && (
-                      <div style={{ textAlign: "right" }}>
-                        <p style={{ fontSize: 11, fontWeight: 700, color: "#059669" }}>Pago em {new Date(m.pago_em).toLocaleDateString("pt-BR")}</p>
-                        {m.confirmado_por && <p style={{ fontSize: 10, color: "#94a3b8" }}>por {m.confirmado_por}</p>}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )
-          })}
+      {!carregou ? <p className="mut">Carregando…</p> : (
+        <div className="cartao" style={{ padding: 6, overflow: "auto" }}>
+          <table className="tabela">
+            <thead><tr><th>Loja</th><th>Plano</th><th className="esconde-cel">Vence</th><th>Situação</th><th style={{ textAlign: "right" }}>Ação</th></tr></thead>
+            <tbody>
+              {vis.map(r => { const st = ST[r.st] ?? ST.pendente; return (
+                <tr key={r.l.id}>
+                  <td><span className="lin" style={{ gap: 10 }}>{r.l.logo_url ? <img src={r.l.logo_url} alt="" style={{ width: 32, height: 32, borderRadius: 9, objectFit: "cover" }} /> : <span className="av-mb" style={{ width: 32, height: 32, borderRadius: 9, background: "var(--pedra)", color: "var(--suave)" }}>{r.l.nome[0]}</span>}
+                    <span><b>{r.l.nome}</b><br />
+                      {dia?.id === r.l.id
+                        ? <span className="lin" style={{ gap: 6, marginTop: 4 }}><input className="pd-sel" style={{ width: 70 }} inputMode="numeric" value={dia.v} onChange={e => setDia({ id: r.l.id, v: e.target.value.replace(/\D/g, "").slice(0, 2) })} /><button className="btn btn-v" style={{ minHeight: 34, padding: "0 10px", fontSize: 13 }} disabled={ocupado === r.l.id} onClick={() => salvarDia(r.l)}>Salvar</button><button className="btn btn-l" style={{ minHeight: 34 }} onClick={() => setDia(null)}>Voltar</button></span>
+                        : <button className="t12 mut" onClick={() => setDia({ id: r.l.id, v: String(r.l.mensalidade_dia ?? 10) })}>Vence todo dia {r.l.mensalidade_dia ?? 10}, <u>mudar</u></button>}
+                    </span></span></td>
+                  <td><b>{PLANO[r.l.plano]?.n ?? r.l.plano}</b><br /><span className="t12 mut num">{R(valor(r))}</span></td>
+                  <td className="esconde-cel num">{r.m ? dataBr(r.m.vencimento) : `dia ${r.l.mensalidade_dia ?? 10}`}</td>
+                  <td><span className={`selo ${st[1]}`}>{st[0]}</span>{r.st !== "pago" && r.atraso > 0 && <small className="pd-atr">{r.atraso} {r.atraso === 1 ? "dia" : "dias"} de atraso</small>}</td>
+                  <td style={{ textAlign: "right" }}>
+                    {r.m && r.st !== "pago" && <button className="btn btn-v" style={{ minHeight: 38, fontSize: 14, padding: "0 12px" }} disabled={ocupado === r.m.id} onClick={() => confirmar(r)}>{ocupado === r.m.id ? "Confirmando…" : "Confirmar pagamento"}</button>}
+                    {r.st === "pago" && r.m?.pago_em && <span className="t12 mut">Pago em {new Date(r.m.pago_em).toLocaleDateString("pt-BR")}{r.m.confirmado_por ? `, por ${r.m.confirmado_por}` : ""}</span>}
+                    {!r.m && <span className="t12 mut">sem cobrança no mês</span>}
+                  </td>
+                </tr>) })}
+              {!vis.length && <tr><td colSpan={5} className="vazio">Nenhuma loja aqui.</td></tr>}
+            </tbody>
+          </table>
         </div>
       )}
-
-      {/* Nota */}
-      <div style={{ marginTop: 20, padding: "12px 16px", background: "white", borderRadius: 12, border: "1.5px solid #F1F5F9", fontSize: 11, color: "#94a3b8" }}>
-        · Plano <strong style={{ color: "#374151" }}>Gold</strong> não gera mensalidade (cobrado por comissão sobre pedidos).<br />
-        · Lojas bloqueadas não conseguem acessar o painel de lojista até o pagamento ser confirmado.<br />
-        · O bloqueio automático ocorre <strong style={{ color: "#374151" }}>4 dias</strong> após o vencimento via cron diário.
-      </div>
-    </div>
+      <p className="t12 mut" style={{ marginTop: 8 }}>Plano Gold não tem mensalidade: paga comissão sobre os pedidos. Loja bloqueada não entra no painel até a mensalidade ser confirmada. O bloqueio é automático 4 dias depois do vencimento.</p>
+    </>
   )
 }

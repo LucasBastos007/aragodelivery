@@ -52,3 +52,9 @@ export function repasseLojaPorPedido(taxa_entrega: number, criadoEm?: string | D
   if (!usaFaixaNova(criadoEm)) return 0
   return t >= 6 ? 0 : 1
 }
+
+/** Ganho do motoboy num pedido, com a corrida dinâmica (chuva) somada por cima. Entrega
+ *  avulsa não tem dinâmica (campo ausente = 0). */
+export function ganhoMotoboyPedido(p: { taxa_entrega?: number | string | null; criado_em?: string | null; taxa_dinamica?: number | string | null }): number {
+  return ganhoMotoboy(Number(p.taxa_entrega ?? 0), p.criado_em) + (Number(p.taxa_dinamica ?? 0) || 0)
+}

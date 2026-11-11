@@ -35,3 +35,14 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
 }
+
+// Só a chave Pix e o banco (tela Ganhos/financeiro). Antes gravava direto do navegador (20/10/2026).
+export async function PATCH(req: NextRequest) {
+  const sess = requireMotoboy(req)
+  if (!sess) return unauthorized()
+  const { pix_key } = await req.json().catch(() => ({}))
+  if (typeof pix_key !== "string" || !pix_key.trim()) return NextResponse.json({ error: "Informe a chave Pix" }, { status: 400 })
+  const { error } = await adminClient().from("motoboys").update({ pix_key: pix_key.trim().slice(0, 1000) }).eq("id", sess.motoboy_id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}

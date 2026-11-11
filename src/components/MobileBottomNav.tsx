@@ -4,13 +4,14 @@ import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { useClienteAuth } from "@/lib/auth-cliente"
 import { useIsMobile } from "@/lib/use-mobile"
+import { SacolaFlutuante } from "@/components/SacolaFlutuante"
 
 export function MobileBottomNav() {
   const pathname = usePathname()
   const { user } = useClienteAuth()
   const isMobile = useIsMobile()
 
-  if (!isMobile) return null
+  if (!isMobile) return <SacolaFlutuante />
 
   const tabs = [
     {
@@ -18,9 +19,8 @@ export function MobileBottomNav() {
       href: "/",
       active: pathname === "/",
       icon: (active: boolean) => (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? "#DC2626" : "none"} stroke={active ? "#DC2626" : "#9CA3AF"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-          <polyline points="9 22 9 12 15 12 15 22"/>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={active ? "#D7261E" : "#77736B"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 10.5L12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>
         </svg>
       ),
     },
@@ -29,7 +29,7 @@ export function MobileBottomNav() {
       href: "/busca",
       active: pathname.startsWith("/busca"),
       icon: (active: boolean) => (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? "#DC2626" : "#9CA3AF"} strokeWidth={active ? "2.5" : "2"} strokeLinecap="round" strokeLinejoin="round">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={active ? "#D7261E" : "#77736B"} strokeWidth={active ? "2.5" : "2"} strokeLinecap="round" strokeLinejoin="round">
           <circle cx="11" cy="11" r="8"/>
           <path d="m21 21-4.35-4.35"/>
         </svg>
@@ -40,11 +40,9 @@ export function MobileBottomNav() {
       href: user ? "/cliente/historico" : "/cliente/entrar",
       active: pathname === "/cliente/historico",
       icon: (active: boolean) => (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? "rgba(220,38,38,0.1)" : "none"} stroke={active ? "#DC2626" : "#9CA3AF"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-          <line x1="16" y1="13" x2="8" y2="13"/>
-          <line x1="16" y1="17" x2="8" y2="17"/>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={active ? "#D7261E" : "#77736B"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/>
+          <path d="M9 8h6M9 12h6"/>
         </svg>
       ),
     },
@@ -53,7 +51,7 @@ export function MobileBottomNav() {
       href: user ? "/cliente/meu-perfil" : "/cliente/entrar",
       active: pathname.startsWith("/cliente/meu-perfil"),
       icon: (active: boolean) => (
-        <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? "rgba(220,38,38,0.1)" : "none"} stroke={active ? "#DC2626" : "#9CA3AF"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={active ? "#D7261E" : "#77736B"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="8" r="4"/>
           <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
         </svg>
@@ -61,26 +59,32 @@ export function MobileBottomNav() {
     },
   ]
 
+  // Layout novo (19/10/2026): mesmas 4 abas e rotas, visual da proposta.
+  // Cores do logo (azul-marinho e vermelho) ficam no chego-novo.css, na classe nav-cliente.
   return (
-    <div style={{
+    <>
+    <SacolaFlutuante acimaDoMenu />
+    <nav aria-label="Navegação" className="nav-cliente" style={{
       position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100,
-      background: "white", borderTop: "1px solid #e5e7eb",
-      display: "flex", justifyContent: "space-around", alignItems: "center",
-      paddingTop: 8,
-      paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)",
+      background: "rgba(255,255,255,0.96)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)",
+      borderTop: "1px solid #E6E5E1",
+      display: "flex", alignItems: "center",
+      padding: "8px 6px calc(env(safe-area-inset-bottom, 0px) + 8px)",
+      fontFamily: "var(--font-corpo), system-ui, sans-serif",
     }}>
       {tabs.map(item => (
-        <Link key={item.label} href={item.href} style={{
+        <Link key={item.label} href={item.href} aria-current={item.active ? "page" : undefined} style={{
           display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
-          textDecoration: "none", padding: "4px 16px", flex: 1, justifyContent: "center",
-          color: item.active ? "#DC2626" : "#9CA3AF",
+          textDecoration: "none", flex: 1, justifyContent: "center",
+          color: item.active ? "#D7261E" : "#77736B",
         }}>
           {item.icon(item.active)}
-          <span style={{ fontSize: 10, fontWeight: item.active ? 700 : 600 }}>
+          <span style={{ fontSize: 11.5, fontWeight: 600 }}>
             {item.label}
           </span>
         </Link>
       ))}
-    </div>
+    </nav>
+    </>
   )
 }

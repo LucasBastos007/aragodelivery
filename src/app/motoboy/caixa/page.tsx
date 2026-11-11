@@ -1,11 +1,25 @@
 "use client"
 
+// "Dinheiro em mãos" igual à proposta (20/10/2026): quanto o motoboy recebeu em dinheiro hoje,
+// os pedidos de onde veio, e a mesma declaração de caixa de antes (/api/motoboy/caixa).
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth"
+import { supabase } from "@/lib/supabase"
+import { partesPagamento } from "@/lib/pagamentoDividido"
 
 type Declaracao = { id: string; valor: number; observacao: string | null; criado_em: string }
+type Linha = { id: string; loja: string; criado_em: string; valor: number }
+
+const brl = (v: number) => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+function mascaraBRL(v: string) {
+  const d = v.replace(/\D/g, "").replace(/^0+/, "").slice(0, 9)
+  return d ? (Number(d) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : ""
+}
+const hora = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }).replace(":", "h")
 
 export default function MotoboyCaixaPage() {
+  const router = useRouter()
   const { sessao } = useAuth()
   const motoboy_id = sessao?.role === "motoboy" ? sessao.motoboy_id : null
 
@@ -14,22 +28,37 @@ export default function MotoboyCaixaPage() {
   const [enviando,     setEnviando]     = useState(false)
   const [erro,         setErro]         = useState("")
   const [sucesso,      setSucesso]      = useState(false)
-  const [loading,      setLoading]      = useState(true)
   const [declaracoes,  setDeclaracoes]  = useState<Declaracao[]>([])
+  const [linhas,       setLinhas]       = useState<Linha[] | null>(null)
 
-  useEffect(() => { if (motoboy_id) carregar() }, [motoboy_id])
+  useEffect(() => { if (motoboy_id) { carregar(); carregarDinheiro() } }, [motoboy_id])
 
   async function carregar() {
-    setLoading(true)
     const res = await fetch("/api/motoboy/caixa", { credentials: "include" })
     const json = await res.json().catch(() => ({}))
     setDeclaracoes(json.declaracoes ?? [])
-    setLoading(false)
+  }
+
+  // Pedidos de hoje entregues por ele em que o cliente pagou (uma parte ou tudo) em dinheiro
+  async function carregarDinheiro() {
+    const hoje = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" })
+    const desde = new Date(`${hoje}T00:00:00-03:00`).toISOString()
+    const { data } = await supabase.from("pedidos")
+      .select("id, criado_em, total, forma_pagamento, forma_pagamento_2, valor_pagamento_1, valor_pagamento_2, endereco_entrega, loja:lojas(nome)")
+      .eq("motoboy_id", motoboy_id!).eq("status", "entregue").gte("criado_em", desde)
+      .order("criado_em", { ascending: false })
+    const ls: Linha[] = []
+    for (const p of (data ?? []) as any[]) {
+      if (/retirada/i.test(p.endereco_entrega ?? "")) continue
+      const v = partesPagamento(p).filter(x => x.forma === "dinheiro").reduce((s, x) => s + x.valor, 0)
+      if (v > 0) ls.push({ id: p.id, loja: p.loja?.nome ?? "Loja", criado_em: p.criado_em, valor: v })
+    }
+    setLinhas(ls)
   }
 
   async function enviar() {
-    const v = Number(valor.replace(",", "."))
-    if (!Number.isFinite(v) || v < 0) { setErro("Informe um valor válido"); return }
+    const v = Number(valor.replace(/\./g, "").replace(",", "."))
+    if (!valor || !Number.isFinite(v) || v < 0) { setErro("Diga quanto tem em mãos"); return }
     setEnviando(true)
     setErro("")
     const res = await fetch("/api/motoboy/caixa", {
@@ -46,103 +75,52 @@ export default function MotoboyCaixaPage() {
     carregar()
   }
 
-  const inp: React.CSSProperties = {
-    width: "100%", padding: "12px 14px", borderRadius: 12, fontSize: 14,
-    background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-    color: "white", outline: "none", boxSizing: "border-box",
-  }
+  const totalDinheiro = (linhas ?? []).reduce((s, l) => s + l.valor, 0)
 
   return (
-    <div style={{ maxWidth: 480, margin: "0 auto", padding: "24px 20px 100px" }}>
-      <p style={{ color: "white", fontWeight: 900, fontSize: 20, marginBottom: 4 }}>Caixa do dia</p>
-      <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13, marginBottom: 28 }}>
-        Informe quanto dinheiro você tem em mãos ao parar de entregar hoje
-      </p>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <div>
-          <label style={{ display: "block", color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
-            Valor em dinheiro (R$)
-          </label>
-          <input
-            value={valor}
-            onChange={e => setValor(e.target.value)}
-            placeholder="0,00"
-            inputMode="decimal"
-            style={inp}
-          />
-        </div>
-        <div>
-          <label style={{ display: "block", color: "rgba(255,255,255,0.4)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
-            Observação (opcional)
-          </label>
-          <input
-            value={observacao}
-            onChange={e => setObservacao(e.target.value)}
-            placeholder="Ex: sobrou troco de..."
-            style={inp}
-          />
-        </div>
+    <div className="mb-pagina" style={{ paddingTop: 0 }}>
+      <div className="mb-topo-pag">
+        <button className="mb-redondo-peq" onClick={() => router.back()} aria-label="Voltar"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg></button>
+        <h1 className="t20">Dinheiro em mãos</h1>
       </div>
 
-      <button onClick={enviar} disabled={enviando} style={{
-        width: "100%", marginTop: 20, padding: "16px",
-        borderRadius: 14, border: "none",
-        background: enviando ? "rgba(249,115,22,0.4)" : "#f97316",
-        color: "white", fontWeight: 900, fontSize: 15, cursor: enviando ? "not-allowed" : "pointer",
-      }}>
-        {enviando ? "Enviando..." : "Declarar caixa"}
-      </button>
+      <div className="mb-cartao" style={{ padding: 18 }}>
+        <span className="mut" style={{ fontSize: 14 }}>Recebido em dinheiro hoje</span><br />
+        <b style={{ fontFamily: "var(--display)", fontSize: 40, fontWeight: 800, letterSpacing: "-.02em", fontVariantNumeric: "tabular-nums" }}>{linhas === null ? "…" : brl(totalDinheiro)}</b>
+      </div>
+      <p className="mut" style={{ fontSize: 14, margin: "14px 2px", lineHeight: 1.5 }}>É o que você recebeu dos clientes que pagaram em dinheiro. Esse valor entra no acerto do seu caixa com o Chegô.</p>
 
-      {erro && (
-        <p style={{ color: "#f87171", fontSize: 13, fontWeight: 600, marginTop: 12, textAlign: "center" }}>{erro}</p>
-      )}
-
-      {sucesso && (
-        <div style={{
-          position: "fixed", bottom: 90, left: 16, right: 16,
-          background: "#22c55e", color: "white", fontWeight: 700, fontSize: 13,
-          padding: "12px 20px", borderRadius: 14, boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
-          textAlign: "center",
-        }}>
-          Caixa declarado com sucesso
-        </div>
-      )}
-
-      <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, marginTop: 36, marginBottom: 12 }}>
-        Declarações anteriores
-      </p>
-
-      {loading ? (
-        <p style={{ color: "rgba(255,255,255,0.3)" }}>Carregando...</p>
-      ) : declaracoes.length === 0 ? (
-        <p style={{ color: "rgba(255,255,255,0.25)", fontSize: 13 }}>Nenhuma declaração ainda</p>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {declaracoes.map(d => (
-            <div key={d.id} style={{
-              background: "#111", borderRadius: 14, padding: "12px 16px",
-              border: "1px solid rgba(255,255,255,0.07)",
-              display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8,
-            }}>
-              <div style={{ minWidth: 0 }}>
-                <p style={{ color: "rgba(255,255,255,0.35)", fontSize: 11 }}>
-                  {new Date(d.criado_em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" })}
-                  {" · "}
-                  {new Date(d.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                </p>
-                {d.observacao && (
-                  <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 12, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {d.observacao}
-                  </p>
-                )}
-              </div>
-              <p style={{ color: "#22c55e", fontWeight: 900, fontSize: 16, flexShrink: 0 }}>
-                R$ {d.valor.toFixed(2)}
-              </p>
+      {linhas && linhas.length > 0 && (
+        <div className="mb-cartao" style={{ padding: "4px 16px" }}>
+          {linhas.map(l => (
+            <div key={l.id} className="mb-linha-h">
+              <span style={{ flex: 1 }}>{l.loja}<br /><small className="mut" style={{ fontSize: 12 }}>hoje, {hora(l.criado_em)}</small></span>
+              <span className="v">{brl(l.valor)}</span>
             </div>
           ))}
         </div>
+      )}
+
+      <label className="mb-campo" style={{ marginTop: 18 }}><span>Quanto você tem em mãos agora?</span>
+        <input inputMode="numeric" placeholder="R$ 0,00" value={valor} onChange={e => setValor(mascaraBRL(e.target.value))} /></label>
+      <label className="mb-campo" style={{ marginTop: 12 }}><span>Observação (opcional)</span>
+        <textarea placeholder="Ex.: sobrou troco de uma corrida" value={observacao} onChange={e => setObservacao(e.target.value)} rows={3} /></label>
+      {erro && <p style={{ color: "var(--pimenta)", fontSize: 13.5, fontWeight: 600, marginTop: 10 }}>{erro}</p>}
+      {sucesso && <p style={{ color: "var(--folha)", fontSize: 13.5, fontWeight: 700, marginTop: 10 }}>Caixa declarado. O Chegô vai conferir.</p>}
+      <button className="mb-btn verm" style={{ marginTop: 14 }} onClick={enviar} disabled={enviando}>{enviando ? "Enviando…" : "Declarar caixa"}</button>
+
+      {declaracoes.length > 0 && (
+        <>
+          <div className="mb-dia-tit">Declarações anteriores</div>
+          <div className="mb-cartao" style={{ padding: "4px 16px" }}>
+            {declaracoes.map(d => (
+              <div key={d.id} className="mb-linha-h">
+                <span style={{ flex: 1 }}>{new Date(d.criado_em).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" })}, {hora(d.criado_em)}{d.observacao ? <><br /><small className="mut" style={{ fontSize: 12 }}>{d.observacao}</small></> : null}</span>
+                <span className="v">{brl(Number(d.valor))}</span>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   )

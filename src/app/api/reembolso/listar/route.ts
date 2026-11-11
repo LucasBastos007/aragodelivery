@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import { requireAdmin, requireLoja, unauthorized } from "@/lib/session"
+import { requireAdmin, unauthorized } from "@/lib/session"
 
 function adminSb() {
   return createClient(
@@ -12,9 +12,10 @@ function adminSb() {
 }
 
 export async function GET(req: NextRequest) {
+  // Só o admin lista reembolsos (20/10/2026)
   const sessAdmin = requireAdmin(req)
-  const sessLoja  = !sessAdmin ? requireLoja(req) : null
-  if (!sessAdmin && !sessLoja) return unauthorized()
+  const sessLoja  = null as { loja_id: string } | null
+  if (!sessAdmin) return unauthorized()
 
   const { searchParams } = new URL(req.url)
   const status     = searchParams.get("status")

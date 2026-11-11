@@ -15,7 +15,7 @@ function Estrelas({ nota }: { nota: number | null }) {
   return (
     <div style={{ display: "flex", gap: 1 }}>
       {[1, 2, 3, 4, 5].map(i => (
-        <svg key={i} width="14" height="14" viewBox="0 0 24 24" fill={i <= nota ? "#f59e0b" : "#E5E7EB"} stroke="none">
+        <svg key={i} width="14" height="14" viewBox="0 0 24 24" fill={i <= nota ? "var(--pequi)" : "var(--linha)"} stroke="none">
           <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
         </svg>
       ))}
@@ -93,16 +93,16 @@ export default function LojaAvaliacoesPage() {
     <div style={{ padding: "32px 36px", maxWidth: 780 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h1 style={{ color: "#111827", fontWeight: 900, fontSize: 22 }}>⭐ Avaliações</h1>
-          <p style={{ color: "#9CA3AF", fontSize: 13, marginTop: 3 }}>
+          
+          <p style={{ color: "var(--suave)", fontSize: 13, marginTop: 3 }}>
             {mediaGeral != null ? `Nota média ${mediaGeral.toFixed(1)} · ${avaliacoes.length} avaliaç${avaliacoes.length === 1 ? "ão" : "ões"}` : "Comentários e notas dos seus clientes"}
           </p>
         </div>
-        <div style={{ display: "flex", gap: 6, background: "#F3F4F6", borderRadius: 10, padding: 3 }}>
+        <div style={{ display: "flex", gap: 6, background: "var(--pedra)", borderRadius: 10, padding: 3 }}>
           {([["todas", "Todas"], ["sem_resposta", "Sem resposta"]] as const).map(([v, label]) => (
             <button key={v} onClick={() => setFiltro(v)} style={{
               padding: "7px 14px", borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: "pointer", border: "none",
-              background: filtro === v ? "#fff" : "transparent", color: filtro === v ? "#111827" : "#6B7280",
+              background: filtro === v ? "#fff" : "transparent", color: filtro === v ? "var(--grafite)" : "var(--suave)",
             }}>
               {label}
             </button>
@@ -111,35 +111,35 @@ export default function LojaAvaliacoesPage() {
       </div>
 
       {loading ? (
-        <p style={{ color: "#9CA3AF" }}>Carregando...</p>
+        <p style={{ color: "var(--suave)" }}>Carregando...</p>
       ) : listaFiltrada.length === 0 ? (
         <div style={{ textAlign: "center", marginTop: 48 }}>
           <p style={{ fontSize: 36, marginBottom: 12 }}>⭐</p>
-          <p style={{ color: "#6B7280", fontWeight: 600 }}>
+          <p style={{ color: "var(--suave)", fontWeight: 600 }}>
             {filtro === "sem_resposta" ? "Nenhuma avaliação pendente de resposta" : "Nenhuma avaliação ainda"}
           </p>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {listaFiltrada.map(a => (
-            <div key={a.id} style={{ background: "#ffffff", borderRadius: 14, padding: "16px 18px", border: "1px solid #E5E7EB" }}>
+            <div key={a.id} style={{ background: "#ffffff", borderRadius: 14, padding: "16px 18px", border: "1px solid var(--linha)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 8 }}>
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
                     <Estrelas nota={a.nota_loja} />
-                    <span style={{ color: "#111827", fontWeight: 700, fontSize: 13 }}>{a.clienteNome ?? "Cliente"}</span>
+                    <span style={{ color: "var(--grafite)", fontWeight: 700, fontSize: 13 }}>{a.clienteNome ?? "Cliente"}</span>
                   </div>
-                  <p style={{ color: "#9CA3AF", fontSize: 11.5 }}>
+                  <p style={{ color: "var(--suave)", fontSize: 11.5 }}>
                     {a.pedidoCodigo ? `Pedido #${a.pedidoCodigo} · ` : ""}{fmtData(a.criado_em)}
                   </p>
                 </div>
               </div>
-              {a.comentario && <p style={{ color: "#374151", fontSize: 13.5, lineHeight: 1.5, marginBottom: 10 }}>{a.comentario}</p>}
+              {a.comentario && <p style={{ color: "var(--texto)", fontSize: 13.5, lineHeight: 1.5, marginBottom: 10 }}>{a.comentario}</p>}
 
               {a.resposta_loja ? (
-                <div style={{ background: "#F9FAFB", borderRadius: 10, padding: "10px 12px", borderLeft: "3px solid #f97316" }}>
-                  <p style={{ color: "#f97316", fontWeight: 700, fontSize: 11.5, marginBottom: 3 }}>Sua resposta</p>
-                  <p style={{ color: "#374151", fontSize: 13 }}>{a.resposta_loja}</p>
+                <div style={{ background: "var(--pedra)", borderRadius: 10, padding: "10px 12px", borderLeft: "3px solid var(--pimenta)" }}>
+                  <p style={{ color: "var(--pimenta)", fontWeight: 700, fontSize: 11.5, marginBottom: 3 }}>Sua resposta</p>
+                  <p style={{ color: "var(--texto)", fontSize: 13 }}>{a.resposta_loja}</p>
                 </div>
               ) : respondendoId === a.id ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -148,18 +148,18 @@ export default function LojaAvaliacoesPage() {
                     onChange={e => setTextoResposta(e.target.value)}
                     placeholder="Escreva uma resposta pro cliente..."
                     rows={2}
-                    style={{ width: "100%", padding: "10px 12px", borderRadius: 10, background: "#F9FAFB", border: "1px solid #E5E7EB", fontSize: 13.5, color: "#111827", outline: "none", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit" }}
+                    style={{ width: "100%", padding: "10px 12px", borderRadius: 10, background: "var(--pedra)", border: "1px solid var(--linha)", fontSize: 13.5, color: "var(--grafite)", outline: "none", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit" }}
                   />
                   <div style={{ display: "flex", gap: 8 }}>
                     <button onClick={() => enviarResposta(a.id)} disabled={enviando || !textoResposta.trim()} style={{
                       padding: "8px 16px", borderRadius: 8, border: "none",
-                      background: enviando || !textoResposta.trim() ? "rgba(249,115,22,0.4)" : "#f97316",
+                      background: enviando || !textoResposta.trim() ? "rgba(215,38,30,0.4)" : "var(--pimenta)",
                       color: "white", fontWeight: 700, fontSize: 12.5, cursor: enviando ? "not-allowed" : "pointer",
                     }}>
                       {enviando ? "Enviando..." : "Enviar resposta"}
                     </button>
                     <button onClick={() => { setRespondendoId(null); setTextoResposta("") }} style={{
-                      padding: "8px 16px", borderRadius: 8, border: "1px solid #E5E7EB", background: "white", color: "#6B7280", fontWeight: 700, fontSize: 12.5, cursor: "pointer",
+                      padding: "8px 16px", borderRadius: 8, border: "1px solid var(--linha)", background: "white", color: "var(--suave)", fontWeight: 700, fontSize: 12.5, cursor: "pointer",
                     }}>
                       Cancelar
                     </button>
@@ -167,8 +167,8 @@ export default function LojaAvaliacoesPage() {
                 </div>
               ) : (
                 <button onClick={() => { setRespondendoId(a.id); setTextoResposta("") }} style={{
-                  padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(249,115,22,0.3)", background: "rgba(249,115,22,0.06)",
-                  color: "#f97316", fontWeight: 700, fontSize: 12.5, cursor: "pointer",
+                  padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(215,38,30,0.3)", background: "rgba(215,38,30,0.06)",
+                  color: "var(--pimenta)", fontWeight: 700, fontSize: 12.5, cursor: "pointer",
                 }}>
                   Responder
                 </button>

@@ -7,8 +7,8 @@
  * Estorno automático se o pagamento já foi confirmado (pix/cartao).
  */
 import { NextRequest, NextResponse } from "next/server"
+import { desfazerCobrancas } from "@/lib/pagamentoDivididoServidor"
 import { createClient } from "@supabase/supabase-js"
-import { estornarPagamento, cancelarPagamento } from "@/lib/asaas"
 
 function adminSb() {
   return createClient(
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   // Valida que o token pertence ao pedido (prova de posse do cliente)
   const { data: pedido } = await sb
     .from("pedidos")
-    .select("id, status, asaas_payment_id, forma_pagamento, total, cliente_push_token")
+    .select("id, status, asaas_payment_id, asaas_payment_id_2, pagamentos_online_confirmados, forma_pagamento, total, cliente_push_token")
     .eq("id", pedido_id)
     .eq("cliente_push_token", cliente_push_token)
     .single()
@@ -61,19 +61,10 @@ export async function POST(req: NextRequest) {
   }
 
   // Estorno automático via Asaas
-  if (pedido.asaas_payment_id) {
-    try {
-      if (pedido.status === "aguardando_pagamento") {
-        await cancelarPagamento(pedido.asaas_payment_id)
-      } else {
-        // Já pago (pendente) — estorna imediatamente
-        await estornarPagamento(pedido.asaas_payment_id)
-      }
-    } catch (e) {
-      console.error("[cancelar] falha no estorno Asaas:", e)
-      // Pedido cancelado mesmo assim — equipe admin verá e fará manualmente
-    }
-  }
+  // Ainda não pago → cancela a cobrança; já pago → estorna. Pedido em 2 formas (pix + cartão)
+  // pode ter as duas cobranças, e o cartão já pago mesmo com o pix pendente.
+  // Falha não impede o cancelamento — equipe admin verá e fará manualmente.
+  await desfazerCobrancas(pedido, pedido.status)
 
   return NextResponse.json({ ok: true, status: "cancelado" })
 }

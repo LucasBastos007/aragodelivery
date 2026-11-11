@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/cancelar-pendentes",
-      "schedule": "0 3 * * *"
+      "schedule": "*/2 * * * *"
     },
     {
       "path": "/api/cron/verificar-mensalidades",
@@ -10,11 +10,35 @@
     },
     {
       "path": "/api/cron/monitorar-saude",
-      "schedule": "*/10 * * * *"
+      "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/cron/relatorio-semanal",
+      "schedule": "0 12 * * 5"
+    },
+    {
+      "path": "/api/cron/relatorio-clientes",
+      "schedule": "0 12 1 * *"
     },
     {
       "path": "/api/cron/fechamento-diario",
-      "schedule": "0 13 * * *"
+      "schedule": "59 2 * * *"
+    },
+    {
+      "path": "/api/cron/re-escalar",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/robo-status",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/mp-saldo",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/lembretes",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

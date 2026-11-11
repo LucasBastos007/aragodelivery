@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
     sb.from("pedidos").select("id, status, motoboy_id, criado_em").eq("loja_id", loja_id).gte("criado_em", hojeInicioUtc)
       .not("status", "in", '("aguardando_pagamento","entregue","cancelado")'),
     sb.from("produtos").select("id, foto_url").eq("loja_id", loja_id),
-    sb.from("pedidos").select("id, codigo, status, nome_cliente, total, criado_em, entregue_em").eq("loja_id", loja_id).order("criado_em", { ascending: false }).limit(5),
+    sb.from("pedidos").select("id, codigo, status, nome_cliente, total, subtotal, criado_em, entregue_em").eq("loja_id", loja_id).order("criado_em", { ascending: false }).limit(5),
   ])
 
   if (erroPeriodo) return NextResponse.json({ error: erroPeriodo.message }, { status: 500 })
@@ -141,12 +141,12 @@ export async function GET(req: NextRequest) {
   // Tempo calculado via lib/tempoPedido.ts — nunca "agora - criado_em" direto aqui de
   // novo (era exatamente esse cálculo incondicional que gerava "73366 min" em pedidos
   // entregues/cancelados há semanas).
-  interface UltimoPedidoRaw { id: string; codigo: string; status: StatusPedido; nome_cliente: string | null; total: number; criado_em: string; entregue_em: string | null }
+  interface UltimoPedidoRaw { id: string; codigo: string; status: StatusPedido; nome_cliente: string | null; total: number; subtotal: number | null; criado_em: string; entregue_em: string | null }
   const ultimosPedidos = ((ultimosRaw ?? []) as UltimoPedidoRaw[]).map(p => {
     const t = tempoPedido(p)
     return {
       id: p.id, codigo: p.codigo, cliente: p.nome_cliente ?? "Cliente", status: p.status,
-      statusLabel: STATUS_LABEL[p.status] ?? p.status, valor: p.total,
+      statusLabel: STATUS_LABEL[p.status] ?? p.status, valor: Number(p.subtotal ?? p.total), // valor da loja: só produtos
       tempoLabel: t.label, tempoTipo: t.tipo,
     }
   })

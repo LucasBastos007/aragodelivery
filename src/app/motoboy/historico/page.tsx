@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
-import { ganhoMotoboy } from "@/lib/comissao"
+import { ganhoMotoboy, ganhoMotoboyPedido } from "@/lib/comissao"
+import { partesPagamento, rotuloPagamento, temForma, valorDaForma, ehDividido } from "@/lib/pagamentoDividido"
 
 type Periodo = "hoje" | "semana" | "mes" | "total"
 
 const PGTO: Record<string, string> = {
-  pix: "PIX", cartao: "Cartão", dinheiro: "Dinheiro", maquininha: "Maquininha", avulsa: "Entrega avulsa",
+  pix: "PIX", cartao: "Cartão", dinheiro: "Dinheiro", maquininha: "Maquininha", pix_loja: "Pix (já pago)", avulsa: "Entrega avulsa",
 }
 const PERIODOS: { key: Periodo; label: string }[] = [
   { key: "hoje",   label: "Hoje" },
@@ -29,7 +30,36 @@ function dateInicio(periodo: Periodo): Date {
 // Calcula sempre pela fórmula canônica — a coluna ganho_motoboy no banco tem histórico
 // de valores gravados por caminhos divergentes (ex: 100% da taxa) e não é confiável.
 function ganhoReal(p: any): number {
-  return ganhoMotoboy(p.taxa_entrega ?? 0, p.criado_em)
+  return ganhoMotoboyPedido(p)
+}
+
+const hojeYmd = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" })
+function rotuloDia(iso: string) {
+  const d = new Date(iso), hoje = new Date(), ontem = new Date(Date.now() - 86400000)
+  if (hojeYmd(d) === hojeYmd(hoje)) return "Hoje"
+  if (hojeYmd(d) === hojeYmd(ontem)) return "Ontem"
+  return d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit" })
+}
+function porDia<T extends { criado_em: string }>(ps: T[]): [string, T[]][] {
+  const m = new Map<string, T[]>()
+  for (const p of ps) { const k = rotuloDia(p.criado_em); m.set(k, [...(m.get(k) ?? []), p]) }
+  return [...m.entries()]
+}
+const horaDe = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }).replace(":", "h")
+// "Rua X, 12 — Compl — Bairro, Cidade" → "Bairro"
+function bairroDe(end?: string | null) {
+  if (!end) return ""
+  const partes = end.split(" — ")
+  const ult = partes[partes.length - 1] ?? ""
+  return partes.length > 1 ? ult.split(",")[0].trim() : ""
+}
+function seloPg(p: any): [string, string] {
+  if (p.forma_pagamento === "avulsa") return ["off", "Avulsa"]
+  const f = p.forma_pagamento_2 && ["dinheiro", "maquininha"].includes(p.forma_pagamento_2) ? p.forma_pagamento_2 : p.forma_pagamento
+  if (f === "dinheiro") return ["din", "Dinheiro"]
+  if (f === "maquininha") return ["maq", "Maquininha"]
+  if (f === "cartao") return ["pix", "Cartão já pago"]
+  return ["pix", "Pix já pago"]
 }
 
 export default function MotoboyHistoricoPage() {
@@ -60,7 +90,9 @@ async function carregar(novaPagina: number) {
 
   const [{ data: pedidosData }, { data: avulsasData }] = await Promise.all([
     supabase.from("pedidos")
-      .select("id, codigo, taxa_entrega, foto_entrega, criado_em, forma_pagamento, endereco_entrega, loja:lojas(nome)")
+      // "foto_entrega" saiu da consulta: a coluna não existe em pedidos e derrubava a
+      // consulta inteira, deixando o histórico sempre vazio (achado em 20/10/2026).
+      .select("id, codigo, taxa_entrega, taxa_dinamica, criado_em, forma_pagamento, forma_pagamento_2, valor_pagamento_1, valor_pagamento_2, total, endereco_entrega, loja:lojas(nome)")
       .eq("motoboy_id", motoboy_id).eq("status", "entregue")
       .order("criado_em", { ascending: false }),
     supabase.from("entregas_avulsas")
@@ -85,116 +117,60 @@ async function carregar(novaPagina: number) {
   setLoading(false)
 }
 
+  const brl = (v: number) => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const quando = (iso: string) => new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(",", ", às")
+
   return (
-    <div style={{ maxWidth: 600, margin: "0 auto", padding: "20px 14px", overflowX: "hidden" }}>
-      {/* Foto ampliada */}
+    <div className="mb-pagina">
       {fotoAmpliada && (
-        <div
-          onClick={() => setFotoAmpliada(null)}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
-        >
-          <img src={fotoAmpliada} alt="Comprovante" style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: 16, objectFit: "contain" }} />
+        <div onClick={() => setFotoAmpliada(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <img src={fotoAmpliada} alt="Comprovante da entrega" style={{ maxWidth: "100%", maxHeight: "85vh", borderRadius: 16, objectFit: "contain" }} />
         </div>
       )}
 
-      <div style={{ marginBottom: 16 }}>
-        <h1 style={{ color: "white", fontWeight: 900, fontSize: 20 }}>Histórico</h1>
-        {total > 0 && (
-          <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 13, marginTop: 3 }}>
-            {total} entrega{total !== 1 ? "s" : ""} · <span style={{ color: "#22c55e", fontWeight: 700 }}>R$ {totalGanhos.toFixed(2)}</span>
-          </p>
-        )}
-      </div>
+      <h1 className="t28">Histórico</h1>
 
-      <div style={{ display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" }}>
-        {PERIODOS.map(p => (
-          <button key={p.key} onClick={() => setPeriodo(p.key)} style={{
-            padding: "7px 16px", borderRadius: 999, fontSize: 12, fontWeight: 700,
-            cursor: "pointer", border: "none", transition: "all 0.15s",
-            background: periodo === p.key ? "#f97316" : "rgba(255,255,255,0.07)",
-            color: periodo === p.key ? "white" : "rgba(255,255,255,0.45)",
-          }}>
-            {p.label}
-          </button>
-        ))}
+      <div className="mb-chips">
+        {PERIODOS.map(p => <button key={p.key} className="mb-chip" aria-pressed={periodo === p.key} onClick={() => setPeriodo(p.key)}>{p.label}</button>)}
       </div>
 
       {loading && pedidos.length === 0 ? (
-        <p style={{ color: "rgba(255,255,255,0.3)" }}>Carregando...</p>
+        <p className="mut" style={{ marginTop: 20 }}>Carregando…</p>
       ) : pedidos.length === 0 ? (
-        <div style={{ textAlign: "center", marginTop: 60 }}>
-          <p style={{ color: "rgba(255,255,255,0.4)", fontWeight: 600 }}>Nenhuma entrega no período</p>
-          <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 13, marginTop: 4 }}>
-            Suas entregas concluídas aparecerão aqui
-          </p>
+        <div style={{ textAlign: "center", marginTop: 50 }}>
+          <div style={{ fontSize: 40 }}>🛵</div>
+          <b className="t16" style={{ display: "block", marginTop: 8 }}>Nenhuma entrega nesse período</b>
+          <p className="mut" style={{ fontSize: 13.5, marginTop: 4 }}>Quando você entregar, aparece aqui.</p>
         </div>
       ) : (
-        <>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {pedidos.map((p, i) => (
-              <div key={p.id + i} style={{
-                background: "#111", borderRadius: 14, padding: "14px 16px",
-                border: "1px solid rgba(255,255,255,0.07)",
-              }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                  <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                      <p style={{ color: "white", fontSize: 14, fontWeight: 800 }}>#{p.codigo}</p>
-                      <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 999, background: "rgba(34,197,94,0.12)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.2)" }}>
-                        Entregue
-                      </span>
-                    </div>
-                    <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 12, marginBottom: 2 }}>{p.loja?.nome ?? "—"}</p>
-                    <p style={{ color: "rgba(255,255,255,0.3)", fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {p.endereco_entrega}
-                    </p>
-                    <div style={{ display: "flex", gap: 10, marginTop: 6, fontSize: 11, color: "rgba(255,255,255,0.25)" }}>
-                      <span>{new Date(p.criado_em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" })}</span>
-                      <span>·</span>
-                      <span>{new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
-                      <span>·</span>
-                      <span>{PGTO[p.forma_pagamento] ?? p.forma_pagamento}</span>
-                    </div>
+        // Igual à proposta: corridas agrupadas por dia, com o total do dia e a forma de pagamento em selo
+        <>{porDia(pedidos).map(([dia, ps]) => (
+          <div key={dia}>
+            <div className="mb-dia-tit">{dia}, {brl(ps.reduce((s, p) => s + ganhoReal(p), 0))}</div>
+            <div className="mb-cartao" style={{ padding: "2px 16px" }}>
+              {ps.map((p, i) => {
+                const sl = seloPg(p)
+                return (
+                  <div key={p.id + i} className="mb-linha-h">
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <b className="t16" style={{ display: "block", fontWeight: 700 }}>{p.loja?.nome ?? "Loja"}</b>
+                      <small className="mut" style={{ fontSize: 14 }}>{bairroDe(p.endereco_entrega)}{bairroDe(p.endereco_entrega) ? ", " : ""}{horaDe(p.criado_em)}</small>
+                    </span>
+                    <span className="v">
+                      {brl(ganhoReal(p))}
+                      <small><span className={`mb-selo ${sl[0]}`}>{sl[1]}</span></small>
+                      {p.foto_entrega && <img src={p.foto_entrega} alt="Comprovante" onClick={() => setFotoAmpliada(p.foto_entrega)} style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", cursor: "pointer", border: "1px solid var(--linha)", marginTop: 4 }} />}
+                    </span>
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flexShrink: 0 }}>
-                    <div style={{ textAlign: "right" }}>
-                      <p style={{ color: "#22c55e", fontWeight: 900, fontSize: 16 }}>
-                        R$ {ganhoReal(p).toFixed(2)}
-                      </p>
-                      {p.taxa_entrega !== ganhoReal(p) && (
-                        <p style={{ color: "rgba(255,255,255,0.2)", fontSize: 10, marginTop: 1 }}>
-                          taxa R$ {(p.taxa_entrega ?? 0).toFixed(2)}
-                        </p>
-                      )}
-                    </div>
-                    {p.foto_entrega && (
-                      <img
-                        src={p.foto_entrega}
-                        alt="Comprovante"
-                        onClick={() => setFotoAmpliada(p.foto_entrega)}
-                        style={{ width: 44, height: 44, borderRadius: 8, objectFit: "cover", cursor: "pointer", border: "1px solid rgba(255,255,255,0.12)" }}
-                      />
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
+                )
+              })}
+            </div>
           </div>
+        ))}</>
+      )}
 
-          {hasMore && (
-            <button
-              onClick={() => carregar(page + 1)}
-              disabled={loading}
-              style={{
-                width: "100%", marginTop: 16, padding: "12px",
-                borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)",
-                background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.5)",
-                fontWeight: 700, fontSize: 14, cursor: loading ? "not-allowed" : "pointer",
-              }}>
-              {loading ? "Carregando..." : "Carregar mais"}
-            </button>
-          )}
-        </>
+      {hasMore && pedidos.length > 0 && (
+        <button className="mb-btn claro peq" style={{ marginTop: 12 }} onClick={() => carregar(page + 1)} disabled={loading}>{loading ? "Carregando…" : "Ver mais"}</button>
       )}
     </div>
   )

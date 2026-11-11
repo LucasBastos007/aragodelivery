@@ -8,6 +8,7 @@ import type { Pedido, FormaPagamento } from "@/types"
 import { STATUS_FINAIS } from "@/lib/statusPedido"
 import { STATUS_LABEL, PGTO, CANCELADO_POR_LABEL, MOTIVO_CANCELAMENTO_LABEL } from "@/lib/pedidoLabels"
 import { imprimirComProtecao } from "@/lib/impressao"
+import { partesPagamento, rotuloPagamento, temForma, valorDaForma, ehDividido } from "@/lib/pagamentoDividido"
 import { ClienteInfo } from "@/components/ClienteInfo"
 import { TimelinePedido } from "@/components/TimelinePedido"
 import { BotaoImprimir } from "@/components/BotaoImprimir"
@@ -28,8 +29,8 @@ const PERIODOS: { key: Periodo; label: string }[] = [
 ]
 
 const STATUS_COLOR: Record<string, { bg: string; text: string }> = {
-  entregue:  { bg: "rgba(34,197,94,0.1)", text: "#16a34a" },
-  cancelado: { bg: "rgba(239,68,68,0.1)", text: "#dc2626" },
+  entregue:  { bg: "rgba(34,197,94,0.1)", text: "var(--folha)" },
+  cancelado: { bg: "rgba(239,68,68,0.1)", text: "var(--pimenta)" },
 }
 
 const PAGAMENTOS: { value: FormaPagamento; label: string }[] = [
@@ -109,7 +110,7 @@ export default function LojaHistoricoPage() {
     let q = supabase
       .from("pedidos")
       .select(
-        "id, codigo, total, subtotal, taxa_entrega, desconto, cupom_codigo, forma_pagamento, status, endereco_entrega, observacao, " +
+        "id, codigo, total, subtotal, taxa_entrega, desconto, cupom_codigo, forma_pagamento, forma_pagamento_2, valor_pagamento_1, valor_pagamento_2, status, endereco_entrega, observacao, " +
         "criado_em, aceito_em, pronto_em, coletado_em, entregue_em, cancelado_em, cancelado_por, motivo_cancelamento, motivo_outro, " +
         "nome_cliente, telefone_cliente, motoboy:motoboys(nome, telefone), itens:itens_pedido(nome, quantidade, preco, observacao, adicionais)",
         { count: "exact" }
@@ -164,18 +165,24 @@ export default function LojaHistoricoPage() {
     const inicio = dateInicio(periodo)
     const fim = new Date(); fim.setHours(23, 59, 59, 999)
     try {
-      const { data, error } = await supabase.rpc("historico_total_vendas", {
-        p_loja_id: loja_id, p_inicio: inicio.toISOString(), p_fim: fim.toISOString(),
-      })
-      if (error) throw error
+      // A função historico_total_vendas nunca existiu no banco (o total não aparecia). Soma direto os
+      // pedidos entregues do período, só os produtos: a loja não vê o frete (regra do Lucas, 20/10/2026).
+      let data = 0
+      for (let i = 0; i < 20000; i += 1000) {
+        const { data: ps, error } = await supabase.from("pedidos").select("subtotal").eq("loja_id", loja_id).eq("status", "entregue")
+          .gte("criado_em", inicio.toISOString()).lte("criado_em", fim.toISOString()).range(i, i + 999)
+        if (error) throw error
+        data += (ps ?? []).reduce((t: number, p: any) => t + Number(p.subtotal ?? 0), 0)
+        if ((ps ?? []).length < 1000) break
+      }
       setTotalVendas(Number(data ?? 0))
     } catch (e) {
-      console.error("[historico] RPC historico_total_vendas indisponível:", e)
+      console.error("[historico] não foi possível somar as vendas:", e)
       setTotalVendas(null)
     }
   }
 
-  const statusColor = (s: string) => STATUS_COLOR[s] ?? { bg: "#F3F4F6", text: "#6B7280" }
+  const statusColor = (s: string) => STATUS_COLOR[s] ?? { bg: "var(--pedra)", text: "var(--suave)" }
 
   function onToggleLargura() {
     const nova = larguraPapel === "80mm" ? "58mm" : "80mm"
@@ -193,14 +200,14 @@ export default function LojaHistoricoPage() {
   const filtrosAtivos = [filtroStatus, filtroPagamento, filtroTipo].filter(Boolean).length
 
   return (
-    <div style={{ maxWidth: 680, margin: "0 auto", padding: "24px 16px" }}>
+    <div style={{ maxWidth: 1000, margin: "0 auto", padding: "4px 0 24px" }}>
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ color: "#111827", fontWeight: 900, fontSize: 20 }}>Histórico de pedidos</h1>
+        
         {total > 0 && (
-          <p style={{ color: "#9CA3AF", fontSize: 13, marginTop: 4 }}>
+          <p style={{ color: "var(--suave)", fontSize: 13, marginTop: 4 }}>
             {total} pedido{total !== 1 ? "s" : ""}
             {totalVendas !== null && totalVendas > 0 && (
-              <> · <span style={{ color: "#22c55e", fontWeight: 700 }}>R$ {totalVendas.toFixed(2)} em vendas</span></>
+              <> · <span style={{ color: "var(--folha)", fontWeight: 700 }}>R$ {Number(totalVendas).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} em vendas</span></>
             )}
           </p>
         )}
@@ -214,13 +221,13 @@ export default function LojaHistoricoPage() {
           placeholder="Buscar pedido ou cliente"
           style={{
             width: "100%", boxSizing: "border-box", padding: "11px 14px", borderRadius: 12,
-            border: "1px solid #e5e7eb", fontSize: 14, color: "#111827", background: "#fff",
+            border: "1px solid var(--linha)", fontSize: 14, color: "var(--grafite)", background: "#fff",
           }}
         />
         {buscaInput && (
           <button onClick={() => setBuscaInput("")} style={{
             position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
-            background: "none", border: "none", color: "#9CA3AF", cursor: "pointer", fontSize: 15,
+            background: "none", border: "none", color: "var(--suave)", cursor: "pointer", fontSize: 15,
           }}>✕</button>
         )}
       </div>
@@ -230,18 +237,18 @@ export default function LojaHistoricoPage() {
         {PERIODOS.map(p => (
           <button key={p.key} onClick={() => setPeriodo(p.key)} style={{
             padding: "7px 16px", borderRadius: 999, fontSize: 12, fontWeight: 700,
-            cursor: "pointer", border: "1px solid #e5e7eb", transition: "all 0.15s",
-            background: periodo === p.key ? "#f97316" : "#ffffff",
-            color: periodo === p.key ? "white" : "#6B7280",
+            cursor: "pointer", border: "1px solid var(--linha)", transition: "all 0.15s",
+            background: periodo === p.key ? "var(--pimenta)" : "#ffffff",
+            color: periodo === p.key ? "white" : "var(--suave)",
           }}>
             {p.label}
           </button>
         ))}
         <button onClick={() => setFiltrosAbertos(v => !v)} style={{
           padding: "7px 14px", borderRadius: 999, fontSize: 12, fontWeight: 700,
-          cursor: "pointer", border: "1px solid #e5e7eb",
-          background: filtrosAtivos > 0 ? "#111827" : "#ffffff",
-          color: filtrosAtivos > 0 ? "white" : "#6B7280",
+          cursor: "pointer", border: "1px solid var(--linha)",
+          background: filtrosAtivos > 0 ? "var(--grafite)" : "#ffffff",
+          color: filtrosAtivos > 0 ? "white" : "var(--suave)",
           display: "flex", alignItems: "center", gap: 5,
         }}>
           Filtros{filtrosAtivos > 0 ? ` (${filtrosAtivos})` : ""}
@@ -253,7 +260,7 @@ export default function LojaHistoricoPage() {
       {filtrosAbertos && (
         <div style={{
           display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 20,
-          padding: "12px", background: "#F9FAFB", borderRadius: 12, border: "1px solid #e5e7eb",
+          padding: "12px", background: "var(--pedra)", borderRadius: 12, border: "1px solid var(--linha)",
         }}>
           <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value as any)} style={selectStyle}>
             <option value="">Status: Todos</option>
@@ -271,7 +278,7 @@ export default function LojaHistoricoPage() {
           </select>
           {filtrosAtivos > 0 && (
             <button onClick={() => { setFiltroStatus(""); setFiltroPagamento(""); setFiltroTipo("") }} style={{
-              background: "none", border: "none", color: "#DC2626", fontSize: 12, fontWeight: 700, cursor: "pointer",
+              background: "none", border: "none", color: "var(--pimenta)", fontSize: 12, fontWeight: 700, cursor: "pointer",
             }}>
               Limpar filtros
             </button>
@@ -280,27 +287,27 @@ export default function LojaHistoricoPage() {
       )}
 
       {estado === "loading" && pedidos.length === 0 ? (
-        <p style={{ color: "#9CA3AF", textAlign: "center", marginTop: 48 }}>Carregando...</p>
+        <p style={{ color: "var(--suave)", textAlign: "center", marginTop: 48 }}>Carregando...</p>
       ) : estado === "error" ? (
-        <div style={{ textAlign: "center", marginTop: 60, background: "#FEF2F2", borderRadius: 16, padding: "32px 20px", border: "1px solid rgba(239,68,68,0.2)" }}>
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="1.5" style={{ margin: "0 auto 12px" }} strokeLinecap="round" strokeLinejoin="round">
+        <div style={{ textAlign: "center", marginTop: 60, background: "var(--pimenta-claro)", borderRadius: 16, padding: "32px 20px", border: "1px solid rgba(239,68,68,0.2)" }}>
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--pimenta)" strokeWidth="1.5" style={{ margin: "0 auto 12px" }} strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
           <p style={{ color: "#991B1B", fontWeight: 700 }}>Não foi possível carregar o histórico</p>
           <p style={{ color: "#B91C1C", fontSize: 13, marginTop: 4 }}>Verifique sua conexão e tente novamente.</p>
           <button onClick={() => carregar(0)} style={{
             marginTop: 16, padding: "9px 20px", borderRadius: 10, border: "none",
-            background: "#DC2626", color: "white", fontWeight: 700, fontSize: 13, cursor: "pointer",
+            background: "var(--pimenta)", color: "white", fontWeight: 700, fontSize: 13, cursor: "pointer",
           }}>
             Tentar de novo
           </button>
         </div>
       ) : pedidos.length === 0 ? (
         <div style={{ textAlign: "center", marginTop: 60 }}>
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" strokeWidth="1.5" style={{ margin: "0 auto 12px" }} strokeLinecap="round" strokeLinejoin="round">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--linha)" strokeWidth="1.5" style={{ margin: "0 auto 12px" }} strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
           </svg>
-          <p style={{ color: "#9CA3AF", fontWeight: 600 }}>
+          <p style={{ color: "var(--suave)", fontWeight: 600 }}>
             {busca || filtrosAtivos > 0 ? "Nenhum pedido encontrado com esses filtros" : "Nenhum pedido no período"}
           </p>
         </div>
@@ -312,7 +319,7 @@ export default function LojaHistoricoPage() {
               const isExp = expanded === p.id
               const isRetirada = p.endereco_entrega?.includes("Retirada") ?? false
               return (
-                <div key={p.id} style={{ background: "#ffffff", borderRadius: 14, border: "1px solid #e5e7eb", overflow: "hidden" }}>
+                <div key={p.id} style={{ background: "#ffffff", borderRadius: 14, border: "1px solid var(--linha)", overflow: "hidden" }}>
                   {/* Header do card — só o essencial, detalhe completo ao expandir */}
                   <button
                     onClick={() => setExpanded(isExp ? null : p.id)}
@@ -327,28 +334,29 @@ export default function LojaHistoricoPage() {
                           }}>
                             {STATUS_LABEL[p.status] ?? p.status}
                           </span>
-                          <span style={{ color: "#374151", fontSize: 14, fontWeight: 800 }}>#{p.codigo}</span>
+                          <span style={{ color: "var(--texto)", fontSize: 14, fontWeight: 800 }}>#{p.codigo}</span>
                         </div>
-                        <p style={{ color: "#374151", fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <p style={{ color: "var(--texto)", fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {p.nome_cliente ?? "Cliente não identificado"}
                         </p>
-                        <div style={{ display: "flex", gap: 8, marginTop: 5, fontSize: 11, color: "#9CA3AF", flexWrap: "wrap" }}>
+                        <div style={{ display: "flex", gap: 8, marginTop: 5, fontSize: 11, color: "var(--suave)", flexWrap: "wrap" }}>
                           <span>{new Date(p.criado_em).toLocaleDateString("pt-BR")}</span>
                           <span>·</span>
                           <span>{new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
                           <span>·</span>
-                          <span>{PGTO[p.forma_pagamento] ?? p.forma_pagamento}</span>
+                          <span>{ehDividido(p) ? rotuloPagamento(p) : PGTO[p.forma_pagamento] ?? p.forma_pagamento}</span>
                           <span>·</span>
                           <span>{isRetirada ? "Retirada" : "Entrega"}</span>
                         </div>
                       </div>
                       <div style={{ textAlign: "right", flexShrink: 0 }}>
-                        <p style={{ color: p.status === "cancelado" ? "#9CA3AF" : "#111827", fontWeight: 900, fontSize: 16, textDecoration: p.status === "cancelado" ? "line-through" : "none" }}>
-                          R$ {Number(p.total ?? 0).toFixed(2)}
+                        <p style={{ color: p.status === "cancelado" ? "var(--suave)" : "var(--grafite)", fontWeight: 900, fontSize: 16, textDecoration: p.status === "cancelado" ? "line-through" : "none" }}>
+                          R$ {Number(Number(p.subtotal ?? p.total ?? 0)).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
+                        {Number(p.taxa_entrega ?? 0) > 0 && <p style={{ fontSize: 10.5, color: "var(--suave)", whiteSpace: "nowrap" }}>sem a entrega</p>}
                         <svg
                           width="14" height="14" viewBox="0 0 24 24" fill="none"
-                          stroke="#D1D5DB" strokeWidth="2" strokeLinecap="round"
+                          stroke="var(--linha)" strokeWidth="2" strokeLinecap="round"
                           style={{ marginTop: 6, transform: isExp ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}
                         >
                           <polyline points="6 9 12 15 18 9"/>
@@ -359,16 +367,16 @@ export default function LojaHistoricoPage() {
 
                   {/* Detalhe completo — somente leitura, reaproveita componentes da Fase 3 */}
                   {isExp && (
-                    <div style={{ borderTop: "1px solid #F3F4F6", padding: "14px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div style={{ borderTop: "1px solid var(--pedra)", padding: "14px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
                       <ClienteInfo pedido={p} />
 
                       {/* Motoboy — só aparece se houver relacionamento real, nunca bloco vazio */}
                       {p.motoboy?.nome && (
-                        <div style={{ padding: "8px 12px", borderRadius: 10, background: "#F9FAFB", border: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ padding: "8px 12px", borderRadius: 10, background: "var(--pedra)", border: "1px solid var(--linha)", display: "flex", alignItems: "center", gap: 8 }}>
                           <span style={{ fontSize: 14 }}>🛵</span>
                           <div>
-                            <p style={{ color: "#6B7280", fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Motoboy</p>
-                            <p style={{ color: "#374151", fontSize: 13, fontWeight: 600 }}>
+                            <p style={{ color: "var(--suave)", fontSize: 10, fontWeight: 700, textTransform: "uppercase" }}>Motoboy</p>
+                            <p style={{ color: "var(--texto)", fontSize: 13, fontWeight: 600 }}>
                               {p.motoboy.nome}{p.motoboy.telefone ? ` · ${p.motoboy.telefone}` : ""}
                             </p>
                           </div>
@@ -378,20 +386,20 @@ export default function LojaHistoricoPage() {
                       {/* Itens, com adicionais e observação quando existirem */}
                       {(p.itens ?? []).length > 0 && (
                         <div>
-                          <p style={{ color: "#6B7280", fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginBottom: 6 }}>Itens</p>
+                          <p style={{ color: "var(--suave)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginBottom: 6 }}>Itens</p>
                           {(p.itens ?? []).map((item, i) => (
                             <div key={i} style={{ marginBottom: 6 }}>
                               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                                <span style={{ color: "#374151" }}>{item.quantidade}x {item.nome}</span>
-                                <span style={{ color: "#9CA3AF" }}>R$ {(item.preco * item.quantidade).toFixed(2)}</span>
+                                <span style={{ color: "var(--texto)" }}>{item.quantidade}x {item.nome}</span>
+                                <span style={{ color: "var(--suave)" }}>R$ {Number((item.preco * item.quantidade)).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                               </div>
                               {(item.adicionais ?? []).map((a, j) => (
-                                <p key={j} style={{ fontSize: 11.5, color: "#9CA3AF", paddingLeft: 10 }}>
-                                  + {a.nome}{a.preco > 0 ? ` (R$ ${a.preco.toFixed(2)})` : ""}
+                                <p key={j} style={{ fontSize: 11.5, color: "var(--suave)", paddingLeft: 10 }}>
+                                  + {a.nome}{a.preco > 0 ? ` (R$ ${Number(a.preco).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : ""}
                                 </p>
                               ))}
                               {item.observacao && (
-                                <p style={{ fontSize: 11.5, color: "#9CA3AF", paddingLeft: 10, fontStyle: "italic" }}>obs: {item.observacao}</p>
+                                <p style={{ fontSize: 11.5, color: "var(--suave)", paddingLeft: 10, fontStyle: "italic" }}>obs: {item.observacao}</p>
                               )}
                             </div>
                           ))}
@@ -404,18 +412,18 @@ export default function LojaHistoricoPage() {
                       {p.status === "cancelado" && (p.cancelado_em || p.cancelado_por || p.motivo_cancelamento) && (
                         <div style={{ padding: "8px 12px", borderRadius: 10, background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.15)" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-                            <p style={{ color: "#dc2626", fontSize: 12, fontWeight: 700 }}>Pedido cancelado</p>
+                            <p style={{ color: "var(--pimenta)", fontSize: 12, fontWeight: 700 }}>Pedido cancelado</p>
                             {p.cancelado_em && (
-                              <span style={{ color: "#9CA3AF", fontSize: 11 }}>
+                              <span style={{ color: "var(--suave)", fontSize: 11 }}>
                                 {new Date(p.cancelado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                               </span>
                             )}
                           </div>
                           {p.cancelado_por && (
-                            <p style={{ color: "#6B7280", fontSize: 12 }}>Por: {CANCELADO_POR_LABEL[p.cancelado_por] ?? p.cancelado_por}</p>
+                            <p style={{ color: "var(--suave)", fontSize: 12 }}>Por: {CANCELADO_POR_LABEL[p.cancelado_por] ?? p.cancelado_por}</p>
                           )}
                           {p.motivo_cancelamento && (
-                            <p style={{ color: "#6B7280", fontSize: 12 }}>
+                            <p style={{ color: "var(--suave)", fontSize: 12 }}>
                               Motivo: {p.motivo_cancelamento === "outro" && p.motivo_outro ? p.motivo_outro : (MOTIVO_CANCELAMENTO_LABEL[p.motivo_cancelamento] ?? p.motivo_cancelamento)}
                             </p>
                           )}
@@ -424,33 +432,33 @@ export default function LojaHistoricoPage() {
 
                       {/* Endereço */}
                       {p.endereco_entrega && (
-                        <div style={{ padding: "8px 12px", borderRadius: 10, background: "#F9FAFB", border: "1px solid #e5e7eb" }}>
-                          <p style={{ color: "#6B7280", fontSize: 11, fontWeight: 700, marginBottom: 3 }}>ENDEREÇO</p>
-                          <p style={{ color: "#374151", fontSize: 13 }}>{p.endereco_entrega}</p>
+                        <div style={{ padding: "8px 12px", borderRadius: 10, background: "var(--pedra)", border: "1px solid var(--linha)" }}>
+                          <p style={{ color: "var(--suave)", fontSize: 11, fontWeight: 700, marginBottom: 3 }}>ENDEREÇO</p>
+                          <p style={{ color: "var(--texto)", fontSize: 13 }}>{p.endereco_entrega}</p>
                         </div>
                       )}
 
                       {/* Timeline — timestamps reais, somente leitura */}
                       <div>
-                        <p style={{ color: "#6B7280", fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginBottom: 6 }}>Linha do tempo</p>
+                        <p style={{ color: "var(--suave)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", marginBottom: 6 }}>Linha do tempo</p>
                         <TimelinePedido pedido={p} />
                       </div>
 
                       {/* Valores */}
-                      <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#9CA3AF" }}>
-                          <span>Subtotal</span><span>R$ {Number(p.subtotal ?? 0).toFixed(2)}</span>
+                      <div style={{ borderTop: "1px solid var(--pedra)", paddingTop: 10, display: "flex", flexDirection: "column", gap: 4 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--suave)" }}>
+                          <span>Subtotal</span><span>R$ {Number(Number(p.subtotal ?? 0)).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#9CA3AF" }}>
-                          <span>Taxa de entrega</span><span>R$ {Number(p.taxa_entrega ?? 0).toFixed(2)}</span>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--suave)" }}>
+                          <span>Taxa de entrega</span><span>R$ {Number(Number(p.taxa_entrega ?? 0)).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 800, color: "#111827", marginTop: 4 }}>
-                          <span>Total</span><span>R$ {Number(p.total ?? 0).toFixed(2)}</span>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 800, color: "var(--grafite)", marginTop: 4 }}>
+                          <span>Total</span><span>R$ {Number(Number(p.total ?? 0)).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                         </div>
                       </div>
 
                       {/* Reimpressão — mesma infra da Fase 3, sempre marcada como REIMPRESSÃO aqui */}
-                      <div style={{ borderTop: "1px solid #F3F4F6", paddingTop: 10 }}>
+                      <div style={{ borderTop: "1px solid var(--pedra)", paddingTop: 10 }}>
                         <BotaoImprimir
                           pedido={p}
                           larguraPapel={larguraPapel}
@@ -473,8 +481,8 @@ export default function LojaHistoricoPage() {
               disabled={estado === "loading"}
               style={{
                 width: "100%", marginTop: 16, padding: "12px",
-                borderRadius: 12, border: "1px solid #e5e7eb",
-                background: "#ffffff", color: "#6B7280",
+                borderRadius: 12, border: "1px solid var(--linha)",
+                background: "#ffffff", color: "var(--suave)",
                 fontWeight: 700, fontSize: 14, cursor: estado === "loading" ? "not-allowed" : "pointer",
               }}>
               {estado === "loading" ? "Carregando..." : "Carregar mais"}
@@ -487,6 +495,6 @@ export default function LojaHistoricoPage() {
 }
 
 const selectStyle: React.CSSProperties = {
-  padding: "8px 10px", borderRadius: 8, border: "1px solid #e5e7eb",
-  background: "#fff", fontSize: 12, color: "#374151", fontWeight: 600,
+  padding: "8px 10px", borderRadius: 8, border: "1px solid var(--linha)",
+  background: "#fff", fontSize: 12, color: "var(--texto)", fontWeight: 600,
 }
