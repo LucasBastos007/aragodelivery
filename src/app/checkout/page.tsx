@@ -4,7 +4,7 @@ import { descontoPromo, PROMO_PRODUTOS } from "@/lib/promoChego"
 import { usePromoUsados, recarregarPromoUsados } from "@/components/cliente/PrecoPromo"
 import AjudaPagamentoWhats from "@/components/AjudaPagamentoWhats"
 import { useEffect, useRef, useState } from "react"
-import { lerCupomSacola, limparCupomSacola, validarCupom, descricaoCupom } from "@/lib/cupomSacola"
+import { lerCupomSacola, limparCupomSacola, validarCupom, descricaoCupom, idDispositivo } from "@/lib/cupomSacola"
 import { useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
 import Link from "next/link"
@@ -563,7 +563,8 @@ export default function CheckoutPage() {
     if (!codigoSacola || !loja_id || subtotal <= 0) { setCupomValido(null); setCupomErro(""); return }
     let cancelado = false
     setValidandoCupom(true)
-    validarCupom({ codigo: codigoSacola, lojaId: loja_id, subtotal, lat: clienteLatAtual, lng: clienteLngAtual, cidade: clienteCidadeAtual})
+    validarCupom({ codigo: codigoSacola, lojaId: loja_id, subtotal, lat: clienteLatAtual, lng: clienteLngAtual, cidade: clienteCidadeAtual,
+      rural: tipoEntrega === "entrega" && zonaRural === true, retirada: tipoEntrega === "retirada" })
       .then(r => {
         if (cancelado) return
         if (r.ok) { setCupomValido(r.cupom); setCupomErro("") }
@@ -571,7 +572,7 @@ export default function CheckoutPage() {
       })
       .finally(() => { if (!cancelado) setValidandoCupom(false) })
     return () => { cancelado = true }
-  }, [codigoSacola, loja_id, subtotal, clienteLatAtual, clienteLngAtual, clienteCidadeAtual])
+  }, [codigoSacola, loja_id, subtotal, clienteLatAtual, clienteLngAtual, clienteCidadeAtual, zonaRural, tipoEntrega])
 
 
   function fmtCardNumber(v: string) {
@@ -783,6 +784,7 @@ export default function CheckoutPage() {
         telefone_cliente: telefone.trim() || null,
         email_cliente:    user?.email ?? null,
         cpf_cliente:      cpfFinal || null,
+        dispositivo:      idDispositivo(),
       }),
     }).then(r => r.json())
 

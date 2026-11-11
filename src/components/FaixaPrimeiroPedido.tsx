@@ -24,7 +24,7 @@ export function FaixaPrimeiroPedido({ telefone }: { telefone?: string | null }) 
       <span style={{ fontSize: 26, lineHeight: 1 }} aria-hidden="true">🎁</span>
       <span style={{ flex: 1, minWidth: 0, fontSize: 14, lineHeight: 1.4, color: "#5C4300" }}>
         <b style={{ display: "block", fontSize: 15 }}>Seu primeiro pedido tem frete grátis!</b>
-        Use <b>{c.codigo}</b>{c.minimo > 0 ? ` em pedidos a partir de R$ ${c.minimo.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : ""}.
+        Use <b>{c.codigo}</b>{c.minimo > 0 ? ` em pedidos a partir de R$ ${c.minimo.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : ""}. Um por casa, fora da zona rural.
       </span>
       <button onClick={copiar} style={{ flexShrink: 0, border: 0, borderRadius: 999, padding: "9px 14px", background: "#5C4300", color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>{copiado ? "Copiado!" : "Copiar"}</button>
     </div>

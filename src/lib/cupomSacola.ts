@@ -26,15 +26,33 @@ export function descricaoCupom(c: CupomValido, brl: (v: number) => string): stri
     : `${brl(c.valor)} de desconto`
 }
 
+/** Id aleatório deste celular/navegador (11/11/2026): o frete grátis do primeiro pedido vale uma
+ *  vez por aparelho, mesmo criando outra conta nele. Não identifica a pessoa, só o aparelho. */
+export function idDispositivo(): string | null {
+  try {
+    let id = localStorage.getItem("chego_dispositivo")
+    if (!id || !/^[A-Za-z0-9-]{16,64}$/.test(id)) {
+      id = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID()
+        : Array.from({ length: 32 }, () => "abcdefghijklmnopqrstuvwxyz0123456789"[Math.floor(Math.random() * 36)]).join("")
+      localStorage.setItem("chego_dispositivo", id)
+    }
+    return id
+  } catch { return null }
+}
+
 /** Chama a validação do servidor. Endereço opcional (na Sacola usa o último endereço salvo). */
-export async function validarCupom(p: { codigo: string; lojaId: string; subtotal: number; lat?: number | null; lng?: number | null; cidade?: string | null; telefone?: string | null }):
+export async function validarCupom(p: { codigo: string; lojaId: string; subtotal: number; lat?: number | null; lng?: number | null; cidade?: string | null; telefone?: string | null; rural?: boolean; retirada?: boolean }):
   Promise<{ ok: true; cupom: CupomValido } | { ok: false; erro: string }> {
   const params = new URLSearchParams({
     codigo: p.codigo.trim().toUpperCase(), subtotal: String(p.subtotal), loja_id: p.lojaId,
     ...(p.lat && p.lng ? { lat: String(p.lat), lng: String(p.lng) } : {}),
     ...(p.cidade ? { cidade: p.cidade } : {}),
     ...(p.telefone ? { telefone: p.telefone } : {}),
+    ...(p.rural ? { rural: "1" } : {}),
+    ...(p.retirada ? { retirada: "1" } : {}),
   })
+  const disp = idDispositivo()
+  if (disp) params.set("dispositivo", disp)
   try {
     // Token do login vai junto: o cupom de primeiro pedido confere a conta logada
     const { data } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }) as any)

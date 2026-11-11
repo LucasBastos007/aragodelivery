@@ -1,5 +1,5 @@
 export const dynamic = "force-dynamic"
-import { jaFezPedido, MSG_SO_PRIMEIRO } from "@/lib/primeiroPedido"
+import { jaFezPedido, bloqueioPrimeiroPedido, MSG_SO_PRIMEIRO } from "@/lib/primeiroPedido"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { cupomValeNoRaio } from "@/lib/cupomRaio"
@@ -22,6 +22,9 @@ export async function GET(req: NextRequest) {
   const lat      = searchParams.get("lat") ? parseFloat(searchParams.get("lat")!) : null
   const lng      = searchParams.get("lng") ? parseFloat(searchParams.get("lng")!) : null
   const cidade   = searchParams.get("cidade")
+  const rural    = searchParams.get("rural") === "1"
+  const retirada = searchParams.get("retirada") === "1"
+  const dispositivo = searchParams.get("dispositivo")
 
   if (!codigo) return NextResponse.json({ error: "Código obrigatório" }, { status: 400 })
 
@@ -92,6 +95,8 @@ export async function GET(req: NextRequest) {
     if (!u?.user) return NextResponse.json({ error: "Entre na sua conta para usar o cupom de primeiro pedido." }, { status: 422 })
     const { data: cli } = await client.from("clientes").select("telefone").eq("id", u.user.id).maybeSingle()
     if (await jaFezPedido(client, cli?.telefone, u.user.id)) return NextResponse.json({ error: MSG_SO_PRIMEIRO }, { status: 422 })
+    const motivo = await bloqueioPrimeiroPedido(client, { clienteId: u.user.id, lat, lng, zonaRural: rural, dispositivo, retirada })
+    if (motivo) return NextResponse.json({ error: motivo }, { status: 422 })
   }
 
   return NextResponse.json({

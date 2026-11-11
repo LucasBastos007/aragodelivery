@@ -14,7 +14,7 @@ import { calcularTaxaEntregaCompleta, coordsPeloHistorico, distanciaEntregaKm, E
 import { freteGratisAtivo, freteGratisElegivel, ehCupomFreteAniversario, cupomFreteAniversarioNoPrazo, CUPOM_FRETE_ANIVERSARIO, MSG_CUPOM_FORA_DO_PRAZO, MSG_CUPOM_FORA_DO_RAIO } from "@/lib/freteGratisCampanha"
 import { acrescimoDinamico } from "@/lib/corridaDinamica"
 import { cupomValeNoRaio } from "@/lib/cupomRaio"
-import { jaFezPedido, MSG_SO_PRIMEIRO } from "@/lib/primeiroPedido"
+import { jaFezPedido, bloqueioPrimeiroPedido, MSG_SO_PRIMEIRO } from "@/lib/primeiroPedido"
 import { chaveBot } from "@/lib/whatsSuporte"
 import { descontoPromo, promoAtiva, relampagoAtivo, PROMO_CODIGO, PROMO_MARCA_ID, PROMO_PRODUTOS, RELAMPAGO, ROTULO_CHEGO } from "@/lib/promoChego"
 import { promoUsados } from "@/lib/promoChegoServidor"
@@ -83,7 +83,9 @@ export async function POST(req: NextRequest) {
     tipo = "normal", // "normal" | "manual"
     zona_rural,      // checkout: "mora em zona rural / estrada de chão?" — ausente (app antigo em cache) = não
     desconto_promo_visto, // promoção Chegô: desconto que o app mostrou (ausente = app antigo, não confere)
+    dispositivo,     // id aleatório guardado no celular (trava de várias contas no primeiro pedido)
   } = body
+  const dispositivoId = /^[A-Za-z0-9-]{16,64}$/.test(String(dispositivo ?? "")) ? String(dispositivo) : null
   const zonaRural = tipo_entrega !== "retirada" && zona_rural === true
 
   if (!loja_id || !items?.length || !forma_pagamento) {
@@ -353,6 +355,13 @@ export async function POST(req: NextRequest) {
         if (await jaFezPedido(sb, telefone_cliente, cliente_id) || await jaFezPedido(sb, cadastro.telefone)) {
           return NextResponse.json({ error: `${MSG_SO_PRIMEIRO} Tire o cupom para finalizar.` }, { status: 422 })
         }
+        // Um por casa e por celular, e nunca em zona rural (11/11/2026)
+        const motivo = await bloqueioPrimeiroPedido(sb, { clienteId: cliente_id, lat: lat_entrega ?? null, lng: lng_entrega ?? null,
+          zonaRural, endereco: endereco_entrega, dispositivo: dispositivoId, retirada: tipo_entrega === "retirada" })
+        if (motivo) {
+          console.log("[primeiro-pedido] recusado", { cliente_id, motivo })
+          return NextResponse.json({ error: `${motivo} Tire o cupom para finalizar.` }, { status: 422 })
+        }
       }
 
       if (valeParaLoja && dentroDoRaio && !expirado && !lotado && minOk) {
@@ -446,6 +455,7 @@ export async function POST(req: NextRequest) {
     observacao: observacao ?? "",
     troco_para: trocoValido,
     zona_rural: zonaRural,
+    ...(dispositivoId ? { dispositivo: dispositivoId } : {}),
     cliente_push_token,
     nome_cliente:    nome_cliente    ?? null,
     telefone_cliente: telefone_cliente ?? null,
