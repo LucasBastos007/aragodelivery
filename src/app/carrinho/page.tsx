@@ -132,7 +132,7 @@ export default function CarrinhoPage() {
                   {item.adicionais && item.adicionais.length > 0 && <small>{item.adicionais.map(a => a.nome).join(", ")}</small>}
                   {item.observacao && <small>Obs.: {item.observacao}</small>}
                   {dPromo > 0
-                    ? <span className="preco-promo" style={{ marginTop: 6 }}><s>{brl(item.preco * item.quantidade)}</s><em>{promo.relampago.has(idx) ? "⚡ Oferta relâmpago" : "−10% OFF"}</em><span className="preco">{brl(item.preco * item.quantidade - dPromo)}</span></span>
+                    ? <span className="preco-promo" style={{ marginTop: 6 }}><s>{brl(item.preco * item.quantidade)}</s><em>{promo.relampago.has(idx) ? "⚡ Oferta relâmpago" : "🚨 Hora Maluca −10%"}</em><span className="preco">{brl(item.preco * item.quantidade - dPromo)}</span></span>
                     : <span className="preco" style={{ display: "block", marginTop: 6, fontSize: 14.5 }}>{brl(item.preco * item.quantidade)}</span>}
                   {dPromo > 0 && item.quantidade > 1 && <small>O desconto vale em 1 unidade.</small>}
                 </div>

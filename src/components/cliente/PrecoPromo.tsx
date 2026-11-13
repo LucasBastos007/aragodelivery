@@ -1,11 +1,11 @@
 "use client"
-// Preço com a promoção Chegô 10% (lib/promoChego): preço cheio riscado, selo "−10% OFF" e o
+// Preço com a promoção Chegô 10% (lib/promoChego): preço cheio riscado, selo da Hora Maluca e o
 // valor com desconto. Fora da promoção, depois do fim, ou se o cliente já usou o desconto
 // nessa loja, mostra o preço normal.
 import { useEffect, useState } from "react"
 import { brl } from "@/lib/precoExibicao"
 import { supabase } from "@/lib/supabase"
-import { comPromo, emPromo, emRelampago, pctRelampago, promoAtiva, relampagoAtivo, PROMO_FIM, PROMO_INICIO, RELAMPAGO, RELAMPAGO_FIM, RELAMPAGO_INICIO } from "@/lib/promoChego"
+import { comPromo, emPromo, emRelampago, pctRelampago, promoAtiva, relampagoAtivo, PROMO_SELO, PROMO_VIRADAS, RELAMPAGO, RELAMPAGO_FIM, RELAMPAGO_INICIO, RODADAS } from "@/lib/promoChego"
 
 /** Re-renderiza na virada da campanha (início e fim) pra o selo aparecer e sumir sozinho. */
 export function usePromoAtiva(): boolean {
@@ -15,11 +15,11 @@ export function usePromoAtiva(): boolean {
 /** Muda de valor em cada virada de campanha; use nas dependências de useMemo. */
 export function usePromoVirada(): string {
   // estado = qual campanha está no ar; muda nas viradas (10%: início/fim; relâmpago: 20h45/21h15)
-  const estado = () => `${promoAtiva() ? 1 : 0}${relampagoAtivo() ? 1 : 0}`
+  const estado = () => `${Object.values(RODADAS).map(r => Date.now() >= new Date(r.inicio).getTime() && Date.now() < new Date(r.fim).getTime() ? 1 : 0).join("")}${relampagoAtivo() ? 1 : 0}`
   const [ativa, setAtiva] = useState(estado)
   useEffect(() => {
     const agora = Date.now()
-    const proxima = [PROMO_INICIO, PROMO_FIM, RELAMPAGO_INICIO, RELAMPAGO_FIM].map(t => new Date(t).getTime()).filter(t => t > agora).sort((a, b) => a - b)[0]
+    const proxima = [...PROMO_VIRADAS, RELAMPAGO_INICIO, RELAMPAGO_FIM].map(t => new Date(t).getTime()).filter(t => t > agora).sort((a, b) => a - b)[0]
     if (proxima == null || proxima - agora > 2 ** 31 - 1) return
     const id = setTimeout(() => setAtiva(`${estado()}.${Date.now()}`), proxima - agora + 500)
     return () => clearTimeout(id)
@@ -50,6 +50,9 @@ export function recarregarPromoUsados() { return buscarUsados(true) }
 
 export function usePromoUsados(): string[] {
   const [u, setU] = useState<string[]>(usadosCache)
+  // Na virada da rodada (16h, 19h) busca de novo: quem abriu o app antes do início ficava sem a lista
+  const virada = usePromoVirada()
+  useEffect(() => { if (promoAtiva()) buscarUsados(true) }, [virada])
   useEffect(() => {
     ouvintes.add(setU)
     buscarUsados().then(setU)
@@ -77,10 +80,10 @@ export function PrecoPromo({ produtoId, valor, aPartir, normal }: { produtoId: s
   }
   if (!emPromo(produtoId, Date.now(), usados) || !(valor > 0)) return <>{normal}</>
   return (
-    <span className="preco-promo">
+    <span className="preco-promo relampago">
+      <span className="selo-relampago">{PROMO_SELO}</span>
       <s>{brl(valor)}</s>
-      <em>−10% OFF</em>
-      <span className="preco">{aPartir && <small>a partir de </small>}{brl(comPromo(valor))}</span>
+      <span className="preco">{aPartir && <small>a partir de </small>}{brl(comPromo(valor))} 🔥</span>
     </span>
   )
 }

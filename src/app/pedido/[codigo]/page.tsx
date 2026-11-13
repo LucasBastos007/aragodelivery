@@ -615,12 +615,9 @@ export default function AcompanhamentoPedido() {
           <div className="cartao" role="status" style={{ padding: 16, background: "#EAF2FB", border: "1px solid #B9D3EE", display: "flex", gap: 12, alignItems: "flex-start" }}>
             <span style={{ fontSize: 28, lineHeight: 1 }} aria-hidden="true">🌧️</span>
             <div style={{ minWidth: 0 }}>
-              <b style={{ fontSize: 16, color: "#123B66" }}>Chuva forte em Aragoiânia</b>
+              <b style={{ fontSize: 16, color: "#123B66" }}>Tá chovendo por aqui!</b>
               <p style={{ fontSize: 14, lineHeight: 1.5, color: "#1F3A57", marginTop: 4 }}>
-                Hoje está chovendo muito e os pedidos estão acima do normal. A loja e os entregadores estão fazendo o possível para o seu pedido chegar rápido e com segurança.
-              </p>
-              <p style={{ fontSize: 14, lineHeight: 1.5, color: "#1F3A57", marginTop: 6 }}>
-                Pode levar um pouco mais que o normal. Obrigado pela paciência e pela compreensão! 💙
+                Seu pedido já está com a gente, mas o motoboy vai com mais cuidado na pista molhada. Pode demorar um pouquinho a mais, mas chega quentinho! 💛
               </p>
             </div>
           </div>

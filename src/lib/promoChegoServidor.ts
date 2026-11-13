@@ -3,7 +3,7 @@
 // conta (libera de novo). Só conta o item marcado com PROMO_MARCA_ID: quem comprou o produto
 // antes da ativação, sem desconto, continua com direito (09/11/2026).
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { chaveRelampago, PROMO_FIM, PROMO_INICIO, PROMO_MARCA_ID, PROMO_PRODUTOS, RELAMPAGO } from "@/lib/promoChego"
+import { chaveLoja, chaveRelampago, PROMO_FIM, PROMO_INICIO, PROMO_ITENS, PROMO_MARCA_ID, PROMO_PRODUTOS, RELAMPAGO } from "@/lib/promoChego"
 
 export async function promoUsados(sb: SupabaseClient, clienteId?: string | null, telefone?: string | null): Promise<string[]> {
   const fim8 = (t?: string | null) => String(t ?? "").replace(/\D/g, "").slice(-8)
@@ -18,6 +18,8 @@ export async function promoUsados(sb: SupabaseClient, clienteId?: string | null,
   // Uso da oferta relâmpago (marca com campanha "relampago") volta como "r:<produto>", separado dos 10%
   const usos = (itens ?? []).flatMap(i => (Array.isArray(i.adicionais) ? i.adicionais : [])
     .filter((a: any) => a?.id === PROMO_MARCA_ID)
-    .map((a: any) => a?.campanha === "relampago" ? chaveRelampago(i.produto_id as string) : i.produto_id as string))
+    .flatMap((a: any) => a?.campanha === "relampago" ? [chaveRelampago(i.produto_id as string)]
+      // Hora Maluca (11/11): 1 desconto por loja, então o uso também bloqueia a loja ("l:<loja>")
+      : PROMO_ITENS[i.produto_id as string] ? [i.produto_id as string, chaveLoja(PROMO_ITENS[i.produto_id as string].loja)] : [i.produto_id as string]))
   return Array.from(new Set(usos))
 }

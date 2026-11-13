@@ -312,6 +312,8 @@ export async function POST(req: NextRequest) {
   // pelo Chegô. A taxa fica gravada cheia (o motoboy ganha igual) e só sai do total do cliente.
   // Cliente com frete fixo não passa pela medição no cálculo acima: mede aqui.
   let freteGratisCampanha = false
+  // Cupom de frete grátis criado pela loja: ela banca o frete (o motoboy recebe igual)
+  let freteDaLoja = false
   if (tipo_entrega === "entrega" && taxa_entrega > 0 && freteGratisAtivo()) {
     const dist = freteDetalhe.distancia_km ?? await distanciaEntregaKm(loja.lat, loja.lng, lat_entrega ?? null, lng_entrega ?? null)
     freteGratisCampanha = freteGratisElegivel({ distanciaKm: dist, lojaLat: loja.lat, lojaLng: loja.lng, latEntrega: lat_entrega, lngEntrega: lng_entrega })
@@ -386,7 +388,10 @@ export async function POST(req: NextRequest) {
         if (freteGratisCampanha && (cupom.tipo === "frete_gratis" || cupom.tipo === "frete_percentual")) {
           // frete já é grátis pela campanha do Chegô: o cupom não muda nada
         } else if (cupom.tipo === "frete_gratis") {
-          taxa_entrega = 0
+          // Motoboy recebe o frete cheio (13/11/2026, pedido do Lucas): a taxa fica gravada e sai só do
+          // total do cliente, como no frete grátis da campanha. Antes zerava e o motoboy ficava no piso.
+          freteGratisCampanha = true
+          if (cupom.loja_id) freteDaLoja = true
         } else if (cupom.tipo === "frete_percentual") {
           taxa_entrega = Math.round(taxa_entrega * (1 - cupom.valor / 100) * 100) / 100
         } else {
@@ -441,7 +446,7 @@ export async function POST(req: NextRequest) {
     tipo,
     subtotal: Math.round(subtotal * 100) / 100,
     taxa_entrega,
-    ...(freteGratisCampanha ? { frete_gratis: true, frete_absorvido_por: "app" } : {}),
+    ...(freteGratisCampanha ? { frete_gratis: true, frete_absorvido_por: freteDaLoja ? "loja" : "app" } : {}),
     // Distância de rota usada no frete (03/11/2026): antes ficava vazia e não dava pra conferir frete errado depois
     ...(freteDetalhe.distancia_km != null ? { distancia_km: freteDetalhe.distancia_km } : {}),
     // Só manda a coluna quando há dinâmica: pedido normal fica idêntico ao de antes

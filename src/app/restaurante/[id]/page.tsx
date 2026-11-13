@@ -4,7 +4,7 @@
 // Só a tela mudou: a consulta, o login obrigatório pra pedir, o preço dos adicionais
 // (lib/precoAdicionais) e o que vai pra sacola (handleAddToCart/handleSimpleAdd) são os mesmos.
 import { PrecoPromo, usePromoAtiva, usePromoUsados, usePromoVirada } from "@/components/cliente/PrecoPromo"
-import { emPromo, emRelampago, descontoPromo, PROMO_FIM_TEXTO } from "@/lib/promoChego"
+import { emPromo, emRelampago, descontoPromo, fimTexto, PROMO_TITULO } from "@/lib/promoChego"
 import { freteGratisAtivo, lojaComPonto } from "@/lib/freteGratisCampanha"
 import { precoAdicionais } from "@/lib/precoAdicionais"
 import { lerFavoritas, alternarFavorita } from "@/lib/favoritas"
@@ -152,7 +152,7 @@ function ProdutoModal({ prod, loja, onClose, onAdd }: {
             {prod.descricao && <p className="mut" style={{ marginTop: 8, lineHeight: 1.5, fontSize: 14.5 }}>{prod.descricao}</p>}
             <div style={{ marginTop: 12 }}><Preco prod={prod} /></div>
             {emRelampago(prod.id, Date.now(), promoUsados) && <p className="mut" style={{ fontSize: 13, marginTop: 6 }}>Oferta Relâmpago Chegô até 21h30: 1 unidade promocional por cadastro. O desconto é pago pelo Chegô e aparece na sacola.</p>}
-            {emPromo(prod.id, Date.now(), promoUsados) && <p className="mut" style={{ fontSize: 13, marginTop: 6 }}>Promoção Chegô: 10% de desconto em 1 unidade, uma vez por cadastro nesta loja, {PROMO_FIM_TEXTO}. O desconto aparece na sacola.</p>}
+            {emPromo(prod.id, Date.now(), promoUsados) && <p className="mut" style={{ fontSize: 13, marginTop: 6 }}>Hora Maluca Chegô, {fimTexto(prod.id)}: 10% de desconto em 1 unidade de 1 produto da promoção, uma vez por cadastro nesta loja. O desconto aparece na sacola.</p>}
 
             {loja.aberto && (
               <>
@@ -427,7 +427,7 @@ function RestauranteConteudo() {
     if (!promo.length) return ordenadas
     const ids = new Set(promo.map(p => p.id))
     const ativaDe = (p: Produto) => ordenadas.find(b => b.ps.some(x => x.id === p.id))?.ativa ?? true
-    const topo = { id: "promo-chego", nome: rel.length ? "⚡ Oferta Relâmpago Chegô" : "Promoção Chegô −10%", ativa: promo.some(ativaDe), legenda: null, ps: promo }
+    const topo = { id: "promo-chego", nome: rel.length ? "⚡ Oferta Relâmpago Chegô" : PROMO_TITULO, ativa: promo.some(ativaDe), legenda: null, ps: promo }
     return [topo, ...ordenadas.map(b => ({ ...b, ps: b.ps.filter(p => !ids.has(p.id)) })).filter(b => b.ps.length)]
   }, [categorias, produtos, vitrines, promoNoAr, promoUsados, promoVirada])
 
