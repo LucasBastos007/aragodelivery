@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
       body: JSON.stringify({
         pedido_id:          pedido.id,
         motoboy_recusou_id: pedido.motoboy_id ?? undefined,
+        sem_prioridade:     true,
       }),
     }).catch(() => {})
     count++

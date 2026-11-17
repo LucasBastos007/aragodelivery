@@ -1,6 +1,9 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse, after } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import webpush from "web-push"
+
+// Espera os 10 s da prioridade do motoboy mais perto dentro do after()
+export const maxDuration = 30
 import { getSession, unauthorized } from "@/lib/session"
 
 // Verifica se a requisição vem de código interno do servidor (cron, webhook, etc.)
@@ -44,7 +47,7 @@ export async function POST(req: NextRequest) {
   if (!isAdmin && !isLojista && !isInternalRequest(req)) return unauthorized()
 
   const body = await req.json()
-  const { pedido_id, motoboy_recusou_id } = body
+  const { pedido_id, motoboy_recusou_id, sem_prioridade } = body
 
   if (!pedido_id) return NextResponse.json({ error: "pedido_id obrigatório" }, { status: 400 })
 
@@ -179,20 +182,57 @@ export async function POST(req: NextRequest) {
   const lojaLatSalvar = lojaLat
   const lojaLngSalvar = lojaLng
 
-  // Reatribuindo um pedido que o motoboy já tinha aceitado — avisa ele que perdeu a corrida
-  // antes de tirar (senão ele só percebe quando o pedido some da lista dele, sem explicação).
-  if (reatribuindoAceito && pedido.motoboy_id && initVapid()) {
-    const { data: motoboyAntigo } = await supabase
-      .from("motoboys").select("push_subscription").eq("id", pedido.motoboy_id).single()
-    if (motoboyAntigo?.push_subscription) {
-      const subs: any[] = Array.isArray(motoboyAntigo.push_subscription) ? motoboyAntigo.push_subscription : [motoboyAntigo.push_subscription]
-      const payload = JSON.stringify({
-        title: "Corrida reatribuída",
-        body:  `O pedido #${pedido.codigo} foi passado pra outro entregador pelo admin.`,
-        tag:   "corrida-reatribuida",
-        url:   "/motoboy",
+  // Reatribuindo um pedido que o motoboy já tinha aceitado: antes mandava o push "Corrida
+  // reatribuída" pra ele. Tirado a pedido da Amanda (16/11/2026), os motoboys não gostavam do
+  // aviso. A corrida só some da lista dele.
+
+  // Prioridade pro mais perto (pedido da Amanda, 16/11/2026): primeiro a corrida vai SÓ pro
+  // motoboy livre (sem nenhuma entrega em andamento) mais perto da loja, por 10 s. Ela fica
+  // marcada pra ele (motoboy_id), então os outros não veem (o app só mostra corrida sem dono
+  // ou dele). Se ele não aceitar em 10 s, recusar ou estiver com o celular parado, vai pra todos.
+  // Só na primeira chamada: recusa, fim do tempo, cron e a própria volta usam sem_prioridade.
+  const PRIORIDADE_SEG = 10
+  const primeiro = !sem_prioridade && lojaLatRaio && lojaLngRaio
+    ? comLoc.find(m => m.distLoja < 9999 && !(ativosPorMotoboy.get(m.id) ?? 0) && m.push_subscription)
+    : undefined
+  if (primeiro && candidatos.length > 1) {
+    const { data: marcado } = await supabase.from("pedidos").update({
+      motoboy_id: primeiro.id,
+      status: "aguardando_aceite",
+      atualizado_em: new Date().toISOString(),
+      ...(lojaLatSalvar != null ? { loja_lat: lojaLatSalvar } : {}),
+      ...(lojaLngSalvar != null ? { loja_lng: lojaLngSalvar } : {}),
+    }).eq("id", pedido_id).eq("status", pedido.status).select("id")
+
+    if (marcado && marcado.length > 0) {
+      if (initVapid()) {
+        const payload = JSON.stringify({
+          title: "Nova corrida pra você!",
+          body:  `Pedido #${pedido.codigo} — R$ ${(Number(pedido.taxa_entrega ?? 0) + Number((pedido as any).taxa_dinamica ?? 0)).toFixed(2)}. Você é o mais perto, tem ${PRIORIDADE_SEG} s pra aceitar.`,
+          tag:   "corrida-nova",
+          url:   `/motoboy?pedido_id=${pedido_id}`,
+          pedido_id,
+          requireInteraction: true,
+        })
+        const subs: any[] = Array.isArray(primeiro.push_subscription) ? primeiro.push_subscription : [primeiro.push_subscription]
+        await Promise.allSettled(subs.map(sub => webpush.sendNotification(sub, payload, { urgency: "high" }).catch(() => {})))
+      }
+
+      // Depois de 10 s, se ainda está parada nele, chama todo mundo (menos ele). Não depende do
+      // celular dele estar acordado. Uma chamada só, sem laço (ver incidente de 31/10 no fim).
+      const site = process.env.NEXT_PUBLIC_SITE_URL ?? new URL(req.url).origin
+      after(async () => {
+        await new Promise(r => setTimeout(r, PRIORIDADE_SEG * 1000))
+        const { data: agora } = await supabase.from("pedidos").select("status, motoboy_id").eq("id", pedido_id).maybeSingle()
+        if (agora?.status !== "aguardando_aceite" || agora?.motoboy_id !== primeiro.id) return
+        await fetch(`${site}/api/escalada`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-internal-secret": process.env.INTERNAL_API_SECRET ?? "" },
+          body: JSON.stringify({ pedido_id, motoboy_recusou_id: primeiro.id, sem_prioridade: true }),
+        }).catch(() => {})
       })
-      await Promise.allSettled(subs.map(sub => webpush.sendNotification(sub, payload, { urgency: "high" }).catch(() => {})))
+
+      return NextResponse.json({ ok: true, prioridade: primeiro.id, broadcast: 0 })
     }
   }
 

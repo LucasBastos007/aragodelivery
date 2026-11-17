@@ -1289,6 +1289,12 @@ export default function MotoboyPage() {
     return () => { supabase.removeChannel(ch) }
   }, [pedidoOferta?.id, motoboy_id])
 
+  // Corrida marcada só pra ele (prioridade do mais perto, ou despachada pelo admin): 10 s em
+  // vez de 30, igual à espera do servidor antes de chamar os outros (16/11/2026).
+  useEffect(() => {
+    if (pedidoOferta && pedidoOferta.motoboy_id === motoboy_id) setTimerOferta(t => Math.min(t, 10))
+  }, [pedidoOferta?.id, motoboy_id])
+
   // ── Timer regressivo da oferta ─────────────────────────────────────────────
   useEffect(() => {
     if (!pedidoOferta) return

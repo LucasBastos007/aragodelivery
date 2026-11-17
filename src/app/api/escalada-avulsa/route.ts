@@ -2,7 +2,7 @@ export const dynamic = "force-dynamic"
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { requireAdmin, unauthorized } from "@/lib/session"
-import { notificarMotoboysDisponiveisAvulsa, avisarMotoboyPerdeuAvulsa } from "@/lib/notificacoesMotoboy"
+import { notificarMotoboysDisponiveisAvulsa } from "@/lib/notificacoesMotoboy"
 
 // Equivalente de src/app/api/escalada/route.ts (pedidos normais), pra entrega avulsa —
 // faltava por completo: o Kanban admin (chego-ctrl/pedidos) já tem o botão "🛵 Chamar
@@ -57,9 +57,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, msg: "outro admin já chamou outro motoboy" })
   }
 
-  if (motoboyAnterior) {
-    await avisarMotoboyPerdeuAvulsa(sb, motoboyAnterior, entrega.codigo).catch(() => {})
-  }
+  // Sem aviso pro motoboy que perdeu a entrega (pedido da Amanda, 16/11/2026): ele reclamava
+  // da notificação. A entrega só some da lista dele.
 
   await notificarMotoboysDisponiveisAvulsa(sb, {
     avulsa_id: entrega.id,
