@@ -196,7 +196,10 @@ export default function InicioNovo({ lojas, loading, logado, endereco, onEnderec
   // Carrossel com as artes do Chegô (enviadas pelo Lucas em 20/10/2026). "Explorar lojas" e
   // "Pedir agora" descem pra lista de lojas; "Fazer meu pedido" abre a Petiscaria.
   type Slide = { foto: string; alt: string; href?: string; externo?: boolean }
+  // Live do Chegô no Instagram (17/11/2026, 20h30, sorteio e brinde): sai sozinho às 22h30 (horário de Brasília)
+  const liveNoAr = Date.now() < Date.parse("2026-11-17T22:30:00-03:00")
   const slides: Slide[] = [
+    ...(liveNoAr ? [{ foto: "/banners/live-instagram.jpg", alt: "Live hoje às 20h30 no Instagram do Chegô, com sorteio e brinde. Seguir @appchegodelivery", href: "https://www.instagram.com/appchegodelivery/", externo: true }] : []),
     { foto: "/banners/home-1.jpg", alt: "Aragoiânia tem um jeitinho que só a gente entende. E agora tem um delivery feito para chamar de nosso. Explorar lojas" },
     { foto: "/banners/home-2.jpg", alt: "Aragoiânia tem história, tem sabor e tem gente que faz acontecer. O Chegô nasceu para valorizar tudo isso. Explorar lojas" },
     { foto: "/banners/home-3.jpg", alt: "Petiscaria Tábua dos Sabores: tem sabor que conquista e que vira tradição. Fazer meu pedido", href: petiscaria ? `/restaurante/${petiscaria.id}` : undefined },
