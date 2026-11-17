@@ -1,5 +1,5 @@
 // sw.js — bump CACHE_NAME a cada deploy para forçar atualização
-const CACHE_NAME = "chego-v164"
+const CACHE_NAME = "chego-v165"
 
 // ─── Background Location ──────────────────────────────────────────────────────
 // Armazena última posição recebida da aba principal para envio em background
@@ -189,6 +189,13 @@ self.addEventListener("notificationclick", (event) => {
         })
       })
     )
+    return
+  }
+
+  // Aviso de live (17/11/2026): abre o Instagram do Chegô direto, fora do app
+  const INSTA = "https://www.instagram.com/appchegodelivery/"
+  if (notifData.url === "/live" || (notifData.url ?? "").startsWith("https://www.instagram.com/")) {
+    event.waitUntil(clients.openWindow ? clients.openWindow(notifData.url === "/live" ? INSTA : notifData.url) : Promise.resolve())
     return
   }
 
