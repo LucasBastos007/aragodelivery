@@ -2,8 +2,8 @@ import { NextRequest, NextResponse, after } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import webpush from "web-push"
 
-// Espera os 10 s da prioridade do motoboy mais perto dentro do after()
-export const maxDuration = 30
+// Espera os 20 s da prioridade do motoboy mais perto dentro do after()
+export const maxDuration = 45
 import { getSession, unauthorized } from "@/lib/session"
 
 // Verifica se a requisição vem de código interno do servidor (cron, webhook, etc.)
@@ -187,11 +187,11 @@ export async function POST(req: NextRequest) {
   // aviso. A corrida só some da lista dele.
 
   // Prioridade pro mais perto (pedido da Amanda, 16/11/2026): primeiro a corrida vai SÓ pro
-  // motoboy livre (sem nenhuma entrega em andamento) mais perto da loja, por 10 s. Ela fica
+  // motoboy livre (sem nenhuma entrega em andamento) mais perto da loja, por 20 s. Ela fica
   // marcada pra ele (motoboy_id), então os outros não veem (o app só mostra corrida sem dono
-  // ou dele). Se ele não aceitar em 10 s, recusar ou estiver com o celular parado, vai pra todos.
+  // ou dele). Se ele não aceitar em 20 s, recusar ou estiver com o celular parado, vai pra todos.
   // Só na primeira chamada: recusa, fim do tempo, cron e a própria volta usam sem_prioridade.
-  const PRIORIDADE_SEG = 10
+  const PRIORIDADE_SEG = 20
   const primeiro = !sem_prioridade && lojaLatRaio && lojaLngRaio
     ? comLoc.find(m => m.distLoja < 9999 && !(ativosPorMotoboy.get(m.id) ?? 0) && m.push_subscription)
     : undefined
@@ -218,7 +218,7 @@ export async function POST(req: NextRequest) {
         await Promise.allSettled(subs.map(sub => webpush.sendNotification(sub, payload, { urgency: "high" }).catch(() => {})))
       }
 
-      // Depois de 10 s, se ainda está parada nele, chama todo mundo (menos ele). Não depende do
+      // Depois de 20 s, se ainda está parada nele, chama todo mundo (menos ele). Não depende do
       // celular dele estar acordado. Uma chamada só, sem laço (ver incidente de 31/10 no fim).
       const site = process.env.NEXT_PUBLIC_SITE_URL ?? new URL(req.url).origin
       after(async () => {
