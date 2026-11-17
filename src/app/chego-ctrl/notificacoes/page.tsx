@@ -23,7 +23,7 @@ export default function NotificacoesPage() {
   const [d, setD] = useState<Dados | null>(null)
   const [publico, setPublico] = useState<"clientes" | "motoboys" | "lojas">("clientes")
   const [titulo, setTitulo] = useState(""), [mensagem, setMensagem] = useState("")
-  const [destino, setDestino] = useState<"inicio" | "loja">("inicio"), [lojaId, setLojaId] = useState("")
+  const [destino, setDestino] = useState<"inicio" | "loja" | "insta">("inicio"), [lojaId, setLojaId] = useState("")
   const [lojas, setLojas] = useState<{ id: string; nome: string }[]>([])
   const [conf, setConf] = useState(false), [env, setEnv] = useState(false)
   const [msg, setMsg] = useState<{ t: string; ok: boolean } | null>(null)
@@ -31,8 +31,8 @@ export default function NotificacoesPage() {
   const carregar = () => fetch("/api/admin/notificar", { credentials: "include" }).then(r => r.json()).then(setD).catch(() => setMsg({ t: "Não foi possível carregar.", ok: false }))
   useEffect(() => { carregar(); supabase.from("lojas").select("id,nome").eq("status", "ativo").order("nome").then(({ data }) => setLojas((data as any[]) ?? [])) }, [])
 
-  const link = destino === "loja" && lojaId ? `/restaurante/${lojaId}` : "/"
-  const pronto = titulo.trim().length >= 3 && mensagem.trim().length >= 3 && (destino === "inicio" || lojaId)
+  const link = destino === "loja" && lojaId ? `/restaurante/${lojaId}` : destino === "insta" ? "/live" : "/"
+  const pronto = titulo.trim().length >= 3 && mensagem.trim().length >= 3 && (destino !== "loja" || lojaId)
   async function enviar(p: string) {
     setEnv(true); setMsg(null)
     const r = await fetch("/api/admin/notificar", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ publico: p, titulo, mensagem, link }) })
@@ -67,6 +67,7 @@ export default function NotificacoesPage() {
             <div className="nt-dest">
               <button className="chip" aria-pressed={destino === "inicio"} onClick={() => setDestino("inicio")}>Início do app</button>
               <button className="chip" aria-pressed={destino === "loja"} onClick={() => setDestino("loja")}>Uma loja</button>
+              <button className="chip" aria-pressed={destino === "insta"} onClick={() => setDestino("insta")}>Instagram do Chegô</button>
               {destino === "loja" && <select className="pd-sel" value={lojaId} onChange={e => setLojaId(e.target.value)}><option value="">Escolha a loja</option>{lojas.map(l => <option key={l.id} value={l.id}>{l.nome}</option>)}</select>}
             </div>
           </>}
