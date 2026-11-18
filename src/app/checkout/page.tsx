@@ -445,9 +445,16 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     if (!loja_id) return
-    supabase.from("lojas").select("lat,lng,endereco,nome,taxa_entrega").eq("id", loja_id).single()
+    supabase.from("lojas").select("lat,lng,endereco,nome,taxa_entrega,aceita_retirada").eq("id", loja_id).single()
       .then(({ data }) => setLojaData(data as any))
   }, [loja_id])
+
+  // Loja que não aceita retirada: não mostra "Retirar na loja" e desfaz uma escolha antiga
+  // guardada (antes o cliente só via "Esta loja não aceita retirada" ao enviar, Sushi Biscuit 17/11).
+  const aceitaRetirada = (lojaData as any)?.aceita_retirada !== false
+  useEffect(() => {
+    if (lojaData && !aceitaRetirada && tipoEntrega === "retirada") setTipoEntrega("entrega")
+  }, [lojaData, aceitaRetirada, tipoEntrega])
 
   // Coordenadas/cidade/bairro do cliente que valem no momento (edição em aberto ou endereço salvo)
   const clienteLatAtual = editandoEndereco
@@ -1172,10 +1179,12 @@ export default function CheckoutPage() {
 
       <div style={{ padding: "14px 12px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
 
-        <div className="modo" style={{ margin: 0, background: "#E6E5E1" }}>
-          <button aria-pressed={tipoEntrega === "entrega"} onClick={() => setTipoEntrega("entrega")}>Entrega</button>
-          <button aria-pressed={tipoEntrega === "retirada"} onClick={() => setTipoEntrega("retirada")}>Retirar na loja</button>
-        </div>
+        {aceitaRetirada && (
+          <div className="modo" style={{ margin: 0, background: "#E6E5E1" }}>
+            <button aria-pressed={tipoEntrega === "entrega"} onClick={() => setTipoEntrega("entrega")}>Entrega</button>
+            <button aria-pressed={tipoEntrega === "retirada"} onClick={() => setTipoEntrega("retirada")}>Retirar na loja</button>
+          </div>
+        )}
 
         {/* Onde */}
         {naLoja ? (
