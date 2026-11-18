@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { cupomValeNoRaio } from "@/lib/cupomRaio"
 import { ehCupomFreteAniversario, cupomFreteAniversarioNoPrazo, lojaComPonto, distanciaRetaKm, CUPOM_FRETE_ANIVERSARIO, MSG_CUPOM_FORA_DO_PRAZO, MSG_CUPOM_FORA_DO_RAIO } from "@/lib/freteGratisCampanha"
+import { ehCupomAlmoco, cupomAlmocoNoHorario, pedidosComCupomAlmoco, CUPOM_ALMOCO, MSG_ALMOCO_HORARIO, MSG_ALMOCO_RAIO, MSG_ALMOCO_USADO } from "@/lib/cupomAlmoco"
 
 function sb() {
   return createClient(
@@ -72,6 +73,20 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Cupons da campanha de almoço (ALM001–ALM050): 10h30 às 14h, uso único que o cancelamento
+  // devolve e frete grátis até 5 km da loja (prévia em linha reta; o /api/pedido/criar mede pela rota)
+  if (ehCupomAlmoco(codigo)) {
+    if (!cupomAlmocoNoHorario()) return NextResponse.json({ error: MSG_ALMOCO_HORARIO }, { status: 422 })
+    if ((await pedidosComCupomAlmoco(client, codigo)).length) return NextResponse.json({ error: MSG_ALMOCO_USADO }, { status: 422 })
+    if (cupom.tipo === "frete_gratis" && !retirada) {
+      const { data: loja } = loja_id ? await client.from("lojas").select("lat, lng").eq("id", loja_id).maybeSingle() : { data: null }
+      if (loja && !lojaComPonto(loja.lat, loja.lng)) return NextResponse.json({ error: "Essa loja ainda não marcou o ponto no mapa, então o frete grátis deste cupom não vale para ela." }, { status: 422 })
+      if (loja && lat != null && lng != null && distanciaRetaKm(Number(loja.lat), Number(loja.lng), lat, lng) > CUPOM_ALMOCO.raioFreteKm) {
+        return NextResponse.json({ error: MSG_ALMOCO_RAIO }, { status: 422 })
+      }
+    }
+  }
+
   // "validade" é só a data (sem hora) — precisa valer até o FIM do dia em horário de
   // Brasília, não meia-noite UTC. Sem o offset -03:00, o cupom "válido até 13/09" expirava
   // às 21h de BRT do dia 12 (a Vercel roda em UTC, então "2026-09-13" virava meia-noite UTC
@@ -80,7 +95,7 @@ export async function GET(req: NextRequest) {
   if (cupom.validade && new Date(cupom.validade + "T23:59:59-03:00") < new Date()) {
     return NextResponse.json({ error: "Este cupom expirou." }, { status: 422 })
   }
-  if (cupom.max_usos != null && (cupom.usos ?? 0) >= cupom.max_usos) {
+  if (cupom.max_usos != null && (cupom.usos ?? 0) >= cupom.max_usos && !ehCupomAlmoco(codigo)) {
     return NextResponse.json({ error: "Este cupom já atingiu o limite de usos." }, { status: 422 })
   }
   if (cupom.pedido_minimo > 0 && subtotal < cupom.pedido_minimo) {

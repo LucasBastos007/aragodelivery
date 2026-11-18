@@ -14,6 +14,7 @@ import { calcularTaxaEntregaCompleta, coordsPeloHistorico, distanciaEntregaKm, E
 import { freteGratisAtivo, freteGratisElegivel, ehCupomFreteAniversario, cupomFreteAniversarioNoPrazo, CUPOM_FRETE_ANIVERSARIO, MSG_CUPOM_FORA_DO_PRAZO, MSG_CUPOM_FORA_DO_RAIO } from "@/lib/freteGratisCampanha"
 import { acrescimoDinamico } from "@/lib/corridaDinamica"
 import { cupomValeNoRaio } from "@/lib/cupomRaio"
+import { ehCupomAlmoco, cupomAlmocoNoHorario, pedidosComCupomAlmoco, CUPOM_ALMOCO, MSG_ALMOCO_HORARIO, MSG_ALMOCO_RAIO, MSG_ALMOCO_USADO } from "@/lib/cupomAlmoco"
 import { jaFezPedido, bloqueioPrimeiroPedido, MSG_SO_PRIMEIRO } from "@/lib/primeiroPedido"
 import { chaveBot } from "@/lib/whatsSuporte"
 import { descontoPromo, promoAtiva, relampagoAtivo, PROMO_CODIGO, PROMO_MARCA_ID, PROMO_PRODUTOS, RELAMPAGO, ROTULO_CHEGO } from "@/lib/promoChego"
@@ -344,8 +345,27 @@ export async function POST(req: NextRequest) {
       // "validade" só tem data, sem hora — vale até o FIM do dia em horário de Brasília,
       // não meia-noite UTC (mesma correção de /api/cupom/validar).
       const expirado = cupom.validade && new Date(cupom.validade + "T23:59:59-03:00") < new Date()
-      const lotado   = cupom.max_usos != null && (cupom.usos ?? 0) >= cupom.max_usos
+      const lotado   = cupom.max_usos != null && (cupom.usos ?? 0) >= cupom.max_usos && !ehCupomAlmoco(cupom_codigo)
       const minOk    = !cupom.pedido_minimo || subtotal >= cupom.pedido_minimo
+
+      // Campanha de almoço (ALM001–ALM050): fora das regras recusa com aviso, em vez de seguir sem
+      // desconto. O uso único é conferido de novo depois de gravar o pedido (dois ao mesmo tempo).
+      if (ehCupomAlmoco(cupom_codigo)) {
+        const tire = " Tire o cupom para finalizar."
+        if (!valeParaLoja) return NextResponse.json({ error: `Este cupom vale só nas lojas de Aragoiânia participantes.${tire}` }, { status: 422 })
+        if (!cupomAlmocoNoHorario() || expirado) return NextResponse.json({ error: `${MSG_ALMOCO_HORARIO}${tire}` }, { status: 422 })
+        if ((await pedidosComCupomAlmoco(sb, cupom_codigo)).length) return NextResponse.json({ error: `${MSG_ALMOCO_USADO}${tire}` }, { status: 422 })
+        if (!minOk) return NextResponse.json({ error: `Pedido mínimo de R$ ${Number(cupom.pedido_minimo).toFixed(2).replace(".", ",")} em produtos para este cupom.${tire}` }, { status: 422 })
+        if (cupom.tipo === "frete_gratis") {
+          if (tipo_entrega !== "entrega") return NextResponse.json({ error: `O frete grátis deste cupom vale só para entrega.${tire}` }, { status: 422 })
+          if (taxa_entrega > 0 && !freteGratisCampanha) {
+            const dist = freteDetalhe.distancia_km ?? await distanciaEntregaKm(loja.lat, loja.lng, lat_entrega ?? null, lng_entrega ?? null)
+            const ok = freteGratisElegivel({ distanciaKm: dist, lojaLat: loja.lat, lojaLng: loja.lng, latEntrega: lat_entrega, lngEntrega: lng_entrega, raioKm: CUPOM_ALMOCO.raioFreteKm, porCupom: true })
+            console.log("[cupom-almoco]", { cupom_codigo, loja_id, dist, ok })
+            if (!ok) return NextResponse.json({ error: `${MSG_ALMOCO_RAIO}${tire}` }, { status: 422 })
+          }
+        }
+      }
 
       // Cupom de primeiro pedido: só com conta, e nem a conta, nem o telefone cadastrado nela,
       // nem o telefone do pedido podem ter pedido antes (fora cancelados). Recusa com aviso
@@ -470,6 +490,17 @@ export async function POST(req: NextRequest) {
   if (pedidoErr || !pedido) {
     console.error("[pedido/criar] Supabase insert error:", JSON.stringify(pedidoErr))
     return NextResponse.json({ error: "Erro ao criar pedido." }, { status: 500 })
+  }
+
+  // Cupom de almoço é de uso único: se outro pedido gravou o mesmo código antes deste (dois ao
+  // mesmo tempo), este é cancelado na hora, antes de itens e cobrança, e o cliente é avisado.
+  if (cupomId && ehCupomAlmoco(cupom_codigo)) {
+    const comCupom = await pedidosComCupomAlmoco(sb, cupom_codigo)
+    if (comCupom[0]?.id !== pedido.id) {
+      await sb.from("pedidos").update({ status: "cancelado", cancelado_em: new Date().toISOString() }).eq("id", pedido.id)
+      console.log("[cupom-almoco] uso simultâneo recusado", { cupom_codigo, pedido: pedido.id })
+      return NextResponse.json({ error: `${MSG_ALMOCO_USADO} Tire o cupom para finalizar.` }, { status: 409 })
+    }
   }
 
   // 9. Insere itens com preços do banco — adicionais também validados (nunca o que o
