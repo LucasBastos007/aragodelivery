@@ -191,10 +191,32 @@ export async function POST(req: NextRequest) {
   // marcada pra ele (motoboy_id), então os outros não veem (o app só mostra corrida sem dono
   // ou dele). Se ele não aceitar em 20 s, recusar ou estiver com o celular parado, vai pra todos.
   // Só na primeira chamada: recusa, fim do tempo, cron e a própria volta usam sem_prioridade.
+  //
+  // Fila justa (pedido do Lucas, 18/11/2026): o "mais perto" mandava quase tudo pra quem ficava
+  // parado no centro (Amanda Bastos levou 11 de 16 corridas do dia). Agora, entre os livres a até
+  // FILA_KM da loja, a prioridade é de quem está há mais tempo sem entregar (nunca entregou hoje
+  // = primeiro da fila). Empate: o mais perto. Ninguém perto: o mais perto, como antes.
+  // Continua sendo só uma oferta: ele precisa aceitar; se não aceitar em 20 s, vai pra todos.
   const PRIORIDADE_SEG = 20
-  const primeiro = !sem_prioridade && lojaLatRaio && lojaLngRaio
-    ? comLoc.find(m => m.distLoja < 9999 && !(ativosPorMotoboy.get(m.id) ?? 0) && m.push_subscription)
-    : undefined
+  const FILA_KM = 3
+  let primeiro: (typeof comLoc)[number] | undefined
+  if (!sem_prioridade && lojaLatRaio && lojaLngRaio) {
+    const livres = comLoc.filter(m => m.distLoja < 9999 && !(ativosPorMotoboy.get(m.id) ?? 0) && m.push_subscription)
+    const pertos = livres.filter(m => m.distLoja <= FILA_KM)
+    if (pertos.length > 1) {
+      const inicioDia = new Date(Date.now() - 3 * 3600e3); inicioDia.setUTCHours(3, 0, 0, 0) // 0h de Brasília
+      const { data: feitas } = await supabase.from("pedidos").select("motoboy_id, entregue_em")
+        .in("motoboy_id", pertos.map(m => m.id)).eq("status", "entregue").gte("entregue_em", inicioDia.toISOString())
+      const ultima = new Map<string, number>()
+      for (const f of feitas ?? []) {
+        const t = Date.parse(f.entregue_em as any) || 0
+        if (t > (ultima.get(f.motoboy_id as any) ?? 0)) ultima.set(f.motoboy_id as any, t)
+      }
+      primeiro = [...pertos].sort((a, b) => (ultima.get(a.id) ?? 0) - (ultima.get(b.id) ?? 0) || a.distLoja - b.distLoja)[0]
+    } else {
+      primeiro = pertos[0] ?? livres[0]
+    }
+  }
   if (primeiro && candidatos.length > 1) {
     const { data: marcado } = await supabase.from("pedidos").update({
       motoboy_id: primeiro.id,
@@ -208,7 +230,7 @@ export async function POST(req: NextRequest) {
       if (initVapid()) {
         const payload = JSON.stringify({
           title: "Nova corrida pra você!",
-          body:  `Pedido #${pedido.codigo} — R$ ${(Number(pedido.taxa_entrega ?? 0) + Number((pedido as any).taxa_dinamica ?? 0)).toFixed(2)}. Você é o mais perto, tem ${PRIORIDADE_SEG} s pra aceitar.`,
+          body:  `Pedido #${pedido.codigo} — R$ ${(Number(pedido.taxa_entrega ?? 0) + Number((pedido as any).taxa_dinamica ?? 0)).toFixed(2)}. É a sua vez na fila, tem ${PRIORIDADE_SEG} s pra aceitar.`,
           tag:   "corrida-nova",
           url:   `/motoboy?pedido_id=${pedido_id}`,
           pedido_id,
