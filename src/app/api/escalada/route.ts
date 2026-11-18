@@ -200,7 +200,11 @@ export async function POST(req: NextRequest) {
   const PRIORIDADE_SEG = 20
   const FILA_KM = 3
   let primeiro: (typeof comLoc)[number] | undefined
-  if (!sem_prioridade && lojaLatRaio && lojaLngRaio) {
+  // Desligado em 18/11/2026 (pedido do Lucas e da Amanda): a vez exclusiva fazia a corrida
+  // "pular" de um motoboy pro outro. Agora toca pra todos de uma vez e quem aceitar primeiro pega.
+  // Pra voltar a fila, é só trocar PRIORIDADE_LIGADA para true.
+  const PRIORIDADE_LIGADA = false
+  if (PRIORIDADE_LIGADA && !sem_prioridade && lojaLatRaio && lojaLngRaio) {
     const livres = comLoc.filter(m => m.distLoja < 9999 && !(ativosPorMotoboy.get(m.id) ?? 0) && m.push_subscription)
     const pertos = livres.filter(m => m.distLoja <= FILA_KM)
     if (pertos.length > 1) {
