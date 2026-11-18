@@ -187,7 +187,7 @@ export default function PedidosPage() {
         <span className="cli">Pra {p.nome_cliente ?? "cliente"}{p.endereco_entrega?.includes("Retirada") ? ", retira na loja" : ""}</span>
         {it.length > 0 && <span className="itens">{it.slice(0, 2).map(i => `${i.quantidade}× ${i.nome}`).join(", ")}{it.length > 2 ? ` e mais ${it.length - 2}` : ""}</span>}
         <span className="rodape"><span className="selo cinza">{ehDividido(p) ? rotuloPagamento(p) : FORMA[p.forma_pagamento] ?? p.forma_pagamento}</span><span className="total num">{brl(p.total)}</span></span>
-        {p.motoboy?.nome && <span className="mb-linha"><span className="av">{p.motoboy.nome[0]}</span>{p.motoboy.nome}</span>}
+        {p.motoboy?.nome && <span className="mb-linha"><span className="av">{p.motoboy.nome[0]}</span>{p.status === "aguardando_aceite" ? `Chamando ${p.motoboy.nome}, ainda não aceitou` : p.motoboy.nome}</span>}
         {avisos[p.id] && <span className={`aviso ${avisos[p.id].ok ? "vd" : "vm"}`} style={{ display: "block", marginTop: 8, fontSize: 13, padding: "8px 10px" }}>{avisos[p.id].t}</span>}
         {act && <span role="button" tabIndex={0} className="btn btn-p acao" aria-disabled={ocupado === p.id} onClick={e => { e.stopPropagation(); if (ocupado !== p.id) avancar(p) }}>{ocupado === p.id ? "Avançando…" : act}</span>}
         {(p.status === "pronto" || p.status === "aguardando_aceite") && ehRetirada(p) && <span className="t14 mut" style={{ display: "block", marginTop: 8 }}>Pronto. Esperando o cliente buscar na loja.</span>}
@@ -342,7 +342,7 @@ function Gaveta({ p, ocupado, aviso, onFechar, acoes }: { p: any; ocupado: boole
 
         <div className="gav-sec"><small>Loja</small><b>{p.loja?.nome ?? "—"}</b>{linkWa(p.loja?.telefone, "WhatsApp da loja", `Pedido *#${p.codigo}*`)}</div>
         <div className="gav-sec"><small>Cliente</small><b>{p.nome_cliente ?? "—"}</b><span className="t14">{p.endereco_entrega}</span>{linkWa(p.telefone_cliente, "WhatsApp do cliente", `Pedido *#${p.codigo}*`)}</div>
-        <div className="gav-sec"><small>Motoboy</small>{p.motoboy?.nome ? <><b>{p.motoboy.nome}</b>{linkWa(p.motoboy?.telefone, "WhatsApp do motoboy", `Entrega *#${p.codigo}*`)}</> : <span className="t14 mut">{retirada ? "Cliente retira na loja." : "Ninguém pegou ainda."}</span>}</div>
+        <div className="gav-sec"><small>Motoboy</small>{p.motoboy?.nome ? <><b>{p.status === "aguardando_aceite" ? `Chamando ${p.motoboy.nome} (ainda não aceitou)` : p.motoboy.nome}</b>{linkWa(p.motoboy?.telefone, "WhatsApp do motoboy", `Entrega *#${p.codigo}*`)}</> : <span className="t14 mut">{retirada ? "Cliente retira na loja." : "Ninguém pegou ainda."}</span>}</div>
 
         <div className="gav-sec"><small>Itens</small>
           {it.length === 0 ? <span className="t14 mut">Sem itens.</span> : it.map((x: any, i: number) => (
