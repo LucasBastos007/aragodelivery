@@ -72,9 +72,37 @@ export async function borderoMotoboy(sb: SupabaseClient, motoboyId: string): Pro
   ].sort((a, b) => a.dia.localeCompare(b.dia))
   const s = saldos.find(x => x.id === motoboyId)
   const reservado = r2(((abertos ?? []) as any[]).reduce((t, x) => t + Number(x.valor ?? 0), 0))
-  return { tipo: "motoboy", id: motoboyId, nome: (mb as any)?.nome ?? "Motoboy", periodo_ini: DESTINACOES_DESDE, periodo_fim: hoje, linhas: lista,
+  const valor = r2(Math.max(0, (s?.pendente ?? 0) - reservado))
+  const completo: BorderoMb = { tipo: "motoboy", id: motoboyId, nome: (mb as any)?.nome ?? "Motoboy", periodo_ini: DESTINACOES_DESDE, periodo_fim: hoje, linhas: lista,
     ganho: s?.ganho ?? r2(lista.reduce((t, l) => t + l.ganho, 0)), bonus: s?.bonus ?? 0, descontos: s?.descontos ?? 0, pago: s?.pago ?? 0, compensado: s?.compensado ?? 0,
-    reservado, valor: r2(Math.max(0, (s?.pendente ?? 0) - reservado)) }
+    reservado, valor }
+
+  // Só o que está em aberto (17/11/2026, pedido da Amanda): antes o borderô listava tudo desde 16/10 e
+  // descontava o "já recebeu" inteiro, misturando semanas já pagas. Os pagamentos quitam os dias mais
+  // antigos primeiro; o borderô começa no primeiro dia ainda não quitado. O valor a receber não muda.
+  const { data: movs } = await sb.from("movimentos_financeiros").select("tipo,valor,ocorrido_em").eq("motoboy_id", motoboyId).is("cancelado_em", null)
+    .in("tipo", ["bonus", "ajuste_credito", "desconto", "ajuste_debito"]).gte("ocorrido_em", iniUtc(DESTINACOES_DESDE))
+  const bonusDia = new Map<string, number>(), descDia = new Map<string, number>(), credito = new Map<string, number>()
+  const soma = (m: Map<string, number>, d: string, v: number) => m.set(d, (m.get(d) ?? 0) + v)
+  for (const l of lista) soma(credito, l.dia, l.ganho)
+  for (const m of (movs ?? []) as any[]) {
+    const d = ymdBrt(new Date(m.ocorrido_em)), v = Number(m.valor ?? 0)
+    if (m.tipo === "bonus" || m.tipo === "ajuste_credito") { soma(bonusDia, d, v); soma(credito, d, v) } else { soma(descDia, d, v); soma(credito, d, -v) }
+  }
+  const quitado = completo.pago + completo.compensado
+  let ini = hoje, antes = 0
+  for (const d of [...credito.keys()].sort()) {
+    if (antes + (credito.get(d) ?? 0) > quitado + 0.004) { ini = d; break }
+    antes += credito.get(d) ?? 0
+  }
+  const noPeriodo = (m: Map<string, number>) => r2([...m].reduce((t, [d, v]) => t + (d >= ini ? v : 0), 0))
+  const emAberto = lista.filter(l => l.dia >= ini)
+  const ultimo = [...credito.keys()].filter(d => d >= ini).sort().at(-1) ?? hoje
+  const aberto: BorderoMb = { ...completo, periodo_ini: ini, periodo_fim: ultimo, linhas: emAberto, ganho: r2(emAberto.reduce((t, l) => t + l.ganho, 0)), bonus: noPeriodo(bonusDia), descontos: noPeriodo(descDia),
+    pago: r2(Math.max(0, quitado - antes)), compensado: 0 }
+  // Se a conta do período não fechar com o saldo (dado fora do padrão), mostra o borderô completo
+  const confere = Math.abs(r2(Math.max(0, aberto.ganho + aberto.bonus - aberto.descontos - aberto.pago) - reservado) - valor) < 0.01
+  return confere ? aberto : completo
 }
 
 /** Borderô em aberto (o mais recente não cancelado) de uma loja no ciclo, ou de um motoboy. */
