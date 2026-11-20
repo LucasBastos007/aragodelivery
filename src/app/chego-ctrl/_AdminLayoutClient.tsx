@@ -57,6 +57,7 @@ const AREAS: [string, Item[]][] = [
   ]],
   ["Qualidade", [
     { href: "/chego-ctrl/avaliacoes", ic: "estrela", label: "Avaliações", frase: "Notas das lojas e dos motoboys. As baixas pedem atenção.", cor: COR.qual },
+    { href: "/chego-ctrl/ranking", ic: "grafico", label: "Ranking e tempos", frase: "Pódio das lojas e dos motoboys, e quem está cumprindo o tempo de preparo e o prazo de entrega.", cor: COR.qual },
   ]],
   ["Ajustes", [
     { href: "/chego-ctrl/taxas", ic: "frete", label: "Taxas e frete", frase: "Frete e taxas definidos pelo Chegô. As lojas não editam.", cor: COR.aj },
