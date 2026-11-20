@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
       motoboys: per.motoboys.lista.map(m => ({ id: m.id, nome: m.nome, entregas: m.entregas, avulsas: m.avulsas, ganho: d(m.ganho), bonus: d(m.bonus), descontos: d(m.descontos), devido: d(m.devido), dinheiroClientes: d(m.dinheiroClientes) })),
       saldoMotoboys: saldo.map(s => { const m: any = M.get(s.id); const chave = m ? chavePixLoja({ pix_key: m.pix_key, pix_chave: m.pix_chave }) : null
         const reservado = Math.round((res.get(s.id) ?? 0) * 100) / 100
-        return { ...s, reservado, livre: Math.max(0, Math.round((s.pendente - reservado) * 100) / 100), telefone: m?.telefone ?? null, chave, chaveTipo: chave ? tipoChaveSugerido(chave) : null, chaveOk: chavePixParece(chave) } }),
+        return { ...s, reservado, livre: Math.max(0, Math.round((s.pendente - reservado) * 100) / 100), status: m?.status ?? null, telefone: m?.telefone ?? null, chave, chaveTipo: chave ? tipoChaveSugerido(chave) : null, chaveOk: chavePixParece(chave) } }),
     })
   } catch (e: any) { return NextResponse.json({ error: e?.message ?? "Não foi possível calcular." }, { status: 503 }) }
 }

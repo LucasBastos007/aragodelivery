@@ -17,7 +17,7 @@ type Reg = { id: string; status: string; valor: number; qtd: number; enviado_em:
 type LinhaLoja = { loja_id: string; nome: string; logo_url: string | null; pedidos: number; produtos: number; liquido: number; saldo?: number; adiantado?: number; chave: string | null; chaveTipo: Chave; chaveOk?: boolean
   pago: { id: string; valor: number; ocorrido_em: string; origem: string; comprovante_path: string | null } | null }
 type Rep = { ciclo: { ini: string; fim: string; paga: string }; encerrado: boolean; saldoAsaas: number | null; lojas: LinhaLoja[] }
-type SaldoMb = { id: string; nome: string; entregas: number; ganho: number; pago: number; pendente: number; reservado: number; livre: number; telefone: string | null; chave: string | null; chaveTipo: Chave }
+type SaldoMb = { id: string; nome: string; entregas: number; ganho: number; pago: number; pendente: number; reservado: number; livre: number; status?: string | null; telefone: string | null; chave: string | null; chaveTipo: Chave }
 type Saque = { id: string; tipo: string; motoboy_id: string | null; valor: number; taxa_saque: number | null; status: string; pix_chave: string | null; chaveTipo: Chave; criado_em: string; motoboy: { nome: string } | null }
 type BLoja = { tipo: "loja"; id: string; nome: string; periodo_ini: string; periodo_fim: string; paga: string; alertas: number; frete: number
   linhas: { codigo: string; dia: string; hora?: string; forma: string; itens: string; frete: number; alerta: string | null; produtos: number; cupom: number; comissao: number; taxas: number; entrega: number; balcao: number; liquido: number }[]
@@ -100,7 +100,8 @@ export default function RepassesPage() {
       fetch(`/api/admin/pagamentos`, { credentials: "include" }).then(r => r.json()).catch(() => ({ saques: [] })),
     ]).then(([a, b, c, d]) => {
       setRep(a); setRegs({ lojas: b.lojas ?? {}, motoboys: b.motoboys ?? {} })
-      setMbs((c.saldoMotoboys ?? []).filter((m: SaldoMb) => m.pendente > 0.004 || m.entregas > 0)); setSaques((d.saques ?? []).filter((s: Saque) => s.tipo === "motoboy" && s.status === "solicitado"))
+      // Motoboy suspenso, sem nada a receber e sem saque em aberto não aparece mais (20/11/2026, pedido da Amanda)
+      setMbs((c.saldoMotoboys ?? []).filter((m: SaldoMb) => m.pendente > 0.004 || m.reservado > 0.004 || (m.entregas > 0 && m.status !== "suspenso"))); setSaques((d.saques ?? []).filter((s: Saque) => s.tipo === "motoboy" && s.status === "solicitado"))
       if (b.error) setErro(b.error)
     }).catch(e => setErro(String(e)))
   }, [ci, tick, hoje])
