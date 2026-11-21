@@ -289,8 +289,19 @@ export default function EntregaAvulsaPage() {
   const [precisaTroco, setPrecisaTroco] = useState(false)
   const [trocoPara, setTrocoPara] = useState("")
   const [tipoMaquininha, setTipoMaquininha] = useState<"" | "credito" | "debito">("")
+  // 2 formas de pagamento e quem paga a entrega (Lucas, 21/11/2026)
+  const [dividir, setDividir] = useState(false)
+  const [formaPgto2, setFormaPgto2] = useState<"" | "dinheiro" | "maquininha" | "pix_loja">("")
+  const [valor1, setValor1] = useState("")
+  const [fretePagoPor, setFretePagoPor] = useState<"cliente" | "loja">("cliente")
   const [ultimoPedido, setUltimoPedido] = useState<string | null>(null)
-  const totalPedido = subtotalCarrinho + (taxaInfo?.taxa ?? 0)
+  const totalPedido = subtotalCarrinho + (fretePagoPor === "loja" ? 0 : (taxaInfo?.taxa ?? 0))
+  const valor1Num = parseFloat(valor1.replace(/\./g, "").replace(",", ".")) || 0
+  const valor2Num = Math.round((totalPedido - valor1Num) * 100) / 100
+  const pgDividido = dividir && !!formaPgto && !!formaPgto2
+  const usaForma = (f: string) => formaPgto === f || (dividir && formaPgto2 === f)
+  const valorEmDinheiro = !pgDividido ? (formaPgto === "dinheiro" ? totalPedido : 0) : (formaPgto === "dinheiro" ? valor1Num : 0) + (formaPgto2 === "dinheiro" ? valor2Num : 0)
+  const NOME_PG: Record<string, string> = { dinheiro: "Dinheiro", maquininha: "Maquininha", pix_loja: "Pix na loja" }
 
   function set(k: string, v: string) {
     setForm(f => ({ ...f, [k]: v }))
@@ -530,6 +541,7 @@ export default function EntregaAvulsaPage() {
 
   function limparForm() {
     setFormaPgto(""); setPrecisaTroco(false); setTrocoPara(""); setTipoMaquininha("")
+    setDividir(false); setFormaPgto2(""); setValor1(""); setFretePagoPor("cliente")
     setForm({ cliente_nome: "", cliente_tel: "", observacao: "" })
     setCarrinho([])
     setBusca("")
@@ -561,9 +573,12 @@ export default function EntregaAvulsaPage() {
     if (zonaRural === null) { alert("Informe se a entrega é em zona rural ou estrada de chão"); return }
     if (zonaRural && detalheRural.trim().length < 5) { alert("Descreva como chegar (zona rural)"); return }
     if (!formaPgto) { alert("Informe a forma de pagamento"); return }
-    if (formaPgto === "maquininha" && !tipoMaquininha) { alert("Informe se a maquininha é crédito ou débito"); return }
+    if (dividir && !formaPgto2) { alert("Escolha a segunda forma de pagamento"); return }
+    if (pgDividido && valor1Num < 1) { alert(`Informe quanto vai em ${NOME_PG[formaPgto]}`); return }
+    if (pgDividido && valor2Num < 1) { alert(`O valor em ${NOME_PG[formaPgto]} precisa ser menor que o total (${brl(totalPedido)})`); return }
+    if (usaForma("maquininha") && !tipoMaquininha) { alert("Informe se a maquininha é crédito ou débito"); return }
     const trocoNum = parseFloat(trocoPara.replace(/\./g, "").replace(",", "."))
-    if (formaPgto === "dinheiro" && precisaTroco && !(trocoNum > totalPedido)) { alert(`Informe um valor de troco maior que o total (${brl(totalPedido)})`); return }
+    if (usaForma("dinheiro") && precisaTroco && !(trocoNum > valorEmDinheiro)) { alert(`Informe um valor de troco maior que o valor em dinheiro (${brl(valorEmDinheiro)})`); return }
     // Abre a janela do cupom AGORA (ainda dentro do clique) — senão o navegador bloqueia.
     const janelaCupom = window.open("", "_blank", "width=420,height=600,menubar=no,toolbar=no")
     setEnviando(true)
@@ -578,8 +593,11 @@ export default function EntregaAvulsaPage() {
           endereco:      endCompl.trim(),
           referencia:    endRef2.trim(),
           forma_pagamento: formaPgto,
-          tipo_maquininha: formaPgto === "maquininha" ? tipoMaquininha : null,
-          troco_para:    formaPgto === "dinheiro" && precisaTroco ? trocoNum : null,
+          forma_pagamento_2: pgDividido ? formaPgto2 : null,
+          valor_pagamento_1: pgDividido ? valor1Num : null,
+          frete_pago_por: fretePagoPor,
+          tipo_maquininha: usaForma("maquininha") ? tipoMaquininha : null,
+          troco_para:    usaForma("dinheiro") && precisaTroco ? trocoNum : null,
           itens:         carrinho.map(i => ({ produto_id: i.produto_id, quantidade: i.quantidade, adicionais: i.adicionais.map(a => a.id), observacao: i.observacao })),
           cidade:        soCidade(endBusca),
           bairro:        endBairro.trim(),
@@ -1071,6 +1089,23 @@ export default function EntregaAvulsaPage() {
           )
         })()}
 
+        {/* Quem paga a entrega */}
+        <div style={{ marginBottom: 14 }}>
+          <p style={labelStyle}>Quem paga a entrega? *</p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            {([["cliente", "👤 O cliente paga"], ["loja", "🏪 A loja paga"]] as const).map(([v, label]) => (
+              <button key={v} type="button" onClick={() => setFretePagoPor(v)} style={{
+                padding: "11px 10px", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 700,
+                background: fretePagoPor === v ? "var(--pimenta-claro)" : "white", color: fretePagoPor === v ? "var(--pimenta-esc)" : "var(--grafite)",
+                border: fretePagoPor === v ? "1.5px solid var(--pimenta)" : "1.5px solid var(--linha)",
+              }}>{label}</button>
+            ))}
+          </div>
+          {fretePagoPor === "loja" && (
+            <p style={{ marginTop: 8, fontSize: 12, color: "var(--suave)" }}>O cliente não paga a taxa de entrega. Ela sai do repasse da loja e o motoboy recebe normal.</p>
+          )}
+        </div>
+
         {/* Pagamento */}
         <div style={{ marginBottom: 14 }}>
           <p style={labelStyle}>Forma de pagamento *</p>
@@ -1080,14 +1115,51 @@ export default function EntregaAvulsaPage() {
               ["maquininha", "💳 Maquininha"],
               ["pix_loja", "✅ Pix na conta da loja"],
             ] as const).map(([v, label]) => (
-              <button key={v} type="button" onClick={() => setFormaPgto(v)} style={{
+              <button key={v} type="button" onClick={() => { setFormaPgto(v); if (formaPgto2 === v) setFormaPgto2("") }} style={{
                 padding: "11px 10px", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 700,
                 background: formaPgto === v ? "var(--pimenta-claro)" : "white", color: formaPgto === v ? "var(--pimenta-esc)" : "var(--grafite)",
                 border: formaPgto === v ? "1.5px solid var(--pimenta)" : "1.5px solid var(--linha)",
               }}>{label}</button>
             ))}
           </div>
-          {formaPgto === "dinheiro" && (
+          {formaPgto && (
+            <label style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--grafite)", cursor: "pointer" }}>
+              <input type="checkbox" checked={dividir} onChange={e => { setDividir(e.target.checked); if (!e.target.checked) { setFormaPgto2(""); setValor1("") } }} /> Pagar em 2 formas
+            </label>
+          )}
+          {dividir && formaPgto && (
+            <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 10, border: "1.5px solid var(--linha)", background: "white" }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: "var(--grafite)", marginBottom: 6 }}>Segunda forma</p>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8 }}>
+                {([["dinheiro", "💵 Dinheiro"], ["maquininha", "💳 Maquininha"], ["pix_loja", "✅ Pix na loja"]] as const).filter(([v]) => v !== formaPgto).map(([v, label]) => (
+                  <button key={v} type="button" onClick={() => setFormaPgto2(v)} style={{
+                padding: "11px 10px", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 700,
+                background: formaPgto2 === v ? "var(--pimenta-claro)" : "white", color: formaPgto2 === v ? "var(--pimenta-esc)" : "var(--grafite)",
+                border: formaPgto2 === v ? "1.5px solid var(--pimenta)" : "1.5px solid var(--linha)",
+              }}>{label}</button>
+                ))}
+              </div>
+              {formaPgto2 && (
+                <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 13, color: "var(--grafite)" }}>Em {NOME_PG[formaPgto]}:</span>
+                  <input
+                    value={valor1}
+                    onChange={e => {
+                      const d = e.target.value.replace(/\D/g, "")
+                      setValor1(d ? (Number(d) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "")
+                    }}
+                    inputMode="numeric"
+                    placeholder="R$ 0,00"
+                    style={{ ...campoStyle, width: 140 }}
+                  />
+                  <span style={{ fontSize: 13, color: valor1Num > 0 && valor2Num < 1 ? "var(--pimenta)" : "var(--suave)" }}>
+                    {valor1Num > 0 ? `Em ${NOME_PG[formaPgto2]}: ${brl(Math.max(0, valor2Num))}` : `O resto vai em ${NOME_PG[formaPgto2]}`}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+          {usaForma("dinheiro") && (
             <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--grafite)", cursor: "pointer" }}>
                 <input type="checkbox" checked={precisaTroco} onChange={e => setPrecisaTroco(e.target.checked)} /> Precisa de troco
@@ -1106,7 +1178,7 @@ export default function EntregaAvulsaPage() {
               )}
             </div>
           )}
-          {formaPgto === "maquininha" && (
+          {usaForma("maquininha") && (
             <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
               {([["credito", "Crédito"], ["debito", "Débito"]] as const).map(([v, label]) => (
                 <button key={v} type="button" onClick={() => setTipoMaquininha(v)} style={{
@@ -1118,8 +1190,8 @@ export default function EntregaAvulsaPage() {
               <p style={{ alignSelf: "center", fontSize: 11, color: "var(--suave)", flex: 2 }}>O motoboy é avisado para levar a maquininha.</p>
             </div>
           )}
-          {formaPgto === "pix_loja" && (
-            <p style={{ marginTop: 8, fontSize: 12, color: "var(--folha)" }}>Pago direto na conta da loja — o motoboy não cobra nada na entrega.</p>
+          {formaPgto === "pix_loja" && !pgDividido && (
+            <p style={{ marginTop: 8, fontSize: 12, color: "var(--folha)" }}>Pago direto na conta da loja. O motoboy não cobra nada na entrega.</p>
           )}
         </div>
 
@@ -1130,10 +1202,16 @@ export default function EntregaAvulsaPage() {
               <span>Produtos</span><span>{brl(subtotalCarrinho)}</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "var(--suave)", marginBottom: 6 }}>
-              <span>Taxa de entrega</span><span>{taxaInfo ? brl(taxaInfo.taxa) : calculandoTaxa ? "calculando…" : "informe o endereço"}</span>
+              <span>Taxa de entrega{fretePagoPor === "loja" ? " (paga pela loja)" : ""}</span><span style={{ textDecoration: fretePagoPor === "loja" && taxaInfo ? "line-through" : "none" }}>{taxaInfo ? brl(taxaInfo.taxa) : calculandoTaxa ? "calculando…" : "informe o endereço"}</span>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 900, color: "var(--grafite)", borderTop: "1px solid var(--linha)", paddingTop: 6 }}>
-              <span>Total{formaPgto === "dinheiro" || formaPgto === "maquininha" ? " a cobrar" : ""}</span><span>{brl(totalPedido)}</span>
+              <span>Total do cliente</span><span>{brl(totalPedido)}</span>
+            </div>
+            {pgDividido && valor1Num > 0 && valor2Num >= 1 && (
+              <div style={{ fontSize: 12, color: "var(--suave)", marginTop: 4 }}>{NOME_PG[formaPgto]} {brl(valor1Num)} + {NOME_PG[formaPgto2]} {brl(valor2Num)}</div>
+            )}
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 700, color: "var(--grafite)", marginTop: 4 }}>
+              <span>Motoboy cobra na entrega</span><span>{brl(Math.max(0, totalPedido - (!pgDividido ? (formaPgto === "pix_loja" ? totalPedido : 0) : (formaPgto === "pix_loja" ? valor1Num : 0) + (formaPgto2 === "pix_loja" ? valor2Num : 0))))}</span>
             </div>
           </div>
         )}

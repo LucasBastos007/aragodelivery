@@ -60,8 +60,16 @@ export async function POST(req: NextRequest) {
   if (!referencia) return NextResponse.json({ error: "Informe o ponto de referência" }, { status: 400 })
   if (!Array.isArray(itens) || itens.length === 0) return NextResponse.json({ error: "Adicione os itens do pedido" }, { status: 400 })
   if (!FORMAS.includes(forma_pagamento)) return NextResponse.json({ error: "Informe a forma de pagamento" }, { status: 400 })
+  // Pagamento em 2 formas (Lucas, 21/11/2026): qualquer combinação entre dinheiro, maquininha e Pix na loja
+  const forma_pagamento_2 = body.forma_pagamento_2 ? body.forma_pagamento_2 as (typeof FORMAS)[number] : null
+  if (forma_pagamento_2 && (!FORMAS.includes(forma_pagamento_2) || forma_pagamento_2 === forma_pagamento))
+    return NextResponse.json({ error: "Escolha duas formas de pagamento diferentes" }, { status: 400 })
+  const usaForma = (f: string) => forma_pagamento === f || forma_pagamento_2 === f
   const tipo_maquininha = body.tipo_maquininha === "debito" ? "debito" : body.tipo_maquininha === "credito" ? "credito" : null
-  if (forma_pagamento === "maquininha" && !tipo_maquininha) return NextResponse.json({ error: "Informe se a maquininha é crédito ou débito" }, { status: 400 })
+  if (usaForma("maquininha") && !tipo_maquininha) return NextResponse.json({ error: "Informe se a maquininha é crédito ou débito" }, { status: 400 })
+  // Quem paga a entrega (Lucas, 21/11/2026): "loja" = cliente não paga frete, a taxa sai do repasse da loja
+  // (mesmo registro do frete grátis bancado pela loja: frete_gratis + frete_absorvido_por "loja"). O motoboy recebe igual.
+  const freteDaLoja = body.frete_pago_por === "loja"
 
   const coordOk = typeof body.cliente_lat === "number" && typeof body.cliente_lng === "number"
     && Math.abs(body.cliente_lat) <= 90 && Math.abs(body.cliente_lng) <= 180
@@ -117,19 +125,33 @@ export async function POST(req: NextRequest) {
     if (e instanceof EnderecoForaDoRaioError || e instanceof PontoEntregaSuspeitoError) return NextResponse.json({ error: e.message }, { status: 400 })
     throw e
   }
-  const total = Math.round((subtotal + taxa_entrega) * 100) / 100
+  const total = Math.round((subtotal + (freteDaLoja ? 0 : taxa_entrega)) * 100) / 100
+
+  let partes: { forma: string; valor: number }[] | null = null
+  if (forma_pagamento_2) {
+    const v1 = Math.round(Number(body.valor_pagamento_1) * 100) / 100
+    const v2 = Math.round((total - v1) * 100) / 100
+    if (!isFinite(v1) || v1 < 1) return NextResponse.json({ error: "A primeira forma precisa ser de pelo menos R$ 1,00" }, { status: 400 })
+    if (v2 < 1) return NextResponse.json({ error: "A segunda forma precisa ser de pelo menos R$ 1,00" }, { status: 400 })
+    partes = [{ forma: forma_pagamento, valor: v1 }, { forma: forma_pagamento_2, valor: v2 }]
+  }
+  const valorDe = (f: string) => partes ? partes.filter(x => x.forma === f).reduce((t, x) => t + x.valor, 0) : forma_pagamento === f ? total : 0
+  const valorDinheiro = valorDe("dinheiro")
 
   const trocoNum = Number(body.troco_para)
-  const troco_para = forma_pagamento === "dinheiro" && body.troco_para != null && trocoNum > total
+  const troco_para = valorDinheiro > 0 && body.troco_para != null && trocoNum > valorDinheiro
     ? Math.round(trocoNum * 100) / 100 : null
+  const R = (v: number) => `R$ ${v.toFixed(2).replace(".", ",")}`
 
   // Mesmo formato da observação do checkout — o app do motoboy lê "💳 Maquininha: Crédito/
   // Débito" daqui (não existe coluna própria lida por ele).
   const observacaoFinal = [
     `Cliente: ${cliente_nome}`,
     `Tel: ${cliente_tel}`,
-    forma_pagamento === "maquininha" ? `💳 Maquininha: ${tipo_maquininha === "credito" ? "Crédito" : "Débito"}` : "",
-    forma_pagamento === "pix_loja" ? "✅ Pix já pago direto à loja" : "",
+    partes ? `💰 Pagamento em 2 formas: ${partes.map(x => `${x.forma === "pix_loja" ? "Pix na loja" : x.forma === "maquininha" ? "Maquininha" : "Dinheiro"} ${R(x.valor)}`).join(" + ")}` : "",
+    usaForma("maquininha") ? `💳 Maquininha: ${tipo_maquininha === "credito" ? "Crédito" : "Débito"}` : "",
+    usaForma("pix_loja") ? `✅ Pix já pago direto à loja${partes ? ` (${R(valorDe("pix_loja"))})` : ""}` : "",
+    freteDaLoja ? "🛵 Entrega paga pela loja: não cobrar frete do cliente" : "",
     observacao,
   ].filter(Boolean).join(" | ")
   const endereco_entrega = `${[endereco, bairro, cidade].filter(Boolean).join(", ")} — Ref: ${referencia}`
@@ -145,10 +167,12 @@ export async function POST(req: NextRequest) {
     status: "preparando",
     aceito_em: agora,
     forma_pagamento,
-    tipo_cartao_entrega: tipo_maquininha,
+    ...(partes ? { forma_pagamento_2: partes[1].forma, valor_pagamento_1: partes[0].valor, valor_pagamento_2: partes[1].valor } : {}),
+    tipo_cartao_entrega: usaForma("maquininha") ? tipo_maquininha : null,
     troco_para,
     subtotal,
     taxa_entrega,
+    ...(freteDaLoja ? { frete_gratis: true, frete_absorvido_por: "loja" } : {}),
     desconto: 0,
     total,
     endereco_entrega,
