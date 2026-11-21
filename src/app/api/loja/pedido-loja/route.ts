@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import crypto from "crypto"
 import { requireLoja, unauthorized } from "@/lib/session"
-import { calcularTaxaEntregaCompleta, EnderecoForaDoRaioError } from "@/lib/frete"
+import { calcularTaxaEntregaCompleta, EnderecoForaDoRaioError, PontoEntregaSuspeitoError } from "@/lib/frete"
 
 // "Pedido da loja" (pedido do usuário, 2026-10-04): o lojista lança um pedido que recebeu
 // por fora (WhatsApp/telefone) escolhendo os itens do PRÓPRIO cardápio. Vira um pedido
@@ -67,6 +67,9 @@ export async function POST(req: NextRequest) {
     && Math.abs(body.cliente_lat) <= 90 && Math.abs(body.cliente_lng) <= 180
   const lat_entrega: number | null = coordOk ? body.cliente_lat : null
   const lng_entrega: number | null = coordOk ? body.cliente_lng : null
+  // Mesma regra do checkout (Lucas, 21/11/2026): sem ponto no mapa o frete saía o mínimo
+  if (lat_entrega == null || lng_entrega == null) return NextResponse.json({ error: "Marque no mapa o local da entrega" }, { status: 400 })
+  const zona_rural = body.zona_rural === true
 
   const sb = adminSb()
   const { data: loja } = await sb.from("lojas")
@@ -108,9 +111,10 @@ export async function POST(req: NextRequest) {
     taxa_entrega = await calcularTaxaEntregaCompleta(sb, {
       loja_id, loja_lat: loja.lat, loja_lng: loja.lng, loja_taxa_base: (loja as any).taxa_entrega,
       tipo_entrega: "entrega", lat_entrega, lng_entrega, cidade_entrega: cidade, bairro_entrega: bairro,
+      zona_rural, exigir_ponto_rural: true,
     })
   } catch (e) {
-    if (e instanceof EnderecoForaDoRaioError) return NextResponse.json({ error: e.message }, { status: 400 })
+    if (e instanceof EnderecoForaDoRaioError || e instanceof PontoEntregaSuspeitoError) return NextResponse.json({ error: e.message }, { status: 400 })
     throw e
   }
   const total = Math.round((subtotal + taxa_entrega) * 100) / 100
@@ -150,6 +154,7 @@ export async function POST(req: NextRequest) {
     endereco_entrega,
     lat_entrega,
     lng_entrega,
+    zona_rural,
     observacao: observacaoFinal,
     nome_cliente: cliente_nome,
     telefone_cliente: cliente_tel,

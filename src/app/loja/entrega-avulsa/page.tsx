@@ -5,6 +5,17 @@ import { useAuth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import type { EntregaAvulsa, Pedido } from "@/types"
 import { imprimirPedido } from "@/lib/impressao"
+import dynamic from "next/dynamic"
+
+const MapaPicker = dynamic(() => import("@/components/MapaPicker"), { ssr: false })
+
+// Distância em metros entre dois pontos (só pra conferir se o pino saiu de cima da loja)
+function distM(aLat: number, aLng: number, bLat: number, bLng: number) {
+  const r = (x: number) => x * Math.PI / 180, R = 6371000
+  const dLat = r(bLat - aLat), dLng = r(bLng - aLng)
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(r(aLat)) * Math.cos(r(bLat)) * Math.sin(dLng / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(h))
+}
 
 const STATUS_CFG: Record<string, { label: string; color: string; bg: string }> = {
   aguardando:        { label: "Aguardando motoboy", color: "#d97706", bg: "var(--pequi-claro)" },
@@ -242,6 +253,16 @@ export default function EntregaAvulsaPage() {
   const [erroLink, setErroLink]           = useState<string | null>(null)
   const [clienteCoords, setClienteCoords] = useState<{ lat: number; lng: number } | null>(null)
 
+  // Local da entrega no mapa — mesma regra do checkout (Lucas, 21/11/2026): a avulsa só sai
+  // com o ponto marcado no mapa (ou link do WhatsApp). Antes ia sem coordenada (ou com a do
+  // geocoder, que erra) e o frete saía R$ 3 a R$ 5 em chácara/zona rural, ou R$ 15,90 em vez
+  // de R$ 30 pra Hidrolândia (AV4478, Sushi Biscuit).
+  const [mapaAlvo, setMapaAlvo] = useState<{ lat: number; lng: number } | null>(null)
+  const [pinCoords, setPinCoords] = useState<{ lat: number; lng: number } | null>(null)
+  const [pinConfirmado, setPinConfirmado] = useState(false)
+  const [zonaRural, setZonaRural] = useState<boolean | null>(null)
+  const [detalheRural, setDetalheRural] = useState("")
+
   const [larguraPapel] = useState<"80mm" | "58mm">(() => {
     if (typeof window !== "undefined") return (localStorage.getItem("print_largura") as "80mm" | "58mm") ?? "80mm"
     return "80mm"
@@ -367,7 +388,7 @@ export default function EntregaAvulsaPage() {
   useEffect(() => {
     setEnderecoCoords(null)
     const cidade = soCidade(endBusca)
-    if (clienteCoords || endCompl.trim().length < 4 || cidade.length < 3) return
+    if (clienteCoords || pinConfirmado || endCompl.trim().length < 4 || cidade.length < 3) return
     const t = setTimeout(async () => {
       try {
         const q = [endCompl.trim(), endBairro.trim(), cidade].filter(Boolean).join(", ")
@@ -381,19 +402,39 @@ export default function EntregaAvulsaPage() {
       } catch {}
     }, 800)
     return () => clearTimeout(t)
-  }, [endCompl, endBairro, endBusca, clienteCoords, lojaCoords])
+  }, [endCompl, endBairro, endBusca, clienteCoords, pinConfirmado, lojaCoords])
+
+  // Centro do mapa: link do WhatsApp > endereço achado pelo texto > loja. Mover o centro por
+  // aqui não conta como confirmação — só o lojista arrastando/tocando ou usando o link.
+  useEffect(() => {
+    if (pinConfirmado) return
+    const alvo = clienteCoords ?? enderecoCoords ?? (lojaCoords?.lat && lojaCoords?.lng ? { lat: lojaCoords.lat, lng: lojaCoords.lng } : null)
+    if (alvo) { setMapaAlvo(alvo); setPinCoords(alvo) }
+    if (clienteCoords) setPinConfirmado(true)
+  }, [clienteCoords, enderecoCoords, lojaCoords, pinConfirmado])
+
+  function moverPino(lat: number, lng: number) {
+    setPinCoords({ lat, lng })
+    if (mapaAlvo && distM(lat, lng, mapaAlvo.lat, mapaAlvo.lng) > 3) setPinConfirmado(true)
+  }
+
+  // Ponto usado pro frete: só o confirmado no mapa (ou o do link)
+  const coordsEntrega = pinConfirmado && pinCoords ? pinCoords : null
+  const pinNaLoja = !!(coordsEntrega && lojaCoords?.lat && lojaCoords?.lng && distM(coordsEntrega.lat, coordsEntrega.lng, lojaCoords.lat, lojaCoords.lng) < 50)
 
   // Prévia da taxa — mesma função/rota usada no checkout dos pedidos normais.
   useEffect(() => {
     setTaxaInfo(null); setErroTaxa(null)
     const cidade = soCidade(endBusca)
     if (!loja_id || cidade.length < 3) return
-    const coords = clienteCoords ?? enderecoCoords
+    const coords = coordsEntrega
+    if (!coords) return
     const t = setTimeout(async () => {
       setCalculandoTaxa(true)
       try {
         const params = new URLSearchParams({ loja_id, tipo_entrega: "entrega", cidade, bairro: endBairro.trim() })
-        if (coords) { params.set("lat", String(coords.lat)); params.set("lng", String(coords.lng)) }
+        params.set("lat", String(coords.lat)); params.set("lng", String(coords.lng))
+        if (zonaRural) params.set("zona_rural", "1")
         const res = await fetch(`/api/frete/calcular?${params}`)
         const json = await res.json().catch(() => null)
         if (res.ok && typeof json?.taxa_entrega === "number") setTaxaInfo({ taxa: json.taxa_entrega })
@@ -405,7 +446,7 @@ export default function EntregaAvulsaPage() {
       }
     }, 500)
     return () => clearTimeout(t)
-  }, [loja_id, endBusca, endBairro, clienteCoords, enderecoCoords])
+  }, [loja_id, endBusca, endBairro, coordsEntrega?.lat, coordsEntrega?.lng, zonaRural])
 
   function selecionarSugestao(s: SugestaoEndereco) {
     setEndSelecionado(s)
@@ -425,6 +466,8 @@ export default function EntregaAvulsaPage() {
     setErroTaxa(null)
     setEnderecoCoords(null)
     setClienteCoords(null)
+    setMapaAlvo(null); setPinCoords(null); setPinConfirmado(false)
+    setZonaRural(null); setDetalheRural("")
     setLinkMaps("")
     setErroLink(null)
   }
@@ -445,6 +488,7 @@ export default function EntregaAvulsaPage() {
         return
       }
       setClienteCoords({ lat: data.lat, lng: data.lng })
+      setMapaAlvo({ lat: data.lat, lng: data.lng }); setPinCoords({ lat: data.lat, lng: data.lng }); setPinConfirmado(true)
 
       const revRes = await fetch(`/api/geocode/reverse?lat=${data.lat}&lon=${data.lng}`)
       const revData = await revRes.json().catch(() => ({}))
@@ -512,6 +556,10 @@ export default function EntregaAvulsaPage() {
     if (!endBusca.trim()) { alert("Informe o município"); return }
     if (!endCompl.trim()) { alert("Informe o endereço (rua, quadra, lote, número)"); return }
     if (!endRef2.trim()) { alert("Informe o ponto de referência"); return }
+    if (!coordsEntrega) { alert("Marque no mapa o local da entrega (arraste o pino até a casa do cliente) ou cole o link da localização do WhatsApp"); return }
+    if (pinNaLoja) { alert("O pino está em cima da loja. Arraste até a casa do cliente."); return }
+    if (zonaRural === null) { alert("Informe se a entrega é em zona rural ou estrada de chão"); return }
+    if (zonaRural && detalheRural.trim().length < 5) { alert("Descreva como chegar (zona rural)"); return }
     if (!formaPgto) { alert("Informe a forma de pagamento"); return }
     if (formaPgto === "maquininha" && !tipoMaquininha) { alert("Informe se a maquininha é crédito ou débito"); return }
     const trocoNum = parseFloat(trocoPara.replace(/\./g, "").replace(",", "."))
@@ -535,9 +583,10 @@ export default function EntregaAvulsaPage() {
           itens:         carrinho.map(i => ({ produto_id: i.produto_id, quantidade: i.quantidade, adicionais: i.adicionais.map(a => a.id), observacao: i.observacao })),
           cidade:        soCidade(endBusca),
           bairro:        endBairro.trim(),
-          observacao:    form.observacao,
-          cliente_lat:   (clienteCoords ?? enderecoCoords)?.lat ?? null,
-          cliente_lng:   (clienteCoords ?? enderecoCoords)?.lng ?? null,
+          observacao:    [zonaRural ? `🚜 Zona rural / estrada de chão — Como chegar: ${detalheRural.trim()}` : "", form.observacao].filter(Boolean).join(" | "),
+          zona_rural:    zonaRural === true,
+          cliente_lat:   coordsEntrega.lat,
+          cliente_lng:   coordsEntrega.lng,
         }),
       })
       const json = await res.json()
@@ -804,6 +853,47 @@ export default function EntregaAvulsaPage() {
           />
         </div>
 
+        {/* Local no mapa — obrigatório, igual ao checkout */}
+        {soCidade(endBusca).length >= 3 && mapaAlvo && (
+          <div style={{ marginBottom: 14 }}>
+            <p style={labelStyle}>Local da entrega no mapa *</p>
+            <MapaPicker lat={mapaAlvo.lat} lng={mapaAlvo.lng} onMove={moverPino} />
+            {!pinConfirmado ? (
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: "var(--pimenta)", margin: 0, flex: 1, minWidth: 200 }}>
+                  Arraste o mapa até a casa do cliente (o pino fica no centro) ou cole o link da localização acima.
+                </p>
+                {enderecoCoords && (
+                  <button type="button" onClick={() => setPinConfirmado(true)} style={{ padding: "8px 12px", borderRadius: 10, border: "1.5px solid var(--linha)", background: "white", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+                    O pino já está na casa
+                  </button>
+                )}
+              </div>
+            ) : pinNaLoja ? (
+              <p style={{ fontSize: 12, fontWeight: 700, color: "var(--pimenta)", marginTop: 8 }}>O pino está em cima da loja. Arraste até a casa do cliente.</p>
+            ) : (
+              <p style={{ fontSize: 12, color: "var(--folha)", marginTop: 8 }}>✓ Local marcado. Se precisar, arraste de novo pra ajustar.</p>
+            )}
+          </div>
+        )}
+
+        {/* Zona rural — mesma pergunta do checkout */}
+        <div style={{ marginBottom: 14 }}>
+          <p style={labelStyle}>Zona rural ou estrada de chão? *</p>
+          <div style={{ display: "flex", gap: 8 }}>
+            {([["Não", false], ["Sim", true]] as const).map(([rot, v]) => (
+              <button key={rot} type="button" onClick={() => setZonaRural(v)} aria-pressed={zonaRural === v} style={{
+                flex: 1, padding: "10px 0", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: "pointer",
+                border: zonaRural === v ? "2px solid var(--pimenta)" : "1.5px solid var(--linha)",
+                background: zonaRural === v ? "var(--pimenta-claro)" : "white", color: "var(--grafite)",
+              }}>{rot}</button>
+            ))}
+          </div>
+          {zonaRural && (
+            <input value={detalheRural} onChange={e => setDetalheRural(e.target.value)} placeholder="Como chegar: estrada, porteira, chácara…" style={{ ...campoStyle, marginTop: 8 }} />
+          )}
+        </div>
+
         {/* Taxa de entrega — mesma regra dos pedidos do app */}
         {calculandoTaxa && <p style={{ fontSize: 11, color: "var(--suave)", margin: "-4px 0 14px" }}>Calculando taxa de entrega…</p>}
         {erroTaxa && !calculandoTaxa && <p style={{ fontSize: 11, color: "var(--pimenta)", margin: "-4px 0 14px" }}>⚠ {erroTaxa}</p>}
@@ -815,7 +905,7 @@ export default function EntregaAvulsaPage() {
             <span style={{ fontSize: 15 }}>📍</span>
             <p style={{ fontSize: 12, color: "var(--folha)", margin: 0 }}>
               Taxa de entrega: <strong>R$ {taxaInfo.taxa.toFixed(2).replace(".", ",")}</strong>
-              {!clienteCoords && !enderecoCoords && !endBairro.trim() && <span style={{ opacity: 0.75 }}> · informe bairro/endereço (ou o link do WhatsApp) pra taxa exata</span>}
+              {zonaRural === null && <span style={{ opacity: 0.75 }}> (falta responder zona rural)</span>}
             </p>
           </div>
         )}
