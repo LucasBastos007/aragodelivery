@@ -325,6 +325,7 @@ export default function EntregaAvulsaPage() {
   const [endNumero, setEndNumero] = useState("")
   const [enderecoManual, setEnderecoManual] = useState(false)
   const [localSalvo, setLocalSalvo] = useState(false)
+  const [cidadeLoja, setCidadeLoja] = useState("")
   const [buscaSalvos, setBuscaSalvos] = useState("")
   const ruaRef = useRef<HTMLDivElement>(null)
 
@@ -398,12 +399,13 @@ export default function EntregaAvulsaPage() {
   async function carregar() {
     if (!loja_id) return
     const [{ data: lojaData }, { data: entregasData }] = await Promise.all([
-      supabase.from("lojas").select("plano, lat, lng, taxa_entrega, entrega_avulsa_liberada").eq("id", loja_id).single(),
+      supabase.from("lojas").select("plano, lat, lng, taxa_entrega, entrega_avulsa_liberada, cidade").eq("id", loja_id).single(),
       supabase.from("entregas_avulsas").select("*").eq("loja_id", loja_id).order("criado_em", { ascending: false }).limit(50),
     ])
     setPlano(lojaData?.plano ?? null)
     setAvulsaLiberada(lojaData?.entrega_avulsa_liberada ?? false)
     setLojaCoords({ lat: lojaData?.lat ?? null, lng: lojaData?.lng ?? null, taxa_entrega: lojaData?.taxa_entrega ?? null })
+    setCidadeLoja((lojaData as { cidade?: string | null } | null)?.cidade ?? "")
     setEntregas(entregasData ?? [])
     setLoading(false)
   }
@@ -567,6 +569,28 @@ export default function EntregaAvulsaPage() {
   // Pino opcional (Lucas, 21/11/2026): com a rua achada no mapa, o frete usa esse ponto; o pino só ajusta.
   // Sem rua achada, ou em zona rural, o pino continua obrigatório.
   const coordsEntrega = pinConfirmado && pinCoords ? pinCoords : enderecoCoords
+
+  // Município sem campo na busca por rua (lojista 21/11: "pede o município e não tem onde pôr").
+  // Sai do ponto no mapa (reverse) e, sem ponto, da cidade da loja.
+  const latMun = coordsEntrega?.lat ?? (pinCoords?.lat ?? null), lngMun = coordsEntrega?.lng ?? (pinCoords?.lng ?? null)
+  useEffect(() => {
+    if (enderecoManual || endBusca.trim()) return
+    let cancel = false
+    ;(async () => {
+      let cidade = ""
+      if (latMun !== null && lngMun !== null) {
+        try {
+          const r = await fetch(`/api/geocode/reverse?lat=${latMun}&lon=${lngMun}`)
+          const a = (await r.json())?.address ?? {}
+          cidade = a.city || a.town || a.village || a.municipality || ""
+          if (!endBairro.trim()) { const b = a.suburb || a.neighbourhood || a.quarter || ""; if (b && !cancel) setEndBairro(b) }
+        } catch {}
+      }
+      if (!cidade) cidade = cidadeLoja
+      if (cidade && !cancel) setEndBusca(cidade)
+    })()
+    return () => { cancel = true }
+  }, [enderecoManual, endBusca, latMun, lngMun, cidadeLoja]) // eslint-disable-line react-hooks/exhaustive-deps
   const pinNaLoja = !!(coordsEntrega && lojaCoords?.lat && lojaCoords?.lng && distM(coordsEntrega.lat, coordsEntrega.lng, lojaCoords.lat, lojaCoords.lng) < 50)
 
   // Prévia da taxa — mesma função/rota usada no checkout dos pedidos normais.
@@ -696,7 +720,8 @@ export default function EntregaAvulsaPage() {
   }
 
   // Endereço completo para salvar
-  const enderecoFinal = [soCidade(endBusca), endBairro.trim() ? `Bairro ${endBairro.trim()}` : "", [endCompl.trim(), endNumero.trim()].filter(Boolean).join(", "), endRef2.trim()].filter(Boolean).join(" — ")
+  const cidadeFinal = soCidade(endBusca) || (enderecoManual ? "" : cidadeLoja)
+  const enderecoFinal = [cidadeFinal, endBairro.trim() ? `Bairro ${endBairro.trim()}` : "", [endCompl.trim(), endNumero.trim()].filter(Boolean).join(", "), endRef2.trim()].filter(Boolean).join(" — ")
   const bairrosTabela = tabelaFrete.filter(t => t.tipo === "bairro").map(t => t.municipio)
 
   const clientesFiltrados = busca.trim().length >= 1
@@ -713,7 +738,10 @@ export default function EntregaAvulsaPage() {
     if (carrinho.length === 0) { alert("Adicione os itens do pedido"); return }
     if (!form.cliente_nome.trim()) { alert("Informe o nome do cliente"); return }
     if (form.cliente_tel.replace(/\D/g, "").length < 10) { alert("Informe o telefone do cliente com DDD"); return }
-    if (!endBusca.trim()) { alert("Informe o município"); return }
+    if (!endBusca.trim()) {
+      if (enderecoManual) { alert("Informe o município"); return }
+      if (!cidadeLoja) { alert("Não consegui identificar a cidade. Toque em \"Não achei, digitar o endereço à mão\" e informe o município."); return }
+    }
     if (!endCompl.trim()) { alert(enderecoManual ? "Informe o endereço (rua, quadra, lote, número)" : "Digite a rua e o setor e escolha da lista"); return }
     if (!endRef2.trim()) { alert("Informe o ponto de referência"); return }
     if (!coordsEntrega) { alert("Não achei essa rua no mapa. Arraste o mapa até a casa do cliente ou cole o link da localização do WhatsApp."); return }
@@ -748,7 +776,7 @@ export default function EntregaAvulsaPage() {
           tipo_maquininha: usaForma("maquininha") ? tipoMaquininha : null,
           troco_para:    usaForma("dinheiro") && precisaTroco ? trocoNum : null,
           itens:         carrinho.map(i => ({ produto_id: i.produto_id, quantidade: i.quantidade, adicionais: i.adicionais.map(a => a.id), observacao: i.observacao })),
-          cidade:        soCidade(endBusca),
+          cidade:        cidadeFinal,
           bairro:        endBairro.trim(),
           observacao:    [zonaRural ? `🚜 Zona rural / estrada de chão — Como chegar: ${detalheRural.trim()}` : "", form.observacao].filter(Boolean).join(" | "),
           zona_rural:    zonaRural === true,
@@ -973,7 +1001,7 @@ export default function EntregaAvulsaPage() {
               <div style={{ position: "relative" }}>
                 <input
                   value={buscaRua}
-                  onChange={e => { setBuscaRua(e.target.value); if (ruaEscolhida) { setRuaEscolhida(null); setEndCompl(""); setEndBairro(""); setEndBusca(""); setEndSelecionado(null) } }}
+                  onChange={e => { setBuscaRua(e.target.value); if (ruaEscolhida) { setRuaEscolhida(null); setEndBairro(""); setEndBusca(""); setEndSelecionado(null) } setEndCompl(e.target.value) }}
                   onFocus={() => { if (sugRua.length > 0) setShowSugRua(true) }}
                   placeholder="Ex: Rua 10, Setor Central"
                   style={{ ...campoStyle, paddingRight: 34 }}
