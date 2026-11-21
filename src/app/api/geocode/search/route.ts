@@ -69,6 +69,8 @@ export async function GET(req: NextRequest) {
         lon:          String(lng),
         address: {
           road:         p.street,
+          district:     p.district,
+          tipo:         p.osm_value,
           city:         p.city,
           town:         undefined as string | undefined,
           village:      undefined as string | undefined,

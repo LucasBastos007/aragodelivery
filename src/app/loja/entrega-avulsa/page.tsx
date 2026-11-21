@@ -36,6 +36,10 @@ type ClienteAvulso = {
   endereco: string | null
   total_pedidos: number
   valor_total: number
+  lat?: number | null
+  lng?: number | null
+  zona_rural?: boolean | null
+  detalhe_rural?: string | null
 }
 
 type SugestaoEndereco = {
@@ -43,6 +47,8 @@ type SugestaoEndereco = {
   display_name: string
   lat: string
   lon: string
+  name?: string
+  address?: { road?: string; city?: string; county?: string; district?: string; tipo?: string }
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -77,7 +83,7 @@ function normalizar(s: string) {
 
 function esc(s: string) { return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") }
 
-type ProdutoCardapio = { id: string; nome: string; preco: number; categoria: string; adicionais: any[] }
+type ProdutoCardapio = { id: string; nome: string; preco: number; categoria: string; adicionais: any[]; foto: string | null }
 type GrupoAdic = { id: string; nome: string; obrigatorio: boolean; minimo: number; maximo: number; itens: { id: string; nome: string; preco: number }[] }
 type ItemCarrinho = { key: string; produto_id: string; nome: string; preco: number; quantidade: number; adicionais: { id: string; nome: string; preco: number }[]; observacao: string }
 
@@ -208,6 +214,76 @@ function imprimirEntregaAvulsa(entrega: EntregaAvulsa, largura: "80mm" | "58mm" 
   }
 }
 
+// Opções da avulsa sem emoji (Lucas, 21/11/2026): cartão com título, linha curta e marca de escolhido
+const FORMAS_AV = [
+  { v: "dinheiro", titulo: "Dinheiro", sub: "Motoboy recebe na entrega" },
+  { v: "maquininha", titulo: "Maquininha", sub: "Crédito ou débito na entrega" },
+  { v: "pix_loja", titulo: "Pix na loja", sub: "Já pago na conta da loja" },
+] as const
+
+function Opcao({ ativo, titulo, sub, onClick }: { ativo: boolean; titulo: string; sub: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} aria-pressed={ativo} style={{
+      display: "flex", alignItems: "flex-start", gap: 10, textAlign: "left", padding: "12px 14px", borderRadius: 12, cursor: "pointer",
+      background: ativo ? "var(--pimenta-claro)" : "white",
+      border: ativo ? "1.5px solid var(--pimenta)" : "1.5px solid var(--linha)",
+      transition: "border-color .15s, background .15s",
+    }}>
+      <span style={{
+        flexShrink: 0, width: 18, height: 18, marginTop: 1, borderRadius: "50%",
+        border: ativo ? "5px solid var(--pimenta)" : "1.5px solid var(--linha)", background: "white", boxSizing: "border-box",
+      }} />
+      <span>
+        <span style={{ display: "block", fontSize: 14, fontWeight: 700, color: ativo ? "var(--pimenta-esc)" : "var(--grafite)" }}>{titulo}</span>
+        <span style={{ display: "block", fontSize: 12, color: "var(--suave)", marginTop: 2 }}>{sub}</span>
+      </span>
+    </button>
+  )
+}
+
+function Chave({ on, label, onChange }: { on: boolean; label: string; onChange: (on: boolean) => void }) {
+  return (
+    <button type="button" role="switch" aria-checked={on} onClick={() => onChange(!on)} style={{
+      display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", padding: "4px 0", cursor: "pointer", alignSelf: "flex-start",
+    }}>
+      <span style={{ position: "relative", width: 38, height: 22, borderRadius: 11, background: on ? "var(--pimenta)" : "var(--linha)", transition: "background .15s", flexShrink: 0 }}>
+        <span style={{ position: "absolute", top: 3, left: on ? 19 : 3, width: 16, height: 16, borderRadius: "50%", background: "white", transition: "left .15s", boxShadow: "0 1px 2px rgba(0,0,0,.2)" }} />
+      </span>
+      <span style={{ fontSize: 14, fontWeight: 600, color: "var(--grafite)" }}>{label}</span>
+    </button>
+  )
+}
+
+function Segmento({ valor, opcoes, onChange }: { valor: string; opcoes: readonly (readonly [string, string])[]; onChange: (v: string) => void }) {
+  return (
+    <div style={{ display: "flex", gap: 4, padding: 4, borderRadius: 10, background: "var(--pedra)" }}>
+      {opcoes.map(([v, label]) => (
+        <button key={v} type="button" onClick={() => onChange(v)} aria-pressed={valor === v} style={{
+          flex: 1, padding: "8px 10px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700,
+          background: valor === v ? "white" : "transparent", color: valor === v ? "var(--pimenta-esc)" : "var(--suave)",
+          boxShadow: valor === v ? "0 1px 3px rgba(0,0,0,.12)" : "none",
+        }}>{label}</button>
+      ))}
+    </div>
+  )
+}
+
+function FotoProduto({ foto, nome, tam }: { foto: string | null; nome: string; tam: number }) {
+  const base: React.CSSProperties = { width: tam, height: tam, borderRadius: 10, flexShrink: 0, background: "var(--pedra)" }
+  return foto
+    ? <img src={foto} alt="" loading="lazy" style={{ ...base, objectFit: "cover" }} />
+    : <span style={{ ...base, display: "flex", alignItems: "center", justifyContent: "center", fontSize: tam / 2.6, fontWeight: 800, color: "var(--suave)" }}>{nome.trim().charAt(0).toUpperCase()}</span>
+}
+
+function Bloco({ titulo, children }: { titulo: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginTop: 10, padding: "12px 14px", borderRadius: 12, border: "1.5px solid var(--linha)", background: "white" }}>
+      <p style={{ fontSize: 12, fontWeight: 700, color: "var(--suave)", textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 8 }}>{titulo}</p>
+      {children}
+    </div>
+  )
+}
+
 export default function EntregaAvulsaPage() {
   const { sessao, logout } = useAuth()
   const loja_id = sessao?.role === "lojista" ? (sessao as any).loja_id : null
@@ -239,6 +315,16 @@ export default function EntregaAvulsaPage() {
   // Tabela de preços fixos por município
   const [tabelaFrete, setTabelaFrete] = useState<{ municipio: string; taxa: number; tipo?: string }[]>([])
   const [endBairro, setEndBairro] = useState("")
+  // Busca única "rua + setor" (Lucas, 21/11/2026): escolhe da lista e preenche município, setor, rua e mapa
+  const [buscaRua, setBuscaRua] = useState("")
+  const [sugRua, setSugRua] = useState<SugestaoEndereco[]>([])
+  const [showSugRua, setShowSugRua] = useState(false)
+  const [ruaEscolhida, setRuaEscolhida] = useState<SugestaoEndereco | null>(null)
+  const [endNumero, setEndNumero] = useState("")
+  const [enderecoManual, setEnderecoManual] = useState(false)
+  const [localSalvo, setLocalSalvo] = useState(false)
+  const [buscaSalvos, setBuscaSalvos] = useState("")
+  const ruaRef = useRef<HTMLDivElement>(null)
 
   // Taxa (prévia calculada no servidor, mesma regra dos pedidos)
   const [taxaInfo, setTaxaInfo] = useState<{ taxa: number } | null>(null)
@@ -339,12 +425,12 @@ export default function EntregaAvulsaPage() {
   async function carregarCardapio() {
     if (!loja_id) return
     const [{ data: prods }, { data: cats }] = await Promise.all([
-      supabase.from("produtos").select("id, nome, preco, adicionais, categoria_id, ordem").eq("loja_id", loja_id).eq("disponivel", true),
+      supabase.from("produtos").select("id, nome, preco, adicionais, categoria_id, ordem, foto_url").eq("loja_id", loja_id).eq("disponivel", true),
       supabase.from("categorias_produto").select("id, nome, ordem").eq("loja_id", loja_id),
     ])
     const catPor = new Map((cats ?? []).map((c: any) => [c.id, c]))
     setCardapio((prods ?? [])
-      .map((p: any) => ({ id: p.id, nome: p.nome, preco: Number(p.preco), adicionais: p.adicionais ?? [], categoria: (catPor.get(p.categoria_id) as any)?.nome ?? "Outros", _o: [(catPor.get(p.categoria_id) as any)?.ordem ?? 999, p.ordem ?? 999] }))
+      .map((p: any) => ({ id: p.id, nome: p.nome, preco: Number(p.preco), adicionais: p.adicionais ?? [], foto: p.foto_url || null, categoria: (catPor.get(p.categoria_id) as any)?.nome ?? "Outros", _o: [(catPor.get(p.categoria_id) as any)?.ordem ?? 999, p.ordem ?? 999] }))
       .sort((a: any, b: any) => a._o[0] - b._o[0] || a._o[1] - b._o[1] || a.nome.localeCompare(b.nome)))
   }
 
@@ -371,6 +457,7 @@ export default function EntregaAvulsaPage() {
     function handleClick(e: MouseEvent) {
       if (buscaRef.current && !buscaRef.current.contains(e.target as Node)) setShowDropdown(false)
       if (endRef.current && !endRef.current.contains(e.target as Node)) setShowSug(false)
+      if (ruaRef.current && !ruaRef.current.contains(e.target as Node)) setShowSugRua(false)
     }
     document.addEventListener("mousedown", handleClick)
     return () => document.removeEventListener("mousedown", handleClick)
@@ -393,12 +480,46 @@ export default function EntregaAvulsaPage() {
     return () => { if (endTimer.current) clearTimeout(endTimer.current) }
   }, [endBusca, endSelecionado, lojaCoords])
 
+  // Busca da rua + setor: sugestões perto da loja
+  useEffect(() => {
+    const q = buscaRua.trim()
+    if (q.length < 3 || ruaEscolhida) { setSugRua([]); return }
+    const t = setTimeout(async () => {
+      try {
+        const bias = lojaCoords?.lat && lojaCoords?.lng ? `&lat=${lojaCoords.lat}&lon=${lojaCoords.lng}` : ""
+        const res = await fetch(`/api/geocode/search?q=${encodeURIComponent(q)}${bias}`)
+        const data: SugestaoEndereco[] = await res.json()
+        setSugRua(data); setShowSugRua(true)
+      } catch {}
+    }, 450)
+    return () => clearTimeout(t)
+  }, [buscaRua, ruaEscolhida, lojaCoords])
+
+  function escolherRua(s: SugestaoEndereco) {
+    const a = s.address ?? {}
+    const rua = a.road || s.name || s.display_name.split(",")[0]
+    const cidade = a.city || a.county || ""
+    setRuaEscolhida(s)
+    setBuscaRua([rua, a.district, cidade].filter(Boolean).join(", "))
+    setShowSugRua(false); setSugRua([])
+    setEndCompl(rua)
+    setEndBairro(a.district || "")
+    if (cidade) { setEndBusca(cidade); setEndSelecionado(s) }
+    const lat = parseFloat(s.lat), lng = parseFloat(s.lon)
+    if (!isNaN(lat) && !isNaN(lng)) { setPinConfirmado(false); setMapaAlvo({ lat, lng }); setPinCoords({ lat, lng }) }
+  }
+
   // Geocodifica o endereço completo (rua + bairro + cidade) pra ter a coordenada real da
   // entrega — só quando não veio coordenada exata do link do WhatsApp. Resultado em outra
   // cidade é descartado (nome de rua comum casando com cidade distante).
   useEffect(() => {
     setEnderecoCoords(null)
     const cidade = soCidade(endBusca)
+    if (ruaEscolhida && !enderecoManual && !clienteCoords) {
+      const lat = parseFloat(ruaEscolhida.lat), lng = parseFloat(ruaEscolhida.lon)
+      if (!isNaN(lat) && !isNaN(lng)) setEnderecoCoords({ lat, lng })
+      return
+    }
     if (clienteCoords || pinConfirmado || endCompl.trim().length < 4 || cidade.length < 3) return
     const t = setTimeout(async () => {
       try {
@@ -413,7 +534,7 @@ export default function EntregaAvulsaPage() {
       } catch {}
     }, 800)
     return () => clearTimeout(t)
-  }, [endCompl, endBairro, endBusca, clienteCoords, pinConfirmado, lojaCoords])
+  }, [endCompl, endBairro, endBusca, clienteCoords, pinConfirmado, lojaCoords, ruaEscolhida, enderecoManual])
 
   // Centro do mapa: link do WhatsApp > endereço achado pelo texto > loja. Mover o centro por
   // aqui não conta como confirmação — só o lojista arrastando/tocando ou usando o link.
@@ -430,7 +551,9 @@ export default function EntregaAvulsaPage() {
   }
 
   // Ponto usado pro frete: só o confirmado no mapa (ou o do link)
-  const coordsEntrega = pinConfirmado && pinCoords ? pinCoords : null
+  // Pino opcional (Lucas, 21/11/2026): com a rua achada no mapa, o frete usa esse ponto; o pino só ajusta.
+  // Sem rua achada, ou em zona rural, o pino continua obrigatório.
+  const coordsEntrega = pinConfirmado && pinCoords ? pinCoords : enderecoCoords
   const pinNaLoja = !!(coordsEntrega && lojaCoords?.lat && lojaCoords?.lng && distM(coordsEntrega.lat, coordsEntrega.lng, lojaCoords.lat, lojaCoords.lng) < 50)
 
   // Prévia da taxa — mesma função/rota usada no checkout dos pedidos normais.
@@ -467,6 +590,7 @@ export default function EntregaAvulsaPage() {
   }
 
   function limparEndereco() {
+    setBuscaRua(""); setRuaEscolhida(null); setSugRua([]); setEndNumero(""); setLocalSalvo(false)
     setEndBusca("")
     setEndBairro("")
     setEndCompl("")
@@ -514,6 +638,9 @@ export default function EntregaAvulsaPage() {
       }
       if (rua) setEndCompl(rua)
       if (bairro && !endBairro) setEndBairro(bairro)
+      // Mostra o endereço achado no campo único de rua e setor
+      setRuaEscolhida({ place_id: "link-maps", display_name: rua, lat: String(data.lat), lon: String(data.lng), address: { road: rua, district: bairro, city: cidade } })
+      setBuscaRua([rua, bairro, cidade].filter(Boolean).join(", "))
     } catch {
       setErroLink("Erro ao processar o link. Tente colar de novo.")
     } finally {
@@ -529,12 +656,19 @@ export default function EntregaAvulsaPage() {
     }))
     if (c.endereco) {
       const { municipio, bairro, end, ref } = separarEnderecoSalvo(c.endereco)
+      setEnderecoManual(true) // endereço salvo volta nos campos separados, já preenchidos
       setEndBusca(municipio)
       setEndBairro(bairro)
       setEndCompl(end)
       setEndRef2(ref)
       setEndSelecionado({ place_id: "saved", display_name: municipio, lat: "", lon: "" })
     }
+    // Local salvo do cliente (pino de pedidos anteriores): já volta marcado, dá pra arrastar se mudou
+    if (typeof c.lat === "number" && typeof c.lng === "number") {
+      setMapaAlvo({ lat: c.lat, lng: c.lng }); setPinCoords({ lat: c.lat, lng: c.lng }); setPinConfirmado(true)
+      setLocalSalvo(true)
+    } else setLocalSalvo(false)
+    if (typeof c.zona_rural === "boolean") { setZonaRural(c.zona_rural); setDetalheRural(c.detalhe_rural ?? "") }
     setBusca(c.nome)
     setShowDropdown(false)
   }
@@ -549,14 +683,15 @@ export default function EntregaAvulsaPage() {
   }
 
   // Endereço completo para salvar
-  const enderecoFinal = [soCidade(endBusca), endBairro.trim() ? `Bairro ${endBairro.trim()}` : "", endCompl.trim(), endRef2.trim()].filter(Boolean).join(" — ")
+  const enderecoFinal = [soCidade(endBusca), endBairro.trim() ? `Bairro ${endBairro.trim()}` : "", [endCompl.trim(), endNumero.trim()].filter(Boolean).join(", "), endRef2.trim()].filter(Boolean).join(" — ")
   const bairrosTabela = tabelaFrete.filter(t => t.tipo === "bairro").map(t => t.municipio)
 
   const clientesFiltrados = busca.trim().length >= 1
-    ? clientes.filter(c =>
-        c.nome.toLowerCase().includes(busca.toLowerCase()) ||
-        (c.telefone ?? "").includes(busca)
-      ).slice(0, 6)
+    ? clientes.filter(c => {
+        const n = (x: string) => x.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        const q = n(busca.trim()), dig = busca.replace(/\D/g, "")
+        return n(c.nome).includes(q) || n(c.endereco ?? "").includes(q) || (dig.length >= 3 && (c.telefone ?? "").replace(/\D/g, "").includes(dig))
+      }).slice(0, 6)
     : clientes.slice(0, 6)
 
   async function enviar(e: React.FormEvent) {
@@ -566,9 +701,10 @@ export default function EntregaAvulsaPage() {
     if (!form.cliente_nome.trim()) { alert("Informe o nome do cliente"); return }
     if (form.cliente_tel.replace(/\D/g, "").length < 10) { alert("Informe o telefone do cliente com DDD"); return }
     if (!endBusca.trim()) { alert("Informe o município"); return }
-    if (!endCompl.trim()) { alert("Informe o endereço (rua, quadra, lote, número)"); return }
+    if (!endCompl.trim()) { alert(enderecoManual ? "Informe o endereço (rua, quadra, lote, número)" : "Digite a rua e o setor e escolha da lista"); return }
     if (!endRef2.trim()) { alert("Informe o ponto de referência"); return }
-    if (!coordsEntrega) { alert("Marque no mapa o local da entrega (arraste o pino até a casa do cliente) ou cole o link da localização do WhatsApp"); return }
+    if (!coordsEntrega) { alert("Não achei essa rua no mapa. Arraste o mapa até a casa do cliente ou cole o link da localização do WhatsApp."); return }
+    if (zonaRural && !pinConfirmado) { alert("Na zona rural, arraste o mapa até o local exato da entrega."); return }
     if (pinNaLoja) { alert("O pino está em cima da loja. Arraste até a casa do cliente."); return }
     if (zonaRural === null) { alert("Informe se a entrega é em zona rural ou estrada de chão"); return }
     if (zonaRural && detalheRural.trim().length < 5) { alert("Descreva como chegar (zona rural)"); return }
@@ -590,7 +726,7 @@ export default function EntregaAvulsaPage() {
         body: JSON.stringify({
           cliente_nome:  form.cliente_nome,
           cliente_tel:   form.cliente_tel,
-          endereco:      endCompl.trim(),
+          endereco:      [endCompl.trim(), endNumero.trim()].filter(Boolean).join(", "),
           referencia:    endRef2.trim(),
           forma_pagamento: formaPgto,
           forma_pagamento_2: pgDividido ? formaPgto2 : null,
@@ -622,6 +758,10 @@ export default function EntregaAvulsaPage() {
           telefone:     form.cliente_tel,
           endereco:     enderecoFinal,
           valor_pedido: json.pedido?.subtotal ?? subtotalCarrinho,
+          lat:          coordsEntrega?.lat ?? null,
+          lng:          coordsEntrega?.lng ?? null,
+          zona_rural:   zonaRural === true,
+          detalhe_rural: zonaRural ? detalheRural.trim() : null,
         }),
       })
 
@@ -691,13 +831,12 @@ export default function EntregaAvulsaPage() {
         <div ref={buscaRef} style={{ position: "relative", marginBottom: 16 }}>
           <p style={labelStyle}>Buscar cliente salvo</p>
           <div style={{ position: "relative" }}>
-            <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 14, pointerEvents: "none" }}>🔍</span>
             <input
               value={busca}
               onChange={e => { setBusca(e.target.value); setShowDropdown(true) }}
               onFocus={() => setShowDropdown(true)}
               placeholder="Nome ou telefone do cliente…"
-              style={{ ...campoStyle, paddingLeft: 34 }}
+              style={campoStyle}
             />
             {busca && (
               <button
@@ -752,6 +891,36 @@ export default function EntregaAvulsaPage() {
         boxShadow: "0 4px 24px rgba(0,0,0,0.06)", padding: "20px 20px", marginBottom: 24,
       }}>
 
+        {/* Cliente: nome e WhatsApp (o motoboy e o admin chamam o cliente por aqui) */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14, marginBottom: 6 }}>
+          <div>
+            <p style={labelStyle}>Nome do cliente *</p>
+            <input
+              required value={form.cliente_nome}
+              onChange={e => set("cliente_nome", e.target.value)}
+              placeholder="Ex: João Silva"
+              style={campoStyle}
+              autoComplete="off"
+            />
+          </div>
+          <div>
+            <p style={labelStyle}>WhatsApp do cliente *</p>
+            <input
+              required
+              inputMode="tel"
+              value={form.cliente_tel}
+              onChange={e => {
+                const d = e.target.value.replace(/\D/g, "").slice(0, 11)
+                const m = d.length <= 2 ? d : d.length <= 6 ? `(${d.slice(0, 2)}) ${d.slice(2)}` : d.length <= 10 ? `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}` : `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`
+                set("cliente_tel", m)
+              }}
+              placeholder="(62) 99999-9999"
+              style={campoStyle}
+            />
+          </div>
+        </div>
+        <p style={{ fontSize: 12, color: "var(--suave)", marginBottom: 16 }}>O motoboy e o Chegô conseguem chamar o cliente nesse WhatsApp. O cliente fica salvo com o endereço e o local no mapa para os próximos pedidos.</p>
+
         {/* Localização enviada pelo cliente no WhatsApp (link do Google Maps) */}
         <div style={{ marginBottom: 14 }}>
           <p style={labelStyle}>Localização do WhatsApp (opcional)</p>
@@ -774,90 +943,159 @@ export default function EntregaAvulsaPage() {
                 fontWeight: 700, fontSize: 13, cursor: resolvendoLink || !linkMaps.trim() ? "not-allowed" : "pointer",
               }}
             >
-              {resolvendoLink ? "..." : "📍 Usar"}
+              {resolvendoLink ? "..." : "Usar"}
             </button>
           </div>
-          {erroLink && <p style={{ fontSize: 11, color: "var(--pimenta)", marginTop: 6 }}>⚠ {erroLink}</p>}
+          {erroLink && <p style={{ fontSize: 11, color: "var(--pimenta)", marginTop: 6 }}>{erroLink}</p>}
           {clienteCoords && !erroLink && (
-            <p style={{ fontSize: 11, color: "var(--folha)", marginTop: 6 }}>✓ Localização identificada — endereço preenchido abaixo</p>
+            <p style={{ fontSize: 11, color: "var(--folha)", marginTop: 6 }}>Localização identificada. Endereço preenchido abaixo.</p>
           )}
         </div>
 
-        {/* 1. Endereço com autocomplete */}
-        <div ref={endRef} style={{ marginBottom: 14, position: "relative" }}>
-          <p style={labelStyle}>Município *</p>
-          <div style={{ position: "relative" }}>
-            <input
-              value={endBusca}
-              onChange={e => { setEndBusca(e.target.value); setEndSelecionado(null) }}
-              onFocus={() => { if (sugestoes.length > 0) setShowSug(true) }}
-              placeholder="Digite o município para buscar…"
-              style={campoStyle}
-              autoComplete="off"
-            />
-            {endBusca && (
-              <button type="button" onClick={limparEndereco} style={{
-                position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
-                background: "none", border: "none", color: "var(--suave)", cursor: "pointer", fontSize: 18, padding: 4,
-              }}>×</button>
-            )}
-          </div>
-
-          {/* Dropdown de sugestões */}
-          {showSug && sugestoes.length > 0 && (
-            <div style={{
-              position: "absolute", top: "100%", left: 0, right: 0, zIndex: 60, marginTop: 4,
-              background: "white", borderRadius: 12, border: "1.5px solid var(--linha)",
-              boxShadow: "0 8px 24px rgba(0,0,0,0.12)", overflow: "hidden",
-            }}>
-              {sugestoes.map(s => (
-                <button
-                  key={s.place_id}
-                  type="button"
-                  onClick={() => selecionarSugestao(s)}
-                  style={{
-                    width: "100%", textAlign: "left", padding: "10px 14px",
-                    background: "none", border: "none", borderBottom: "1px solid var(--pedra)",
-                    cursor: "pointer", fontSize: 12, color: "var(--grafite)", lineHeight: 1.4,
-                  }}
-                  onMouseOver={e => (e.currentTarget.style.background = "var(--pedra)")}
-                  onMouseOut={e => (e.currentTarget.style.background = "none")}
-                >
-                  📍 {s.display_name}
-                </button>
-              ))}
+        {!enderecoManual ? (
+          <>
+            {/* Rua + setor numa busca só */}
+            <div ref={ruaRef} style={{ marginBottom: 14, position: "relative" }}>
+              <p style={labelStyle}>Rua e setor *</p>
+              <div style={{ position: "relative" }}>
+                <input
+                  value={buscaRua}
+                  onChange={e => { setBuscaRua(e.target.value); if (ruaEscolhida) { setRuaEscolhida(null); setEndCompl(""); setEndBairro(""); setEndBusca(""); setEndSelecionado(null) } }}
+                  onFocus={() => { if (sugRua.length > 0) setShowSugRua(true) }}
+                  placeholder="Ex: Rua 10, Setor Central"
+                  style={{ ...campoStyle, paddingRight: 34 }}
+                  autoComplete="off"
+                />
+                {buscaRua && (
+                  <button type="button" onClick={limparEndereco} aria-label="Limpar endereço" style={{
+                    position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+                    background: "none", border: "none", color: "var(--suave)", cursor: "pointer", fontSize: 18, padding: 4,
+                  }}>×</button>
+                )}
+              </div>
+              {showSugRua && !ruaEscolhida && buscaRua.trim().length >= 3 && (
+                <div style={{
+                  position: "absolute", top: "100%", left: 0, right: 0, zIndex: 60, marginTop: 4,
+                  background: "white", borderRadius: 12, border: "1.5px solid var(--linha)",
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.12)", overflow: "hidden",
+                }}>
+                  {sugRua.map(s => {
+                    const ad = s.address ?? {}
+                    const titulo = ad.road || s.name || s.display_name.split(",")[0]
+                    const sub = [ad.district, ad.city || ad.county].filter(Boolean).join(", ")
+                    return (
+                      <button key={s.place_id} type="button" onClick={() => escolherRua(s)} style={{
+                        width: "100%", textAlign: "left", padding: "10px 14px", background: "none", border: "none",
+                        borderBottom: "1px solid var(--pedra)", cursor: "pointer", lineHeight: 1.35,
+                      }}
+                        onMouseOver={e => (e.currentTarget.style.background = "var(--pedra)")}
+                        onMouseOut={e => (e.currentTarget.style.background = "none")}>
+                        <span style={{ display: "block", fontSize: 14, fontWeight: 600, color: "var(--grafite)" }}>{titulo}</span>
+                        {sub && <span style={{ display: "block", fontSize: 12, color: "var(--suave)" }}>{sub}</span>}
+                      </button>
+                    )
+                  })}
+                  <button type="button" onClick={() => { setEnderecoManual(true); setShowSugRua(false) }} style={{
+                    width: "100%", textAlign: "left", padding: "10px 14px", background: "var(--pedra)", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "var(--pimenta-esc)",
+                  }}>Não achei, digitar o endereço à mão</button>
+                </div>
+              )}
+              {ruaEscolhida && (
+                <p style={{ fontSize: 12, color: "var(--suave)", marginTop: 6 }}>
+                  {[endBairro, endBusca].filter(Boolean).join(", ")}
+                </p>
+              )}
             </div>
-          )}
 
-        </div>
+            {/* Número / quadra / lote */}
+            <div style={{ marginBottom: 14 }}>
+              <p style={labelStyle}>Número, quadra e lote</p>
+              <input value={endNumero} onChange={e => setEndNumero(e.target.value)} placeholder="Ex: Qd 12 Lt 5, nº 230" style={campoStyle} />
+            </div>
+          </>
+        ) : (
+          <>
+            {/* 1. Endereço com autocomplete */}
+            <div ref={endRef} style={{ marginBottom: 14, position: "relative" }}>
+              <p style={labelStyle}>Município *</p>
+              <div style={{ position: "relative" }}>
+                <input
+                  value={endBusca}
+                  onChange={e => { setEndBusca(e.target.value); setEndSelecionado(null) }}
+                  onFocus={() => { if (sugestoes.length > 0) setShowSug(true) }}
+                  placeholder="Digite o município para buscar…"
+                  style={campoStyle}
+                  autoComplete="off"
+                />
+                {endBusca && (
+                  <button type="button" onClick={limparEndereco} style={{
+                    position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+                    background: "none", border: "none", color: "var(--suave)", cursor: "pointer", fontSize: 18, padding: 4,
+                  }}>×</button>
+                )}
+              </div>
 
-        {/* Bairro — com a tabela de bairros da loja como sugestão */}
-        <div style={{ marginBottom: 14 }}>
-          <p style={labelStyle}>Bairro</p>
-          <input
-            value={endBairro}
-            onChange={e => setEndBairro(e.target.value)}
-            list="avulsa-bairros"
-            placeholder="Ex: Centro, Vila Boa…"
-            style={campoStyle}
-            autoComplete="off"
-          />
-          <datalist id="avulsa-bairros">
-            {bairrosTabela.map(b => <option key={b} value={b} />)}
-          </datalist>
-        </div>
+              {/* Dropdown de sugestões */}
+              {showSug && sugestoes.length > 0 && (
+                <div style={{
+                  position: "absolute", top: "100%", left: 0, right: 0, zIndex: 60, marginTop: 4,
+                  background: "white", borderRadius: 12, border: "1.5px solid var(--linha)",
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.12)", overflow: "hidden",
+                }}>
+                  {sugestoes.map(s => (
+                    <button
+                      key={s.place_id}
+                      type="button"
+                      onClick={() => selecionarSugestao(s)}
+                      style={{
+                        width: "100%", textAlign: "left", padding: "10px 14px",
+                        background: "none", border: "none", borderBottom: "1px solid var(--pedra)",
+                        cursor: "pointer", fontSize: 12, color: "var(--grafite)", lineHeight: 1.4,
+                      }}
+                      onMouseOver={e => (e.currentTarget.style.background = "var(--pedra)")}
+                      onMouseOut={e => (e.currentTarget.style.background = "none")}
+                    >
+                      {s.display_name}
+                    </button>
+                  ))}
+                </div>
+              )}
 
-        {/* Endereço (rua e número) */}
-        <div style={{ marginBottom: 14 }}>
-          <p style={labelStyle}>Endereço *</p>
-          <input
-            required
-            value={endCompl}
-            onChange={e => setEndCompl(e.target.value)}
-            placeholder="Rua, quadra, lote, número…"
-            style={campoStyle}
-          />
-        </div>
+            </div>
+
+            {/* Bairro — com a tabela de bairros da loja como sugestão */}
+            <div style={{ marginBottom: 14 }}>
+              <p style={labelStyle}>Bairro</p>
+              <input
+                value={endBairro}
+                onChange={e => setEndBairro(e.target.value)}
+                list="avulsa-bairros"
+                placeholder="Ex: Centro, Vila Boa…"
+                style={campoStyle}
+                autoComplete="off"
+              />
+              <datalist id="avulsa-bairros">
+                {bairrosTabela.map(b => <option key={b} value={b} />)}
+              </datalist>
+            </div>
+
+            {/* Endereço (rua e número) */}
+            <div style={{ marginBottom: 14 }}>
+              <p style={labelStyle}>Endereço *</p>
+              <input
+                required
+                value={endCompl}
+                onChange={e => setEndCompl(e.target.value)}
+                placeholder="Rua, quadra, lote, número…"
+                style={campoStyle}
+              />
+            </div>
+
+            <button type="button" onClick={() => { setEnderecoManual(false); limparEndereco() }} style={{ background: "none", border: "none", padding: 0, marginBottom: 14, cursor: "pointer", fontSize: 13, fontWeight: 700, color: "var(--pimenta-esc)" }}>
+              Voltar para a busca por rua
+            </button>
+          </>
+        )}
 
         {/* Ponto de referência */}
         <div style={{ marginBottom: 14 }}>
@@ -871,86 +1109,53 @@ export default function EntregaAvulsaPage() {
           />
         </div>
 
-        {/* Local no mapa — obrigatório, igual ao checkout */}
-        {soCidade(endBusca).length >= 3 && mapaAlvo && (
-          <div style={{ marginBottom: 14 }}>
-            <p style={labelStyle}>Local da entrega no mapa *</p>
-            <MapaPicker lat={mapaAlvo.lat} lng={mapaAlvo.lng} onMove={moverPino} />
-            {!pinConfirmado ? (
-              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
-                <p style={{ fontSize: 12, fontWeight: 700, color: "var(--pimenta)", margin: 0, flex: 1, minWidth: 200 }}>
-                  Arraste o mapa até a casa do cliente (o pino fica no centro) ou cole o link da localização acima.
-                </p>
-                {enderecoCoords && (
-                  <button type="button" onClick={() => setPinConfirmado(true)} style={{ padding: "8px 12px", borderRadius: 10, border: "1.5px solid var(--linha)", background: "white", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
-                    O pino já está na casa
-                  </button>
-                )}
-              </div>
-            ) : pinNaLoja ? (
-              <p style={{ fontSize: 12, fontWeight: 700, color: "var(--pimenta)", marginTop: 8 }}>O pino está em cima da loja. Arraste até a casa do cliente.</p>
-            ) : (
-              <p style={{ fontSize: 12, color: "var(--folha)", marginTop: 8 }}>✓ Local marcado. Se precisar, arraste de novo pra ajustar.</p>
-            )}
-          </div>
-        )}
-
-        {/* Zona rural — mesma pergunta do checkout */}
+        {/* Zona rural */}
         <div style={{ marginBottom: 14 }}>
           <p style={labelStyle}>Zona rural ou estrada de chão? *</p>
-          <div style={{ display: "flex", gap: 8 }}>
-            {([["Não", false], ["Sim", true]] as const).map(([rot, v]) => (
-              <button key={rot} type="button" onClick={() => setZonaRural(v)} aria-pressed={zonaRural === v} style={{
-                flex: 1, padding: "10px 0", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: "pointer",
-                border: zonaRural === v ? "2px solid var(--pimenta)" : "1.5px solid var(--linha)",
-                background: zonaRural === v ? "var(--pimenta-claro)" : "white", color: "var(--grafite)",
-              }}>{rot}</button>
-            ))}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <Opcao ativo={zonaRural === false} titulo="Não" sub="Rua da cidade" onClick={() => setZonaRural(false)} />
+            <Opcao ativo={zonaRural === true} titulo="Sim" sub="Chácara, sítio, estrada de chão" onClick={() => setZonaRural(true)} />
           </div>
           {zonaRural && (
             <input value={detalheRural} onChange={e => setDetalheRural(e.target.value)} placeholder="Como chegar: estrada, porteira, chácara…" style={{ ...campoStyle, marginTop: 8 }} />
           )}
         </div>
 
+        {/* Mapa: aparece com a rua digitada; pino opcional para ajustar (obrigatório na zona rural ou se a rua não for achada) */}
+        {soCidade(endBusca).length >= 3 && mapaAlvo && (() => {
+          const pinObrigatorio = zonaRural === true || (!enderecoCoords && !pinConfirmado)
+          return (
+            <div style={{ marginBottom: 14 }}>
+              <p style={labelStyle}>Local no mapa{pinConfirmado ? "" : pinObrigatorio ? " *" : " (opcional)"}</p>
+              <MapaPicker lat={mapaAlvo.lat} lng={mapaAlvo.lng} onMove={moverPino} />
+              <p style={{ fontSize: 12, marginTop: 8, fontWeight: pinNaLoja || (pinObrigatorio && !pinConfirmado) ? 700 : 400,
+                color: pinNaLoja || (pinObrigatorio && !pinConfirmado) ? "var(--pimenta)" : pinConfirmado ? "var(--folha)" : "var(--suave)" }}>
+                {pinNaLoja ? "O pino está em cima da loja. Arraste até a casa do cliente."
+                  : pinConfirmado && localSalvo ? "Local salvo do cliente. Se ele mudou de endereço, arraste até o lugar novo."
+                  : pinConfirmado ? "Local marcado. Arraste de novo se precisar ajustar."
+                  : zonaRural ? "Zona rural: arraste o mapa até o local exato da entrega."
+                  : !enderecoCoords ? "Não achei essa rua no mapa. Arraste até a casa do cliente ou cole o link da localização."
+                  : "O mapa está na rua digitada. Se quiser ser mais preciso, arraste até a casa do cliente."}
+              </p>
+            </div>
+          )
+        })()}
+
         {/* Taxa de entrega — mesma regra dos pedidos do app */}
         {calculandoTaxa && <p style={{ fontSize: 11, color: "var(--suave)", margin: "-4px 0 14px" }}>Calculando taxa de entrega…</p>}
-        {erroTaxa && !calculandoTaxa && <p style={{ fontSize: 11, color: "var(--pimenta)", margin: "-4px 0 14px" }}>⚠ {erroTaxa}</p>}
+        {erroTaxa && !calculandoTaxa && <p style={{ fontSize: 11, color: "var(--pimenta)", margin: "-4px 0 14px" }}>{erroTaxa}</p>}
         {taxaInfo && !calculandoTaxa && (
           <div style={{
             display: "flex", alignItems: "center", gap: 8, margin: "-4px 0 14px",
             background: "var(--folha-claro)", border: "1px solid #BBF7D0", borderRadius: 8, padding: "8px 12px",
           }}>
-            <span style={{ fontSize: 15 }}>📍</span>
             <p style={{ fontSize: 12, color: "var(--folha)", margin: 0 }}>
               Taxa de entrega: <strong>R$ {taxaInfo.taxa.toFixed(2).replace(".", ",")}</strong>
               {zonaRural === null && <span style={{ opacity: 0.75 }}> (falta responder zona rural)</span>}
+              {zonaRural === true && <span style={{ opacity: 0.85 }}> (já com o adicional da zona rural: R$ 5,00 + R$ 1,00 por km acima de 5 km)</span>}
             </p>
           </div>
         )}
-
-        {/* 2. Nome e telefone */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-          <div>
-            <p style={labelStyle}>Nome do cliente *</p>
-            <input
-              required value={form.cliente_nome}
-              onChange={e => set("cliente_nome", e.target.value)}
-              placeholder="Ex: João Silva"
-              style={campoStyle}
-            />
-          </div>
-          <div>
-            <p style={labelStyle}>Telefone *</p>
-            <input
-              required
-              inputMode="tel"
-              value={form.cliente_tel}
-              onChange={e => set("cliente_tel", e.target.value)}
-              placeholder="(99) 99999-9999"
-              style={campoStyle}
-            />
-          </div>
-        </div>
 
         {/* 3. Itens do pedido (cardápio da loja) */}
         <div style={{ marginBottom: 14 }}>
@@ -970,7 +1175,7 @@ export default function EntregaAvulsaPage() {
             const lista = q ? cardapio.filter(p => n(p.nome).includes(q) || n(p.categoria).includes(q)) : cardapio
             const categorias = [...new Set(lista.map(p => p.categoria))]
             return (
-              <div style={{ marginTop: 8, maxHeight: 340, overflowY: "auto", border: "1.5px solid var(--pedra)", borderRadius: 12, background: "white" }}>
+              <div style={{ marginTop: 8, maxHeight: 420, overflowY: "auto", border: "1.5px solid var(--pedra)", borderRadius: 12, background: "white" }}>
                 {lista.length === 0 && <p style={{ padding: "12px 14px", fontSize: 12, color: "var(--suave)" }}>Nenhum item encontrado</p>}
                 {categorias.map(cat => (
                   <div key={cat}>
@@ -979,11 +1184,14 @@ export default function EntregaAvulsaPage() {
                       const noCarrinho = carrinho.filter(i => i.produto_id === p.id).reduce((t, i) => t + i.quantidade, 0)
                       return (
                         <button key={p.id} type="button" onClick={() => escolherProduto(p)} style={{
-                          width: "100%", textAlign: "left", padding: "10px 14px", background: noCarrinho ? "var(--pimenta-claro)" : "none", border: "none",
+                          width: "100%", textAlign: "left", padding: "8px 14px", background: noCarrinho ? "var(--pimenta-claro)" : "none", border: "none",
                           borderBottom: "1px solid var(--pedra)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
                         }}>
-                          <span style={{ fontSize: 13, color: "var(--grafite)", minWidth: 0 }}>
-                            {noCarrinho > 0 && <strong style={{ color: "var(--pimenta-esc)" }}>{noCarrinho}× </strong>}{p.nome}
+                          <span style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+                            <FotoProduto foto={p.foto} nome={p.nome} tam={48} />
+                            <span style={{ fontSize: 14, color: "var(--grafite)", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {noCarrinho > 0 && <strong style={{ color: "var(--pimenta-esc)" }}>{noCarrinho}× </strong>}{p.nome}
+                            </span>
                           </span>
                           <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                             <span style={{ fontSize: 13, fontWeight: 800, color: "var(--grafite)", whiteSpace: "nowrap" }}>{brl(p.preco)}</span>
@@ -1052,8 +1260,13 @@ export default function EntregaAvulsaPage() {
                 background: "white", width: "100%", maxWidth: 520, maxHeight: "85vh", overflowY: "auto",
                 borderRadius: "18px 18px 0 0", padding: "18px 18px calc(18px + env(safe-area-inset-bottom, 0px))",
               }}>
-                <p style={{ fontSize: 16, fontWeight: 900, color: "var(--grafite)" }}>{produtoEscolhendo.nome}</p>
-                <p style={{ fontSize: 13, color: "var(--suave)", marginBottom: 12 }}>{brl(produtoEscolhendo.preco)}</p>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+                  <FotoProduto foto={produtoEscolhendo.foto} nome={produtoEscolhendo.nome} tam={64} />
+                  <div>
+                    <p style={{ fontSize: 16, fontWeight: 900, color: "var(--grafite)" }}>{produtoEscolhendo.nome}</p>
+                    <p style={{ fontSize: 13, color: "var(--suave)" }}>{brl(produtoEscolhendo.preco)}</p>
+                  </div>
+                </div>
                 {grupos.map(g => (
                   <div key={g.id} style={{ marginBottom: 14 }}>
                     <p style={{ fontSize: 12, fontWeight: 800, color: "var(--grafite)", marginBottom: 6 }}>
@@ -1090,108 +1303,79 @@ export default function EntregaAvulsaPage() {
         })()}
 
         {/* Quem paga a entrega */}
-        <div style={{ marginBottom: 14 }}>
-          <p style={labelStyle}>Quem paga a entrega? *</p>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            {([["cliente", "👤 O cliente paga"], ["loja", "🏪 A loja paga"]] as const).map(([v, label]) => (
-              <button key={v} type="button" onClick={() => setFretePagoPor(v)} style={{
-                padding: "11px 10px", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 700,
-                background: fretePagoPor === v ? "var(--pimenta-claro)" : "white", color: fretePagoPor === v ? "var(--pimenta-esc)" : "var(--grafite)",
-                border: fretePagoPor === v ? "1.5px solid var(--pimenta)" : "1.5px solid var(--linha)",
-              }}>{label}</button>
-            ))}
+        <div style={{ marginBottom: 18 }}>
+          <p style={labelStyle}>Quem paga a entrega *</p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+            <Opcao ativo={fretePagoPor === "cliente"} titulo="Cliente" sub="Taxa entra no total do pedido" onClick={() => setFretePagoPor("cliente")} />
+            <Opcao ativo={fretePagoPor === "loja"} titulo="Loja" sub="Cliente não paga, sai do repasse" onClick={() => setFretePagoPor("loja")} />
           </div>
-          {fretePagoPor === "loja" && (
-            <p style={{ marginTop: 8, fontSize: 12, color: "var(--suave)" }}>O cliente não paga a taxa de entrega. Ela sai do repasse da loja e o motoboy recebe normal.</p>
-          )}
         </div>
 
         {/* Pagamento */}
-        <div style={{ marginBottom: 14 }}>
+        <div style={{ marginBottom: 18 }}>
           <p style={labelStyle}>Forma de pagamento *</p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8 }}>
-            {([
-              ["dinheiro", "💵 Dinheiro"],
-              ["maquininha", "💳 Maquininha"],
-              ["pix_loja", "✅ Pix na conta da loja"],
-            ] as const).map(([v, label]) => (
-              <button key={v} type="button" onClick={() => { setFormaPgto(v); if (formaPgto2 === v) setFormaPgto2("") }} style={{
-                padding: "11px 10px", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 700,
-                background: formaPgto === v ? "var(--pimenta-claro)" : "white", color: formaPgto === v ? "var(--pimenta-esc)" : "var(--grafite)",
-                border: formaPgto === v ? "1.5px solid var(--pimenta)" : "1.5px solid var(--linha)",
-              }}>{label}</button>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8 }}>
+            {FORMAS_AV.map(f => (
+              <Opcao key={f.v} ativo={formaPgto === f.v} titulo={f.titulo} sub={f.sub}
+                onClick={() => { setFormaPgto(f.v); if (formaPgto2 === f.v) setFormaPgto2("") }} />
             ))}
           </div>
+
           {formaPgto && (
-            <label style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--grafite)", cursor: "pointer" }}>
-              <input type="checkbox" checked={dividir} onChange={e => { setDividir(e.target.checked); if (!e.target.checked) { setFormaPgto2(""); setValor1("") } }} /> Pagar em 2 formas
-            </label>
-          )}
-          {dividir && formaPgto && (
-            <div style={{ marginTop: 8, padding: "10px 12px", borderRadius: 10, border: "1.5px solid var(--linha)", background: "white" }}>
-              <p style={{ fontSize: 12, fontWeight: 700, color: "var(--grafite)", marginBottom: 6 }}>Segunda forma</p>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8 }}>
-                {([["dinheiro", "💵 Dinheiro"], ["maquininha", "💳 Maquininha"], ["pix_loja", "✅ Pix na loja"]] as const).filter(([v]) => v !== formaPgto).map(([v, label]) => (
-                  <button key={v} type="button" onClick={() => setFormaPgto2(v)} style={{
-                padding: "11px 10px", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 700,
-                background: formaPgto2 === v ? "var(--pimenta-claro)" : "white", color: formaPgto2 === v ? "var(--pimenta-esc)" : "var(--grafite)",
-                border: formaPgto2 === v ? "1.5px solid var(--pimenta)" : "1.5px solid var(--linha)",
-              }}>{label}</button>
-                ))}
-              </div>
-              {formaPgto2 && (
-                <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 13, color: "var(--grafite)" }}>Em {NOME_PG[formaPgto]}:</span>
-                  <input
-                    value={valor1}
-                    onChange={e => {
-                      const d = e.target.value.replace(/\D/g, "")
-                      setValor1(d ? (Number(d) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "")
-                    }}
-                    inputMode="numeric"
-                    placeholder="R$ 0,00"
-                    style={{ ...campoStyle, width: 140 }}
-                  />
-                  <span style={{ fontSize: 13, color: valor1Num > 0 && valor2Num < 1 ? "var(--pimenta)" : "var(--suave)" }}>
-                    {valor1Num > 0 ? `Em ${NOME_PG[formaPgto2]}: ${brl(Math.max(0, valor2Num))}` : `O resto vai em ${NOME_PG[formaPgto2]}`}
-                  </span>
-                </div>
+            <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+              <Chave on={dividir} label="Dividir em 2 formas" onChange={on => { setDividir(on); if (!on) { setFormaPgto2(""); setValor1("") } }} />
+              {dividir && (
+                <Bloco titulo="Segunda forma">
+                  <Segmento valor={formaPgto2} opcoes={FORMAS_AV.filter(f => f.v !== formaPgto).map(f => [f.v, f.titulo] as [string, string])} onChange={v => setFormaPgto2(v as "dinheiro" | "maquininha" | "pix_loja")} />
+                  {formaPgto2 && (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
+                      <div>
+                        <p style={{ fontSize: 12, color: "var(--suave)", marginBottom: 4 }}>{NOME_PG[formaPgto]}</p>
+                        <input
+                          value={valor1}
+                          onChange={e => {
+                            const d = e.target.value.replace(/\D/g, "")
+                            setValor1(d ? (Number(d) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "")
+                          }}
+                          inputMode="numeric"
+                          placeholder="0,00"
+                          style={{ ...campoStyle, fontVariantNumeric: "tabular-nums" }}
+                        />
+                      </div>
+                      <div>
+                        <p style={{ fontSize: 12, color: "var(--suave)", marginBottom: 4 }}>{NOME_PG[formaPgto2]}</p>
+                        <div style={{ ...campoStyle, background: "var(--pedra)", fontVariantNumeric: "tabular-nums", color: valor1Num > 0 && valor2Num < 1 ? "var(--pimenta)" : "var(--grafite)" }}>
+                          {valor1Num > 0 ? brl(Math.max(0, valor2Num)) : "o restante"}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </Bloco>
+              )}
+              {usaForma("maquininha") && (
+                <Bloco titulo="Maquininha">
+                  <Segmento valor={tipoMaquininha} opcoes={[["credito", "Crédito"], ["debito", "Débito"]]} onChange={v => setTipoMaquininha(v as "credito" | "debito")} />
+                  <p style={{ fontSize: 12, color: "var(--suave)", marginTop: 6 }}>O motoboy é avisado para levar a maquininha.</p>
+                </Bloco>
+              )}
+              {usaForma("dinheiro") && (
+                <>
+                  <Chave on={precisaTroco} label="Precisa de troco" onChange={setPrecisaTroco} />
+                  {precisaTroco && (
+                    <input
+                      value={trocoPara}
+                      onChange={e => {
+                        const d = e.target.value.replace(/\D/g, "")
+                        setTrocoPara(d ? (Number(d) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "")
+                      }}
+                      inputMode="numeric"
+                      placeholder="Troco para R$ 0,00"
+                      style={{ ...campoStyle, maxWidth: 220, fontVariantNumeric: "tabular-nums" }}
+                    />
+                  )}
+                </>
               )}
             </div>
-          )}
-          {usaForma("dinheiro") && (
-            <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "var(--grafite)", cursor: "pointer" }}>
-                <input type="checkbox" checked={precisaTroco} onChange={e => setPrecisaTroco(e.target.checked)} /> Precisa de troco
-              </label>
-              {precisaTroco && (
-                <input
-                  value={trocoPara}
-                  onChange={e => {
-                    const d = e.target.value.replace(/\D/g, "")
-                    setTrocoPara(d ? (Number(d) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "")
-                  }}
-                  inputMode="numeric"
-                  placeholder="Troco para R$ 0,00"
-                  style={{ ...campoStyle, width: 180 }}
-                />
-              )}
-            </div>
-          )}
-          {usaForma("maquininha") && (
-            <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
-              {([["credito", "Crédito"], ["debito", "Débito"]] as const).map(([v, label]) => (
-                <button key={v} type="button" onClick={() => setTipoMaquininha(v)} style={{
-                  flex: 1, padding: "9px", borderRadius: 10, cursor: "pointer", fontSize: 13, fontWeight: 700,
-                  background: tipoMaquininha === v ? "var(--pimenta-claro)" : "white", color: tipoMaquininha === v ? "var(--pimenta-esc)" : "var(--grafite)",
-                  border: tipoMaquininha === v ? "1.5px solid var(--pimenta)" : "1.5px solid var(--linha)",
-                }}>{label}</button>
-              ))}
-              <p style={{ alignSelf: "center", fontSize: 11, color: "var(--suave)", flex: 2 }}>O motoboy é avisado para levar a maquininha.</p>
-            </div>
-          )}
-          {formaPgto === "pix_loja" && !pgDividido && (
-            <p style={{ marginTop: 8, fontSize: 12, color: "var(--folha)" }}>Pago direto na conta da loja. O motoboy não cobra nada na entrega.</p>
           )}
         </div>
 
@@ -1219,7 +1403,7 @@ export default function EntregaAvulsaPage() {
         {ultimoPedido && sucesso && (
           <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 12, background: "var(--folha-claro)", border: "1px solid #BBF7D0" }}>
             <p style={{ fontSize: 13, fontWeight: 700, color: "var(--folha)" }}>
-              ✓ Pedido #{ultimoPedido} criado e em preparo. <a href="/loja?foco=preparo" style={{ color: "var(--folha)", textDecoration: "underline" }}>Ver no painel de Pedidos</a>
+              Pedido #{ultimoPedido} criado e em preparo. <a href="/loja?foco=preparo" style={{ color: "var(--folha)", textDecoration: "underline" }}>Ver no painel de Pedidos</a>
             </p>
           </div>
         )}
@@ -1231,47 +1415,62 @@ export default function EntregaAvulsaPage() {
           fontWeight: 800, fontSize: 14, cursor: enviando ? "not-allowed" : "pointer",
           boxShadow: enviando ? "none" : "0 4px 16px rgba(215,38,30,0.35)",
         }}>
-          {enviando ? "Criando pedido…" : "🧾 Criar pedido e imprimir cupom"}
+          {enviando ? "Criando pedido…" : "Criar pedido e imprimir cupom"}
         </button>
       </form>
 
-      {/* Clientes recorrentes */}
-      {clientes.length > 0 && (
-        <div style={{ marginBottom: 24 }}>
-          <p style={{ fontSize: 13, fontWeight: 800, color: "var(--texto)", marginBottom: 12 }}>
-            Clientes salvos ({clientes.length})
-          </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {clientes.slice(0, 8).map(c => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => { selecionarCliente(c); window.scrollTo({ top: 0, behavior: "smooth" }) }}
-                style={{
-                  background: "white", borderRadius: 12, border: "1.5px solid var(--pedra)",
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.04)", padding: "12px 16px",
-                  display: "flex", justifyContent: "space-between", alignItems: "center",
-                  cursor: "pointer", textAlign: "left", width: "100%",
-                }}
-              >
-                <div style={{ minWidth: 0 }}>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: "var(--grafite)", margin: 0 }}>{c.nome}</p>
-                  <p style={{ fontSize: 12, color: "var(--suave)", margin: "2px 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {c.telefone && <>{c.telefone} · </>}
-                    {c.endereco}
-                  </p>
-                </div>
-                <div style={{ textAlign: "right", flexShrink: 0, marginLeft: 12 }}>
-                  <p style={{ fontSize: 13, fontWeight: 800, color: "var(--pimenta)", margin: 0 }}>{c.total_pedidos}x</p>
-                  <p style={{ fontSize: 11, color: "var(--suave)", margin: 0 }}>
-                    med. R$ {(c.valor_total / c.total_pedidos).toFixed(2).replace(".", ",")}
-                  </p>
-                </div>
-              </button>
-            ))}
+      {/* Clientes salvos, com busca por nome, telefone ou endereço */}
+      {clientes.length > 0 && (() => {
+        const n = (x: string) => x.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        const q = n(buscaSalvos.trim())
+        const qDig = buscaSalvos.replace(/\D/g, "")
+        const lista = !q ? clientes : clientes.filter(c =>
+          n(c.nome).includes(q) || n(c.endereco ?? "").includes(q) || (qDig.length >= 3 && (c.telefone ?? "").replace(/\D/g, "").includes(qDig)))
+        const endBonito = (e: string | null) => (e ?? "").replace(/ — /g, ", ").replace(/Bairro /g, "")
+        return (
+          <div style={{ marginBottom: 24 }}>
+            <p style={{ fontSize: 13, fontWeight: 800, color: "var(--texto)", marginBottom: 10 }}>
+              Clientes salvos ({clientes.length})
+            </p>
+            <input
+              value={buscaSalvos}
+              onChange={e => setBuscaSalvos(e.target.value)}
+              placeholder="Buscar por nome, telefone ou endereço"
+              style={{ ...campoStyle, marginBottom: 10 }}
+              autoComplete="off"
+            />
+            {lista.length === 0 && <p style={{ fontSize: 13, color: "var(--suave)", padding: "8px 2px" }}>Nenhum cliente encontrado.</p>}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {lista.slice(0, q ? 30 : 8).map(c => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => { selecionarCliente(c); setBuscaSalvos(""); window.scrollTo({ top: 0, behavior: "smooth" }) }}
+                  style={{
+                    background: "white", borderRadius: 12, border: "1.5px solid var(--pedra)",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.04)", padding: "12px 16px",
+                    display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12,
+                    cursor: "pointer", textAlign: "left", width: "100%",
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: "var(--grafite)", margin: 0 }}>{c.nome}</p>
+                    {c.telefone && <p style={{ fontSize: 13, color: "var(--grafite)", margin: "2px 0 0", fontVariantNumeric: "tabular-nums" }}>{c.telefone}</p>}
+                    {c.endereco && <p style={{ fontSize: 12, color: "var(--suave)", margin: "2px 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{endBonito(c.endereco)}</p>}
+                  </div>
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    <p style={{ fontSize: 13, fontWeight: 800, color: "var(--pimenta)", margin: 0 }}>{c.total_pedidos} {c.total_pedidos === 1 ? "pedido" : "pedidos"}</p>
+                    <p style={{ fontSize: 11, color: "var(--suave)", margin: 0 }}>
+                      média {brl(c.valor_total / Math.max(1, c.total_pedidos))}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+            {!q && clientes.length > 8 && <p style={{ fontSize: 12, color: "var(--suave)", marginTop: 8 }}>Mostrando os 8 que mais pedem. Use a busca para achar os outros.</p>}
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Histórico de avulsas */}
       {entregas.length > 0 && (
@@ -1304,7 +1503,7 @@ export default function EntregaAvulsaPage() {
                         fontSize: 11, fontWeight: 700, cursor: "pointer",
                       }}
                     >
-                      🖨️ Imprimir
+                      Imprimir
                     </button>
                   </div>
                 </div>

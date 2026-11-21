@@ -29,7 +29,12 @@ export async function POST(req: NextRequest) {
   const sess = requireLoja(req)
   if (!sess) return unauthorized()
 
-  const { nome, telefone, endereco, valor_pedido } = await req.json()
+  const { nome, telefone, endereco, valor_pedido, lat, lng, zona_rural, detalhe_rural } = await req.json()
+  // Local no mapa do cliente (Lucas, 21/11/2026): o último pino usado vale pro próximo pedido.
+  // Se as colunas ainda não existirem no banco, grava sem elas.
+  const coordOk = typeof lat === "number" && typeof lng === "number" && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+  const local = coordOk ? { lat, lng, zona_rural: zona_rural === true, detalhe_rural: typeof detalhe_rural === "string" ? detalhe_rural.slice(0, 300) || null : null } : {}
+  const semColuna = (e: any) => /lat|lng|zona_rural|detalhe_rural/.test(String(e?.message ?? "")) && /column|schema/i.test(String(e?.message ?? ""))
   if (!nome) return NextResponse.json({ error: "nome obrigatório" }, { status: 400 })
 
   const db = adminClient()
@@ -58,7 +63,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (existente) {
-    await db
+    const upd = (extra: object) => db
       .from("clientes_avulsos")
       .update({
         nome: nome.trim(),
@@ -67,10 +72,14 @@ export async function POST(req: NextRequest) {
         total_pedidos: existente.total_pedidos + 1,
         valor_total: (existente.valor_total ?? 0) + valor,
         atualizado_em: new Date().toISOString(),
+        ...extra,
       })
       .eq("id", existente.id)
+    const r = await upd(local)
+    if (r.error && semColuna(r.error)) await upd({})
   } else {
-    await db.from("clientes_avulsos").insert({
+    const ins = (extra: object) => db.from("clientes_avulsos").insert({
+      ...extra,
       loja_id,
       nome: nome.trim(),
       telefone: telefone?.trim() || null,
@@ -78,6 +87,8 @@ export async function POST(req: NextRequest) {
       total_pedidos: 1,
       valor_total: valor,
     })
+    const r = await ins(local)
+    if (r.error && semColuna(r.error)) await ins({})
   }
 
   return NextResponse.json({ ok: true })
