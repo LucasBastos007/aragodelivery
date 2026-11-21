@@ -42,6 +42,8 @@ type ClienteAvulso = {
   detalhe_rural?: string | null
 }
 
+const RAIO_BUSCA_RUA_KM = 25
+
 type SugestaoEndereco = {
   place_id: string | number
   display_name: string
@@ -489,7 +491,18 @@ export default function EntregaAvulsaPage() {
         const bias = lojaCoords?.lat && lojaCoords?.lng ? `&lat=${lojaCoords.lat}&lon=${lojaCoords.lng}` : ""
         const res = await fetch(`/api/geocode/search?q=${encodeURIComponent(q)}${bias}`)
         const data: SugestaoEndereco[] = await res.json()
-        setSugRua(data); setShowSugRua(true)
+        // Só ruas perto da loja (teste de 21/11: "Rua rio verde" virava Nova Iguaçu, "Rv 5 Monte Sinai" virava Goiânia)
+        const lj = lojaCoords?.lat && lojaCoords?.lng ? { lat: lojaCoords.lat, lng: lojaCoords.lng } : null
+        const perto = lj
+          ? data.filter(s => {
+              const la = parseFloat(s.lat), lo = parseFloat(s.lon)
+              if (isNaN(la) || isNaN(lo)) return false
+              const t = (x: number) => x * Math.PI / 180
+              const h = Math.sin(t(la - lj.lat) / 2) ** 2 + Math.cos(t(lj.lat)) * Math.cos(t(la)) * Math.sin(t(lo - lj.lng) / 2) ** 2
+              return 2 * 6371 * Math.asin(Math.sqrt(h)) <= RAIO_BUSCA_RUA_KM
+            })
+          : data
+        setSugRua(perto); setShowSugRua(true)
       } catch {}
     }, 450)
     return () => clearTimeout(t)
@@ -995,6 +1008,9 @@ export default function EntregaAvulsaPage() {
                       </button>
                     )
                   })}
+                  {sugRua.length === 0 && (
+                    <p style={{ padding: "10px 14px", fontSize: 13, color: "var(--suave)", margin: 0 }}>Não achei essa rua perto da loja. Digite de outro jeito ou marque o local no mapa.</p>
+                  )}
                   <button type="button" onClick={() => { setEnderecoManual(true); setShowSugRua(false) }} style={{
                     width: "100%", textAlign: "left", padding: "10px 14px", background: "var(--pedra)", border: "none", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "var(--pimenta-esc)",
                   }}>Não achei, digitar o endereço à mão</button>

@@ -30,7 +30,9 @@ export default function MapaPicker({ lat, lng, onMove }: Props) {
     import("leaflet").then((L) => {
       if (!divRef.current || mapRef.current) return
 
-      const map = L.map(divRef.current, { zoomControl: true })
+      // Zoom sempre em volta do pino do centro: com zoom no cursor, rolar a página por cima do mapa
+      // mudava o ponto de entrega sem ninguém arrastar (teste da avulsa, 21/11/2026)
+      const map = L.map(divRef.current, { zoomControl: true, scrollWheelZoom: "center", doubleClickZoom: "center", touchZoom: "center" })
         .setView([lat, lng], 17)
 
       const tileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
