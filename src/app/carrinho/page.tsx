@@ -3,6 +3,7 @@
 // Sacola no layout novo (proposta aprovada em 19/10/2026). Mesma sacola (useCart), mesmas
 // ações (+, −, esvaziar, sugestão de bebida) e o mesmo caminho pro /checkout.
 import { freteGratisAtivo, lojaComPonto } from "@/lib/freteGratisCampanha"
+import { textoEntrega } from "@/lib/tempoEntrega"
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -118,7 +119,7 @@ export default function CarrinhoPage() {
         <div className="cartao" style={{ padding: "6px 16px 4px" }}>
           <div className="sacola-loja">
             {loja?.logo_url && <img src={loja.logo_url} alt="" />}
-            <span style={{ flex: 1, minWidth: 0 }}><b className="h3">{items[0]?.loja_nome}</b><small className="mut">{loja ? `Entrega em ${loja.tempo_min}-${loja.tempo_max} min` : ""}</small></span>
+            <span style={{ flex: 1, minWidth: 0 }}><b className="h3">{items[0]?.loja_nome}</b><small className="mut">{loja ? `Entrega em ${textoEntrega(loja)}` : ""}</small></span>
             {loja_id && <Link href={`/restaurante/${loja_id}`} style={{ color: "var(--pimenta)", fontWeight: 700, fontSize: 13.5, flex: "none" }}>Adicionar mais</Link>}
           </div>
           {items.map((item, idx) => {

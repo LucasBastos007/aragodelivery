@@ -4,6 +4,7 @@
 // entregaram e os mais rápidos, e o acompanhamento de preparo e prazo de entrega de cada loja.
 // Só leitura. Semana = ciclo do Chegô (sexta a quinta). Horário de Brasília.
 import { useEffect, useMemo, useState } from "react"
+import { DESLOCAMENTO_MIN } from "@/lib/tempoEntrega"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
 
@@ -89,7 +90,7 @@ export default function RankingPage() {
     const m = new Map<string, { n: number; rota: number[]; km: number; noPrazo: number; comPrazo: number }>()
     for (const p of ent) { if (!p.motoboy_id) continue; const x = m.get(p.motoboy_id) ?? { n: 0, rota: [], km: 0, noPrazo: 0, comPrazo: 0 }; x.n++
       const r = mins(p.coletado_em, p.entregue_em); if (r != null) x.rota.push(r); x.km += Number(p.distancia_km) || 0
-      const tot = mins(p.criado_em, p.entregue_em), tm = p.loja_id ? lojas.get(p.loja_id)?.tempo_max : null; if (tot != null && tm) { x.comPrazo++; if (tot <= tm) x.noPrazo++ }
+      const tot = mins(p.criado_em, p.entregue_em), tm = p.loja_id && lojas.get(p.loja_id)?.tempo_max ? lojas.get(p.loja_id)!.tempo_max! + DESLOCAMENTO_MIN : null; if (tot != null && tm) { x.comPrazo++; if (tot <= tm) x.noPrazo++ }
       m.set(p.motoboy_id, x) }
     const l = [...m].map(([id, x]) => ({ id, n: x.n, rota: mediana(x.rota), medidas: x.rota.length, km: x.km, prazo: x.comPrazo ? pct(x.noPrazo, x.comPrazo) : null }))
     return ordMoto === "entregas" ? l.sort((a, b) => b.n - a.n) : l.filter(x => x.medidas >= 5 && x.rota != null).sort((a, b) => a.rota! - b.rota!)
@@ -100,7 +101,7 @@ export default function RankingPage() {
     const atrasados: { p: Ped; acima: number; tot: number }[] = []
     for (const p of ent) { if (!p.loja_id) continue; const x = m.get(p.loja_id) ?? { prep: [], prepBotao: 0, tot: [], atras: 0, comPrazo: 0 }
       const pr = mins(p.aceito_em, p.pronto_em) ?? (p.tipo !== "loja" ? mins(p.aceito_em, p.coletado_em) : null); if (pr != null) { x.prep.push(pr); if (p.pronto_em) x.prepBotao++ }
-      const tot = mins(p.criado_em, p.entregue_em), tm = lojas.get(p.loja_id)?.tempo_max
+      const tot = mins(p.criado_em, p.entregue_em), tm = lojas.get(p.loja_id)?.tempo_max ? lojas.get(p.loja_id)!.tempo_max! + DESLOCAMENTO_MIN : null
       if (tot != null) { x.tot.push(tot); if (tm) { x.comPrazo++; if (tot > tm) { x.atras++; atrasados.push({ p, acima: tot - tm, tot }) } } }
       m.set(p.loja_id, x) }
     const lista = [...m].map(([id, x]) => { const l = lojas.get(id), prep = media(x.prep), dentro = x.prep.filter(v => v <= meta).length, pa = x.comPrazo ? pct(x.atras, x.comPrazo) : null

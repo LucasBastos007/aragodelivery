@@ -4,6 +4,7 @@
 // Só a tela mudou: a consulta, o login obrigatório pra pedir, o preço dos adicionais
 // (lib/precoAdicionais) e o que vai pra sacola (handleAddToCart/handleSimpleAdd) são os mesmos.
 import { PrecoPromo, usePromoAtiva, usePromoUsados, usePromoVirada } from "@/components/cliente/PrecoPromo"
+import { entregaMin, entregaMax } from "@/lib/tempoEntrega"
 import { emPromo, emRelampago, descontoPromo, fimTexto, PROMO_TITULO } from "@/lib/promoChego"
 import { freteGratisAtivo, lojaComPonto } from "@/lib/freteGratisCampanha"
 import { precoAdicionais } from "@/lib/precoAdicionais"
@@ -552,7 +553,7 @@ function RestauranteConteudo() {
         </div>
         <div className="fatos">
           <button onClick={() => avaliacoes.length && irCat("avals")}><b>{loja.nota_media ? `★ ${Number(loja.nota_media).toFixed(1).replace(".", ",")}` : "Nova"}</b>{loja.total_avaliacoes ? `${loja.total_avaliacoes} avaliações` : "sem avaliações"}</button>
-          <div><b>{modo === "retirada" ? "20" : `${loja.tempo_min}-${loja.tempo_max}`}</b>{modo === "retirada" ? "min pra retirar" : "minutos"}</div>
+          <div><b>{modo === "retirada" ? "20" : `${entregaMin(loja)}-${entregaMax(loja)}`}</b>{modo === "retirada" ? "min pra retirar" : "minutos"}</div>
           <div><b>{modo === "retirada" ? "Grátis" : freteGratisAtivo() && lojaComPonto((loja as any).lat, (loja as any).lng) ? "Frete" : taxa > 0 ? brl(taxa) : "Grátis"}</b>{modo === "retirada" ? "retirada" : freteGratisAtivo() && lojaComPonto((loja as any).lat, (loja as any).lng) ? "grátis até 7 km" : "entrega"}</div>
           {minimo > 0 && <div><b>{brl(minimo)}</b>mínimo</div>}
         </div>

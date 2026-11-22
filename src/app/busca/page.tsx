@@ -3,6 +3,7 @@
 // e abre as mesmas rotas de sempre (/restaurante/[id]). Mantém o filtro ?cidade= usado pelo
 // banner "Chegô chegou em Guapó".
 import { PrecoPromo } from "@/components/cliente/PrecoPromo"
+import { textoEntrega, entregaMax } from "@/lib/tempoEntrega"
 import { useEffect, useMemo, useRef, useState, Suspense } from "react"
 import { ultimaPorUltimo } from "@/lib/ordemLojas"
 import { LinhaLoja } from "@/components/cliente/LinhaLoja"
@@ -41,11 +42,11 @@ const INTENCOES: Record<string, { n: string; t: (p: Prod, l: Loja) => boolean }>
   leve: { n: "🥗 Algo leve", t: p => /salada|grelhad|açaí|acai|suco|wrap|natural|fit|integral|frutas/i.test(p.nome + " " + (p.descricao ?? "")) },
   dividir: { n: "👨‍👩‍👧 Pra dividir", t: p => /combo|famíl|famil|grande|porç|porc|balde|gigante|2 litros/i.test(p.nome + " " + (p.descricao ?? "")) || /pizza/i.test(p.nome) },
   barato: { n: "💸 Até R$ 30", t: p => precoExibicao(p).valor <= 30 },
-  rapido: { n: "⚡ Chega rápido", t: (_p, l) => (l.tempo_max ?? 60) <= 35 },
+  rapido: { n: "⚡ Chega rápido", t: (_p, l) => entregaMax(l, 60) <= 55 },
 }
 const MAIS_BUSCADOS = ["Pizza", "X-tudo", "Açaí", "Marmita", "Coca-Cola", "Pastel", "Hambúrguer", "Espetinho"]
 const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
-const tempo = (l: Loja) => `${l.tempo_min ?? 30}-${l.tempo_max ?? 50} min`
+const tempo = (l: Loja) => textoEntrega(l)
 
 const IcVoltar = () => <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6" /></svg>
 const IcBusca = () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="11" cy="11" r="7.5" /><path d="m20.5 20.5-4.2-4.2" /></svg>

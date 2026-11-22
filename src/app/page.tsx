@@ -1,6 +1,7 @@
 "use client"
 
 import AberturaChego from "@/components/AberturaChego"
+import { textoEntrega } from "@/lib/tempoEntrega"
 import { ultimaPorUltimo } from "@/lib/ordemLojas"
 import { useEffect, useMemo, useRef, useState } from "react"
 import type React from "react"
@@ -1594,7 +1595,7 @@ function LojaCard({ loja, isMobile, userCoords, compact }: { loja: Loja; isMobil
                 {loja.aberto ? "● Aberto" : "Fechado"}
               </span>
               <span style={{ color: "#9CA3AF", fontSize: 11 }}>·</span>
-              <span style={{ fontSize: 11, color: "#9CA3AF" }}>{loja.tempo_min}–{loja.tempo_max} min</span>
+              <span style={{ fontSize: 11, color: "#9CA3AF" }}>{textoEntrega(loja, "–")}</span>
               {distLabel && (<>
                 <span style={{ color: "#9CA3AF", fontSize: 11 }}>·</span>
                 <span style={{ fontSize: 11, color: "#6B7280", display: "flex", alignItems: "center", gap: 3 }}>
@@ -1682,7 +1683,7 @@ function LojaCard({ loja, isMobile, userCoords, compact }: { loja: Loja; isMobil
           <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, flexWrap: "wrap" }}>
             <span style={{ color: "#6B7280", display: "flex", alignItems: "center", gap: 4 }}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              {loja.tempo_min}–{loja.tempo_max} min
+              {textoEntrega(loja, "–")}
             </span>
             {distLabel && (<>
               <span style={{ color: "#e5e7eb" }}>·</span>

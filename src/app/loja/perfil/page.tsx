@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { DESLOCAMENTO_MIN } from "@/lib/tempoEntrega"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
 import { diaEMinutosAgoraBrt } from "@/lib/periodoBrt"
@@ -553,14 +554,17 @@ export default function PerfilPage() {
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <div>
-            <label className="label">Mín. (min)</label>
+            <label className="label">Preparo mín. (min)</label>
             <input className="input" type="number" min="5" value={form.tempo_min} onChange={e => set("tempo_min", e.target.value)} />
           </div>
           <div>
-            <label className="label">Máx. (min)</label>
+            <label className="label">Preparo máx. (min)</label>
             <input className="input" type="number" min="10" value={form.tempo_max} onChange={e => set("tempo_max", e.target.value)} />
           </div>
         </div>
+        <p style={{ fontSize: 12, color: "var(--suave)", marginTop: 10 }}>
+          O cliente vê o preparo + {DESLOCAMENTO_MIN} min do motoboy: <strong>{(parseInt(form.tempo_min) || 0) + DESLOCAMENTO_MIN}-{(parseInt(form.tempo_max) || 0) + DESLOCAMENTO_MIN} min</strong> de entrega.
+        </p>
       </div>
 
       {/* Conta */}

@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { DESLOCAMENTO_MIN } from "@/lib/tempoEntrega"
 import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { useAuth } from "@/lib/auth"
@@ -42,7 +43,7 @@ export default function LojaLayoutClient({ children }: { children: React.ReactNo
   const [loja, setLoja] = useState<{ nome: string; logo_url: string | null; aberto: boolean; tempo_min: number; tempo_max: number } | null>(null)
   const [mudandoLoja, setMudandoLoja] = useState(false)
 
-  // Barra de cima: aberta/fechada e tempo de preparo (o tempo que o cliente vê no app)
+  // Barra de cima: aberta/fechada e tempo de preparo (o cliente vê preparo + DESLOCAMENTO_MIN, lib/tempoEntrega)
   useEffect(() => {
     if (sessao?.role !== "lojista") return
     const id = sessao.loja_id
@@ -287,10 +288,10 @@ export default function LojaLayoutClient({ children }: { children: React.ReactNo
               </button>
             )}
             {loja && (
-              <span className="preparo" title="Tempo de entrega que o cliente vê no app">
-                <button onClick={() => mudarTempo(-5)} disabled={mudandoLoja} aria-label="Diminuir tempo">−</button>
+              <span className="preparo" title={`Tempo de preparo. O cliente vê ${loja.tempo_min + DESLOCAMENTO_MIN}-${loja.tempo_max + DESLOCAMENTO_MIN} min de entrega (preparo + ${DESLOCAMENTO_MIN} min do motoboy)`}>
+                <button onClick={() => mudarTempo(-5)} disabled={mudandoLoja} aria-label="Diminuir tempo de preparo">−</button>
                 <b className="num">{loja.tempo_min}-{loja.tempo_max} min</b>
-                <button onClick={() => mudarTempo(5)} disabled={mudandoLoja} aria-label="Aumentar tempo">+</button>
+                <button onClick={() => mudarTempo(5)} disabled={mudandoLoja} aria-label="Aumentar tempo de preparo">+</button>
               </span>
             )}
             <button className={`ic-bt ${somOk ? "" : "off"}`} aria-label="Testar o som de pedido novo" title="Testar o som" onClick={() => { liberarSom().then(() => tocaSomPedido()) }}><Ico n="som" /></button>

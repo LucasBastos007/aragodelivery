@@ -4,6 +4,7 @@
 // Só muda a aparência: as lojas vêm da mesma consulta da home antiga (page.tsx), o endereço
 // usa o mesmo AddressBottomSheet e cada loja abre a mesma rota /restaurante/[id].
 import { PrecoPromo } from "@/components/cliente/PrecoPromo"
+import { textoEntrega, entregaMax } from "@/lib/tempoEntrega"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ehSempreUltima, ultimaPorUltimo } from "@/lib/ordemLojas"
 import { lerFavoritas, alternarFavorita } from "@/lib/favoritas"
@@ -50,7 +51,7 @@ const ehPetiscaria = (l: Loja) => /petiscaria t/i.test(l.nome)
 // "Famosos no Chegô": nomes exatos das lojas, na ordem em que aparecem (Lucas, 05/11/2026)
 const FAMOSOS_FIXOS = ["Petiscaria Tábua dos Sabores", "Winderson Lanches", "Armazém Gastrobar", "BISCOITO DURO CAFE", "Padaria Flor de Ipê", "TRILHAS DA AMAZONIA", "QUINTAL GASTROBAR E HAMBURGUERIA", "Cantinho da Danny", "Pizzaria Bom Demais"]
 const semAcento = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase()
-const tempo = (l: Loja) => `${l.tempo_min ?? 30}-${l.tempo_max ?? 50} min`
+const tempo = (l: Loja) => textoEntrega(l)
 const nota = (v: number) => v.toFixed(1).replace(".", ",")
 
 function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
@@ -222,7 +223,7 @@ export default function InicioNovo({ lojas, loading, logado, endereco, onEnderec
   let lista = lojas.filter(l => !FILTRO_ABA[aba] || FILTRO_ABA[aba]!(l))
   if (filtros.has("abertas")) lista = lista.filter(l => l.aberto)
   if (filtros.has("gratis")) lista = lista.filter(l => !(Number(l.taxa_entrega ?? 0) > 0))
-  if (filtros.has("rapido")) lista = lista.filter(l => (l.tempo_max ?? 60) <= 40)
+  if (filtros.has("rapido")) lista = lista.filter(l => entregaMax(l, 60) <= 60)
   if (filtros.has("nota")) lista = lista.filter(l => (l.nota_media ?? 0) >= 4.7)
   lista = ultimaPorUltimo([...lista.filter(l => l.aberto), ...lista.filter(l => !l.aberto)])
   const qtdAbertas = lojas.filter(l => l.aberto).length

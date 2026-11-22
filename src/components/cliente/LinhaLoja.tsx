@@ -2,6 +2,7 @@
 
 // Linha de loja igual à proposta (Início, Busca, favoritas): dados corridos com "·" e o coração.
 import { useEffect, useState } from "react"
+import { textoEntrega } from "@/lib/tempoEntrega"
 import Link from "next/link"
 import { brl } from "@/lib/precoExibicao"
 import { lerFavoritas, alternarFavorita } from "@/lib/favoritas"
@@ -19,7 +20,7 @@ export function LinhaLoja({ l }: { l: L }) {
         <b>{l.nome}</b>
         <span className="meta">
           {l.nota_media ? <><span className="estrela">★</span> {Number(l.nota_media).toFixed(1).replace(".", ",")} · </> : ""}{l.categoria} · {l.cidade || "Aragoiânia"}{" "}
-          {l.aberto ? `${l.tempo_min ?? 30}-${l.tempo_max ?? 50} min` : "Fechada agora"}
+          {l.aberto ? textoEntrega(l) : "Fechada agora"}
         </span>
       </span>
       <span role="button" tabIndex={0} className="fav" aria-label={fav ? "Tirar dos favoritos" : "Salvar nos favoritos"} aria-pressed={fav}

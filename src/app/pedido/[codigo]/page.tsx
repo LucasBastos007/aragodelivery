@@ -1,6 +1,7 @@
 "use client"
 
 import AjudaPagamentoWhats from "@/components/AjudaPagamentoWhats"
+import { DESLOCAMENTO_MIN } from "@/lib/tempoEntrega"
 import { useEffect, useRef, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
@@ -577,8 +578,10 @@ export default function AcompanhamentoPedido() {
   const temMoto   = !!motoboy && !retirada && ["indo_para_loja", "na_loja", "em_rota", "coletado"].includes(pedido.status)
   const codigoEntrega = ((pedido as any).telefone_cliente ?? "").replace(/\D/g, "").slice(-4)
   const criado    = new Date((pedido as any).criado_em ?? Date.now())
+  // Entrega: preparo da loja + deslocamento (lib/tempoEntrega). Retirada: só o preparo.
+  const somaDesloc = retirada ? 0 : DESLOCAMENTO_MIN
   const janela    = loja?.tempo_min && loja?.tempo_max
-    ? `${horaBrt(new Date(criado.getTime() + loja.tempo_min * 60000))} e ${horaBrt(new Date(criado.getTime() + loja.tempo_max * 60000))}` : null
+    ? `${horaBrt(new Date(criado.getTime() + (loja.tempo_min + somaDesloc) * 60000))} e ${horaBrt(new Date(criado.getTime() + (loja.tempo_max + somaDesloc) * 60000))}` : null
   const titulo    = cancelado ? "Pedido cancelado" : aguardandoPagamento ? "Falta pagar" : entregue ? etapas[4].tit : etapas[etapaRet].tit
   const zap       = (num: string, texto: string) => `https://wa.me/${num}?text=${encodeURIComponent(texto)}`
 

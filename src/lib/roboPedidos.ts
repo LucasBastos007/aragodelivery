@@ -4,6 +4,7 @@
 // item disponível, adicionais obrigatórios, preço, frete, criação do pedido, Pix) é feito aqui
 // pelas mesmas funções/rotas do app. O pedido só é criado depois do cliente confirmar o resumo.
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
+import { DESLOCAMENTO_MIN, entregaMin, entregaMax } from "@/lib/tempoEntrega"
 import { chaveBot, enviarTexto, zapi } from "@/lib/whatsSuporte"
 import { categoriaAtivaAgora, produtoDisponivelAgora } from "@/lib/sugestaoBebidas"
 import { precoAdicionais } from "@/lib/precoAdicionais"
@@ -146,7 +147,7 @@ async function executar(sb: SupabaseClient, cfg: Config, c: Conversa, nome: stri
       if (!id || !cfg.lojas.includes(id)) return { erro: "Escolha a loja primeiro." }
       const { data: l } = await sb.from("lojas").select("nome, descricao, logradouro, numero, bairro, cidade, tempo_min, tempo_max, valor_minimo, aceita_retirada, aceita_entrega, nota_media, total_avaliacoes").eq("id", id).maybeSingle()
       if (!l) return { erro: "Loja não encontrada." }
-      return { nome: l.nome, descricao: l.descricao, endereco_para_retirada: [l.logradouro && `${l.logradouro}${l.numero ? `, ${l.numero}` : ""}`, l.bairro, l.cidade].filter(Boolean).join(", "), tempo_entrega: l.tempo_min && l.tempo_max ? `${l.tempo_min} a ${l.tempo_max} minutos` : null, pedido_minimo: Number(l.valor_minimo) || 0, aceita_retirada: !!l.aceita_retirada, aceita_entrega: l.aceita_entrega !== false, nota: l.nota_media ? `${l.nota_media} (${l.total_avaliacoes} avaliações)` : null }
+      return { nome: l.nome, descricao: l.descricao, endereco_para_retirada: [l.logradouro && `${l.logradouro}${l.numero ? `, ${l.numero}` : ""}`, l.bairro, l.cidade].filter(Boolean).join(", "), tempo_entrega: l.tempo_min && l.tempo_max ? `${entregaMin(l)} a ${entregaMax(l)} minutos` : null, tempo_retirada: l.tempo_min && l.tempo_max ? `${l.tempo_min} a ${l.tempo_max} minutos` : null, pedido_minimo: Number(l.valor_minimo) || 0, aceita_retirada: !!l.aceita_retirada, aceita_entrega: l.aceita_entrega !== false, nota: l.nota_media ? `${l.nota_media} (${l.total_avaliacoes} avaliações)` : null }
     }
     case "mostrar_cardapio": {
       if (!c.loja_id) return { erro: "Escolha a loja primeiro." }
@@ -311,7 +312,8 @@ async function executar(sb: SupabaseClient, cfg: Config, c: Conversa, nome: stri
       const minDesde = (d: string | null) => d ? Math.round((agoraMs - new Date(d).getTime()) / 60000) : null
       return ps.map((p: any) => {
         const retirada = /retirada/i.test(p.endereco_entrega ?? "")
-        const tMin = Number(p.loja?.tempo_min) || 30, tMax = Number(p.loja?.tempo_max) || 45
+        const desloc = retirada ? 0 : DESLOCAMENTO_MIN
+        const tMin = (Number(p.loja?.tempo_min) || 30) + desloc, tMax = (Number(p.loja?.tempo_max) || 45) + desloc
         // Previsão: a gravada no pedido; senão, a partir de quando a loja aceitou (ou fez o pedido) + tempo médio da loja
         const base = p.aceito_em ?? p.criado_em
         const prevIni = p.previsao_entrega_em ? null : new Date(new Date(base).getTime() + tMin * 60000)
