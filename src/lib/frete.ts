@@ -173,8 +173,9 @@ export async function calcularTaxaEntregaCompleta(
   // Livia Jesus R$18). Só se aplica quando explicitamente cadastrado — null/ausente cai
   // no cálculo normal de sempre, comportamento 100% preservado pros demais clientes.
   let cidadeEntrega = params.cidade_entrega?.trim() ?? ""
+  let complementoCliente = ""
   if (params.cliente_id) {
-    const { data: clienteRow } = await sb.from("clientes").select("frete_fixo, endereco_cidade, endereco_cep").eq("id", params.cliente_id).maybeSingle()
+    const { data: clienteRow } = await sb.from("clientes").select("frete_fixo, endereco_cidade, endereco_cep, endereco_complemento").eq("id", params.cliente_id).maybeSingle()
     if (clienteRow?.frete_fixo != null) { if (detalhe) detalhe.fonte = "cliente"; return Math.max(0, Number(clienteRow.frete_fixo)) }
     // Cidade vazia = endereço do cadastro sem cidade e sem geocodificação (sem lat/lng) —
     // nesse caso nenhuma tabela casava e caía na taxa base da loja. Incidente real,
@@ -184,6 +185,7 @@ export async function calcularTaxaEntregaCompleta(
     if (!cidadeEntrega && params.lat_entrega == null) {
       cidadeEntrega = clienteRow?.endereco_cidade?.trim() || await cidadePorCep(clienteRow?.endereco_cep) || ""
     }
+    complementoCliente = clienteRow?.endereco_complemento ?? ""
   }
 
   const [{ data: tabelaFrete }, { data: lojaRow }] = await Promise.all([
@@ -203,6 +205,19 @@ export async function calcularTaxaEntregaCompleta(
   // que ela existe (estender pra outra cidade usando a tabela de bairro de lá), a cidade
   // principal continua servida pelo mecanismo de sempre (distância real ou município).
   // Loja de cidade única (sem extra distinta): comportamento antigo, bairro = própria cidade.
+  // Sem cidade e sem ponto no mapa (U3UXAT, 23/11/2026): cadastro com cidade vazia, "Oloana-GO" no
+  // complemento e CEP 75340-000 que o ViaCEP não conhece. Caía na taxa base (R$ 4) em vez dos R$ 40
+  // da tabela da loja pra Oloana. Procura o nome de um município da tabela no bairro e no complemento.
+  if (!cidadeEntrega && params.lat_entrega == null) {
+    const texto = ` ${normalizar(`${params.bairro_entrega ?? ""} ${complementoCliente}`).replace(/[^a-z0-9]+/g, " ")} `
+    const achado = filtrarPorTipo(tabelaFrete ?? [], "municipio")
+      .find(t => { const m = normalizar(t.municipio).replace(/[^a-z0-9]+/g, " ").trim(); return !!m && texto.includes(` ${m} `) })
+    if (achado) cidadeEntrega = achado.municipio
+  }
+  // Ainda sem cidade e sem ponto: não dá pra saber quanto cobrar. No checkout, pede o ponto no mapa.
+  if (!cidadeEntrega && params.lat_entrega == null && params.exigir_ponto_rural)
+    throw new PontoEntregaSuspeitoError(0, "Marque no mapa o local exato da entrega para calcular a taxa.")
+
   const cidadesAtendidas: string[] = lojaRow?.cidades_atendidas ?? []
   const cidadesExtras = cidadesAtendidas.filter((c: string) => !!c && !mesmaCidade(c, lojaRow?.cidade ?? ""))
   const cidadesBairroElegiveis: string[] = cidadesExtras.length > 0 ? cidadesExtras : [lojaRow?.cidade].filter((c): c is string => !!c)
