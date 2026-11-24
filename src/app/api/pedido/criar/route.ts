@@ -102,7 +102,8 @@ export async function POST(req: NextRequest) {
     const num = (partes.length > 1 ? partes[partes.length - 1] : "").toUpperCase().replace(/\s+/g, "")
     const rua = partes.length > 1 ? partes.slice(0, -1).join(",") : primeiro
     const numOk = num === "S/N" || num === "SN" || num === "S.N." || (/\d/.test(num) && !/^0+$/.test(num))
-    if (!/[A-Za-zÀ-ú]{3,}/.test(rua.replace(/^Nº/i, "")) || !numOk) {
+    // 2 letras bastam: rodovia vem do mapa como "GO-040" (cliente travado em 24/11)
+    if (!/[A-Za-zÀ-ú]{2,}/.test(rua.replace(/^Nº/i, "")) || !numOk) {
       return NextResponse.json({ error: "Endereço incompleto: informe rua, número (ou S/N), bairro e um ponto de referência." }, { status: 422 })
     }
   }

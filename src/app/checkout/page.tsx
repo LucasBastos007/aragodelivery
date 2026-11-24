@@ -136,6 +136,11 @@ function EnderecoMapa({ onResult, fallbackLat, fallbackLng }: {
   const [geocodando, setGeocodando] = useState(false)
   const [numero, setNumero]         = useState("")
   const [complemento, setComplemento] = useState("")
+  // Ponto de referência separado do complemento (Amanda, 24/11): vai junto no mesmo texto do pedido
+  const [referencia, setReferencia]   = useState("")
+  // Rua sempre editável (24/11): o mapa às vezes devolve só a rodovia ("GO-040") e o cliente mora
+  // numa avenida do lado. null = cliente não mexeu, vale o que o mapa achou.
+  const [ruaEditada, setRuaEditada]   = useState<string | null>(null)
   // Rua/bairro digitados pelo cliente quando o mapa não identifica (condomínio, zona rural,
   // rua nova). Pedido #5VKMCR (2026-10-06) saiu só com "00 — Condomínio" e o motoboy não achou.
   const [ruaManual, setRuaManual]       = useState("")
@@ -165,8 +170,9 @@ function EnderecoMapa({ onResult, fallbackLat, fallbackLng }: {
 
   // Notifica pai quando geo/numero/complemento mudam
   useEffect(() => {
-    if (geo) onResult({ ...geo, rua: geo.rua || ruaManual.trim(), bairro: geo.bairro || bairroManual.trim() }, numero, complemento)
-  }, [geo, numero, complemento, ruaManual, bairroManual])
+    const comp = [complemento.trim(), referencia.trim() ? `ref.: ${referencia.trim()}` : ""].filter(Boolean).join(", ")
+    if (geo) onResult({ ...geo, rua: (ruaEditada ?? geo.rua ?? "").trim() || ruaManual.trim(), bairro: geo.bairro || bairroManual.trim() }, numero, comp)
+  }, [geo, numero, complemento, referencia, ruaEditada, ruaManual, bairroManual])
 
   async function geocodePonto(lt: number, ln: number) {
     setGeocodando(true)
@@ -203,10 +209,13 @@ function EnderecoMapa({ onResult, fallbackLat, fallbackLng }: {
       </div>
       <p className="mut" style={{ fontSize: 12.5, textAlign: "center" }}>Arraste o pino ou toque no mapa pra ajustar o local</p>
 
-      {/* Rua / bairro — só aparecem quando o mapa não identificou */}
-      {geo && !geocodando && (!geo.rua || !geo.bairro) && (
-        <div style={{ display: "grid", gridTemplateColumns: !geo.rua && !geo.bairro ? "1fr 1fr" : "1fr", gap: 10 }}>
-          {!geo.rua && (
+      {/* Rua sempre aparece (já vem com o que o mapa achou, o cliente corrige); bairro só quando o mapa não achou */}
+      {geo && !geocodando && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+          {geo.rua ? (
+            <label className={`campo ${(ruaEditada ?? geo.rua).trim() ? "" : "falta"}`}><span>Rua *</span>
+              <input value={ruaEditada ?? geo.rua} onChange={e => setRuaEditada(e.target.value)} placeholder="Rua, avenida ou quadra" /></label>
+          ) : (
             <label className={`campo ${ruaManual.trim() ? "" : "falta"}`}><span>Rua *</span>
               <input value={ruaManual} onChange={e => setRuaManual(e.target.value)} placeholder="Rua, avenida ou quadra" /></label>
           )}
@@ -218,11 +227,13 @@ function EnderecoMapa({ onResult, fallbackLat, fallbackLng }: {
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10 }}>
-        <label className="campo"><span>Número *</span>
-          <input value={numero} onChange={e => setNumero(e.target.value)} placeholder="42 ou S/N" /></label>
-        <label className="campo"><span>Complemento ou referência *</span>
-          <input value={complemento} onChange={e => setComplemento(e.target.value)} placeholder="Qd 5 Lt 10, casa azul…" /></label>
+        <label className="campo"><span>Número</span>
+          <input value={numero} onChange={e => setNumero(e.target.value)} placeholder="Sem número? Deixe vazio" inputMode="text" /></label>
+        <label className="campo"><span>Complemento</span>
+          <input value={complemento} onChange={e => setComplemento(e.target.value)} placeholder="Qd 5 Lt 10, apto 2…" /></label>
       </div>
+      <label className={`campo ${referencia.trim().length >= 3 ? "" : "falta"}`}><span>Ponto de referência *</span>
+        <input value={referencia} onChange={e => setReferencia(e.target.value)} placeholder="Ex.: casa azul, perto da praça" /></label>
     </div>
   )
 }
@@ -231,14 +242,20 @@ function EnderecoMapa({ onResult, fallbackLat, fallbackLng }: {
  * número real (não "0"/"00"; "S/N" vale) e complemento/ponto de referência. Retorna a
  * mensagem de erro, ou null se estiver ok. */
 function erroEnderecoEntrega(rua: string, bairro: string, numero: string, complemento: string): string | null {
-  const n = numero.trim().toUpperCase().replace(/\s+/g, "")
   if (!rua.trim()) return "Informe o nome da rua do endereço de entrega"
   if (!bairro.trim()) return "Informe o bairro ou condomínio do endereço de entrega"
-  if (!n) return "Informe o número da sua casa/apto no campo Número (ou S/N se não tiver)"
-  const semNumero = n === "S/N" || n === "SN" || n === "S.N."
-  if (!semNumero && (!/\d/.test(n) || /^0+$/.test(n))) return "Número inválido — informe o número real da casa (ou S/N se não tiver)"
-  if (complemento.trim().length < 3) return "Informe o complemento ou um ponto de referência (ex: Qd 5 Lt 10, casa azul, perto da praça)"
+  if (numeroEntrega(numero) !== "S/N" && !/\d/.test(numero)) return "No campo Número vai só o número da casa. Se não tiver, deixe vazio"
+  if (complemento.trim().length < 3) return "Informe um ponto de referência (ex.: casa azul, perto da praça)"
   return null
+}
+
+/** Número da casa como vai no pedido: vazio, "0", "00" ou S/N viram "S/N" (Aragoiânia tem rua sem
+ * número; pedido da Amanda em 24/11 pra não obrigar a digitar S/N). */
+function numeroEntrega(numero: string): string {
+  const n = numero.trim()
+  const c = n.toUpperCase().replace(/\s+/g, "")
+  if (!c || /^0+$/.test(c) || c === "S/N" || c === "SN" || c === "S.N.") return "S/N"
+  return n
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────
@@ -716,13 +733,13 @@ export default function CheckoutPage() {
 
       if (geo && geo.lat !== 0) {
         enderecoFinal = [
-          [geo.rua, numero.trim()].filter(Boolean).join(", "),
+          [geo.rua, numeroEntrega(numero)].filter(Boolean).join(", "),
           comp.trim(),
           [geo.bairro, geo.cidade].filter(Boolean).join(", "),
         ].filter(Boolean).join(" — ")
       } else {
         enderecoFinal = [
-          [geo?.rua, numero.trim()].filter(Boolean).join(", "),
+          [geo?.rua, numeroEntrega(numero)].filter(Boolean).join(", "),
           comp.trim(),
           [geo?.bairro, geo?.cidade].filter(Boolean).join(", "),
         ].filter(Boolean).join(" — ")
