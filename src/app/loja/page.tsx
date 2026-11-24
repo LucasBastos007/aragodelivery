@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import { PEDIDO_PUB } from "@/lib/colunasPublicas"
 import { useAuth } from "@/lib/auth"
 import type { Pedido, StatusPedido, ItemPedido } from "@/types"
 import { statusOperacional, type StatusOperacional } from "@/lib/statusPedido"
@@ -429,7 +430,7 @@ export default function LojaDashboard() {
     const [{ data }, { data: historico }, { data: entregues }] = await Promise.all([
       supabase
         .from("pedidos")
-        .select("*, itens:itens_pedido(*), motoboy:motoboys(nome,telefone)")
+        .select(`${PEDIDO_PUB}, itens:itens_pedido(*), motoboy:motoboys(nome,telefone)`)
         .eq("loja_id", loja_id)
         .not("status", "in", '("aguardando_pagamento","entregue","cancelado")')
         .gte("criado_em", inicioHojeBrt)
@@ -444,7 +445,7 @@ export default function LojaDashboard() {
       // principal de propósito (ver comentário de AbaPedidos acima).
       supabase
         .from("pedidos")
-        .select("*, itens:itens_pedido(*), motoboy:motoboys(nome,telefone)")
+        .select(`${PEDIDO_PUB}, itens:itens_pedido(*), motoboy:motoboys(nome,telefone)`)
         .eq("loja_id", loja_id)
         .eq("status", "entregue")
         .gte("criado_em", inicioHojeBrt)

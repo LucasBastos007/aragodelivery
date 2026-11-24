@@ -5,6 +5,7 @@
 // pausar e excluir (/api/admin/cupons). Valores em reais com máscara.
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { ler } from "@/lib/ler"
 import { R } from "../_dinheiro"
 
 type Tipo = "percentual" | "fixo" | "frete_gratis" | "frete_percentual"
@@ -26,7 +27,7 @@ export default function CuponsPage() {
 
   async function load() {
     const [{ data: cs }, { data: ls }] = await Promise.all([
-      supabase.from("cupons").select("*, loja:lojas(nome)").order("criado_em", { ascending: false }),
+      ler("admin_cupons"),
       supabase.from("lojas").select("id, nome").eq("status", "ativo").order("nome"),
     ])
     setCupons((cs as Cupom[]) ?? []); setLojas(ls ?? [])

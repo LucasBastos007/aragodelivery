@@ -5,6 +5,7 @@
 // (/api/admin/ton-conferir: envia o extrato, cruza com os pedidos, nada é gravado).
 import { useRef, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { ler } from "@/lib/ler"
 import { R, dm } from "../_dinheiro"
 import { CorridaDinamica } from "../_CorridaDinamica"
 
@@ -30,8 +31,8 @@ export default function FerramentasPage() {
     setOcupado(qual)
     try {
       if (qual === "clientes") { const j = await fetch("/api/admin/clientes", { credentials: "include" }).then(r => r.json()); csv("chego-clientes.csv", [["Nome", "Telefone", "E-mail", "Bairro", "Cidade", "Pedidos", "Gastou", "Último pedido", "Cliente desde"], ...(j.clientes ?? []).map((c: any) => [c.nome, c.telefone, c.email, c.bairro, c.cidade, c.pedidos, String(c.gasto).replace(".", ","), c.ultimo ? new Date(c.ultimo).toLocaleDateString("pt-BR") : "", new Date(c.criado_em).toLocaleDateString("pt-BR")])]) }
-      if (qual === "lojas") { const { data } = await supabase.from("lojas").select("nome,status,categoria,telefone,email,plano,comissao,taxa_entrega,aberto,criado_em").order("nome"); csv("chego-lojas.csv", [["Loja", "Situação", "Categoria", "Telefone", "E-mail", "Plano", "Comissão %", "Taxa base", "Aberta agora", "Cadastro"], ...(data ?? []).map((l: any) => [l.nome, l.status, l.categoria, l.telefone, l.email, l.plano, l.comissao, String(l.taxa_entrega ?? "").replace(".", ","), l.aberto ? "sim" : "não", new Date(l.criado_em).toLocaleDateString("pt-BR")])]) }
-      if (qual === "motoboys") { const { data } = await supabase.from("motoboys").select("nome,status,telefone,email,veiculo,placa,disponivel,criado_em").order("nome"); csv("chego-motoboys.csv", [["Motoboy", "Situação", "Telefone", "E-mail", "Veículo", "Placa", "Online agora", "Cadastro"], ...(data ?? []).map((m: any) => [m.nome, m.status, m.telefone, m.email, m.veiculo, m.placa, m.disponivel ? "sim" : "não", new Date(m.criado_em).toLocaleDateString("pt-BR")])]) }
+      if (qual === "lojas") { const { data } = await ler("admin_lojas_csv"); csv("chego-lojas.csv", [["Loja", "Situação", "Categoria", "Telefone", "E-mail", "Plano", "Comissão %", "Taxa base", "Aberta agora", "Cadastro"], ...(data ?? []).map((l: any) => [l.nome, l.status, l.categoria, l.telefone, l.email, l.plano, l.comissao, String(l.taxa_entrega ?? "").replace(".", ","), l.aberto ? "sim" : "não", new Date(l.criado_em).toLocaleDateString("pt-BR")])]) }
+      if (qual === "motoboys") { const { data } = await ler("admin_motoboys_csv"); csv("chego-motoboys.csv", [["Motoboy", "Situação", "Telefone", "E-mail", "Veículo", "Placa", "Online agora", "Cadastro"], ...(data ?? []).map((m: any) => [m.nome, m.status, m.telefone, m.email, m.veiculo, m.placa, m.disponivel ? "sim" : "não", new Date(m.criado_em).toLocaleDateString("pt-BR")])]) }
     } finally { setOcupado(null) }
   }
   async function enviarTon(f?: File) {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { ler } from "@/lib/ler"
 import { useAuth } from "@/lib/auth"
 import { ganhoMotoboy as ganhoLiquido, ganhoMotoboyPedido } from "@/lib/comissao"
 
@@ -41,7 +42,7 @@ export default function MotoboyFinanceiroPage() {
   async function load() {
     if (!motoboy_id) return
 
-    const { data: mb } = await supabase.from("motoboys").select("*").eq("id", motoboy_id).single()
+    const { data: mb } = await ler("motoboy_eu")
     setMotoboy(mb)
     // pix_key pode ser JSON { pix, banco } ou string legada
     try {
@@ -65,9 +66,7 @@ export default function MotoboyFinanceiroPage() {
       supabase
         .from("entregas_avulsas").select("taxa_entrega, criado_em")
         .eq("motoboy_id", motoboy_id).eq("status", "entregue"),
-      supabase
-        .from("saldo_ajustes").select("valor")
-        .eq("motoboy_id", motoboy_id).eq("tipo", "motoboy").is("quitado_em", null),
+      ler<any[]>("motoboy_ajustes"),
     ])
     const pedList = ped ?? []
     setEntregas(pedList.slice(0, 30)); setTodasEntregas(pedList)
@@ -85,9 +84,7 @@ export default function MotoboyFinanceiroPage() {
       (ajustes ?? []).reduce((s, a) => s + Number(a.valor ?? 0), 0)
     setTotalGanhos(ganhos)
 
-    const { data: saq } = await supabase
-      .from("saques").select("*").eq("motoboy_id", motoboy_id).eq("tipo", "motoboy")
-      .order("criado_em", { ascending: false })
+    const { data: saq } = await ler<any[]>("motoboy_saques")
     setSaques(saq ?? [])
 
     const pagos      = (saq ?? []).filter(s => s.status === "pago").reduce((s, x) => s + x.valor, 0)

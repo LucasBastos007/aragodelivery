@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
+import { ler } from "@/lib/ler"
 import { gravarAdmin as gravarBruto } from "@/lib/adminGravar"
 import type { Motoboy, StatusMotoboy } from "@/types"
 
@@ -28,7 +29,7 @@ export default function MotoboysPage() {
   async function load() {
     const corte = `${ymdBrt(new Date(Date.now() - 6 * 86400000))}T03:00:00Z`
     const [{ data }, { data: ent }] = await Promise.all([
-      supabase.from("motoboys").select("*").order("criado_em", { ascending: false }),
+      ler("admin_motoboys"),
       supabase.from("pedidos").select("motoboy_id, taxa_entrega").eq("status", "entregue").not("motoboy_id", "is", null).gte("criado_em", corte).limit(5000),
     ])
     const s: Record<string, { n: number; v: number }> = {}

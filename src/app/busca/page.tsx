@@ -10,6 +10,7 @@ import { LinhaLoja } from "@/components/cliente/LinhaLoja"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
+import { LOJA_PUB } from "@/lib/colunasPublicas"
 import { MobileBottomNav } from "@/components/MobileBottomNav"
 import { HalloweenDecor } from "@/components/HalloweenDecor"
 import { precoExibicao, brl } from "@/lib/precoExibicao"
@@ -80,7 +81,7 @@ function BuscaContent() {
 
   useEffect(() => { inputRef.current?.focus() }, [])
   useEffect(() => {
-    supabase.from("lojas").select("*").eq("status", "ativo")
+    supabase.from("lojas").select(LOJA_PUB).eq("status", "ativo")
       .order("ordem_home", { ascending: true, nullsFirst: false })
       .order("destaque", { ascending: false }).order("aberto", { ascending: false }).order("nome")
       .then(({ data }) => setLojas(ultimaPorUltimo((data as Loja[]) ?? [])))

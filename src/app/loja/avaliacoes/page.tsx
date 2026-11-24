@@ -56,7 +56,7 @@ export default function LojaAvaliacoesPage() {
       const { data: pedidos } = await supabase.from("pedidos").select("id, codigo, cliente_id").in("id", pedidoIds)
       const clienteIds = [...new Set((pedidos ?? []).map((p: any) => p.cliente_id).filter(Boolean))]
       const { data: clientes } = clienteIds.length > 0
-        ? await supabase.from("clientes").select("id, nome").in("id", clienteIds)
+        ? await supabase.from("clientes_nomes" as any).select("id, nome").in("id", clienteIds)
         : { data: [] as any[] }
       const pedidoPorId = new Map((pedidos ?? []).map((p: any) => [p.id, p]))
       const nomePorClienteId = new Map((clientes ?? []).map((c: any) => [c.id, c.nome]))

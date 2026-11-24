@@ -8,6 +8,7 @@ import type React from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
+import { LOJA_PUB } from "@/lib/colunasPublicas"
 import { useCart } from "@/lib/cart"
 import { useClienteAuth } from "@/lib/auth-cliente"
 import { useIsMobileOuNulo } from "@/lib/use-mobile"
@@ -560,7 +561,7 @@ export default function Home() {
     if (typeof window !== "undefined" && !localStorage.getItem("arago_onboarded")) {
       router.replace("/onboarding"); return
     }
-    supabase.from("lojas").select("*").eq("status", "ativo")
+    supabase.from("lojas").select(LOJA_PUB).eq("status", "ativo")
       .order("ordem_home", { ascending: true, nullsFirst: false })
       .order("destaque", { ascending: false }).order("aberto", { ascending: false }).order("nome")
       .then(({ data }) => { setLojas(ultimaPorUltimo((data as Loja[]) ?? [])); setLoading(false) })

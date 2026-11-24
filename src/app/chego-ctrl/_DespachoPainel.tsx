@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from "react"
 import dynamic from "next/dynamic"
 import { supabase } from "@/lib/supabase"
+import { PEDIDO_PUB } from "@/lib/colunasPublicas"
 import { gravarAdmin } from "@/lib/adminGravar"
 import { km, situacaoMb, COR_MB } from "./_Mapa"
 
@@ -28,7 +29,7 @@ export default function DespachoPainel() {
 
   const load = useCallback(async () => {
     const [{ data: ped }, { data: moto }, { data: s }, { data: at }] = await Promise.all([
-      supabase.from("pedidos").select("*, loja:lojas(nome, endereco, lat, lng, logo_url), itens:itens_pedido(*)")
+      supabase.from("pedidos").select(`${PEDIDO_PUB}, loja:lojas(nome, endereco, lat, lng, logo_url), itens:itens_pedido(*)`)
         .eq("status", "pronto").is("motoboy_id", null)
         .not("endereco_entrega", "ilike", "%Retirada%") // retirada na loja nunca precisa de motoboy
         .order("criado_em", { ascending: true }),

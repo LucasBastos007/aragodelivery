@@ -9,6 +9,7 @@
 // que fica escondido em "Mais opções" pra não apagar pedido por engano.
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { PEDIDO_PUB } from "@/lib/colunasPublicas"
 import type { Pedido, StatusPedido } from "@/types"
 import { rotuloPagamento, temForma, ehDividido } from "@/lib/pagamentoDividido"
 
@@ -87,7 +88,7 @@ export default function PedidosPage() {
   async function load(per = periodo) {
     const { inicio, fim } = rangeDatas(per, ci, cf)
     const [{ data: ped }, { data: av }] = await Promise.all([
-      supabase.from("pedidos").select("*, loja:lojas(nome, telefone, logo_url), motoboy:motoboys(nome, telefone), itens:itens_pedido(*)")
+      supabase.from("pedidos").select(`${PEDIDO_PUB}, loja:lojas(nome, telefone, logo_url), motoboy:motoboys(nome, telefone), itens:itens_pedido(*)`)
         .gte("criado_em", inicio).lte("criado_em", fim).order("criado_em", { ascending: false }).limit(1000),
       supabase.from("entregas_avulsas").select("*").gte("criado_em", inicio).lte("criado_em", fim).order("criado_em", { ascending: false }).limit(1000),
     ])

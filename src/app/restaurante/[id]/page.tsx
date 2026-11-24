@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState, Suspense } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
+import { LOJA_PUB } from "@/lib/colunasPublicas"
 import { useCart } from "@/lib/cart"
 import { SacolaFlutuante } from "@/components/SacolaFlutuante"
 import { useClienteAuth } from "@/lib/auth-cliente"
@@ -274,7 +275,7 @@ function RestauranteConteudo() {
 
     async function load() {
       const [{ data: lojaData }, { data: catData }, { data: prodData }, { data: avalData }] = await Promise.all([
-        supabase.from("lojas").select("*").eq("id", id).single(),
+        supabase.from("lojas").select(LOJA_PUB).eq("id", id).single(),
         supabase.from("categorias_produto").select("*").eq("loja_id", id).order("ordem"),
         supabase.from("produtos").select("*").eq("loja_id", id).eq("disponivel", true).order("preco").order("nome"),
         supabase.from("avaliacoes").select("id, pedido_id, nota_loja, comentario, resposta_loja, criado_em")
@@ -295,7 +296,7 @@ function RestauranteConteudo() {
         const { data: pedidos } = await supabase.from("pedidos").select("id, cliente_id").in("id", pedidoIds)
         const clienteIds = [...new Set((pedidos ?? []).map((p: any) => p.cliente_id).filter(Boolean))]
         const { data: clientes } = clienteIds.length > 0
-          ? await supabase.from("clientes").select("id, nome").in("id", clienteIds)
+          ? await supabase.from("clientes_nomes" as any).select("id, nome").in("id", clienteIds)
           : { data: [] as any[] }
         if (!vivo) return
         const pedidoPorId = new Map((pedidos ?? []).map((p: any) => [p.id, p]))

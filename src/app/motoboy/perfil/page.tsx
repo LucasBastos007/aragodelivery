@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { ler } from "@/lib/ler"
 import { useAuth } from "@/lib/auth"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -32,7 +33,7 @@ export default function MotoboyPerfilPage() {
 
   useEffect(() => {
     if (!motoboy_id) return
-    supabase.from("motoboys").select("nome, email, telefone, cpf, pix_key, foto").eq("id", motoboy_id).single()
+    ler("motoboy_eu")
       .then(({ data }) => {
         if (data) {
           setForm({

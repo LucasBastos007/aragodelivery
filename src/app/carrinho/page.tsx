@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import { LOJA_PUB } from "@/lib/colunasPublicas"
 import { useCart } from "@/lib/cart"
 import { bebidasDoCardapio } from "@/lib/sugestaoBebidas"
 import { brl } from "@/lib/precoExibicao"
@@ -55,7 +56,7 @@ export default function CarrinhoPage() {
 
   useEffect(() => {
     if (!loja_id) return
-    supabase.from("lojas").select("*").eq("id", loja_id).single()
+    supabase.from("lojas").select(LOJA_PUB).eq("id", loja_id).single()
       .then(({ data }) => setLoja(data as Loja))
     Promise.all([
       supabase.from("categorias_produto").select("*").eq("loja_id", loja_id),

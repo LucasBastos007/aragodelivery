@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { ler } from "@/lib/ler"
 import { useAuth } from "@/lib/auth"
 
 type Tipo = "percentual" | "fixo" | "frete_gratis"
@@ -37,7 +38,7 @@ export default function LojaCuponsPage() {
 
   async function carregar() {
     setLoading(true)
-    const { data } = await supabase.from("cupons").select("*").eq("loja_id", loja_id).order("criado_em", { ascending: false })
+    const { data } = await ler("loja_cupons")
     setCupons((data as Cupom[]) ?? [])
     setLoading(false)
   }

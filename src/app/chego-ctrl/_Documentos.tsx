@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
+import { ler } from "@/lib/ler"
 
 const ST: Record<string, [string, string]> = { pendente: ["Esperando aprovação", "amarelo"], aprovado: ["Contrato enviado", "azul"], contrato_assinado: ["Contrato assinado", "roxo"], ativo: ["Ativo", "verde"], suspenso: ["Suspenso", "vermelho"] }
 const pix = (raw: unknown) => { if (!raw) return null; try { const o = JSON.parse(String(raw)); return [o.pix ?? o.chave, o.banco].filter(Boolean).join(", ") } catch { return String(raw) } }
@@ -14,7 +15,7 @@ export default function Documentos({ tipo }: { tipo: "loja" | "motoboy" }) {
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("id")
     if (!id) { setErro("Abra pela tela de " + (tipo === "loja" ? "Lojas" : "Motoboys") + "."); return }
-    supabase.from(tipo === "loja" ? "lojas" : "motoboys").select("*").eq("id", id).single().then(async ({ data }) => {
+    ler("admin_cadastro", { tipo, id }).then(async ({ data }) => {
       if (!data) { setErro("Cadastro não encontrado."); return }
       setX(data)
       const d: any = data

@@ -9,6 +9,7 @@ import { useClienteAuth } from "@/lib/auth-cliente"
 import { useCart } from "@/lib/cart"
 import { montarReordem } from "@/lib/reordenar"
 import { supabase } from "@/lib/supabase"
+import { PEDIDO_PUB } from "@/lib/colunasPublicas"
 import { brl } from "@/lib/precoExibicao"
 import { MobileBottomNav } from "@/components/MobileBottomNav"
 
@@ -49,7 +50,7 @@ export default function HistoricoPage() {
     setLoadingPedidos(true)
     supabase
       .from("pedidos")
-      .select("*, loja:lojas(id, nome, logo_url), itens:itens_pedido(*, produto:produtos(foto_url))")
+      .select(`${PEDIDO_PUB}, loja:lojas(id, nome, logo_url), itens:itens_pedido(*, produto:produtos(foto_url))`)
       .eq("cliente_id", user.id)
       .in("status", [...STATUS_ANDAMENTO, "entregue", "cancelado"])
       .order("criado_em", { ascending: false })

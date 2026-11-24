@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { DESLOCAMENTO_MIN } from "@/lib/tempoEntrega"
 import { supabase } from "@/lib/supabase"
+import { ler } from "@/lib/ler"
 import { useAuth } from "@/lib/auth"
 import { diaEMinutosAgoraBrt } from "@/lib/periodoBrt"
 import dynamic from "next/dynamic"
@@ -157,7 +158,7 @@ export default function PerfilPage() {
 
   useEffect(() => {
     if (!loja_id) return
-    supabase.from("lojas").select("*").eq("id", loja_id).single().then(({ data }) => {
+    ler("loja_perfil").then(({ data }) => {
       if (!data) return
       setAberto(data.aberto)
       setStatus(data.status)

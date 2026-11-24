@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import { supabase } from "@/lib/supabase"
+import { PEDIDO_PUB } from "@/lib/colunasPublicas"
 import Link from "next/link"
 import { useAuth } from "@/lib/auth"
 import { ganhoMotoboy, ganhoMotoboyPedido } from "@/lib/comissao"
@@ -831,7 +832,7 @@ export default function MotoboyPage() {
     url.searchParams.delete("pedido_id")
     window.history.replaceState({}, "", url.toString())
     supabase.from("pedidos")
-      .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
+      .select(`${PEDIDO_PUB}, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)`)
       .eq("id", pedidoId)
       .single()
       .then(({ data }) => {
@@ -920,7 +921,7 @@ export default function MotoboyPage() {
       const pedidoId = event.data.pedido_id
       if (!pedidoId || dismissedIdsRef.current.has(pedidoId)) return
       supabase.from("pedidos")
-        .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)")
+        .select(`${PEDIDO_PUB}, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)`)
         .eq("id", pedidoId)
         .single()
         .then(({ data }) => {
@@ -1021,12 +1022,12 @@ export default function MotoboyPage() {
         { data: ofertaData },
       ] = await Promise.all([
         supabase.from("pedidos")
-          .select("*, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng, cidade)")
+          .select(`${PEDIDO_PUB}, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng, cidade)`)
           .eq("status", "pronto").is("motoboy_id", null)
           .not("endereco_entrega", "ilike", "%Retirada%") // retirada na loja nunca precisa de motoboy
           .order("criado_em", { ascending: true }),
         supabase.from("pedidos")
-          .select("*, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng, cidade)")
+          .select(`${PEDIDO_PUB}, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng, cidade)`)
           .in("status", ["indo_para_loja", "na_loja", "em_rota", "coletado"])
           .eq("motoboy_id", motoboy_id)
           .order("criado_em", { ascending: true }),
@@ -1034,7 +1035,7 @@ export default function MotoboyPage() {
         // Inclui a corrida que o admin despachou direto pra ele (21/10/2026): antes só chegava pela
         // notificação; se ele fechasse e reabrisse o app, a oferta sumia.
         supabase.from("pedidos")
-          .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng, cidade), itens:itens_pedido(*)")
+          .select(`${PEDIDO_PUB}, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng, cidade), itens:itens_pedido(*)`)
           .eq("status", "aguardando_aceite").or(`motoboy_id.is.null,motoboy_id.eq.${motoboy_id}`)
           .limit(5),
       ])
@@ -1158,7 +1159,7 @@ export default function MotoboyPage() {
 
     // Verifica oferta pendente já existente ao entrar (broadcast: motoboy_id null)
     supabase.from("pedidos")
-      .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng, cidade), itens:itens_pedido(*)")
+      .select(`${PEDIDO_PUB}, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng, cidade), itens:itens_pedido(*)`)
       .or(`motoboy_id.is.null,motoboy_id.eq.${motoboy_id}`)
       .eq("status", "aguardando_aceite")
       .limit(5)
@@ -1186,7 +1187,7 @@ export default function MotoboyPage() {
         if (agoraMs - ultimaBusca < 20_000) return
         buscouOfertaRef.current.set(novo.id, agoraMs)
         supabase.from("pedidos")
-          .select("*, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng, cidade), itens:itens_pedido(*)")
+          .select(`${PEDIDO_PUB}, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng, cidade), itens:itens_pedido(*)`)
           .eq("id", novo.id).single()
           .then(({ data }) => {
             if (data && !dismissedIdsRef.current.has(data.id) && (data.motoboy_id === motoboy_id || dentroDoRaio(data))) {
@@ -1225,7 +1226,7 @@ export default function MotoboyPage() {
         if (novo?.motoboy_id !== null) return
         if (novo?.endereco_entrega?.toLowerCase?.().includes("retirada")) return
         supabase.from("pedidos")
-          .select("*, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng, cidade)")
+          .select(`${PEDIDO_PUB}, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng, cidade)`)
           .eq("id", novo.id).single()
           .then(({ data }) => {
             // Reconfirma no momento da busca — pode ter mudado de novo enquanto buscava

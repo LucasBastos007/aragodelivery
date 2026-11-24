@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
+import { ler } from "@/lib/ler"
 import { gravarAdmin as gravarBruto } from "@/lib/adminGravar"
 import type { Loja, StatusLoja, PlanoLoja } from "@/types"
 
@@ -45,7 +46,7 @@ export default function LojasPage() {
   }
 
   async function load() {
-    const { data } = await supabase.from("lojas").select("*").order("criado_em", { ascending: false })
+    const { data } = await ler("admin_lojas")
     setLojas(data ?? []); setCarregou(true)
   }
   useEffect(() => { load() }, [])

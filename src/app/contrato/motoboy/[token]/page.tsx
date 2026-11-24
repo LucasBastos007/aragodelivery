@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useParams } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import { ler } from "@/lib/ler"
 import type { Motoboy } from "@/types"
 
 export default function ContratoMotoboyPage() {
@@ -22,11 +23,7 @@ export default function ContratoMotoboyPage() {
 
   useEffect(() => {
     async function load() {
-      const { data, error } = await supabase
-        .from("motoboys")
-        .select("*")
-        .eq("contrato_token", token)
-        .single()
+      const { data, error } = await ler("contrato_motoboy", { token })
       if (error || !data) { setErro("Link inválido ou expirado."); setLoading(false); return }
       if (data.contrato_assinado) { setAssinado(true) }
       setMotoboy(data)

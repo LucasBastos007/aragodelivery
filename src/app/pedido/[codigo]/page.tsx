@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react"
 import { useParams } from "next/navigation"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
+import { MOTOBOY_PUB, PEDIDO_PUB } from "@/lib/colunasPublicas"
 import type { Pedido, StatusPedido } from "@/types"
 import { brl } from "@/lib/precoExibicao"
 import { partesPagamento, rotuloPagamento, temForma, valorDaForma, ehDividido } from "@/lib/pagamentoDividido"
@@ -356,7 +357,7 @@ export default function AcompanhamentoPedido() {
   async function load() {
     const { data: rows, error } = await supabase
       .from("pedidos")
-      .select("*, itens:itens_pedido(*), loja:lojas(nome, telefone, logo_url, tempo_min, tempo_max), motoboy:motoboys(*)")
+      .select(`${PEDIDO_PUB}, itens:itens_pedido(*), loja:lojas(nome, telefone, logo_url, tempo_min, tempo_max), motoboy:motoboys(${MOTOBOY_PUB})`)
       .eq("codigo", codigo.toUpperCase())
       .order("criado_em", { ascending: false })
       .limit(1)
@@ -365,7 +366,7 @@ export default function AcompanhamentoPedido() {
     if (!data) {
       const { data: rows2 } = await supabase
         .from("pedidos")
-        .select("*, itens:itens_pedido(*), loja:lojas(nome, telefone, logo_url, tempo_min, tempo_max)")
+        .select(`${PEDIDO_PUB}, itens:itens_pedido(*), loja:lojas(nome, telefone, logo_url, tempo_min, tempo_max)`)
         .eq("codigo", codigo.toUpperCase())
         .order("criado_em", { ascending: false })
         .limit(1)

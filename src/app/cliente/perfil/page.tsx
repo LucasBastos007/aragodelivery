@@ -7,6 +7,7 @@ import { useClienteAuth } from "@/lib/auth-cliente"
 import { useCart } from "@/lib/cart"
 import { montarReordem } from "@/lib/reordenar"
 import { supabase } from "@/lib/supabase"
+import { PEDIDO_PUB } from "@/lib/colunasPublicas"
 
 const inp: React.CSSProperties = {
   width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 14,
@@ -69,7 +70,7 @@ export default function ClientePerfilPage() {
     setLoadingPedidos(true)
     supabase
       .from("pedidos")
-      .select("*, loja:lojas(id, nome), itens:itens_pedido(*)")
+      .select(`${PEDIDO_PUB}, loja:lojas(id, nome), itens:itens_pedido(*)`)
       .eq("cliente_id", user.id)
       .order("criado_em", { ascending: false })
       .limit(20)
@@ -85,7 +86,7 @@ export default function ClientePerfilPage() {
         if (!codigo) { setLoadingPedidos(false); return }
         supabase
           .from("pedidos")
-          .select("*, loja:lojas(id, nome), itens:itens_pedido(*)")
+          .select(`${PEDIDO_PUB}, loja:lojas(id, nome), itens:itens_pedido(*)`)
           .ilike("codigo", `%${codigo}%`)
           .order("criado_em", { ascending: false })
           .limit(20)
