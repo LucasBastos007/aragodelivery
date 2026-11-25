@@ -5,7 +5,7 @@
 // adicionais que ainda existem (casando por id, ou por grupo+nome se a loja recriou o grupo)
 // e mesma chave de carrinho de restaurante/[id]/page.tsx::handleAddToCart. Item indisponível
 // ou que ficou sem escolha obrigatória NÃO entra — volta em `pendentes` pro cliente escolher.
-import { supabase } from "@/lib/supabase"
+import { produtosPorIds } from "@/lib/cardapio"
 import { precoAdicionais } from "@/lib/precoAdicionais"
 import type { CartItem } from "@/lib/cart"
 
@@ -18,9 +18,7 @@ export async function montarReordem(pedido: any): Promise<{ itens: Omit<CartItem
   const loja = pedido.loja
   const itensPedido: any[] = pedido.itens ?? []
   const ids = [...new Set(itensPedido.map(i => i.produto_id).filter(Boolean))]
-  const { data: produtos } = ids.length
-    ? await supabase.from("produtos").select("id, nome, preco, disponivel, adicionais").in("id", ids)
-    : { data: [] as any[] }
+  const produtos = await produtosPorIds(ids)
   const porId = new Map((produtos ?? []).map((p: any) => [p.id, p]))
 
   const itens: Omit<CartItem, "quantidade">[][] = []

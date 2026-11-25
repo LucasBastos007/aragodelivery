@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
+import { cardapioDaLoja } from "@/lib/cardapio"
 import { LOJA_PUB } from "@/lib/colunasPublicas"
 import { useCart } from "@/lib/cart"
 import { bebidasDoCardapio } from "@/lib/sugestaoBebidas"
@@ -58,10 +59,7 @@ export default function CarrinhoPage() {
     if (!loja_id) return
     supabase.from("lojas").select(LOJA_PUB).eq("id", loja_id).single()
       .then(({ data }) => setLoja(data as Loja))
-    Promise.all([
-      supabase.from("categorias_produto").select("*").eq("loja_id", loja_id),
-      supabase.from("produtos").select("*").eq("loja_id", loja_id).eq("disponivel", true),
-    ]).then(([c, p]) => setCardapio({ categorias: (c.data as CategoriaProduto[]) ?? [], produtos: (p.data as Produto[]) ?? [] }))
+    cardapioDaLoja(loja_id).then(({ categorias, produtos }) => setCardapio({ categorias: categorias as CategoriaProduto[], produtos: produtos as Produto[] }))
   }, [loja_id])
 
   const bebidas = useMemo(() => cardapio && bebidasDoCardapio(cardapio.categorias, cardapio.produtos), [cardapio])

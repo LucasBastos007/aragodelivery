@@ -27,6 +27,24 @@ const CONSULTAS: Record<string, Consulta> = {
     const s = requireLoja(req); if (!s) return unauthorized()
     return sb.from("cupons").select("*").eq("loja_id", s.loja_id).order("criado_em", { ascending: false })
   },
+  // Cardápio da própria loja, para a loja editar (inclui produtos pausados)
+  async loja_cardapio_edit(req) {
+    const s = requireLoja(req); if (!s) return unauthorized()
+    const [cat, prod] = await Promise.all([
+      sb.from("categorias_produto").select("*").eq("loja_id", s.loja_id).order("ordem"),
+      sb.from("produtos").select("*").eq("loja_id", s.loja_id).order("criado_em"),
+    ])
+    return { data: { categorias: cat.data ?? [], produtos: prod.data ?? [] }, error: cat.error || prod.error }
+  },
+  // Cardápio disponível da própria loja (entrega avulsa)
+  async loja_cardapio_disp(req) {
+    const s = requireLoja(req); if (!s) return unauthorized()
+    const [prod, cat] = await Promise.all([
+      sb.from("produtos").select("id, nome, preco, adicionais, categoria_id, ordem, foto_url").eq("loja_id", s.loja_id).eq("disponivel", true),
+      sb.from("categorias_produto").select("id, nome, ordem").eq("loja_id", s.loja_id),
+    ])
+    return { data: { produtos: prod.data ?? [], categorias: cat.data ?? [] }, error: prod.error || cat.error }
+  },
 
   // Motoboy logado
   async motoboy_eu(req) {

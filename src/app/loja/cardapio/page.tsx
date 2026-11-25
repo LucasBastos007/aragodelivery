@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { ler } from "@/lib/ler"
 import { useAuth } from "@/lib/auth"
 import type { Produto, CategoriaProduto, AdicionalProduto, GrupoAdicional } from "@/types"
 import { ncmParaFormulario, ncmAoSalvar } from "@/lib/ncmProduto"
@@ -81,12 +82,9 @@ export default function CardapioPage() {
 
   async function carregarTudo() {
     setLoading(true)
-    const [catRes, prodRes] = await Promise.all([
-      supabase.from("categorias_produto").select("*").eq("loja_id", lojaId).order("ordem"),
-      supabase.from("produtos").select("*").eq("loja_id", lojaId).order("criado_em"),
-    ])
-    setCategorias(catRes.data ?? [])
-    setProdutos(prodRes.data ?? [])
+    const { data } = await ler<{ categorias: any[]; produtos: any[] }>("loja_cardapio_edit")
+    setCategorias(data?.categorias ?? [])
+    setProdutos(data?.produtos ?? [])
     setLoading(false)
   }
 

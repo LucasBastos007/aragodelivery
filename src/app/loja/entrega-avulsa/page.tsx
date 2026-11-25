@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useAuth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
+import { ler } from "@/lib/ler"
 import type { EntregaAvulsa, Pedido } from "@/types"
 import { imprimirPedido } from "@/lib/impressao"
 import dynamic from "next/dynamic"
@@ -428,10 +429,8 @@ export default function EntregaAvulsaPage() {
 
   async function carregarCardapio() {
     if (!loja_id) return
-    const [{ data: prods }, { data: cats }] = await Promise.all([
-      supabase.from("produtos").select("id, nome, preco, adicionais, categoria_id, ordem, foto_url").eq("loja_id", loja_id).eq("disponivel", true),
-      supabase.from("categorias_produto").select("id, nome, ordem").eq("loja_id", loja_id),
-    ])
+    const { data: card } = await ler<{ produtos: any[]; categorias: any[] }>("loja_cardapio_disp")
+    const prods = card?.produtos ?? [], cats = card?.categorias ?? []
     const catPor = new Map((cats ?? []).map((c: any) => [c.id, c]))
     setCardapio((prods ?? [])
       .map((p: any) => ({ id: p.id, nome: p.nome, preco: Number(p.preco), adicionais: p.adicionais ?? [], foto: p.foto_url || null, categoria: (catPor.get(p.categoria_id) as any)?.nome ?? "Outros", _o: [(catPor.get(p.categoria_id) as any)?.ordem ?? 999, p.ordem ?? 999] }))

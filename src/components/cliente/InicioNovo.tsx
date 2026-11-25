@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { ehSempreUltima, ultimaPorUltimo } from "@/lib/ordemLojas"
 import { lerFavoritas, alternarFavorita } from "@/lib/favoritas"
 import Link from "next/link"
-import { supabase } from "@/lib/supabase"
+import { vitrineHome } from "@/lib/cardapio"
 import { precoExibicao, brl } from "@/lib/precoExibicao"
 import { maisPedidos } from "@/lib/maisPedidos"
 import type { Loja } from "@/types"
@@ -96,17 +96,9 @@ export default function InicioNovo({ lojas, loading, logado, endereco, onEnderec
     if (petiscaria && !ids.includes(petiscaria.id)) ids.push(petiscaria.id)
     if (!ids.length) { setProds([]); return }
     // Só os "Mais pedidos" de cada loja (pedido do Lucas, 20/10/2026): mesma regra da página da loja (lib/maisPedidos)
-    // O banco devolve no máximo 1000 linhas por vez: busca em páginas pra não cortar o cardápio de ninguém
-    const todosProdutos = async () => {
-      const out: Prod[] = []
-      for (let i = 0; i < 20000; i += 1000) {
-        const { data } = await supabase.from("produtos").select("id, loja_id, categoria_id, nome, descricao, preco, preco_antigo, ncm, ordem, foto_url, adicionais, dias_semana")
-          .in("loja_id", ids).eq("disponivel", true).order("preco").order("nome").order("id").range(i, i + 999)
-        out.push(...((data as Prod[]) ?? [])); if ((data ?? []).length < 1000) break
-      }
-      return out
-    }
-    Promise.all([todosProdutos(), supabase.from("categorias_produto").select("id, loja_id, nome").in("loja_id", ids)]).then(([todos, { data: cats }]) => {
+    // 25/11: o cardápio vem pela rota /api/cardapio (vitrine) em vez de ler o banco direto.
+    vitrineHome(ids).then(({ produtos, categorias: cats }) => {
+      const todos = (produtos as Prod[]) ?? []
       const porL = new Map<string, Prod[]>()
       for (const p of todos) { if (!porL.has(p.loja_id)) porL.set(p.loja_id, []); porL.get(p.loja_id)!.push(p) }
       const catL = (id: string) => ((cats as { id: string; loja_id: string; nome: string }[]) ?? []).filter(c => c.loja_id === id)

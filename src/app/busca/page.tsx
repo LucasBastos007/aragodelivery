@@ -10,6 +10,7 @@ import { LinhaLoja } from "@/components/cliente/LinhaLoja"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
+import { buscarProdutos, vitrineHome } from "@/lib/cardapio"
 import { LOJA_PUB } from "@/lib/colunasPublicas"
 import { MobileBottomNav } from "@/components/MobileBottomNav"
 import { HalloweenDecor } from "@/components/HalloweenDecor"
@@ -96,9 +97,7 @@ function BuscaContent() {
     const limpo = termo.replace(/[%,()*\\]/g, " ").trim()
     setBuscando(true)
     const t = setTimeout(() => {
-      supabase.from("produtos").select("id, loja_id, nome, descricao, preco, foto_url, adicionais")
-        .eq("disponivel", true).or(`nome.ilike.%${limpo}%,descricao.ilike.%${limpo}%`).limit(300)
-        .then(({ data }) => { setProds((data as Prod[]) ?? []); setBuscando(false) })
+      buscarProdutos(limpo).then((data) => { setProds((data as Prod[]) ?? []); setBuscando(false) })
     }, 250)
     return () => clearTimeout(t)
   }, [termo])
@@ -109,9 +108,7 @@ function BuscaContent() {
     if (!intencao || vitrine.length) return
     const ids = lojas.filter(l => l.aberto).map(l => l.id)
     if (!ids.length) return
-    supabase.from("produtos").select("id, loja_id, nome, descricao, preco, foto_url, adicionais")
-      .in("loja_id", ids).eq("disponivel", true).not("foto_url", "is", null).limit(1500)
-      .then(({ data }) => setVitrine((data as Prod[]) ?? []))
+    vitrineHome(ids).then(({ produtos }) => setVitrine(((produtos as Prod[]) ?? []).filter(p => p.foto_url)))
   }, [intencao, lojas, vitrine.length])
 
   // Foto de cada categoria (igual à proposta): um prato típico com foto, escolhido pelo nome;
@@ -119,10 +116,9 @@ function BuscaContent() {
   const [fotoGrupo, setFotoGrupo] = useState<Record<string, string>>({})
   useEffect(() => {
     if (!lojas.length || Object.keys(fotoGrupo).length) return
-    supabase.from("produtos").select("nome, foto_url, loja_id").in("loja_id", lojas.map(l => l.id))
-      .eq("disponivel", true).not("foto_url", "is", null).limit(3000)
-      .then(({ data }) => {
-        const ps = (data ?? []) as { nome: string; foto_url: string; loja_id: string }[]
+    vitrineHome(lojas.map(l => l.id))
+      .then(({ produtos }) => {
+        const ps = ((produtos ?? []) as any[]).filter(p => p.foto_url) as { nome: string; foto_url: string; loja_id: string }[]
         const catDe = new Map(lojas.map(l => [l.id, l.categoria]))
         const r: Record<string, string> = {}
         for (const g of GRUPOS) {

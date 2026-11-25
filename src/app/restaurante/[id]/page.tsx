@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState, Suspense } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
+import { cardapioDaLoja } from "@/lib/cardapio"
 import { LOJA_PUB } from "@/lib/colunasPublicas"
 import { useCart } from "@/lib/cart"
 import { SacolaFlutuante } from "@/components/SacolaFlutuante"
@@ -274,13 +275,13 @@ function RestauranteConteudo() {
     } catch {}
 
     async function load() {
-      const [{ data: lojaData }, { data: catData }, { data: prodData }, { data: avalData }] = await Promise.all([
+      const [{ data: lojaData }, cardapio, { data: avalData }] = await Promise.all([
         supabase.from("lojas").select(LOJA_PUB).eq("id", id).single(),
-        supabase.from("categorias_produto").select("*").eq("loja_id", id).order("ordem"),
-        supabase.from("produtos").select("*").eq("loja_id", id).eq("disponivel", true).order("preco").order("nome"),
+        cardapioDaLoja(id),
         supabase.from("avaliacoes").select("id, pedido_id, nota_loja, comentario, resposta_loja, criado_em")
           .eq("loja_id", id).not("comentario", "eq", "").order("criado_em", { ascending: false }).limit(15),
       ])
+      const catData = cardapio.categorias, prodData = cardapio.produtos
       if (!vivo) return
       setLoja(lojaData as Loja)
       setCategorias((catData as CategoriaProduto[]) ?? [])
