@@ -14,7 +14,8 @@ import { useCart } from "@/lib/cart"
 import { bebidasDoCardapio } from "@/lib/sugestaoBebidas"
 import { brl } from "@/lib/precoExibicao"
 import { descontoPromo } from "@/lib/promoChego"
-import { usePromoUsados } from "@/components/cliente/PrecoPromo"
+import { usePromoUsados, useBlackLojasCheias } from "@/components/cliente/PrecoPromo"
+import { descontoBlack, linhasBlackCarrinho, MSG_LIMITE_LOJA, MSG_PAODEMEL_MIN, blackAtiva, lojaBlack, itemBlack, PAODEMEL_MIN, chaveLojaBlack } from "@/lib/blackFriday"
 import { lerCupomSacola, gravarCupomSacola, limparCupomSacola, validarCupom, descricaoCupom, type CupomValido } from "@/lib/cupomSacola"
 import type { Loja, Produto, CategoriaProduto } from "@/types"
 
@@ -84,6 +85,15 @@ export default function CarrinhoPage() {
   // Promoção Chegô 10% na 1ª unidade de cada produto da promoção (lib/promoChego)
   const promoUsados = usePromoUsados()
   const promo = descontoPromo(items.map(i => ({ produto_id: i.produto_id ?? i.id, preco: i.preco, quantidade: i.quantidade })), promoUsados)
+  // Black Friday Chegô: 20% no preço base, não acumula com cupom (com cupom aplicado, mostra o aviso)
+  const blackCheias = useBlackLojasCheias()
+  const blackBruto = descontoBlack(linhasBlackCarrinho(items), blackCheias)
+  const blackComCupom = blackBruto.total > 0 && !!cupom
+  const black = blackComCupom ? { total: 0, porLinha: new Map() } : blackBruto
+  const lojaSacola = items[0]?.loja_id
+  const lojaNoLimite = blackAtiva() && !!lojaSacola && lojaBlack(lojaSacola) && blackCheias.has(chaveLojaBlack(lojaSacola))
+  const qtdPaoDeMel = items.filter(i => itemBlack(i.produto_id ?? i.id)?.grupo === "paodemel").reduce((s, i) => s + i.quantidade, 0)
+  const faltaPaoDeMel = blackAtiva() && !lojaNoLimite && qtdPaoDeMel > 0 && qtdPaoDeMel < PAODEMEL_MIN
 
   const topo = (
     <div className="topo branco">
@@ -123,6 +133,7 @@ export default function CarrinhoPage() {
           </div>
           {items.map((item, idx) => {
             const dPromo = promo.porLinha.get(idx) ?? 0
+            const dBlack = black.porLinha.get(idx)?.desc ?? 0
             const foto = fotoDe.get(item.produto_id ?? item.id)
             return (
               <div key={item.id} className="item-s">
@@ -131,7 +142,9 @@ export default function CarrinhoPage() {
                   <b>{item.nome}</b>
                   {item.adicionais && item.adicionais.length > 0 && <small>{item.adicionais.map(a => a.nome).join(", ")}</small>}
                   {item.observacao && <small>Obs.: {item.observacao}</small>}
-                  {dPromo > 0
+                  {dBlack > 0
+                    ? <span className="preco-promo black" style={{ marginTop: 6 }}><span className="selo-black">🖤 BLACK CHEGÔ</span><s>{brl(item.preco * item.quantidade)}</s><span className="preco">{brl(item.preco * item.quantidade - dBlack)}</span></span>
+                    : dPromo > 0
                     ? <span className="preco-promo" style={{ marginTop: 6 }}><s>{brl(item.preco * item.quantidade)}</s><em>{promo.relampago.has(idx) ? "⚡ Oferta relâmpago" : "🚨 Hora Maluca −10%"}</em><span className="preco">{brl(item.preco * item.quantidade - dPromo)}</span></span>
                     : <span className="preco" style={{ display: "block", marginTop: 6, fontSize: 14.5 }}>{brl(item.preco * item.quantidade)}</span>}
                   {dPromo > 0 && item.quantidade > 1 && <small>O desconto vale em 1 unidade.</small>}
@@ -189,14 +202,18 @@ export default function CarrinhoPage() {
           <div><span>Entrega</span><span className={entregaGratis ? "verde" : ""}>{freteCampanha ? "Grátis até 7 km" : entregaGratis ? "Grátis" : loja ? brl(taxaSacola) : "…"}</span></div>
           {freteCampanha && <p className="mut" style={{ fontSize: 12.5, marginTop: 2 }}>Aniversário de Aragoiânia: frete pago pelo Chegô para endereços a até 7 km da loja. Confirmamos pelo seu endereço ao finalizar.</p>}
           {descontoCupom > 0 && <div><span>Desconto</span><span className="verde">− {brl(descontoCupom)}</span></div>}
+          {lojaNoLimite && <p style={{ fontSize: 13, margin: "4px 0", fontWeight: 600 }}>{MSG_LIMITE_LOJA}</p>}
+          {faltaPaoDeMel && <p style={{ fontSize: 13, margin: "4px 0", fontWeight: 600 }}>🖤 {MSG_PAODEMEL_MIN} Faltam {PAODEMEL_MIN - qtdPaoDeMel} un.</p>}
+          {blackComCupom && <p style={{ fontSize: 13, margin: "4px 0", fontWeight: 700, color: "var(--pimenta)" }}>A Black Friday não vale junto com cupom. Tire o cupom para ganhar − {brl(blackBruto.total)}.</p>}
+          {black.total > 0 && <div><span>🖤 Black Friday Chegô</span><span className="verde">− {brl(black.total)}</span></div>}
           {promo.total > 0 && <div><span>Desconto promocional, custeado pelo Chegô</span><span className="verde">− {brl(promo.total)}</span></div>}
-          <div className="tot"><span>Total</span><span>{brl(totalSacolaFn(descontoCupom + promo.total))}</span></div>
+          <div className="tot"><span>Total</span><span>{brl(totalSacolaFn(descontoCupom + promo.total + black.total))}</span></div>
         </div>
         {falta > 0 && <p className="aviso-amarelo">Faltam {brl(falta)} pro pedido mínimo da loja ({brl(minimo)}).</p>}
       </div>
 
       <div className="rodape-fixo grudado">
-        <span><small className="mut">Total</small><br /><b className="preco" style={{ fontSize: 19 }}>{brl(totalSacolaFn(descontoCupom + promo.total))}</b></span>
+        <span><small className="mut">Total</small><br /><b className="preco" style={{ fontSize: 19 }}>{brl(totalSacolaFn(descontoCupom + promo.total + black.total))}</b></span>
         <button className="btn btn-p" disabled={falta > 0} onClick={() => router.push("/checkout")}>{falta > 0 ? `Faltam ${brl(falta)}` : "Continuar"}</button>
       </div>
 

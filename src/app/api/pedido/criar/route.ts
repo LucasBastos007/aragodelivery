@@ -19,6 +19,8 @@ import { jaFezPedido, bloqueioPrimeiroPedido, MSG_SO_PRIMEIRO } from "@/lib/prim
 import { chaveBot } from "@/lib/whatsSuporte"
 import { descontoPromo, promoAtiva, relampagoAtivo, PROMO_CODIGO, PROMO_MARCA_ID, PROMO_PRODUTOS, RELAMPAGO, ROTULO_CHEGO } from "@/lib/promoChego"
 import { promoUsados } from "@/lib/promoChegoServidor"
+import { blackAtiva, descontoBlack, itemBlack, BLACK_CODIGO, BLACK_MARCA_ID } from "@/lib/blackFriday"
+import { blackLojasCheias, blackSuspensa } from "@/lib/blackFridayServidor"
 
 // Teste do robô: loja fechada no app aceita pedido só quando vem do robô e está em robo_pedidos.abrir_no_whats
 async function abertaSoNoWhats(req: NextRequest, sb: ReturnType<typeof adminSb>, lojaId: string) {
@@ -251,6 +253,29 @@ export async function POST(req: NextRequest) {
     }, { status: 409 })
   }
 
+  // Black Friday Chegô (27/11 06h30–28/11 00h00): 20% off (Aline R$3 fixo no morango cravejado),
+  // só sobre o preço BASE do produto (nunca adicionais), split 10% Chegô + 10% loja, máx. 2 pedidos
+  // promocionais por cadastro POR LOJA. Loja já no limite → preço normal. Pão de Mel: a partir de 3 un.
+  const temBlack = blackAtiva() && items.some((i: any) => itemBlack(i.produto_id)) && !(await blackSuspensa(sb))
+  const lojasCheias = temBlack ? await blackLojasCheias(sb, cliente_id, telefone_cliente) : new Set<string>()
+  const black = temBlack
+    ? descontoBlack(items.map((item: any) => ({
+        produto_id: item.produto_id,
+        quantidade: Number(item.quantidade),
+        precoBase: Number(produtos.find((p: any) => p.id === item.produto_id)!.preco),
+      })), lojasCheias)
+    : { total: 0, porLinha: new Map<number, { desc: number; chego: number; loja: number; qtd: number; original: number }>() }
+  // App mostrou mais desconto do que o servidor dá (loja já no limite, ou a campanha acabou): não cobra
+  // diferente do que o cliente viu — devolve pro app atualizar o carrinho.
+  // Tolerância de R$ 0,50: diferença de centavos (preço mudou) segue com o valor do servidor; só
+  // barra quando o desconto de uma loja sumiu de verdade (limite de 2 pedidos ou fim da campanha).
+  if (body.desconto_black_visto != null && Number(body.desconto_black_visto) - black.total > 0.5) {
+    return NextResponse.json({
+      error: "Os preços da Black Friday mudaram (você já usou suas 2 compras promocionais nesta loja, ou a promoção acabou). Confira o novo total.",
+      black_desconto: black.total,
+    }, { status: 409 })
+  }
+
   // Grupo obrigatório (ex: "Escolha o sabor") sem escolha válida → recusa. Antes passava
   // calado e a loja recebia o item sem sabor (bug real 2026-10-09, pedido E92TBV, via
   // "Pedir de novo"; também pega carrinho antigo cujo grupo a loja recriou com ids novos).
@@ -427,6 +452,13 @@ export async function POST(req: NextRequest) {
   // Promoção Chegô soma no desconto (pago pela Chegô; a loja recebe pelo preço cheio)
   if (promo.total > 0) desconto = Math.min(subtotal, Math.round((desconto + promo.total) * 100) / 100)
 
+  // Black Friday não acumula com cupom nem com outra promoção (escopo 26/11). O desconto já traz o
+  // split (Chegô 10% / loja o resto) por item; aqui só entra no total do pedido.
+  if (black.total > 0) {
+    if (cupomId) return NextResponse.json({ error: "A Black Friday não vale junto com cupom. Tire o cupom para finalizar com os preços da Black Friday." }, { status: 422 })
+    desconto = Math.min(subtotal, Math.round(black.total * 100) / 100)
+  }
+
   // 5b. Corrida dinâmica (chuva): acréscimo fixo que o cliente paga e vai inteiro pro motoboy.
   // Fica fora de taxa_entrega pra todo o cálculo atual (piso, cupom, repasse) seguir igual.
   const taxa_dinamica = await acrescimoDinamico(sb, tipo_entrega)
@@ -473,7 +505,7 @@ export async function POST(req: NextRequest) {
     // Só manda a coluna quando há dinâmica: pedido normal fica idêntico ao de antes
     ...(taxa_dinamica > 0 ? { taxa_dinamica } : {}),
     desconto: Math.round(desconto * 100) / 100,
-    cupom_codigo: cupomId ? cupom_codigo?.toUpperCase().trim() : promo.total > 0 ? PROMO_CODIGO : null,
+    cupom_codigo: cupomId ? cupom_codigo?.toUpperCase().trim() : black.total > 0 ? BLACK_CODIGO : promo.total > 0 ? PROMO_CODIGO : null,
     total: Math.round(total * 100) / 100,
     endereco_entrega: endereco_entrega ?? "",
     lat_entrega: lat_entrega ?? null,
@@ -517,7 +549,13 @@ export async function POST(req: NextRequest) {
         preco:      Number(produto.preco),
         quantidade: Number(item.quantidade),
         observacao: item.observacao ?? "",
-        adicionais: promo.porLinha.has(idx)
+        adicionais: black.porLinha.has(idx)
+          ? [...(adicionaisPorItem.get(idx) ?? []), (() => {
+              const b = black.porLinha.get(idx)!
+              const brl = (v: number) => v.toFixed(2).replace(".", ",")
+              return { id: BLACK_MARCA_ID, nome: `Black Friday Chegô: ${b.qtd} un. com desconto (−R$ ${brl(b.desc)}) — custeio loja R$ ${brl(b.loja)}, Chegô R$ ${brl(b.chego)}`, preco: 0, campanha: "black_friday_2026", qtd: b.qtd, original: b.original, promocional: Math.round((b.original - b.desc) * 100) / 100, desconto_black: b.desc, custo_chego: b.chego, custo_loja: b.loja }
+            })()]
+          : promo.porLinha.has(idx)
           ? [...(adicionaisPorItem.get(idx) ?? []), promo.relampago.has(idx)
             ? { id: PROMO_MARCA_ID, campanha: "relampago", nome: `Oferta Relâmpago Chegô, 1 un.: ${ROTULO_CHEGO} (R$ ${promo.porLinha.get(idx)!.toFixed(2).replace(".", ",")})`, preco: 0, desconto_chego: promo.porLinha.get(idx) }
             : { id: PROMO_MARCA_ID, nome: `Promoção Chegô: 1 un. com 10% off (R$ ${promo.porLinha.get(idx)!.toFixed(2).replace(".", ",")} pago pela Chegô)`, preco: 0, desconto_chego: promo.porLinha.get(idx) }]

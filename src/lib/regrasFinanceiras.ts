@@ -28,6 +28,7 @@
 
 import { ganhoMotoboy } from "@/lib/comissao"
 import { PROMO_CODIGO } from "@/lib/promoChego"
+import { BLACK_CODIGO } from "@/lib/blackFriday"
 
 export const AVULSA_COMISSAO_DESDE = "2026-10-12T00:00:00-03:00"
 export const COMISSAO_AVULSA_PCT = 10
@@ -53,6 +54,10 @@ export type PedidoBase = {
   total: number | string
   desconto?: number | string | null
   cupom_codigo?: string | null
+  /** Black Friday Chegô (27/11/2026): parte do desconto paga pelo Chegô e pela loja, somada dos
+   *  itens marcados (anexarSplitBlack). Sem isso, pedido BLACKCHEGO divide meio a meio. */
+  black_custo_chego?: number | null
+  black_custo_loja?: number | null
   frete_gratis?: boolean | null
   frete_absorvido_por?: string | null
   endereco_entrega?: string | null
@@ -150,7 +155,14 @@ export function calcularPedido(p: PedidoBase, loja: LojaBase, cupom?: CupomBase 
   if (!cupom && String(p.cupom_codigo ?? "").toUpperCase() === PROMO_CODIGO) cupom = { codigo: PROMO_CODIGO, loja_id: null }
   let descontoFinanciador: CalculoPedido["descontoFinanciador"] = null
   let descontoLoja = 0, descontoChego = 0
-  if (desconto > 0) {
+  if (desconto > 0 && String(p.cupom_codigo ?? "").toUpperCase() === BLACK_CODIGO) {
+    // Black Friday: Chegô arca com 10% do original e a loja com o resto. Só a parte da loja sai
+    // do repasse ("Desconto 10% — Black Friday CHEGÔ"); a do Chegô entra em descontosChego.
+    const temSplit = p.black_custo_chego != null || p.black_custo_loja != null
+    const chego = temSplit ? Math.min(desconto, n(p.black_custo_chego)) : Math.floor((desconto / 2) * 100 + 1e-6) / 100
+    descontoFinanciador = "chego"; descontoChego = Math.round(chego * 100) / 100
+    descontoLoja = Math.round((desconto - descontoChego) * 100) / 100
+  } else if (desconto > 0) {
     if (cupom?.loja_id) { descontoFinanciador = "loja"; descontoLoja = desconto }
     else if (cupom) { descontoFinanciador = "chego"; descontoChego = desconto }
     else { descontoFinanciador = "nao_identificado"; descontoChego = desconto }

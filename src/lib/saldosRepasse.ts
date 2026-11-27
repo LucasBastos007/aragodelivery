@@ -2,6 +2,7 @@
 // (calcularDestinacoes), pra tela de Repasses, o pagamento e o fechamento nunca darem números diferentes.
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { calcularDestinacoes, DESTINACOES_DESDE } from "@/lib/destinacoesFinanceiras"
+import { anexarSplitBlack } from "@/lib/blackFridayServidor"
 
 const iniUtc = (ymd: string) => `${ymd}T03:00:00.000Z`
 const fimUtcExcl = (ymd: string) => { const d = new Date(`${ymd}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + 1); return `${d.toISOString().slice(0, 10)}T03:00:00.000Z` }
@@ -29,6 +30,7 @@ export async function destinacoesPeriodo(sb: SupabaseClient, de: string, ate: st
     ler(sb, "movimentos_financeiros", "id,tipo,valor,loja_id,motoboy_id,ocorrido_em,origem,cancelado_em", "ocorrido_em", de, ate),
     ler(sb, "saques", "id,tipo,loja_id,motoboy_id,valor,status,criado_em,pago_em"),
   ])
+  await anexarSplitBlack(sb, pedidos as any[]) // Black Friday: split Chegô/loja
   return calcularDestinacoes({ pedidos, avulsas, lojas, cupons, motoboys, movimentos, saques, mensalidades: [], inicio: de, fim: ate } as never)
 }
 

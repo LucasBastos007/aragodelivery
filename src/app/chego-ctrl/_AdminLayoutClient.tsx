@@ -52,6 +52,7 @@ const AREAS: [string, Item[]][] = [
   ["App do cliente", [
     { href: "/chego-ctrl/vitrine", ic: "vitrine", label: "Vitrine", frase: "O que o cliente vê primeiro: Famosos e Mais pedidos.", cor: COR.app },
     { href: "/chego-ctrl/cupons", ic: "cupom", label: "Cupons", frase: "Descontos ativos e quem banca cada um.", cor: COR.app },
+    { href: "/chego-ctrl/black-friday", ic: "cupom", label: "Black Friday", frase: "Pedidos, custo do Chegô e das lojas, e botão de suspender.", cor: COR.app },
     { href: "/chego-ctrl/acessos", ic: "saude", label: "Acessos", frase: "Quantas pessoas entram no app, quantas criam conta e quantas pedem.", cor: COR.app },
     { href: "/chego-ctrl/notificacoes", ic: "sino", label: "Notificações", frase: "Mandar aviso no celular dos clientes, lojas ou motoboys.", cor: COR.app },
   ]],

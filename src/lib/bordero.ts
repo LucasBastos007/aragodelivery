@@ -14,9 +14,9 @@ const r2 = (v: number) => Math.round(v * 100) / 100
 const FORMA: Record<string, string> = { pix: "Pix", cartao: "Cartão", dinheiro: "Dinheiro", maquininha: "Maquininha", pix_loja: "Pix na loja" }
 const forma = (a: string, b?: string | null) => [a, b].filter(Boolean).map(x => FORMA[x!] ?? x).join(" + ")
 
-export type LinhaBorderoLoja = { codigo: string; dia: string; hora: string; forma: string; itens: string; frete: number; alerta: string | null; produtos: number; cupom: number; comissao: number; taxas: number; entrega: number; balcao: number; liquido: number }
+export type LinhaBorderoLoja = { codigo: string; dia: string; hora: string; forma: string; itens: string; frete: number; alerta: string | null; produtos: number; cupom: number; black?: number; comissao: number; taxas: number; entrega: number; balcao: number; liquido: number }
 export type BorderoLoja = { tipo: "loja"; id: string; nome: string; periodo_ini: string; periodo_fim: string; paga: string
-  linhas: LinhaBorderoLoja[]; alertas: number; frete: number; produtos: number; cupom: number; comissao: number; taxas: number; entrega: number; balcao: number; avulsas: number; qtdAvulsas: number; ajustes: number; ajustesLista: { valor: number; motivo: string; dia: string }[]; adiantado: number; valor: number; saldo: number }
+  linhas: LinhaBorderoLoja[]; alertas: number; frete: number; produtos: number; cupom: number; black?: number; rotuloBlack?: string; comissao: number; taxas: number; entrega: number; balcao: number; avulsas: number; qtdAvulsas: number; ajustes: number; ajustesLista: { valor: number; motivo: string; dia: string }[]; adiantado: number; valor: number; saldo: number }
 export type LinhaBorderoMb = { codigo: string; dia: string; loja: string; ganho: number; avulsa: boolean }
 export type BorderoMb = { tipo: "motoboy"; id: string; nome: string; periodo_ini: string; periodo_fim: string
   linhas: LinhaBorderoMb[]; ganho: number; bonus: number; descontos: number; pago: number; compensado: number; reservado: number; valor: number }
@@ -51,9 +51,9 @@ export async function borderoLoja(sb: SupabaseClient, lojaId: string, c: Ciclo):
   }
   const linhas = r.linhas.map(l => ({ codigo: l.codigo, dia: l.dia, hora: new Date(l.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }), forma: forma(l.forma, l.forma_2), itens: l.itens.map(i => `${i.quantidade}x ${i.nome}`).join(", "),
     frete: r2(Number(ped.get(l.id)?.taxa_entrega ?? 0)), alerta: alerta(l.id, l.produtos),
-    produtos: l.produtos, cupom: l.cupomLoja, comissao: l.comissao, taxas: r2(l.taxaOnline + l.taxaMaquininha), entrega: l.participacaoEntrega, balcao: l.recebidoPelaLoja, liquido: l.liquido }))
+    produtos: l.produtos, cupom: l.cupomLoja, black: l.blackLoja ?? 0, comissao: l.comissao, taxas: r2(l.taxaOnline + l.taxaMaquininha), entrega: l.participacaoEntrega, balcao: l.recebidoPelaLoja, liquido: l.liquido }))
   return { tipo: "loja", id: lojaId, nome: (loja as any)?.nome ?? "Loja", periodo_ini: r.ciclo.ini, periodo_fim: c.fim, paga: c.paga, linhas,
-    alertas: linhas.filter(l => l.alerta).length, frete: r2(linhas.reduce((t, l) => t + l.frete, 0)), produtos: r.produtos, cupom: r.cupomLoja, comissao: r.comissao, taxas: r2(r.taxaOnline + r.taxaMaquininha), entrega: r.participacaoEntrega, balcao: r.recebidoPelaLoja,
+    alertas: linhas.filter(l => l.alerta).length, frete: r2(linhas.reduce((t, l) => t + l.frete, 0)), produtos: r.produtos, cupom: r.cupomLoja, black: r.blackLoja ?? 0, rotuloBlack: r.rotuloBlack, comissao: r.comissao, taxas: r2(r.taxaOnline + r.taxaMaquininha), entrega: r.participacaoEntrega, balcao: r.recebidoPelaLoja,
     avulsas: r.avulsas, qtdAvulsas: r.qtdAvulsas, ajustes: r.ajustes, ajustesLista: r.ajustesLista, adiantado: ad.total, valor: Math.max(0, r2(r.liquido - ad.total)), saldo: r2(r.liquido - ad.total) }
 }
 

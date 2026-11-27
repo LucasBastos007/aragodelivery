@@ -6,6 +6,7 @@ import { useEffect, useState } from "react"
 import { brl } from "@/lib/precoExibicao"
 import { supabase } from "@/lib/supabase"
 import { comPromo, emPromo, emRelampago, pctRelampago, promoAtiva, relampagoAtivo, PROMO_SELO, PROMO_VIRADAS, RELAMPAGO, RELAMPAGO_FIM, RELAMPAGO_INICIO, RODADAS } from "@/lib/promoChego"
+import { blackAtiva, chaveLojaBlack, comBlack, itemBlack, marcarBlackSuspensa, pctBlack, uuidLoja, BLACK_SELO, BLACK_VIRADAS } from "@/lib/blackFriday"
 
 /** Re-renderiza na virada da campanha (início e fim) pra o selo aparecer e sumir sozinho. */
 export function usePromoAtiva(): boolean {
@@ -62,9 +63,73 @@ export function usePromoUsados(): string[] {
   return u
 }
 
+// ——— Black Friday Chegô (lib/blackFriday) ———
+/** Re-renderiza na virada da Black Friday (06h30 liga, 00h00 desliga). */
+const viradaBlackOuvintes = new Set<() => void>()
+export function useBlackVirada(): string {
+  const [v, setV] = useState(() => (blackAtiva() ? "1" : "0"))
+  // Suspensão emergencial chega por /api/black/usados: todo componente com selo re-renderiza
+  useEffect(() => { const f = () => setV(`s.${Date.now()}`); viradaBlackOuvintes.add(f); if (blackAtiva()) buscarCheias(); return () => { viradaBlackOuvintes.delete(f) } }, [])
+  useEffect(() => {
+    const agora = Date.now()
+    const proxima = BLACK_VIRADAS.map(t => new Date(t).getTime()).filter(t => t > agora).sort((a, b) => a - b)[0]
+    if (proxima == null || proxima - agora > 2 ** 31 - 1) return
+    const id = setTimeout(() => setV(`${blackAtiva() ? 1 : 0}.${Date.now()}`), proxima - agora + 500)
+    return () => clearTimeout(id)
+  }, [v])
+  return v
+}
+// Lojas em que o cliente logado já bateu o limite de 2 pedidos (/api/black/usados). Uma consulta por
+// carregamento, compartilhada; sem login fica vazio (o servidor ainda trava por telefone no checkout).
+let cheiasCache: string[] = []
+let cheiasPromessa: Promise<string[]> | null = null
+const ouvintesBlack = new Set<(c: string[]) => void>()
+function buscarCheias(forcar = false): Promise<string[]> {
+  if (cheiasPromessa && !forcar) return cheiasPromessa
+  cheiasPromessa = supabase.auth.getSession()
+    .then(({ data }) => {
+      const tk = data.session?.access_token
+      if (!blackAtiva()) return []
+      // Sempre consulta (mesmo sem login): traz a suspensão emergencial; com login, as lojas no limite
+      return fetch("/api/black/usados", { headers: tk ? { Authorization: `Bearer ${tk}` } : {}, cache: "no-store" })
+        .then(r => r.ok ? r.json() : { cheias: [] })
+        .then(j => { if (j?.suspensa) { marcarBlackSuspensa(true); viradaBlackOuvintes.forEach(f => f()) } return Array.isArray(j?.cheias) ? j.cheias as string[] : [] })
+    })
+    .catch(() => [] as string[])
+    .then(c => { cheiasCache = c; ouvintesBlack.forEach(f => f(c)); return c })
+  return cheiasPromessa
+}
+/** Chamar depois de um pedido BF, pra a tela já mostrar o preço normal se bateu o limite. */
+export function recarregarBlackCheias() { return buscarCheias(true) }
+export function useBlackLojasCheias(): Set<string> {
+  const [c, setC] = useState<string[]>(cheiasCache)
+  const virada = useBlackVirada()
+  useEffect(() => { if (blackAtiva()) buscarCheias(true) }, [virada])
+  useEffect(() => {
+    ouvintesBlack.add(setC)
+    buscarCheias().then(setC)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => { buscarCheias(true) })
+    return () => { ouvintesBlack.delete(setC); subscription.unsubscribe() }
+  }, [])
+  return new Set(c)
+}
+
 export function PrecoPromo({ produtoId, valor, aPartir, normal }: { produtoId: string; valor: number; aPartir?: boolean; normal: React.ReactNode }) {
   usePromoAtiva()
   const usados = usePromoUsados()
+  useBlackVirada()
+  const cheias = useBlackLojasCheias()
+  const black = itemBlack(produtoId)
+  if (black && blackAtiva() && valor > 0 && !cheias.has(chaveLojaBlack(uuidLoja(black)))) {
+    return (
+      <span className="preco-promo black">
+        <span className="selo-black">🖤 {BLACK_SELO} · {pctBlack(black, valor)}% OFF</span>
+        <s>{brl(valor)}</s>
+        <span className="preco">{aPartir && <small>a partir de </small>}{brl(comBlack(black, valor))}</span>
+        {black.grupo === "paodemel" && <small className="regra">promoção a partir de 3 un. (pode misturar os sabores)</small>}
+      </span>
+    )
+  }
   if (emRelampago(produtoId, Date.now(), usados) && valor > 0) {
     // Oferta Relâmpago: preço fixo da oferta (mais o que a opção escolhida somar ao preço base)
     const promo = Math.max(0, valor - (RELAMPAGO[produtoId].original - RELAMPAGO[produtoId].promo))

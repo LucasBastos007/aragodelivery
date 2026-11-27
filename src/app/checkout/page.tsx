@@ -1,7 +1,8 @@
 "use client"
 
 import { descontoPromo, PROMO_PRODUTOS } from "@/lib/promoChego"
-import { usePromoUsados, recarregarPromoUsados } from "@/components/cliente/PrecoPromo"
+import { usePromoUsados, recarregarPromoUsados, useBlackLojasCheias, recarregarBlackCheias } from "@/components/cliente/PrecoPromo"
+import { descontoBlack, linhasBlackCarrinho } from "@/lib/blackFriday"
 import AjudaPagamentoWhats from "@/components/AjudaPagamentoWhats"
 import { useEffect, useRef, useState } from "react"
 import { lerCupomSacola, limparCupomSacola, validarCupom, descricaoCupom, idDispositivo } from "@/lib/cupomSacola"
@@ -274,6 +275,8 @@ export default function CheckoutPage() {
   const [trocoPara, setTrocoPara]       = useState("")
   const [tipoMaquininha, setTipoMaquininha] = useState<"credito" | "debito">("credito")
   const promoUsadosConta = usePromoUsados()
+  // Black Friday: lojas em que a conta já usou as 2 compras promocionais (preço normal nelas)
+  const blackCheias = useBlackLojasCheias()
   const [usadosPromo, setUsadosPromo] = useState<string[]>([])
   useEffect(() => { setUsadosPromo(u => Array.from(new Set([...u, ...promoUsadosConta]))) }, [promoUsadosConta])
   // Pagamento em 2 formas (20/10/2026): 1ª forma = `pagamento`, com o valor digitado; o resto
@@ -573,7 +576,12 @@ export default function CheckoutPage() {
   // Promoção Chegô 10% (lib/promoChego): o servidor confere e devolve 409 se o cadastro já usou
   const promo       = descontoPromo(items.map(i => ({ produto_id: i.produto_id ?? i.id, preco: i.preco, quantidade: i.quantidade })), usadosPromo)
   const descPromo   = Math.min(promo.total, Math.max(0, subtotal - desconto))
-  const totalFinal  = Math.max(0, subtotal - desconto - descPromo) + taxa + dinamica
+  // Black Friday Chegô (lib/blackFriday): 20% só no preço base, não acumula com cupom. O servidor
+  // confere e devolve 409 se a loja bateu o limite de 2 pedidos ou a campanha acabou.
+  const black       = descontoBlack(linhasBlackCarrinho(items), blackCheias)
+  const blackComCupom = black.total > 0 && !!cupomValido
+  const descBlack   = blackComCupom ? 0 : Math.min(black.total, Math.max(0, subtotal - desconto - descPromo))
+  const totalFinal  = Math.max(0, subtotal - desconto - descPromo - descBlack) + taxa + dinamica
   const divide      = dividir && !!pagamento2 && pagamento !== "google_pay"
   const valor1      = divide ? Number(valor1Txt.replace(/\./g, "").replace(",", ".")) || 0 : totalFinal
   const valor2      = divide ? Math.round((totalFinal - valor1) * 100) / 100 : 0
@@ -804,6 +812,7 @@ export default function CheckoutPage() {
         troco_para:       trocoParaEnviar,
         cupom_codigo:     cupomValido?.codigo ?? null,
         desconto_promo_visto: descPromo,
+        desconto_black_visto: descBlack,
         nome_cliente:     nome.trim() || null,
         telefone_cliente: telefone.trim() || null,
         email_cliente:    user?.email ?? null,
@@ -814,6 +823,8 @@ export default function CheckoutPage() {
 
     if (criarRes.error || !criarRes.pedido_id) {
       // Promoção Chegô: cadastro já usou ou a campanha acabou; recalcula o total na tela
+      // Black Friday: loja bateu o limite ou a campanha acabou; recarrega e recalcula na tela
+      if (criarRes.black_desconto != null) recarregarBlackCheias()
       if (Array.isArray(criarRes.promo_usados)) setUsadosPromo(Number(criarRes.promo_desconto) === 0 ? Object.keys(PROMO_PRODUTOS) : criarRes.promo_usados)
       // Ponto de entrega incoerente ou zona rural sem ponto: abre o mapa pra marcar (2026-10-28)
       if (typeof criarRes.error === "string" && criarRes.error.includes("marque no mapa") && tipoEntrega === "entrega") setEditandoEndereco(true)
@@ -824,6 +835,7 @@ export default function CheckoutPage() {
 
     const { pedido_id: pedidoIdNovo, codigo, total: totalServidor, cliente_push_token } = criarRes
     if (Number(criarRes.desconto_promo ?? descPromo) > 0) recarregarPromoUsados()
+    if (descBlack > 0) recarregarBlackCheias()
     const pedido = { id: pedidoIdNovo }
     if (cliente_push_token) localStorage.setItem(`arago_tkn_${codigo}`, cliente_push_token)
 
@@ -1387,6 +1399,9 @@ export default function CheckoutPage() {
           {freteCampanha && !naLoja && !taxaCalculando && <p className="verde" style={{ fontSize: 13, marginTop: 2 }}>Frete grátis no aniversário de Aragoiânia, pago pelo Chegô.</p>}
           {dinamica > 0 && !taxaCalculando && <div><span>Corrida dinâmica (chuva)</span><span>+ {brl(dinamica)}</span></div>}
           {desconto > 0 && <div><span>Desconto ({cupomValido?.codigo})</span><span className="verde">− {brl(desconto)}</span></div>}
+          {descBlack > 0 && <div><span>🖤 BLACK FRIDAY CHEGÔ</span><span className="verde">− {brl(descBlack)}</span></div>}
+          {descBlack > 0 && <p className="verde" style={{ fontSize: 13, marginTop: 4 }}>Você economiza {brl(descBlack)} com a Black Friday. Desconto só no preço dos produtos (adicionais e entrega pelo valor normal).</p>}
+          {blackComCupom && <p style={{ fontSize: 13, marginTop: 4, color: "var(--pimenta)", fontWeight: 700 }}>A Black Friday não vale junto com cupom. Tire o cupom para pagar com os preços da Black Friday (− {brl(black.total)}).</p>}
           {descPromo > 0 && <div><span>DESCONTO PROMOCIONAL — CUSTEADO PELO CHEGÔ</span><span className="verde">− {brl(descPromo)}</span></div>}
           {descPromo > 0 && <p className="verde" style={{ fontSize: 13, marginTop: 4 }}>Você economiza {brl(descPromo)} nesse pedido. O desconto vale em 1 unidade de cada produto da promoção e é pago pelo Chegô, não pela loja.</p>}
           {cupomValido && desconto === 0 && <p className="verde" style={{ fontSize: 13, marginTop: 4 }}>Cupom {cupomValido.codigo}: {descricaoCupom(cupomValido, brl)}</p>}

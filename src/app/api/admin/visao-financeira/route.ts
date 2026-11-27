@@ -4,6 +4,7 @@ import {createClient} from '@supabase/supabase-js'
 import {requireAdmin,unauthorized} from '@/lib/session'
 import {diaBrt,limitesPeriodo,resumirFinanceiro,type LinhaFinanceira,type LojaGestao,type MovimentoGestao} from '@/lib/financeiroGestao'
 import {calcularDestinacoes,type MensalidadeRecebida} from '@/lib/destinacoesFinanceiras'
+import { anexarSplitBlack } from "@/lib/blackFridayServidor"
 
 // Mensalidades: cobranças pagas no Asaas por clientes que são LOJAS (nunca pedidos).
 // Cache de 10 min por período — a tela atualiza a cada minuto.
@@ -45,6 +46,7 @@ export async function GET(req:NextRequest){
   let mensAsaas:MensalidadeRecebida[]=[],mensErro:string|null=null
   try{mensAsaas=await mensalidadesAsaas(lojas,inicio,fim)}catch(e){mensErro=(e as Error).message}
   const mensTabela=(mensalidades as (MovimentoGestao&{loja_id?:string})[]).filter(m=>m.status==='pago'&&m.pago_em&&diaBrt(m.pago_em)>=inicio&&diaBrt(m.pago_em)<=fim).map(m=>({loja:lojas.find(l=>l.id===m.loja_id)?.nome??'—',valor:Number(m.valor??0),liquido:Number(m.valor??0),data:diaBrt(m.pago_em!),origem:'Cadastro'}))
+  await anexarSplitBlack(sb, pedidos as any[]) // Black Friday: split Chegô/loja
   const destinacoes=calcularDestinacoes({pedidos:pedidos as never,avulsas:avulsas as never,lojas,cupons,motoboys,movimentos:(movs??[]) as never,saques:saques as never,mensalidades:[...mensAsaas,...mensTabela.filter(t=>!mensAsaas.some(m=>m.loja===t.loja&&Math.abs(m.valor-t.valor)<0.01&&m.data===t.data))],mensalidadesErro:mensErro,inicio,fim})
   return NextResponse.json({...resumirFinanceiro(pedidos,avulsas,lojas,mensalidades,saques,reembolsos,inicio,fim),destinacoes,caixa,atualizadoEm:new Date().toISOString()},{headers:{'Cache-Control':'private, no-store'}})
  }catch(e){console.error('[visao-financeira]',(e as Error).message);return NextResponse.json({error:'Não foi possível conferir todos os dados financeiros. Tente atualizar novamente.'},{status:503})}

@@ -7,6 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { calcularPedido, type CupomBase, type LojaBase, type PedidoBase } from "@/lib/regrasFinanceiras"
 import { iniUtc, fimUtc, ymdBrt, INICIO_REPASSES } from "@/lib/repasseLoja"
 import { saldoMotoboys } from "@/lib/saldosRepasse"
+import { anexarSplitBlack } from "@/lib/blackFridayServidor"
 
 // Quanto o Asaas e a maquininha cobram do Chegô. ESTIMATIVA: confirmar com o Lucas e trocar aqui.
 // Pix: Asaas cobra R$ 1,99 fixo (o desconto de R$ 0,99 acabou em 09/09/2026); Mercado Pago 0,99%
@@ -40,6 +41,7 @@ export async function linhasCarteira(sb: SupabaseClient, de: string, ate: string
     if (error) throw error
     peds.push(...(data ?? [])); if ((data ?? []).length < 1000) break
   }
+  await anexarSplitBlack(sb, peds) // Black Friday: split Chegô/loja
   const [{ data: lojas }, { data: cupons }] = await Promise.all([sb.from("lojas").select("id,nome,comissao,participacao_entrega"), sb.from("cupons").select("codigo,loja_id")])
   const L = new Map<string, LojaBase>((lojas ?? []).map((l: any) => [l.id, l]))
   const C = new Map<string, CupomBase>((cupons ?? []).map((c: any) => [String(c.codigo).toUpperCase(), c]))

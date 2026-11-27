@@ -9,6 +9,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 import { buscarPagamentoMp, ehIdMp } from "@/lib/mercadopago"
 import { calcularPedido, type CalculoPedido, type CupomBase, type LojaBase, type PedidoBase } from "@/lib/regrasFinanceiras"
+import { anexarSplitBlack } from "@/lib/blackFridayServidor"
 
 const TZ = "America/Sao_Paulo"
 const DIA_MS = 86400000
@@ -168,6 +169,9 @@ export async function calcularFechamento(dataYmd: string, opts: { persistir?: bo
   const C = new Map<string, CupomBase>(cuponsArr.map(c => [String(c.codigo).toUpperCase(), c]))
   const nomeLoja = (id: string | null) => (id && L.get(id)?.nome) || "—"
   const nomeMb = (id: string | null) => (id && M.get(id)?.nome) || "—"
+
+  // Black Friday: split Chegô/loja de cada pedido BLACKCHEGO (lido dos itens) pro borderô
+  await anexarSplitBlack(sb, pedidosAll as any[])
 
   // ── Asaas: cobranças dos pedidos (taxa real e status) ──
   const pedidosDia = pedidosAll.filter(p => p.criado_em >= iniDia)

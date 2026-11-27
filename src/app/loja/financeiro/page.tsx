@@ -9,10 +9,10 @@
 import { useEffect, useMemo, useState } from "react"
 import { Ico } from "../_icones"
 
-type Linha = { id: string; codigo: string; criado_em: string; dia: string; forma: string; forma_2: string | null; produtos: number; cupomLoja: number; comissao: number
+type Linha = { id: string; codigo: string; criado_em: string; dia: string; forma: string; forma_2: string | null; produtos: number; cupomLoja: number; blackLoja?: number; comissao: number
   taxaOnline: number; taxaMaquininha: number; participacaoEntrega: number; recebidoPelaLoja: number; liquido: number; itens: { nome: string; quantidade: number; preco: number }[] }
 type Resumo = { ciclo: { ini: string; fim: string; paga: string }; pedidos: number; produtos: number; vendasApp: number; vendasEntrega: number; recebidoPelaLoja: number
-  comissao: number; taxaOnline: number; taxaMaquininha: number; cupomLoja: number; participacaoEntrega: number; liquido: number; porDia: { dia: string; produtos: number; pedidos: number }[]; linhas: Linha[] }
+  comissao: number; taxaOnline: number; taxaMaquininha: number; cupomLoja: number; blackLoja?: number; rotuloBlack?: string; participacaoEntrega: number; liquido: number; porDia: { dia: string; produtos: number; pedidos: number }[]; linhas: Linha[] }
 type Repasse = { ciclo: Resumo["ciclo"]; atual: boolean; adiantado: number; aReceber: number; podeAdiantar: boolean; anterior: Resumo["ciclo"] | null; resumo: Resumo; pagoCiclo: any; pagos: { id: string; comprovante: boolean; pelo_asaas: boolean; valor: number; ocorrido_em: string; motivo: string }[] }
 // Borderô que o Chegô mandou conferir antes do repasse (20/10/2026)
 type Bordero = { id: string; status: string; valor: number; qtd: number; periodo_ini: string; periodo_fim: string; enviado_em: string; respondido_em: string | null; resposta: string | null; pago_em: string | null
@@ -137,7 +137,7 @@ function AbaResumo({ rep, abre, setAbre, onAdiantar }: { rep: Repasse; abre: str
             {linhaAbre("comissao", "Comissão do Chegô", "Sobre os produtos, pelo seu plano", "− " + R(r.comissao), grupos.comissao, "comissao", "menos")}
             {linhaAbre("online", "Taxa de pagamento online", "Pix R$ 1,00 e cartão 1,99% + R$ 0,49 por pedido", "− " + R(r.taxaOnline), grupos.online, "taxa", "menos")}
             {linhaAbre("maq", "Taxa da maquininha", "Crédito e débito na entrega, 3,08%", "− " + R(r.taxaMaquininha), grupos.maq, "maq", "menos")}
-            {linhaAbre("cupom", "Cupons da loja", "Desconto que a loja dá no pedido", "− " + R(r.cupomLoja), grupos.cupom, "cupom", "menos")}
+            {linhaAbre("cupom", (r.blackLoja ?? 0) > 0 ? "Cupons e Black Friday" : "Cupons da loja", (r.blackLoja ?? 0) > 0 ? `Inclui ${r.rotuloBlack ?? "Desconto 10% — Black Friday CHEGÔ"}: − ${R(r.blackLoja ?? 0)}` : "Desconto que a loja dá no pedido", "− " + R(r.cupomLoja), grupos.cupom, "cupom", "menos")}
             {r.participacaoEntrega > 0 && linhaAbre("part", "Participação na entrega", "Combinado da loja por entrega", "− " + R(r.participacaoEntrega), grupos.part, "part", "menos")}
             {((r as any).ajustesLista ?? []).map((x: any) => linha(x.valor < 0 ? "Desconto do Chegô" : "Crédito do Chegô", x.motivo, (x.valor < 0 ? "− " : "+ ") + R(Math.abs(x.valor)), x.valor < 0 ? "menos" : ""))}
             {rep.adiantado > 0 && linha("Adiantamento de terça", "Já pago, com taxa de R$ 5,00", "− " + R(rep.adiantado), "menos")}
@@ -205,7 +205,7 @@ function AbaVendas() {
                     <div className="dia-peds">{linhasDia.map(l => (
                       <div key={l.id} className="dia-ped"><div className="lin"><b>#{l.codigo}</b><span className="t12 mut">{hora(l.criado_em)}, {forma(l)}</span><b className="num" style={{ marginLeft: "auto" }}>{R(l.produtos)}</b></div>
                         <div className="t14">{l.itens.map((i, k) => <div key={k}>{i.quantidade}× {i.nome}</div>)}</div>
-                        {l.cupomLoja > 0 && <div className="t12" style={{ color: "var(--pimenta-esc)" }}>Cupom da loja: − {R(l.cupomLoja)}</div>}</div>
+                        {l.cupomLoja > 0 && <div className="t12" style={{ color: "var(--pimenta-esc)" }}>{(l.blackLoja ?? 0) > 0 ? (r.rotuloBlack ?? "Desconto 10% — Black Friday CHEGÔ") : "Cupom da loja"}: − {R(l.cupomLoja)}</div>}</div>
                     ))}</div></div>
                   <div><div className="t14" style={{ fontWeight: 800, margin: "10px 0 6px" }}>Produtos vendidos</div>
                     <ul className="dia-prods">{Object.entries(qtd).sort((a, b) => b[1] - a[1]).map(([n, q]) => <li key={n}><span>{n}</span><b className="num">{q}</b></li>)}</ul></div>

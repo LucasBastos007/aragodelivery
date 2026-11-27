@@ -11,6 +11,8 @@
 // - Repasses pagos ficam em movimentos_financeiros (tipo "repasse"), com o ciclo no externo_id.
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { calcularPedido, type CupomBase, type LojaBase, type PedidoBase } from "@/lib/regrasFinanceiras"
+import { anexarSplitBlack } from "@/lib/blackFridayServidor"
+import { BLACK_CODIGO, rotuloBorderoBlack } from "@/lib/blackFriday"
 
 export const INICIO_REPASSES = "2026-10-16"
 export const AJUSTES_NO_REPASSE_DESDE = "2026-10-30"
@@ -43,12 +45,14 @@ export const chaveCiclo = (lojaId: string, c: Ciclo) => `repasse_ciclo:${lojaId}
 export type LinhaRepasse = {
   id: string; codigo: string; criado_em: string; dia: string; forma: string; forma_2: string | null
   produtos: number; cupomLoja: number; comissao: number; taxaOnline: number; taxaMaquininha: number
+  /** Parte do cupomLoja que é a participação da loja na Black Friday (só informativo; já está em cupomLoja) */
+  blackLoja?: number
   participacaoEntrega: number; recebidoPelaLoja: number; liquido: number; itens: { nome: string; quantidade: number; preco: number }[]
 }
 export type ResumoRepasse = {
   ciclo: Ciclo; pedidos: number; avulsas: number; qtdAvulsas: number; produtos: number
   vendasApp: number; vendasEntrega: number; recebidoPelaLoja: number
-  comissao: number; taxaOnline: number; taxaMaquininha: number; cupomLoja: number; participacaoEntrega: number
+  comissao: number; taxaOnline: number; taxaMaquininha: number; cupomLoja: number; blackLoja?: number; rotuloBlack?: string; participacaoEntrega: number
   ajustes: number; ajustesLista: { valor: number; motivo: string; dia: string }[]
   liquido: number; porDia: { dia: string; produtos: number; pedidos: number }[]; linhas: LinhaRepasse[]
 }
@@ -75,6 +79,7 @@ export async function calcularRepasse(sb: SupabaseClient, lojaId: string, ciclo:
     todosPedidos(),
     sb.from("cupons").select("codigo,loja_id"),
   ])
+  await anexarSplitBlack(sb, peds as any[]) // Black Friday: só a parte da loja sai do repasse
   const C = new Map<string, CupomBase>((cupons ?? []).map((c: any) => [String(c.codigo).toUpperCase(), c]))
   const L: LojaBase = (loja as any) ?? { id: lojaId, nome: "", comissao: 0 }
 
@@ -89,17 +94,19 @@ export async function calcularRepasse(sb: SupabaseClient, lojaId: string, ciclo:
 
   // Totais somados SEM arredondar pedido a pedido e arredondados só no fim, igual ao fechamento
   // diário (destinacoesFinanceiras). Assim o valor pago bate no centavo com o fechamento.
-  const bruto: Record<string, number> = { produtos: 0, cupomLoja: 0, comissao: 0, taxaOnline: 0, taxaMaquininha: 0, participacaoEntrega: 0, recebidoPelaLoja: 0, liquido: 0, vendasApp: 0 }
+  const bruto: Record<string, number> = { produtos: 0, cupomLoja: 0, blackLoja: 0, comissao: 0, taxaOnline: 0, taxaMaquininha: 0, participacaoEntrega: 0, recebidoPelaLoja: 0, liquido: 0, vendasApp: 0 }
   const online = (f: string | null) => f === "pix" || f === "cartao"
   const linhas: LinhaRepasse[] = (peds ?? []).map((p: any) => {
     const c = calcularPedido(p as PedidoBase, L, p.cupom_codigo ? C.get(String(p.cupom_codigo).toUpperCase()) ?? null : null)
     const taxaMaq = c.partes.filter(x => x.forma === "maquininha").reduce((s, x) => s + x.taxa, 0)
+    const ehBlack = String(p.cupom_codigo ?? "").toUpperCase() === BLACK_CODIGO
+    if (ehBlack) bruto.blackLoja += c.descontoLoja
     bruto.produtos += c.produtos; bruto.cupomLoja += c.descontoLoja; bruto.comissao += c.comissao; bruto.taxaOnline += c.taxaPagamento - taxaMaq; bruto.taxaMaquininha += taxaMaq
     bruto.participacaoEntrega += c.participacaoEntrega; bruto.recebidoPelaLoja += c.recebidoPelaLoja; bruto.liquido += c.liquidoLoja
     if (online(p.forma_pagamento) && !p.forma_pagamento_2) bruto.vendasApp += c.produtos
     return {
       id: p.id, codigo: p.codigo, criado_em: p.criado_em, dia: ymdBrt(new Date(p.criado_em)), forma: p.forma_pagamento, forma_2: p.forma_pagamento_2 ?? null,
-      produtos: r2(c.produtos), cupomLoja: r2(c.descontoLoja), comissao: r2(c.comissao), taxaOnline: r2(c.taxaPagamento - taxaMaq), taxaMaquininha: r2(taxaMaq),
+      produtos: r2(c.produtos), cupomLoja: r2(c.descontoLoja), blackLoja: ehBlack ? r2(c.descontoLoja) : 0, comissao: r2(c.comissao), taxaOnline: r2(c.taxaPagamento - taxaMaq), taxaMaquininha: r2(taxaMaq),
       participacaoEntrega: r2(c.participacaoEntrega), recebidoPelaLoja: r2(c.recebidoPelaLoja), liquido: r2(c.liquidoLoja), itens: itensPor.get(p.id) ?? [],
     }
   })
@@ -125,7 +132,7 @@ export async function calcularRepasse(sb: SupabaseClient, lojaId: string, ciclo:
     ciclo, pedidos: linhas.length, produtos, avulsas, qtdAvulsas: (avs ?? []).length,
     vendasApp, vendasEntrega: r2(produtos - vendasApp - recebido), recebidoPelaLoja: recebido,
     comissao: soma("comissao"), taxaOnline: soma("taxaOnline"), taxaMaquininha: soma("taxaMaquininha"),
-    cupomLoja: soma("cupomLoja"), participacaoEntrega: soma("participacaoEntrega"), ajustes, ajustesLista,
+    cupomLoja: soma("cupomLoja"), blackLoja: soma("blackLoja"), rotuloBlack: rotuloBorderoBlack(lojaId), participacaoEntrega: soma("participacaoEntrega"), ajustes, ajustesLista,
     liquido: r2(bruto.liquido - avulsas + ajustes), porDia: [...porDiaMap.values()], linhas,
   }
 }
