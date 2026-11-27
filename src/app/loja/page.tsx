@@ -432,7 +432,7 @@ export default function LojaDashboard() {
     const [{ data: data0 }, { data: historico }, { data: entregues0 }] = await Promise.all([
       supabase
         .from("pedidos")
-        .select(`${PEDIDO_PUB}, itens:itens_pedido(*), motoboy:motoboys(nome,telefone)`)
+        .select(`${PEDIDO_PUB}, itens:itens_pedido(*), motoboy:motoboys(nome)`)
         .eq("loja_id", loja_id)
         .not("status", "in", '("aguardando_pagamento","entregue","cancelado")')
         .gte("criado_em", inicioHojeBrt)
@@ -442,7 +442,7 @@ export default function LojaDashboard() {
       // principal de propósito (ver comentário de AbaPedidos acima).
       supabase
         .from("pedidos")
-        .select(`${PEDIDO_PUB}, itens:itens_pedido(*), motoboy:motoboys(nome,telefone)`)
+        .select(`${PEDIDO_PUB}, itens:itens_pedido(*), motoboy:motoboys(nome)`)
         .eq("loja_id", loja_id)
         .eq("status", "entregue")
         .gte("criado_em", inicioHojeBrt)
