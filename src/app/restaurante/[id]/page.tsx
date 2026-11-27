@@ -5,7 +5,7 @@
 // (lib/precoAdicionais) e o que vai pra sacola (handleAddToCart/handleSimpleAdd) são os mesmos.
 import { PrecoPromo, usePromoAtiva, usePromoUsados, usePromoVirada, useBlackVirada, useBlackLojasCheias } from "@/components/cliente/PrecoPromo"
 import { blackAtiva, itemBlack, lojaBlack, chaveLojaBlack, MSG_LIMITE_LOJA } from "@/lib/blackFriday"
-import { SeloBlack } from "@/components/cliente/BlackChego"
+import { LogoComSelo } from "@/components/cliente/BlackChego"
 import { entregaMin, entregaMax } from "@/lib/tempoEntrega"
 import { emPromo, emRelampago, descontoPromo, fimTexto, PROMO_TITULO } from "@/lib/promoChego"
 import { freteGratisAtivo, lojaComPonto } from "@/lib/freteGratisCampanha"
@@ -552,9 +552,9 @@ function RestauranteConteudo() {
       </div>
 
       <div className="loja-cab">
-        {loja.logo_url ? <img className="logo" src={loja.logo_url} alt="" /> : <span className="logo" />}
+        <LogoComSelo black={blackAtiva() && lojaBlack(loja.id)} tam={26}>{loja.logo_url ? <img className="logo" src={loja.logo_url} alt="" /> : <span className="logo" />}</LogoComSelo>
         <div className="nome">
-          <h1 className="h1" style={{ fontSize: 26 }}>{loja.nome}{blackAtiva() && lojaBlack(loja.id) && <SeloBlack tam={22} />}</h1>
+          <h1 className="h1" style={{ fontSize: 26 }}>{loja.nome}</h1>
           <BlackAvisoLoja lojaId={loja.id} />
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, flexWrap: "wrap" }}>
             <span className={`selo ${loja.aberto ? "aberto" : "fechado"}`}>{loja.aberto ? "● Aberta" : "Fechada agora"}</span>

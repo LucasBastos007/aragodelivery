@@ -605,3 +605,28 @@
 .cn .bk-loja img{width:100%;height:100%;object-fit:cover;display:block}
 @media (min-width:768px){.cn .bk-loja{width:54px;height:54px}}
 @media (prefers-reduced-motion:reduce){.cn .bk-luz{animation:none;display:none}.cn .bk-trilho{animation:none}.cn .bk-fila{overflow-x:auto}}
+/* Black (27/11): selo no canto da logo, faixa no lugar dos Famosos, selo menor no "Mais pedidos" */
+.cn .logo-wrap{position:relative;display:inline-block;flex-shrink:0;line-height:0}
+.cn .logo-wrap>.selo-black-ver{position:absolute;top:-2px;right:-3px;margin:0;z-index:1;background:#fff;border-radius:50%;padding:1px}
+.cn .loja-cab .logo-wrap{margin-top:-40px}.cn .loja-cab .logo-wrap .logo{margin-top:0}
+.cn .loja-cab .logo-wrap>.selo-black-ver{top:-6px;right:-8px}
+.cn .bk-faixa{position:relative;overflow:hidden;isolation:isolate;margin:18px 16px 0;padding:12px 0 10px;border-radius:18px;color:#fff;
+  background:radial-gradient(120% 120% at 100% 0%,#123A8F 0%,rgba(18,58,143,0) 55%),linear-gradient(160deg,#16161A 0%,#050506 65%,#000 100%);
+  box-shadow:0 0 0 1px rgba(30,102,245,.55) inset,0 10px 26px rgba(5,10,30,.35),0 0 20px rgba(30,102,245,.18)}
+.cn .bk-faixa-topo{position:relative;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 14px 10px}
+.cn .bk-faixa-tit{display:flex;align-items:center;gap:4px;font-size:15px;font-weight:900;letter-spacing:.02em;white-space:nowrap}
+.cn .bk-faixa-tit span{color:#5B93FF;margin-left:4px}
+.cn .bk-faixa .bk-fila{padding:0}
+.cn .bk-faixa .bk-trilho{gap:14px}
+.cn .bk-fam{flex:none;width:74px;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#E6ECF8;text-align:center;line-height:1.2}
+.cn .bk-fam img{width:66px;height:66px;border-radius:50%;object-fit:cover;background:#fff;box-shadow:0 0 0 2px #0A0A0A,0 0 0 3.5px #1E66F5,0 6px 14px rgba(0,0,0,.55)}
+.cn .dest .preco-promo .selo-black{font-size:9px;letter-spacing:.02em;padding:2px 6px;max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.cn .bk-faixa .bk-tempo{white-space:nowrap;flex:none;padding:4px 8px}
+.cn .bk-faixa-tit{font-size:14px;min-width:0}
+/* etiqueta 20% OFF no canto da logo (no lugar do selo) */
+.cn .logo-wrap>.off-black{position:absolute;top:-6px;right:-10px;z-index:1;padding:2px 5px;border-radius:7px;
+  background:linear-gradient(160deg,#1B1B1F,#000);color:#fff;font-size:9.5px;font-weight:900;letter-spacing:.01em;line-height:1.1;white-space:nowrap;
+  box-shadow:0 0 0 1.5px #fff,0 0 0 2.5px #1E66F5,0 3px 8px rgba(0,0,0,.35)}
+.cn .logo-wrap.grande>.off-black{top:-8px;right:-14px;font-size:12px;padding:3px 7px;border-radius:9px}
+.cn .logo-wrap>.off-black{right:auto;left:50%;transform:translateX(-50%);top:-7px}
+.cn .logo-wrap.grande>.off-black{right:auto;left:50%;top:-10px}

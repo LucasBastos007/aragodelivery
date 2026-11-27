@@ -64,3 +64,38 @@ export function BannerBlack({ lojas, onVerLojas }: { lojas: { id: string; nome: 
     </section>
   )
 }
+
+/** Faixa da Black no lugar dos "Famosos no Chegô" (mesmo espaço): timer e as logos correndo. */
+export function FaixaBlack({ lojas }: { lojas: { id: string; nome: string; logo_url?: string | null }[] }) {
+  const [t, setT] = useState(falta)
+  useEffect(() => { const id = setInterval(() => setT(falta()), 1000); return () => clearInterval(id) }, [])
+  const comLogo = lojas.filter(l => l.logo_url)
+  if (!comLogo.length) return null
+  const fila = [...comLogo, ...comLogo]
+  return (
+    <section className="bk-faixa" aria-label="Lojas na Black Chegô">
+      <div className="bk-luz" aria-hidden />
+      <div className="bk-faixa-topo">
+        <b className="bk-faixa-tit">BLACK CHEGÔ <SeloBlack tam={16} /> <span>20% OFF</span></b>
+        <span className="bk-tempo">termina em <b className="num">{t}</b></span>
+      </div>
+      <div className="bk-fila">
+        <div className="bk-trilho" style={{ animationDuration: `${Math.max(20, comLogo.length * 3.2)}s` }}>
+          {fila.map((l, i) => (
+            <Link key={i} href={`/restaurante/${l.id}`} className="bk-fam" aria-hidden={i >= comLogo.length} tabIndex={i >= comLogo.length ? -1 : 0}>
+              <img src={l.logo_url!} alt="" loading="lazy" />
+              <span>{l.nome.length > 18 ? l.nome.slice(0, 17) + "…" : l.nome}</span>
+            </Link>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/** Logo da loja com o selo da Black no canto (lista de lojas e página da loja). */
+export function LogoComSelo({ black, children, tam = 18 }: { black: boolean; children: React.ReactNode; tam?: number }) {
+  if (!black) return <>{children}</>
+  // 27/11 (Lucas): no canto da logo vai a etiqueta "20% OFF" no lugar do selo de verificado
+  return <span className={`logo-wrap${tam >= 24 ? " grande" : ""}`}>{children}<span className="off-black" aria-label="20% de desconto na Black Chegô">20% OFF</span></span>
+}

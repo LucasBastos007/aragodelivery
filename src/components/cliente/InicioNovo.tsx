@@ -5,7 +5,7 @@
 // usa o mesmo AddressBottomSheet e cada loja abre a mesma rota /restaurante/[id].
 import { PrecoPromo, useBlackVirada } from "@/components/cliente/PrecoPromo"
 import { blackAtiva, lojaBlack } from "@/lib/blackFriday"
-import { BannerBlack, SeloBlack } from "@/components/cliente/BlackChego"
+import { FaixaBlack, LogoComSelo, SeloBlack } from "@/components/cliente/BlackChego"
 import { textoEntrega, entregaMax } from "@/lib/tempoEntrega"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ehSempreUltima, ultimaPorUltimo } from "@/lib/ordemLojas"
@@ -260,7 +260,6 @@ export default function InicioNovo({ lojas, loading, logado, endereco, onEnderec
 
       {aba === "inicio" && (
         <>
-          {blackAtiva() && <BannerBlack lojas={lojas.filter(l => lojaBlack(l.id))} onVerLojas={irParaLojas} />}
           <div className="if-banner imagens"
             onTouchStart={e => { toqueX.current = e.touches[0].clientX }}
             onTouchEnd={e => {
@@ -279,7 +278,9 @@ export default function InicioNovo({ lojas, loading, logado, endereco, onEnderec
             <div className="pts">{slides.map((_, i) => <i key={i} className={i === slide ? "on" : ""} />)}</div>
           </div>
 
-          {famosos.length > 0 && (
+          {/* Black Friday (27/11/2026, pedido do Lucas): no lugar dos Famosos, a faixa preta com o timer e as logos das lojas participantes */}
+          {blackAtiva() && lojas.some(l => lojaBlack(l.id)) && <FaixaBlack lojas={lojas.filter(l => lojaBlack(l.id))} />}
+          {!(blackAtiva() && lojas.some(l => lojaBlack(l.id))) && famosos.length > 0 && (
             <>
               <div className="if-tit"><b>Famosos no Chegô</b></div>
               <div className="if-famosos">
@@ -329,10 +330,10 @@ export default function InicioNovo({ lojas, loading, logado, endereco, onEnderec
           <div key={l.id}>
             {i > 0 && <div className="divisor" />}
             <Link className={`loja-l ${l.aberto ? "" : "fechada"}`} href={`/restaurante/${l.id}`}>
-              {l.logo_url ? <img className="logo" src={l.logo_url} alt="" loading="lazy" /> : <span className="logo" />}
+              <LogoComSelo black={blackAtiva() && lojaBlack(l.id)}>{l.logo_url ? <img className="logo" src={l.logo_url} alt="" loading="lazy" /> : <span className="logo" />}</LogoComSelo>
               {/* Linha da loja igual à proposta: dados corridos com "·" e o coração de favorito */}
               <span className="info">
-                <b>{l.nome}{blackAtiva() && lojaBlack(l.id) && <SeloBlack />}</b>
+                <b>{l.nome}</b>
                 <span className="meta">
                   {l.nota_media ? <><span className="estrela">★</span> {nota(Number(l.nota_media))} · </> : ""}{l.categoria} · {l.cidade || "Aragoiânia"}{" "}
                   {/* Sem o valor do frete na lista (pedido do Lucas, 20/10/2026): ele aparece na loja e na sacola */}
