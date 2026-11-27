@@ -17,7 +17,7 @@ import { BLACK_ITENS, BLACK_LOJAS, type BlackItem } from "@/lib/blackFridayConfi
 export { BLACK_ITENS, BLACK_LOJAS } from "@/lib/blackFridayConfig"
 export type { BlackItem, BlackLojaKey } from "@/lib/blackFridayConfig"
 
-export const BLACK_INICIO = "2026-11-27T06:30:00-03:00"
+export const BLACK_INICIO = "2026-11-26T23:30:00-03:00" // antecipado a pedido do Lucas (26/11 23h51) pra conferir; original 27/11 06h30
 export const BLACK_FIM = "2026-11-28T00:00:00-03:00"
 export const BLACK_CODIGO = "BLACKCHEGO"
 export const BLACK_MARCA_ID = "black-friday-chego"
