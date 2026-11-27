@@ -570,3 +570,38 @@
 .cn .f68-fase span{font-size:13px;line-height:1.35;color:#5C4300}
 .cn .festa68.revelado .f68-fase span{font-weight:700;color:var(--grafite)}
 @media (prefers-reduced-motion:reduce){.cn .festa68 *{animation:none!important;transition:none!important}}
+
+/* Black Friday Chegô — selo de verificado e banner único da home (BlackChego.tsx) */
+.cn .selo-black-ver{display:inline-flex;vertical-align:-3px;margin-left:5px;filter:drop-shadow(0 0 3px rgba(30,102,245,.55))}
+.cn .bk-banner{position:relative;margin:14px 16px 0;border-radius:18px;overflow:hidden;color:#fff;isolation:isolate;
+  background:radial-gradient(120% 90% at 85% 0%,#123A8F 0%,rgba(18,58,143,0) 55%),radial-gradient(90% 80% at 0% 100%,#0D2559 0%,rgba(13,37,89,0) 60%),linear-gradient(160deg,#16161A 0%,#050506 60%,#000 100%);
+  box-shadow:0 1px 0 rgba(255,255,255,.08) inset,0 0 0 1px rgba(30,102,245,.55) inset,0 14px 34px rgba(5,10,30,.45),0 0 26px rgba(30,102,245,.22)}
+.cn .bk-banner::before{content:"";position:absolute;inset:0;z-index:-1;opacity:.5;
+  background:repeating-linear-gradient(115deg,rgba(255,255,255,.025) 0 2px,transparent 2px 9px)}
+.cn .bk-banner::after{content:"";position:absolute;left:0;right:0;top:0;height:46%;z-index:-1;background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,0))}
+.cn .bk-luz{position:absolute;top:-40%;bottom:-40%;width:38%;left:-45%;z-index:0;pointer-events:none;
+  background:linear-gradient(100deg,transparent,rgba(120,170,255,.16) 45%,rgba(255,255,255,.22) 50%,rgba(120,170,255,.16) 55%,transparent);transform:skewX(-18deg);animation:bk-luz 5.5s ease-in-out infinite}
+@keyframes bk-luz{0%,35%{left:-45%}75%,100%{left:120%}}
+.cn .bk-topo{position:relative;display:flex;align-items:center;justify-content:space-between;padding:12px 14px 0}
+.cn .bk-logo{height:30px;width:auto;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6))}
+.cn .bk-tempo{font-size:11.5px;font-weight:600;color:#B9C6E4;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);padding:4px 9px;border-radius:999px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.cn .bk-tempo b{color:#fff;font-weight:800;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.cn .bk-meio{position:relative;display:flex;align-items:flex-end;justify-content:space-between;gap:10px;width:100%;padding:6px 14px 10px;background:none;border:0;color:inherit;text-align:left;cursor:pointer}
+.cn .bk-titulo{display:flex;align-items:center;flex-wrap:nowrap;white-space:nowrap;min-width:0;font-size:clamp(18px,5.6vw,34px);font-weight:900;letter-spacing:.01em;line-height:1;
+  background:linear-gradient(180deg,#FFFFFF 0%,#DCE3F2 55%,#9FAACB 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.cn .bk-titulo .bk-black{margin-right:7px}
+.cn .bk-titulo .selo-black-ver{margin-left:6px;-webkit-text-fill-color:initial}
+.cn .bk-off{display:flex;align-items:center;gap:4px;line-height:.9;flex:0 0 auto}
+.cn .bk-off b{font-size:clamp(34px,10.5vw,58px);font-weight:900;letter-spacing:-.03em;color:#fff;text-shadow:0 0 18px rgba(30,102,245,.75),0 2px 0 #0B2E7A}
+.cn .bk-off span{display:flex;flex-direction:column;font-size:clamp(14px,4vw,20px);font-weight:900;color:#5B93FF}
+.cn .bk-off small{font-size:10px;font-weight:700;color:#B9C6E4;margin-top:3px;letter-spacing:.02em}
+.cn .bk-fila{position:relative;overflow:hidden;padding:4px 0 13px;-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
+.cn .bk-trilho{display:flex;gap:10px;width:max-content;padding-left:14px;animation:bk-fila linear infinite}
+.cn .bk-banner:hover .bk-trilho,.cn .bk-trilho:active{animation-play-state:paused}
+@keyframes bk-fila{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.cn .bk-loja{flex:0 0 auto;width:46px;height:46px;border-radius:50%;overflow:hidden;background:#fff;
+  box-shadow:0 0 0 2px #0A0A0A,0 0 0 3.5px #1E66F5,0 6px 14px rgba(0,0,0,.55);transition:transform .2s}
+.cn .bk-loja:active{transform:scale(.92)}
+.cn .bk-loja img{width:100%;height:100%;object-fit:cover;display:block}
+@media (min-width:768px){.cn .bk-loja{width:54px;height:54px}}
+@media (prefers-reduced-motion:reduce){.cn .bk-luz{animation:none;display:none}.cn .bk-trilho{animation:none}.cn .bk-fila{overflow-x:auto}}

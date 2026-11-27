@@ -4,7 +4,8 @@
 // Só muda a aparência: as lojas vêm da mesma consulta da home antiga (page.tsx), o endereço
 // usa o mesmo AddressBottomSheet e cada loja abre a mesma rota /restaurante/[id].
 import { PrecoPromo, useBlackVirada } from "@/components/cliente/PrecoPromo"
-import { blackAtiva, lojaBlack, BLACK_SELO } from "@/lib/blackFriday"
+import { blackAtiva, lojaBlack } from "@/lib/blackFriday"
+import { BannerBlack, SeloBlack } from "@/components/cliente/BlackChego"
 import { textoEntrega, entregaMax } from "@/lib/tempoEntrega"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ehSempreUltima, ultimaPorUltimo } from "@/lib/ordemLojas"
@@ -194,12 +195,6 @@ export default function InicioNovo({ lojas, loading, logado, endereco, onEnderec
   // Live do Chegô no Instagram (17/11/2026, 20h30, sorteio e brinde): sai sozinho às 22h30 (horário de Brasília)
   const liveNoAr = Date.now() < Date.parse("2026-11-17T22:30:00-03:00")
   const slides: Slide[] = [
-    // Black Friday Chegô (27/11/2026): 3 artes no começo do carrossel, só de 06h30 à meia-noite. O toque desce pra lista de lojas.
-    ...(blackAtiva() ? [
-      { foto: "/banners/black-1.jpg", alt: "Black Chegô: 20% off nas lojas participantes do Chegô. Só hoje, 27/11, até meia-noite" },
-      { foto: "/banners/black-2.jpg", alt: "Sem cupom: o desconto já aparece no preço. Procure o selo BLACK CHEGÔ no cardápio. Até 2 pedidos promocionais em cada loja" },
-      { foto: "/banners/black-3.jpg", alt: "13 lojas na Black: açaí, milk-shake, pastel, X-Tudo, petiscos, caldos, salgados, doces, pão de mel e pipoca. Ver lojas participantes" },
-    ] : []),
     ...(liveNoAr ? [{ foto: "/banners/live-instagram-2.jpg", alt: "Live hoje às 20h30 no Instagram do Chegô, com sorteio e brinde. Seguir @appchegodelivery", href: "https://www.instagram.com/appchegodelivery/", externo: true }] : []),
     { foto: "/banners/home-1.jpg", alt: "Aragoiânia tem um jeitinho que só a gente entende. E agora tem um delivery feito para chamar de nosso. Explorar lojas" },
     { foto: "/banners/home-2.jpg", alt: "Aragoiânia tem história, tem sabor e tem gente que faz acontecer. O Chegô nasceu para valorizar tudo isso. Explorar lojas" },
@@ -265,6 +260,7 @@ export default function InicioNovo({ lojas, loading, logado, endereco, onEnderec
 
       {aba === "inicio" && (
         <>
+          {blackAtiva() && <BannerBlack lojas={lojas.filter(l => lojaBlack(l.id))} onVerLojas={irParaLojas} />}
           <div className="if-banner imagens"
             onTouchStart={e => { toqueX.current = e.touches[0].clientX }}
             onTouchEnd={e => {
@@ -290,7 +286,7 @@ export default function InicioNovo({ lojas, loading, logado, endereco, onEnderec
                 {famosos.map(l => (
                   <Link key={l.id} href={`/restaurante/${l.id}`}>
                     <img src={l.logo_url} alt="" loading="lazy" />
-                    {l.nome.length > 18 ? l.nome.slice(0, 17) + "…" : l.nome}{blackAtiva() && lojaBlack(l.id) && <span className="selo-black-loja">{BLACK_SELO}</span>}
+                    {l.nome.length > 18 ? l.nome.slice(0, 17) + "…" : l.nome}{blackAtiva() && lojaBlack(l.id) && <SeloBlack />}
                   </Link>
                 ))}
               </div>
@@ -308,7 +304,7 @@ export default function InicioNovo({ lojas, loading, logado, endereco, onEnderec
                       <span className="if-im"><img src={p.foto_url!} alt="" loading="lazy" />{beb && <span className="tag-beb">Bebida</span>}</span>
                       <b>{p.nome}</b>
                       <PrecoPromo produtoId={p.id} valor={valor} aPartir={aPartir} normal={<span className="v">{aPartir && <small>a partir de </small>}{brl(valor)}</span>} />
-                      <small className="lj">{l.nome}{blackAtiva() && lojaBlack(l.id) && <span className="selo-black-loja">{BLACK_SELO}</span>}</small>
+                      <small className="lj">{l.nome}{blackAtiva() && lojaBlack(l.id) && <SeloBlack />}</small>
                     </Link>
                   )
                 })}
@@ -336,7 +332,7 @@ export default function InicioNovo({ lojas, loading, logado, endereco, onEnderec
               {l.logo_url ? <img className="logo" src={l.logo_url} alt="" loading="lazy" /> : <span className="logo" />}
               {/* Linha da loja igual à proposta: dados corridos com "·" e o coração de favorito */}
               <span className="info">
-                <b>{l.nome}{blackAtiva() && lojaBlack(l.id) && <span className="selo-black-loja">{BLACK_SELO}</span>}</b>
+                <b>{l.nome}{blackAtiva() && lojaBlack(l.id) && <SeloBlack />}</b>
                 <span className="meta">
                   {l.nota_media ? <><span className="estrela">★</span> {nota(Number(l.nota_media))} · </> : ""}{l.categoria} · {l.cidade || "Aragoiânia"}{" "}
                   {/* Sem o valor do frete na lista (pedido do Lucas, 20/10/2026): ele aparece na loja e na sacola */}

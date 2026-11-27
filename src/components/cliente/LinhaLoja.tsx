@@ -6,7 +6,8 @@ import { textoEntrega } from "@/lib/tempoEntrega"
 import Link from "next/link"
 import { brl } from "@/lib/precoExibicao"
 import { lerFavoritas, alternarFavorita } from "@/lib/favoritas"
-import { blackAtiva, lojaBlack, BLACK_SELO } from "@/lib/blackFriday"
+import { blackAtiva, lojaBlack } from "@/lib/blackFriday"
+import { SeloBlack } from "@/components/cliente/BlackChego"
 import { useBlackVirada } from "@/components/cliente/PrecoPromo"
 
 type L = { id: string; nome: string; logo_url?: string | null; aberto?: boolean | null; nota_media?: number | null; categoria?: string | null; cidade?: string | null; tempo_min?: number | null; tempo_max?: number | null; taxa_entrega?: number | null }
@@ -21,7 +22,7 @@ export function LinhaLoja({ l }: { l: L }) {
     <Link className={`loja-l ${l.aberto ? "" : "fechada"}`} href={`/restaurante/${l.id}`}>
       {l.logo_url ? <img className="logo" src={l.logo_url} alt="" loading="lazy" /> : <span className="logo" />}
       <span className="info">
-        <b>{l.nome}{black && <span className="selo-black-loja">{BLACK_SELO}</span>}</b>
+        <b>{l.nome}{black && <SeloBlack />}</b>
         <span className="meta">
           {l.nota_media ? <><span className="estrela">★</span> {Number(l.nota_media).toFixed(1).replace(".", ",")} · </> : ""}{l.categoria} · {l.cidade || "Aragoiânia"}{" "}
           {l.aberto ? textoEntrega(l) : "Fechada agora"}

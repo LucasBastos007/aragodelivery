@@ -4,7 +4,8 @@
 // Só a tela mudou: a consulta, o login obrigatório pra pedir, o preço dos adicionais
 // (lib/precoAdicionais) e o que vai pra sacola (handleAddToCart/handleSimpleAdd) são os mesmos.
 import { PrecoPromo, usePromoAtiva, usePromoUsados, usePromoVirada, useBlackVirada, useBlackLojasCheias } from "@/components/cliente/PrecoPromo"
-import { blackAtiva, lojaBlack, chaveLojaBlack, BLACK_SELO, MSG_LIMITE_LOJA } from "@/lib/blackFriday"
+import { blackAtiva, lojaBlack, chaveLojaBlack, MSG_LIMITE_LOJA } from "@/lib/blackFriday"
+import { SeloBlack } from "@/components/cliente/BlackChego"
 import { entregaMin, entregaMax } from "@/lib/tempoEntrega"
 import { emPromo, emRelampago, descontoPromo, fimTexto, PROMO_TITULO } from "@/lib/promoChego"
 import { freteGratisAtivo, lojaComPonto } from "@/lib/freteGratisCampanha"
@@ -547,7 +548,7 @@ function RestauranteConteudo() {
       <div className="loja-cab">
         {loja.logo_url ? <img className="logo" src={loja.logo_url} alt="" /> : <span className="logo" />}
         <div className="nome">
-          <h1 className="h1" style={{ fontSize: 26 }}>{loja.nome}{blackAtiva() && lojaBlack(loja.id) && <span className="selo-black-loja" style={{ fontSize: 12, verticalAlign: "middle" }}>{BLACK_SELO}</span>}</h1>
+          <h1 className="h1" style={{ fontSize: 26 }}>{loja.nome}{blackAtiva() && lojaBlack(loja.id) && <SeloBlack tam={22} />}</h1>
           <BlackAvisoLoja lojaId={loja.id} />
           <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 6, flexWrap: "wrap" }}>
             <span className={`selo ${loja.aberto ? "aberto" : "fechado"}`}>{loja.aberto ? "● Aberta" : "Fechada agora"}</span>
@@ -688,10 +689,11 @@ function BlackAvisoLoja({ lojaId }: { lojaId: string }) {
   useBlackVirada()
   const cheias = useBlackLojasCheias()
   if (!blackAtiva() || !lojaBlack(lojaId)) return null
-  const noLimite = cheias.has(chaveLojaBlack(lojaId))
+  // Só avisa quando o cliente já usou as 2 compras nesta loja (o selo e o preço riscado já dizem o resto)
+  if (!cheias.has(chaveLojaBlack(lojaId))) return null
   return (
     <div style={{ marginTop: 8, background: "#0A0A0A", color: "#fff", border: "1px solid #1E66F5", borderRadius: 10, padding: "8px 12px", fontSize: 13, fontWeight: 700, lineHeight: 1.4 }}>
-      {noLimite ? MSG_LIMITE_LOJA : "🖤 BLACK FRIDAY CHEGÔ — produtos com desconto marcados no cardápio. Hoje até meia-noite. Até 2 pedidos promocionais por cadastro nesta loja."}
+      {MSG_LIMITE_LOJA}
     </div>
   )
 }
