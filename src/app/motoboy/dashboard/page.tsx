@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
 import { ganhoMotoboy, ganhoMotoboyPedido } from "@/lib/comissao"
+import { ler } from "@/lib/ler"
 
 type Periodo = "hoje" | "semana" | "mes" | "total"
 
@@ -119,10 +120,7 @@ export default function MotoboyDashboardPage() {
         .select("id, codigo, taxa_entrega, taxa_dinamica, criado_em, loja:lojas(nome)")
         .eq("motoboy_id", motoboy_id).eq("status", "entregue")
         .order("criado_em", { ascending: false }),
-      supabase.from("entregas_avulsas")
-        .select("id, codigo, taxa_entrega, criado_em, loja_nome")
-        .eq("motoboy_id", motoboy_id).eq("status", "entregue")
-        .order("criado_em", { ascending: false }),
+      ler<any[]>("avulsas", { status: "entregue", meu: true }),
     ])
 
     const avulsasNormalizadas = ((todasAvulsas ?? []) as any[]).map(a => ({ ...a, loja: { nome: a.loja_nome } }))

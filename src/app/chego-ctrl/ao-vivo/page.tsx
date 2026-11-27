@@ -7,6 +7,8 @@ import Link from "next/link"
 import dynamic from "next/dynamic"
 import { useCallback, useEffect, useState } from "react"
 import { supabase } from "@/lib/supabase"
+import { ler as lerServidor } from "@/lib/ler"
+import { comPii, ehRetirada } from "@/lib/piiPedidos"
 
 const Despacho = dynamic(() => import("../_DespachoPainel"), { ssr: false, loading: () => <p className="mut">Carregando…</p> })
 const Mapa = dynamic(() => import("../_Mapa"), { ssr: false, loading: () => <div className="mapa-op" /> })
@@ -37,10 +39,11 @@ function AoVivoGeral() {
       supabase.from("motoboys").select("id, nome, status, disponivel, lat, lng"),
       supabase.from("pedidos").select("id, total, status, loja_id, motoboy_id, taxa_entrega, motoboy:motoboys(nome)").gte("criado_em", corte).neq("status", "cancelado").limit(5000),
       supabase.from("pedidos").select("id, codigo, total, status, criado_em, atualizado_em, loja:lojas(nome)").gte("criado_em", iniDia(hoje)).order("criado_em", { ascending: false }).limit(1000),
-      supabase.from("pedidos").select("id, codigo, total, status, criado_em, atualizado_em, motoboy_id, endereco_entrega, loja:lojas(nome, logo_url)").in("status", ANDAMENTO).order("criado_em", { ascending: true }).limit(100),
+      supabase.from("pedidos").select("id, codigo, total, status, criado_em, atualizado_em, motoboy_id, loja:lojas(nome, logo_url)").in("status", ANDAMENTO).order("criado_em", { ascending: true }).limit(100),
       supabase.from("alertas_sos").select("motoboy_id").eq("status", "pendente"),
-      supabase.from("entregas_avulsas").select("motoboy_id, motoboy_nome, taxa_entrega").eq("status", "entregue").not("motoboy_id", "is", null).gte("criado_em", corte),
+      lerServidor<any[]>("avulsas", { status: "entregue", motoboy_nao_nulo: true, desde: corte, limit: 5000 }),
     ])
+    if (and.data) (and as any).data = await comPii(and.data as any[]) // endereço do cliente pelo servidor (etapa 2)
     const L = lojas.data ?? [], M = mbs.data ?? [], P = (per.data ?? []) as any[], H = (dia.data ?? []) as any[]
     const porLoja = new Map<string, { v: number; n: number }>()
     for (const x of P) if (x.loja_id) { const a = porLoja.get(x.loja_id) ?? { v: 0, n: 0 }; a.v += x.total ?? 0; a.n++; porLoja.set(x.loja_id, a) }
@@ -147,7 +150,8 @@ export default function AoVivoPage() {
   const [prontos, setProntos] = useState(0)
   useEffect(() => { if (new URLSearchParams(window.location.search).get("aba") === "despacho") setAba("despacho") }, [])
   useEffect(() => {
-    const ler = () => supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "pronto").is("motoboy_id", null).not("endereco_entrega", "ilike", "%Retirada%").then(({ count }) => setProntos(count ?? 0))
+    // retirada na loja não conta; o endereço vem do servidor (etapa 2 da segurança)
+    const ler = () => supabase.from("pedidos").select("id").eq("status", "pronto").is("motoboy_id", null).then(async ({ data }) => setProntos((await comPii(data as any[])).filter(p => !ehRetirada(p)).length))
     ler(); const iv = setInterval(ler, 20_000); return () => clearInterval(iv)
   }, [])
   const trocar = (a: "agora" | "despacho") => { setAba(a); window.history.replaceState(null, "", a === "despacho" ? "?aba=despacho" : window.location.pathname) }

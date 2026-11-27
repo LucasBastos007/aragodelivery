@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import { partesPagamento } from "@/lib/pagamentoDividido"
+import { comPii, comPiiUm, ehRetirada } from "@/lib/piiPedidos"
 
 type Declaracao = { id: string; valor: number; observacao: string | null; criado_em: string }
 type Linha = { id: string; loja: string; criado_em: string; valor: number }
@@ -44,11 +45,11 @@ export default function MotoboyCaixaPage() {
     const hoje = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" })
     const desde = new Date(`${hoje}T00:00:00-03:00`).toISOString()
     const { data } = await supabase.from("pedidos")
-      .select("id, criado_em, total, forma_pagamento, forma_pagamento_2, valor_pagamento_1, valor_pagamento_2, endereco_entrega, loja:lojas(nome)")
+      .select("id, criado_em, total, forma_pagamento, forma_pagamento_2, valor_pagamento_1, valor_pagamento_2, loja:lojas(nome)")
       .eq("motoboy_id", motoboy_id!).eq("status", "entregue").gte("criado_em", desde)
       .order("criado_em", { ascending: false })
     const ls: Linha[] = []
-    for (const p of (data ?? []) as any[]) {
+    for (const p of await comPii((data ?? []) as any[])) {
       if (/retirada/i.test(p.endereco_entrega ?? "")) continue
       const v = partesPagamento(p).filter(x => x.forma === "dinheiro").reduce((s, x) => s + x.valor, 0)
       if (v > 0) ls.push({ id: p.id, loja: p.loja?.nome ?? "Loja", criado_em: p.criado_em, valor: v })

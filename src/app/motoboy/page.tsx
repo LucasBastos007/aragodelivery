@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import { supabase } from "@/lib/supabase"
 import { PEDIDO_PUB } from "@/lib/colunasPublicas"
+import { comPii, comPiiUm, ehRetirada } from "@/lib/piiPedidos"
+import { ler } from "@/lib/ler"
 import Link from "next/link"
 import { useAuth } from "@/lib/auth"
 import { ganhoMotoboy, ganhoMotoboyPedido } from "@/lib/comissao"
@@ -835,7 +837,8 @@ export default function MotoboyPage() {
       .select(`${PEDIDO_PUB}, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)`)
       .eq("id", pedidoId)
       .single()
-      .then(({ data }) => {
+      .then(async ({ data: d0 }) => {
+        const data = await comPiiUm(d0)
         if (data && !dismissedIdsRef.current.has(data.id)) {
           setPedidoOferta(data); setTimerOferta(30); setDistKmOferta(null)
         }
@@ -877,11 +880,7 @@ export default function MotoboyPage() {
         .eq("motoboy_id", motoboy_id)
         .eq("status", "entregue")
         .gte("criado_em", desde),
-      supabase.from("entregas_avulsas")
-        .select("taxa_entrega, criado_em")
-        .eq("motoboy_id", motoboy_id)
-        .eq("status", "entregue")
-        .gte("criado_em", desde),
+      ler<any[]>("avulsas", { status: "entregue", desde, meu: true }),
     ]).then(([{ data: pedidosData }, { data: avulsasData }]) => {
       const pedidos = pedidosData ?? []
       const avulsas = avulsasData ?? []
@@ -924,7 +923,8 @@ export default function MotoboyPage() {
         .select(`${PEDIDO_PUB}, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng), itens:itens_pedido(*)`)
         .eq("id", pedidoId)
         .single()
-        .then(({ data }) => {
+        .then(async ({ data: d0 }) => {
+          const data = await comPiiUm(d0)
           if (data && !dismissedIdsRef.current.has(data.id)) {
             setPedidoOferta(data); setTimerOferta(30); setDistKmOferta(null)
           }
@@ -1024,7 +1024,6 @@ export default function MotoboyPage() {
         supabase.from("pedidos")
           .select(`${PEDIDO_PUB}, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng, cidade)`)
           .eq("status", "pronto").is("motoboy_id", null)
-          .not("endereco_entrega", "ilike", "%Retirada%") // retirada na loja nunca precisa de motoboy
           .order("criado_em", { ascending: true }),
         supabase.from("pedidos")
           .select(`${PEDIDO_PUB}, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng, cidade)`)
@@ -1039,6 +1038,9 @@ export default function MotoboyPage() {
           .eq("status", "aguardando_aceite").or(`motoboy_id.is.null,motoboy_id.eq.${motoboy_id}`)
           .limit(5),
       ])
+      // Dados do cliente vêm do servidor (etapa 2 da segurança); retirada na loja nunca precisa de motoboy
+      const [prontosPii, andamentoPii, ofertaPii] = await Promise.all([comPii(prontosData as any[]), comPii(andamentoData as any[]), comPii(ofertaData as any[])])
+      const prontosData2 = prontosPii.filter(p => !ehRetirada(p))
 
       // Filtra pela distância até o raio configurado pelo motoboy — mesma regra do
       // despacho ativo (escalada), só que aplicada no lado do cliente aqui porque é uma
@@ -1046,7 +1048,7 @@ export default function MotoboyPage() {
       // quando já temos GPS real do motoboy e coordenada real da loja; sem isso, mostra
       // tudo (mesmo fallback seguro usado em escalada/route.ts).
       const temGpsReal = myLatPedidosRef.current !== DEFAULT_LAT || myLngPedidosRef.current !== DEFAULT_LNG
-      const todosProntos = (prontosData as Pedido[]) ?? []
+      const todosProntos = (prontosData2 as Pedido[]) ?? []
       const novosProntos = temGpsReal
         ? todosProntos.filter(p => {
             const ll = (p as any).loja
@@ -1066,7 +1068,7 @@ export default function MotoboyPage() {
       setProntos(novosProntos)
       // Só atualiza emAndamento se não retornou erro E (tem dados OU não acabamos de aceitar)
       if (!andamentoError) {
-        let dados = (andamentoData as Pedido[]) ?? []
+        let dados = (andamentoPii as Pedido[]) ?? []
         // Reaplica a ordem escolhida em "Priorizar esta entrega" — a query sempre volta
         // ordenada por criado_em, então sem isso a próxima atualização (a cada 15s)
         // desfazia a priorização manual do motoboy.
@@ -1085,8 +1087,8 @@ export default function MotoboyPage() {
       // Polling fallback: exibe oferta se realtime perdeu o evento — toca o mesmo
       // som de alerta do caminho realtime, senão a corrida aparece muda quando o
       // WebSocket cai (comum com o app em segundo plano ou rede instável).
-      if (!pedidoOfertaRef.current && ofertaData && ofertaData.length > 0) {
-        const oferta = ofertaData.find((o: any) => o.motoboy_id === motoboy_id && !dismissedIdsRef.current.has(o.id)) ?? ofertaData[0]
+      if (!pedidoOfertaRef.current && ofertaPii.length > 0) {
+        const oferta = ofertaPii.find((o: any) => o.motoboy_id === motoboy_id && !dismissedIdsRef.current.has(o.id)) ?? ofertaPii[0]
         const designada = (oferta as any).motoboy_id === motoboy_id
         const ofertaLl = (oferta as any).loja
         const ofertaDentroDoRaio = (cidadeFixaRef.current && ofertaLl?.cidade && ofertaLl.cidade === cidadeFixaRef.current)
@@ -1163,7 +1165,8 @@ export default function MotoboyPage() {
       .or(`motoboy_id.is.null,motoboy_id.eq.${motoboy_id}`)
       .eq("status", "aguardando_aceite")
       .limit(5)
-      .then(({ data }) => {
+      .then(async ({ data: d0 }) => {
+        const data = await comPii(d0 as any[])
         // A despachada direto pra ele vem primeiro e não depende do raio
         const o = (data ?? []).find((x: any) => x.motoboy_id === motoboy_id && !dismissedIdsRef.current.has(x.id))
           ?? (data ?? []).find((x: any) => !x.motoboy_id && !dismissedIdsRef.current.has(x.id) && dentroDoRaio(x))
@@ -1189,7 +1192,8 @@ export default function MotoboyPage() {
         supabase.from("pedidos")
           .select(`${PEDIDO_PUB}, loja_lat, loja_lng, loja:lojas(nome, endereco, telefone, lat, lng, cidade), itens:itens_pedido(*)`)
           .eq("id", novo.id).single()
-          .then(({ data }) => {
+          .then(async ({ data: d0 }) => {
+            const data = await comPiiUm(d0)
             if (data && !dismissedIdsRef.current.has(data.id) && (data.motoboy_id === motoboy_id || dentroDoRaio(data))) {
               playNotificationSound(); setPedidoOferta(data); setTimerOferta(30); setDistKmOferta(null)
             }
@@ -1228,9 +1232,10 @@ export default function MotoboyPage() {
         supabase.from("pedidos")
           .select(`${PEDIDO_PUB}, itens:itens_pedido(*), loja:lojas(nome, endereco, telefone, lat, lng, cidade)`)
           .eq("id", novo.id).single()
-          .then(({ data }) => {
+          .then(async ({ data: d0 }) => {
+            const data = await comPiiUm(d0)
             // Reconfirma no momento da busca — pode ter mudado de novo enquanto buscava
-            if (!data || data.status !== "pronto" || data.motoboy_id) return
+            if (!data || data.status !== "pronto" || data.motoboy_id || ehRetirada(data)) return
             if (!dentroDoRaio((data as any).loja)) return
             setProntos(prev => {
               if (prev.some(p => p.id === data.id)) return prev
@@ -1329,8 +1334,7 @@ export default function MotoboyPage() {
   useEffect(() => {
     if (!motoboy_id) return
     async function checkAvulsa() {
-      const { data } = await supabase.from("entregas_avulsas")
-        .select("*").eq("status", "aguardando").order("criado_em", { ascending: false }).limit(1)
+      const { data } = await ler<any[]>("avulsas", { status: "aguardando", limit: 1 })
       if (data && data.length > 0 && !dismissedIdsRef.current.has(data[0].id) && !avulsaOfertaRef.current) {
         setAvulsaOferta(data[0]); setTimerAvulsa(30); playNotificationSound()
       }
@@ -1345,10 +1349,7 @@ export default function MotoboyPage() {
     if (!motoboy_id || !disponivel) return
 
     // Carrega avulsas em andamento deste motoboy
-    supabase.from("entregas_avulsas")
-      .select("*")
-      .eq("motoboy_id", motoboy_id)
-      .in("status", ["aceito", "coletado", "em_rota"])
+    ler<any[]>("avulsas", { status: ["aceito", "coletado", "em_rota"], meu: true })
       .then(({ data }) => { setEmAndamentoAvulsa(data ?? []) })
 
     const ch = supabase.channel(`avulsa-all-${motoboy_id}`)

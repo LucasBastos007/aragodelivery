@@ -12,6 +12,7 @@ import { supabase } from "@/lib/supabase"
 import { PEDIDO_PUB } from "@/lib/colunasPublicas"
 import { brl } from "@/lib/precoExibicao"
 import { MobileBottomNav } from "@/components/MobileBottomNav"
+import { comPii } from "@/lib/piiPedidos"
 
 const STATUS_ANDAMENTO = ["pendente","aceito","preparando","pronto","aguardando_aceite","indo_para_loja","na_loja","em_rota","coletado"]
 
@@ -55,7 +56,7 @@ export default function HistoricoPage() {
       .in("status", [...STATUS_ANDAMENTO, "entregue", "cancelado"])
       .order("criado_em", { ascending: false })
       .limit(100)
-      .then(({ data }) => { setTodos(data ?? []); setLoadingPedidos(false) })
+      .then(async ({ data }) => { setTodos(await comPii(data as any[])); setLoadingPedidos(false) })
   }, [user])
 
   async function handleReorder(pedido: any) {

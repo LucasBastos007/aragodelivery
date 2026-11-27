@@ -12,6 +12,8 @@ import { supabase } from "@/lib/supabase"
 import { PEDIDO_PUB } from "@/lib/colunasPublicas"
 import type { Pedido, StatusPedido } from "@/types"
 import { rotuloPagamento, temForma, ehDividido } from "@/lib/pagamentoDividido"
+import { ler } from "@/lib/ler"
+import { comPii } from "@/lib/piiPedidos"
 
 type Periodo = "hoje" | "7d" | "15d" | "30d" | "custom"
 type Filtro = "andamento" | "atrasados" | "entregues" | "cancelados" | "todos" | "avulsas"
@@ -88,18 +90,20 @@ export default function PedidosPage() {
   async function load(per = periodo) {
     const { inicio, fim } = rangeDatas(per, ci, cf)
     const [{ data: ped }, { data: av }] = await Promise.all([
-      supabase.from("pedidos").select(`${PEDIDO_PUB}, loja:lojas(nome, telefone, logo_url), motoboy:motoboys(nome, telefone), itens:itens_pedido(*)`)
+      supabase.from("pedidos").select(`${PEDIDO_PUB}, loja:lojas(nome, telefone, logo_url), motoboy:motoboys(nome), itens:itens_pedido(*)`)
         .gte("criado_em", inicio).lte("criado_em", fim).order("criado_em", { ascending: false }).limit(1000),
-      supabase.from("entregas_avulsas").select("*").gte("criado_em", inicio).lte("criado_em", fim).order("criado_em", { ascending: false }).limit(1000),
+      ler<any[]>("avulsas", { desde: inicio, ate: fim, limit: 1000 }),
     ])
-    setPedidos((ped as Pedido[]) ?? [])
+    setPedidos((await comPii(ped as any[])) as Pedido[])
     const avl = av ?? []; setAvulsas(avl)
     const lIds = [...new Set(avl.map((a: any) => a.loja_id).filter(Boolean))], mIds = [...new Set(avl.map((a: any) => a.motoboy_id).filter(Boolean))]
     const [{ data: ls }, { data: ms }] = await Promise.all([
       lIds.length ? supabase.from("lojas").select("id, telefone").in("id", lIds) : Promise.resolve({ data: [] as any[] }),
-      mIds.length ? supabase.from("motoboys").select("id, nome, telefone").in("id", mIds) : Promise.resolve({ data: [] as any[] }),
+      mIds.length ? supabase.from("motoboys").select("id, nome").in("id", mIds) : Promise.resolve({ data: [] as any[] }),
     ])
-    setFones({ loja: Object.fromEntries((ls ?? []).map((l: any) => [l.id, l.telefone])), mb: Object.fromEntries((ms ?? []).map((m: any) => [m.id, { nome: m.nome, tel: m.telefone }])) })
+    const { data: tels } = mIds.length ? await ler<{ id: string; telefone: string | null }[]>("admin_motoboys_telefones") : { data: [] as any[] }
+    const tel = new Map((tels ?? []).map((t: any) => [t.id, t.telefone]))
+    setFones({ loja: Object.fromEntries((ls ?? []).map((l: any) => [l.id, l.telefone])), mb: Object.fromEntries((ms ?? []).map((m: any) => [m.id, { nome: m.nome, tel: tel.get(m.id) ?? null }])) })
     setCarregou(true)
   }
 

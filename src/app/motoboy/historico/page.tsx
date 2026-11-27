@@ -5,6 +5,8 @@ import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
 import { ganhoMotoboy, ganhoMotoboyPedido } from "@/lib/comissao"
 import { partesPagamento, rotuloPagamento, temForma, valorDaForma, ehDividido } from "@/lib/pagamentoDividido"
+import { ler } from "@/lib/ler"
+import { comPii, comPiiUm, ehRetirada } from "@/lib/piiPedidos"
 
 type Periodo = "hoje" | "semana" | "mes" | "total"
 
@@ -88,18 +90,16 @@ async function carregar(novaPagina: number) {
   const inicio = dateInicio(periodo)
   const fim    = new Date(); fim.setHours(23, 59, 59, 999)
 
-  const [{ data: pedidosData }, { data: avulsasData }] = await Promise.all([
+  const [{ data: pedidosData0 }, { data: avulsasData }] = await Promise.all([
     supabase.from("pedidos")
       // "foto_entrega" saiu da consulta: a coluna não existe em pedidos e derrubava a
       // consulta inteira, deixando o histórico sempre vazio (achado em 20/10/2026).
-      .select("id, codigo, taxa_entrega, taxa_dinamica, criado_em, forma_pagamento, forma_pagamento_2, valor_pagamento_1, valor_pagamento_2, total, endereco_entrega, loja:lojas(nome)")
+      .select("id, codigo, taxa_entrega, taxa_dinamica, criado_em, forma_pagamento, forma_pagamento_2, valor_pagamento_1, valor_pagamento_2, total, loja:lojas(nome)")
       .eq("motoboy_id", motoboy_id).eq("status", "entregue")
       .order("criado_em", { ascending: false }),
-    supabase.from("entregas_avulsas")
-      .select("id, codigo, taxa_entrega, criado_em, endereco, loja_nome")
-      .eq("motoboy_id", motoboy_id).eq("status", "entregue")
-      .order("criado_em", { ascending: false }),
+    ler<any[]>("avulsas", { status: "entregue", meu: true }),
   ])
+  const pedidosData = await comPii(pedidosData0 as any[])
 
   const avulsasNormalizadas = ((avulsasData ?? []) as any[]).map(a => ({
     ...a, loja: { nome: a.loja_nome }, endereco_entrega: a.endereco, forma_pagamento: "avulsa", foto_entrega: null,

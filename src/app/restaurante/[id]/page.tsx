@@ -4,7 +4,7 @@
 // Só a tela mudou: a consulta, o login obrigatório pra pedir, o preço dos adicionais
 // (lib/precoAdicionais) e o que vai pra sacola (handleAddToCart/handleSimpleAdd) são os mesmos.
 import { PrecoPromo, usePromoAtiva, usePromoUsados, usePromoVirada, useBlackVirada, useBlackLojasCheias } from "@/components/cliente/PrecoPromo"
-import { blackAtiva, lojaBlack, chaveLojaBlack, MSG_LIMITE_LOJA } from "@/lib/blackFriday"
+import { blackAtiva, itemBlack, lojaBlack, chaveLojaBlack, MSG_LIMITE_LOJA } from "@/lib/blackFriday"
 import { SeloBlack } from "@/components/cliente/BlackChego"
 import { entregaMin, entregaMax } from "@/lib/tempoEntrega"
 import { emPromo, emRelampago, descontoPromo, fimTexto, PROMO_TITULO } from "@/lib/promoChego"
@@ -383,6 +383,8 @@ function RestauranteConteudo() {
   const promoNoAr = usePromoAtiva()
   const promoVirada = usePromoVirada()
   const promoUsados = usePromoUsados()
+  const blackVirada = useBlackVirada()
+  const blackCheias = useBlackLojasCheias()
   const destaquesBase = useMemo(() => maisPedidos(produtos as any[], categorias, loja?.categoria) as Produto[], [produtos, categorias, loja?.categoria])
   const destaques = useMemo(() => {
     const d = destaquesBase
@@ -428,13 +430,17 @@ function RestauranteConteudo() {
     // própria, e sai da categoria dele. Só na tela: produtos.ordem não muda, então quando a
     // campanha acaba (ou o cliente já usou o desconto nesta loja) tudo volta pro lugar de antes.
     const rel = promoNoAr ? produtos.filter(p => emRelampago(p.id, Date.now(), promoUsados)) : []
-    const promo = promoNoAr ? [...rel, ...produtos.filter(p => emPromo(p.id, Date.now(), promoUsados))] : []
+    const promoBase = promoNoAr ? [...rel, ...produtos.filter(p => emPromo(p.id, Date.now(), promoUsados))] : []
+    // Black Friday Chegô (27/11/2026, pedido do Lucas): os produtos da Black sobem pro topo do
+    // cardápio da loja participante, só na tela e só enquanto o desconto vale pro cliente aqui.
+    const bf = blackAtiva() && loja && !blackCheias.has(chaveLojaBlack(loja.id)) ? produtos.filter(p => itemBlack(p.id) && !promoBase.some(x => x.id === p.id)) : []
+    const promo = [...promoBase, ...bf]
     if (!promo.length) return ordenadas
     const ids = new Set(promo.map(p => p.id))
     const ativaDe = (p: Produto) => ordenadas.find(b => b.ps.some(x => x.id === p.id))?.ativa ?? true
-    const topo = { id: "promo-chego", nome: rel.length ? "⚡ Oferta Relâmpago Chegô" : PROMO_TITULO, ativa: promo.some(ativaDe), legenda: null, ps: promo }
+    const topo = { id: "promo-chego", nome: rel.length ? "⚡ Oferta Relâmpago Chegô" : promoBase.length ? PROMO_TITULO : "🖤 Black Chegô · 20% OFF", ativa: promo.some(ativaDe), legenda: null, ps: promo }
     return [topo, ...ordenadas.map(b => ({ ...b, ps: b.ps.filter(p => !ids.has(p.id)) })).filter(b => b.ps.length)]
-  }, [categorias, produtos, vitrines, promoNoAr, promoUsados, promoVirada])
+  }, [categorias, produtos, vitrines, promoNoAr, promoUsados, promoVirada, loja, blackCheias, blackVirada])
 
   // Aba do cardápio acompanha a rolagem
   useEffect(() => {

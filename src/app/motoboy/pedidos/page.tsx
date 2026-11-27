@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react"
 import { supabase } from "@/lib/supabase"
 import { useAuth } from "@/lib/auth"
+import { ler } from "@/lib/ler"
 
 const STATUS_LABEL: Record<string, { texto: string; cor: string; bg: string; border: string }> = {
   aceito:     { texto: "Loja aceitou", cor: "#1E5BD8", bg: "#E8EFFC", border: "#E8EFFC" },
@@ -62,18 +63,11 @@ export default function MotoboyPedidosPage() {
     // Só pedidos/avulsas que ainda vão precisar de motoboy — retirada na loja nunca entra
     // na fila de despacho, então não faz sentido o motoboy ficar de olho nesses.
     const [{ data: pedidosData }, { data: avulsasData }] = await Promise.all([
-      supabase.from("pedidos")
-        .select("id, codigo, criado_em, status, endereco_entrega, loja:lojas(nome, lat, lng, cidade)")
-        .in("status", ["aceito", "preparando"])
-        .not("endereco_entrega", "ilike", "%Retirada%")
-        .order("criado_em", { ascending: false }),
+      ler<any[]>("motoboy_fila"),
       // Avulsa não tem fase de "preparo" antes de virar disponível — "aguardando" já É
       // o equivalente de "pronto pra corrida" (motoboy pode aceitar agora, ver
       // /api/motoboy/aceitar-avulsa). Mostra aqui como aviso de "tem uma disponível".
-      supabase.from("entregas_avulsas")
-        .select("id, codigo, criado_em, status, endereco, loja_nome, loja_lat, loja_lng")
-        .eq("status", "aguardando")
-        .order("criado_em", { ascending: false }),
+      ler<any[]>("avulsas", { status: "aguardando" }),
     ])
 
     const pos = posRef.current

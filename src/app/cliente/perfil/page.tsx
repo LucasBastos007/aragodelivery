@@ -8,6 +8,7 @@ import { useCart } from "@/lib/cart"
 import { montarReordem } from "@/lib/reordenar"
 import { supabase } from "@/lib/supabase"
 import { PEDIDO_PUB } from "@/lib/colunasPublicas"
+import { comPii } from "@/lib/piiPedidos"
 
 const inp: React.CSSProperties = {
   width: "100%", padding: "11px 14px", borderRadius: 10, fontSize: 14,
@@ -74,9 +75,9 @@ export default function ClientePerfilPage() {
       .eq("cliente_id", user.id)
       .order("criado_em", { ascending: false })
       .limit(20)
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         if (data && data.length > 0) {
-          setPedidos(data)
+          setPedidos(await comPii(data as any[]))
           setLoadingPedidos(false)
           return
         }
@@ -90,7 +91,7 @@ export default function ClientePerfilPage() {
           .ilike("codigo", `%${codigo}%`)
           .order("criado_em", { ascending: false })
           .limit(20)
-          .then(({ data: d2 }) => { setPedidos(d2 ?? []); setLoadingPedidos(false) })
+          .then(async ({ data: d2 }) => { setPedidos(await comPii(d2 as any[])); setLoadingPedidos(false) })
       })
   }, [user, perfil])
 

@@ -11,6 +11,7 @@ import type { Pedido, StatusPedido } from "@/types"
 import { brl } from "@/lib/precoExibicao"
 import { partesPagamento, rotuloPagamento, temForma, valorDaForma, ehDividido } from "@/lib/pagamentoDividido"
 import { GoogleMap, useJsApiLoader, OverlayView, DirectionsRenderer } from "@react-google-maps/api"
+import { comPiiUm } from "@/lib/piiPedidos"
 
 const GMAPS_LIBS_TRACK: ("geometry" | "places")[] = []
 
@@ -362,7 +363,7 @@ export default function AcompanhamentoPedido() {
       .order("criado_em", { ascending: false })
       .limit(1)
 
-    const data = (error ? null : rows?.[0]) ?? null
+    const data = await comPiiUm((error ? null : rows?.[0]) ?? null)
     if (!data) {
       const { data: rows2 } = await supabase
         .from("pedidos")
@@ -370,7 +371,7 @@ export default function AcompanhamentoPedido() {
         .eq("codigo", codigo.toUpperCase())
         .order("criado_em", { ascending: false })
         .limit(1)
-      const d2 = rows2?.[0] ?? null
+      const d2 = await comPiiUm(rows2?.[0] ?? null)
       if (!d2) { setNotFound(true); setLoading(false); return }
       const newStatus = (d2 as any).status
       if (prevStatusRef.current !== "entregue" && newStatus === "entregue") {

@@ -401,7 +401,7 @@ export default function EntregaAvulsaPage() {
     if (!loja_id) return
     const [{ data: lojaData }, { data: entregasData }] = await Promise.all([
       supabase.from("lojas").select("plano, lat, lng, taxa_entrega, entrega_avulsa_liberada, cidade").eq("id", loja_id).single(),
-      supabase.from("entregas_avulsas").select("*").eq("loja_id", loja_id).order("criado_em", { ascending: false }).limit(50),
+      ler<any[]>("avulsas", { limit: 50 }),
     ])
     setPlano(lojaData?.plano ?? null)
     setAvulsaLiberada(lojaData?.entrega_avulsa_liberada ?? false)

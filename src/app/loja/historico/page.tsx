@@ -12,6 +12,8 @@ import { partesPagamento, rotuloPagamento, temForma, valorDaForma, ehDividido } 
 import { ClienteInfo } from "@/components/ClienteInfo"
 import { TimelinePedido } from "@/components/TimelinePedido"
 import { BotaoImprimir } from "@/components/BotaoImprimir"
+import { ler } from "@/lib/ler"
+import { comPii } from "@/lib/piiPedidos"
 
 // Fase 4 (Histórico) — reescrito em 2026-09-23 a partir da auditoria aprovada.
 // Regra central de "isso é Histórico" agora vem de src/lib/statusPedido.ts
@@ -106,13 +108,23 @@ export default function LojaHistoricoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loja_id, periodo, busca, filtroStatus, filtroPagamento, filtroTipo])
 
-  function montarQueryBase() {
+  // Busca por nome/telefone do cliente e filtro retirada/entrega rodam no servidor (as colunas do
+  // cliente não saem mais pela chave pública, 27/11/2026); aqui só filtra pelos ids que voltaram.
+  async function montarQueryBase() {
+    const inicio0 = dateInicio(periodo)
+    const fim0 = new Date(); fim0.setHours(23, 59, 59, 999)
+    let ids: string[] | null = null
+    if (busca || filtroTipo) {
+      const { data: r } = await ler<string[]>("loja_historico_ids", { busca, tipo: filtroTipo || null, desde: inicio0.toISOString(), ate: fim0.toISOString() })
+      ids = (r ?? []).slice(0, 250)
+      if (!ids.length) ids = ["00000000-0000-0000-0000-000000000000"]
+    }
     let q = supabase
       .from("pedidos")
       .select(
-        "id, codigo, total, subtotal, taxa_entrega, desconto, cupom_codigo, forma_pagamento, forma_pagamento_2, valor_pagamento_1, valor_pagamento_2, status, endereco_entrega, observacao, " +
+        "id, codigo, total, subtotal, taxa_entrega, desconto, cupom_codigo, forma_pagamento, forma_pagamento_2, valor_pagamento_1, valor_pagamento_2, status, observacao, " +
         "criado_em, aceito_em, pronto_em, coletado_em, entregue_em, cancelado_em, cancelado_por, motivo_cancelamento, motivo_outro, " +
-        "nome_cliente, telefone_cliente, motoboy:motoboys(nome, telefone), itens:itens_pedido(nome, quantidade, preco, observacao, adicionais)",
+        "motoboy:motoboys(nome), itens:itens_pedido(nome, quantidade, preco, observacao, adicionais)",
         { count: "exact" }
       )
       .eq("loja_id", loja_id as string)
@@ -122,14 +134,10 @@ export default function LojaHistoricoPage() {
     const fim = new Date(); fim.setHours(23, 59, 59, 999)
     q = q.gte("criado_em", inicio.toISOString()).lte("criado_em", fim.toISOString())
 
-    if (busca) {
-      q = q.or(`codigo.ilike.%${busca}%,nome_cliente.ilike.%${busca}%,telefone_cliente.ilike.%${busca}%`)
-    }
+    if (ids) q = q.in("id", ids)
     if (filtroPagamento) q = q.eq("forma_pagamento", filtroPagamento)
-    if (filtroTipo === "retirada") q = q.ilike("endereco_entrega", "%Retirada%")
-    if (filtroTipo === "entrega")  q = q.not("endereco_entrega", "ilike", "%Retirada%")
 
-    return q
+    return { q } // embrulhado: devolver a consulta solta de uma função async já executaria ela
   }
 
   async function carregar(novaPagina: number) {
@@ -137,13 +145,13 @@ export default function LojaHistoricoPage() {
     setEstado("loading")
     const from = novaPagina * PAGE_SIZE
     try {
-      const { data, count, error } = await montarQueryBase()
+      const { data, count, error } = await (await montarQueryBase()).q
         .order("criado_em", { ascending: false })
         .range(from, from + PAGE_SIZE - 1)
 
       if (error) throw error
 
-      const rows = (data ?? []) as unknown as Pedido[]
+      const rows = (await comPii((data ?? []) as any[])) as unknown as Pedido[]
       setPedidos(prev => (novaPagina === 0 ? rows : [...prev, ...rows]))
       if (count !== null) setTotal(count)
       setHasMore(rows.length === PAGE_SIZE)

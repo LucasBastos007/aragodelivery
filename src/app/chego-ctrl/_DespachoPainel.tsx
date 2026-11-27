@@ -9,6 +9,8 @@ import { supabase } from "@/lib/supabase"
 import { PEDIDO_PUB } from "@/lib/colunasPublicas"
 import { gravarAdmin } from "@/lib/adminGravar"
 import { km, situacaoMb, COR_MB } from "./_Mapa"
+import { ler } from "@/lib/ler"
+import { comPii, ehRetirada } from "@/lib/piiPedidos"
 
 const Mapa = dynamic(() => import("./_Mapa"), { ssr: false, loading: () => <div className="mapa-op" /> })
 
@@ -31,13 +33,18 @@ export default function DespachoPainel() {
     const [{ data: ped }, { data: moto }, { data: s }, { data: at }] = await Promise.all([
       supabase.from("pedidos").select(`${PEDIDO_PUB}, loja:lojas(nome, endereco, lat, lng, logo_url), itens:itens_pedido(*)`)
         .eq("status", "pronto").is("motoboy_id", null)
-        .not("endereco_entrega", "ilike", "%Retirada%") // retirada na loja nunca precisa de motoboy
         .order("criado_em", { ascending: true }),
-      supabase.from("motoboys").select("id, nome, disponivel, status, lat, lng, veiculo, telefone").order("nome"),
-      supabase.from("alertas_sos").select("*, motoboy:motoboys(nome, telefone)").eq("status", "pendente").order("criado_em", { ascending: false }),
+      supabase.from("motoboys").select("id, nome, disponivel, status, lat, lng, veiculo").order("nome"),
+      supabase.from("alertas_sos").select("*, motoboy:motoboys(nome)").eq("status", "pendente").order("criado_em", { ascending: false }),
       supabase.from("pedidos").select("id, codigo, motoboy_id, status, taxa_entrega").in("status", ["aguardando_aceite", "indo_para_loja", "na_loja", "coletado", "em_rota"]).not("motoboy_id", "is", null),
     ])
-    setPedidos(ped ?? []); setMotoboys(moto ?? []); setSos(s ?? []); setAtivas(at ?? []); setCarregou(true)
+    // Dados do cliente e telefone dos motoboys pelo servidor (etapa 2 da segurança); retirada não precisa de motoboy
+    const [pedPii, { data: tels }] = await Promise.all([comPii(ped as any[]), ler<{ id: string; telefone: string | null }[]>("admin_motoboys_telefones")])
+    const tel = new Map((tels ?? []).map(t => [t.id, t.telefone]))
+    const comTel = (m: any) => m ? { ...m, telefone: tel.get(m.id) ?? m.telefone ?? null } : m
+    setPedidos(pedPii.filter(p => !ehRetirada(p))); setMotoboys((moto ?? []).map(comTel))
+    setSos((s ?? []).map((x: any) => ({ ...x, motoboy: x.motoboy ? { ...x.motoboy, telefone: tel.get(x.motoboy_id) ?? null } : x.motoboy })))
+    setAtivas(at ?? []); setCarregou(true)
   }, [])
 
   useEffect(() => { load(); const iv = setInterval(load, 15_000); return () => clearInterval(iv) }, [load])

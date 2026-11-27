@@ -63,9 +63,7 @@ export default function MotoboyFinanceiroPage() {
         .from("pedidos").select("id, codigo, taxa_entrega, taxa_dinamica, criado_em, loja:lojas(nome)")
         .eq("motoboy_id", motoboy_id).eq("status", "entregue")
         .order("criado_em", { ascending: false }),
-      supabase
-        .from("entregas_avulsas").select("taxa_entrega, criado_em")
-        .eq("motoboy_id", motoboy_id).eq("status", "entregue"),
+      ler<any[]>("avulsas", { status: "entregue", meu: true }),
       ler<any[]>("motoboy_ajustes"),
     ])
     const pedList = ped ?? []

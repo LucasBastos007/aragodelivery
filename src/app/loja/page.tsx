@@ -15,6 +15,8 @@ import { BotaoImprimir } from "@/components/BotaoImprimir"
 import { ClienteInfo } from "@/components/ClienteInfo"
 import { tocaSomPedido } from "@/lib/somPedido"
 import { TimelinePedido as Timeline } from "@/components/TimelinePedido"
+import { ler } from "@/lib/ler"
+import { comPii } from "@/lib/piiPedidos"
 
 type DiaSemana = "dom" | "seg" | "ter" | "qua" | "qui" | "sex" | "sab"
 type DiaConfig = { aberto: boolean; inicio: string; fim: string }
@@ -427,7 +429,7 @@ export default function LojaDashboard() {
     if (!loja_id) return
     const seq = ++loadSeqRef.current
     const [inicioHojeBrt] = limitesDoDiaBrt(hojeYmdBrt())
-    const [{ data }, { data: historico }, { data: entregues }] = await Promise.all([
+    const [{ data: data0 }, { data: historico }, { data: entregues0 }] = await Promise.all([
       supabase
         .from("pedidos")
         .select(`${PEDIDO_PUB}, itens:itens_pedido(*), motoboy:motoboys(nome,telefone)`)
@@ -435,12 +437,7 @@ export default function LojaDashboard() {
         .not("status", "in", '("aguardando_pagamento","entregue","cancelado")')
         .gte("criado_em", inicioHojeBrt)
         .order("criado_em", { ascending: false }),
-      supabase
-        .from("pedidos")
-        .select("telefone_cliente")
-        .eq("loja_id", loja_id)
-        .eq("status", "entregue")
-        .not("telefone_cliente", "is", null),
+      ler<any[]>("loja_telefones_entregues"),
       // Coluna "Entregue" do kanban — só pedidos entregues HOJE, separado da query
       // principal de propósito (ver comentário de AbaPedidos acima).
       supabase
@@ -452,6 +449,8 @@ export default function LojaDashboard() {
         .order("entregue_em", { ascending: false }),
     ])
 
+    // Dados do cliente (nome, telefone, endereço, troco) e telefone do motoboy vêm do servidor
+    const [data, entregues] = await Promise.all([comPii(data0 as any[]), comPii(entregues0 as any[])])
     if (seq !== loadSeqRef.current) return // chegou uma resposta mais nova enquanto isso
 
     const resultado = (data as Pedido[]) ?? []
