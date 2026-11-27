@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { ehDividido, temForma, valorDaForma, colunaCobranca, confirmarCobranca } from "@/lib/pagamentoDividido"
 import { criarCliente, criarCartaoToken, type AsaasSplit } from "@/lib/asaas"
+import { avisarLojaWhats } from "@/lib/avisoLojaWhats"
 
 function adminSb() {
   return createClient(
@@ -64,6 +65,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true, cardToken, payment_id: cobranca.id, falta_pix: !completo })
       }
       await sb.from("pedidos").update({ asaas_payment_id: cobranca.id, status: "pendente" }).eq("id", pedido_id)
+      await avisarLojaWhats(sb, pedido_id).catch(e => console.error("[AVISO LOJA WHATS]", e))
       return NextResponse.json({ ok: true, cardToken, payment_id: cobranca.id })
     }
 

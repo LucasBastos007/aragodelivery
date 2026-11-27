@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js"
 import { requireMotoboy, requireLoja, requireAdmin, getSession, unauthorized } from "@/lib/session"
 import { checkRateLimit } from "@/lib/rate-limit"
 import { inscricaoValida } from "@/lib/pushHosts"
+import { avisarLojaWhats } from "@/lib/avisoLojaWhats"
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -161,6 +162,9 @@ export async function POST(req: NextRequest) {
     if (!loja_id) {
       return NextResponse.json({ error: "loja_id obrigatório" }, { status: 400 })
     }
+
+    // WhatsApp do lojista (confere tudo no banco e só manda 1 vez por pedido)
+    if (pedido_id) await avisarLojaWhats(supabaseAdmin, String(pedido_id)).catch(e => console.error("[AVISO LOJA WHATS]", e))
 
     const { data: loja } = await supabaseAdmin
       .from("lojas")

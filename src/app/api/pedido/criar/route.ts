@@ -21,6 +21,7 @@ import { descontoPromo, promoAtiva, relampagoAtivo, PROMO_CODIGO, PROMO_MARCA_ID
 import { promoUsados } from "@/lib/promoChegoServidor"
 import { blackAtiva, descontoBlack, itemBlack, BLACK_CODIGO, BLACK_MARCA_ID } from "@/lib/blackFriday"
 import { blackLojasCheias, blackSuspensa } from "@/lib/blackFridayServidor"
+import { avisarLojaWhats } from "@/lib/avisoLojaWhats"
 
 // Teste do robô: loja fechada no app aceita pedido só quando vem do robô e está em robo_pedidos.abrir_no_whats
 async function abertaSoNoWhats(req: NextRequest, sb: ReturnType<typeof adminSb>, lojaId: string) {
@@ -582,6 +583,9 @@ export async function POST(req: NextRequest) {
 
   // Rastreia pedido realizado
   void sb.from("acessos_app").insert({ tipo: "pedido" })
+
+  // Pedido já entra na loja (dinheiro/maquininha): avisa o lojista no WhatsApp
+  if (statusInicial === "pendente") await avisarLojaWhats(sb, pedido.id).catch(e => console.error("[AVISO LOJA WHATS]", e))
 
   return NextResponse.json({
     ok: true,
