@@ -95,6 +95,24 @@ export function useClienteAuth() {
     return error?.message ?? null
   }
 
+  // Grava o cadastro em 2 passos (27/11/2026): o banco recusa upsert em clientes depois da trava de
+  // segurança (falta UPDATE na coluna id), então atualiza e, se a linha não existir, cria.
+  // Devolve a mensagem de erro (ou null) para a tela avisar o cliente em vez de "salvar" sem gravar.
+  async function gravarCliente(payload: any): Promise<string | null> {
+    const { id, ...campos } = payload
+    const up = await supabase.from("clientes").update(campos).eq("id", id).select("id")
+    if (up.error) { console.error("[CADASTRO] update", up.error); return "Não foi possível salvar seus dados. Tente de novo." }
+    if (up.data && up.data.length > 0) return null
+    const ins = await supabase.from("clientes").insert(payload)
+    if (!ins.error) return null
+    if (ins.error.code === "23505") {
+      const again = await supabase.from("clientes").update(campos).eq("id", id)
+      if (!again.error) return null
+    }
+    console.error("[CADASTRO] insert", ins.error)
+    return "Não foi possível salvar seus dados. Tente de novo."
+  }
+
   async function salvarPerfil(
     nome: string,
     telefone: string,
@@ -103,8 +121,8 @@ export function useClienteAuth() {
       complemento?: string; cep?: string; cidade?: string
     },
     cpf?: string
-  ) {
-    if (!user) return
+  ): Promise<string | null> {
+    if (!user) return "Entre na sua conta para salvar."
     const payload: any = { id: user.id, nome: nome.trim(), telefone: telefone.trim() }
     if (endereco) {
       if (endereco.rua       !== undefined) payload.endereco_rua        = endereco.rua
@@ -121,11 +139,13 @@ export function useClienteAuth() {
         supabase.auth.updateUser({ data: { cpf: digits } }).catch(() => {})
       }
     }
-    await supabase.from("clientes").upsert(payload)
+    const erro = await gravarCliente(payload)
+    if (erro) return erro
     setPerfil(p => p
       ? { ...p, nome, telefone, ...payload }
       : { id: user.id, nome, telefone, ...payload }
     )
+    return null
   }
 
   async function completarPerfil(dados: {
@@ -133,8 +153,8 @@ export function useClienteAuth() {
     telefone: string
     cpf: string
     endereco?: { rua?: string; numero?: string; bairro?: string; complemento?: string; cep?: string; cidade?: string }
-  }) {
-    if (!user) return
+  }): Promise<string | null> {
+    if (!user) return "Entre na sua conta para salvar."
     const cpfDigits = dados.cpf.replace(/\D/g, "")
     const payload: any = {
       id: user.id,
@@ -151,11 +171,12 @@ export function useClienteAuth() {
       if (e.cep        !== undefined) payload.endereco_cep         = e.cep
       if (e.cidade     !== undefined) payload.endereco_cidade      = e.cidade
     }
-    // Salva no banco (pode falhar se coluna cpf não existir — ignoramos silenciosamente)
-    await supabase.from("clientes").upsert(payload)
-    // Salva também nos metadados do usuário Supabase Auth — sempre funciona
-    await supabase.auth.updateUser({ data: { cpf: cpfDigits, nome: payload.nome, telefone: payload.telefone } })
+    // Salva também nos metadados do usuário Supabase Auth (cópia de segurança)
+    await supabase.auth.updateUser({ data: { cpf: cpfDigits, nome: payload.nome, telefone: payload.telefone } }).catch(() => {})
+    const erro = await gravarCliente(payload)
+    if (erro) return erro
     setPerfil(p => p ? { ...p, ...payload } : { nome: "", telefone: "", ...payload })
+    return null
   }
 
   async function logout() {

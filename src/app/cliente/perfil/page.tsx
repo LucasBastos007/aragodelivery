@@ -105,7 +105,7 @@ export default function ClientePerfilPage() {
 
   async function handleSalvar() {
     setSalvando(true)
-    await salvarPerfil(nome, telefone, {
+    const falha = await salvarPerfil(nome, telefone, {
       rua: endRua, numero: endNumero, complemento: endCompl,
       bairro: endBairro, cep: endCep,
     }, cpf)
@@ -114,6 +114,7 @@ export default function ClientePerfilPage() {
       if (typeof window !== "undefined") localStorage.setItem("arago_last_address", addr)
     }
     setSalvando(false)
+    if (falha) { alert(falha); return }
     setSalvo(true)
     setTimeout(() => setSalvo(false), 2500)
   }

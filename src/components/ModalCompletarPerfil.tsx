@@ -50,8 +50,9 @@ export default function ModalCompletarPerfil() {
     if (telDigits.length < 8)   { setErro("Informe um telefone válido com DDD"); return }
 
     setErro(""); setSalvando(true)
-    await completarPerfil({ nome, telefone, cpf })
+    const falha = await completarPerfil({ nome, telefone, cpf })
     setSalvando(false)
+    if (falha) { setErro(falha); return }
     setVisivel(false)
   }
 
