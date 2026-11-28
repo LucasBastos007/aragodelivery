@@ -122,20 +122,7 @@ export function imprimirPedido(pedido: Pedido, largura: "80mm" | "58mm" = "80mm"
 </body>
 </html>`
 
-  const win = janela ?? window.open("", "_blank", "width=420,height=600,menubar=no,toolbar=no")
-  if (win) {
-    win.document.write(html)
-    win.document.close()
-    win.focus()
-    const img = win.document.querySelector("img")
-    if (img && !img.complete) {
-      img.onload = () => { win.print(); win.close() }
-      img.onerror = () => { win.print(); win.close() }
-      setTimeout(() => { win.print(); win.close() }, 3000)
-    } else {
-      setTimeout(() => { win.print(); win.close() }, 400)
-    }
-  }
+  imprimirHtml(html, janela)
 }
 
 // Proteção contra impressão acidental/duplicada — mesma lógica usada em Pedidos (Fase 3),
@@ -165,4 +152,79 @@ export function imprimirComProtecao(opts: {
   }
   imprimirPedido(pedido, larguraPapel, ehReimpressao)
   setImpressos(prev => ({ ...prev, [pedido.id]: new Date().toISOString() }))
+}
+
+// iPhone/iPad (28/11/2026): lojista apertava Imprimir, o app marcava "impresso" e a tela de
+// impressão não abria. No iOS o print() de uma janela aberta com window.open não espera o
+// usuário e o close() logo depois fecha a janela antes da folha de impressão aparecer (no
+// app instalado na tela inicial a janela nem abre direito). No iOS a comanda vai para uma
+// área escondida da própria página e imprime com window.print(); o resto da tela some na
+// impressão. Computador e Android seguem com a janela, como já funcionava.
+export function ehIOS() {
+  if (typeof navigator === "undefined") return false
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+}
+
+const AREA = "chego-area-impressao"
+
+function imprimirNaPagina(html: string) {
+  const css = (html.match(/<style>([\s\S]*?)<\/style>/) ?? [])[1] ?? ""
+  const corpo = (html.match(/<body>([\s\S]*?)<\/body>/) ?? [])[1] ?? ""
+  // prende as regras da comanda dentro da área, pra não mexer no visual do app
+  const cssArea = css.replace(/([^{}]+)\{/g, (m, sel: string) => {
+    const t = sel.trim()
+    if (t.startsWith("@")) return m
+    return t.split(",").map(x => {
+      x = x.trim()
+      if (x === "body") return `#${AREA}`
+      if (x === "*") return `#${AREA}, #${AREA} *`
+      return `#${AREA} ${x}`
+    }).join(", ") + " {"
+  })
+  document.getElementById(AREA)?.remove()
+  document.getElementById(AREA + "-css")?.remove()
+  const st = document.createElement("style")
+  st.id = AREA + "-css"
+  st.textContent = `${cssArea}
+    @media screen { #${AREA} { display: none !important; } }
+    @media print { body > *:not(#${AREA}) { display: none !important; } #${AREA} { display: block !important; } html, body { background: #fff !important; } }`
+  const div = document.createElement("div")
+  div.id = AREA
+  div.innerHTML = corpo
+  document.head.appendChild(st)
+  document.body.appendChild(div)
+  const limpar = () => { div.remove(); st.remove(); window.removeEventListener("afterprint", limpar) }
+  window.addEventListener("afterprint", limpar)
+  const img = div.querySelector("img")
+  let foi = false
+  const imprimir = () => { if (foi) return; foi = true; window.print() }
+  if (img && !img.complete) {
+    img.onload = imprimir
+    img.onerror = imprimir
+    setTimeout(imprimir, 1500)
+  } else imprimir()
+}
+
+export function imprimirHtml(html: string, janela?: Window | null) {
+  if (ehIOS()) {
+    try { janela?.close() } catch {}
+    imprimirNaPagina(html)
+    return
+  }
+  const win = janela ?? window.open("", "_blank", "width=420,height=600,menubar=no,toolbar=no")
+  if (win) {
+    win.document.write(html)
+    win.document.close()
+    win.focus()
+    let foi = false
+    const imprimir = () => { if (foi) return; foi = true; win.print(); win.close() }
+    const img = win.document.querySelector("img")
+    if (img && !img.complete) {
+      img.onload = imprimir
+      img.onerror = imprimir
+      setTimeout(imprimir, 3000)
+    } else {
+      setTimeout(imprimir, 400)
+    }
+  }
 }

@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth"
 import { supabase } from "@/lib/supabase"
 import { ler } from "@/lib/ler"
 import type { EntregaAvulsa, Pedido } from "@/types"
-import { imprimirPedido } from "@/lib/impressao"
+import { imprimirPedido, imprimirHtml, ehIOS } from "@/lib/impressao"
 import dynamic from "next/dynamic"
 
 const MapaPicker = dynamic(() => import("@/components/MapaPicker"), { ssr: false })
@@ -201,20 +201,7 @@ function imprimirEntregaAvulsa(entrega: EntregaAvulsa, largura: "80mm" | "58mm" 
 </body>
 </html>`
 
-  const win = janela ?? window.open("", "_blank", "width=420,height=600,menubar=no,toolbar=no")
-  if (win) {
-    win.document.write(html)
-    win.document.close()
-    win.focus()
-    const img = win.document.querySelector("img")
-    if (img && !img.complete) {
-      img.onload = () => { win.print(); win.close() }
-      img.onerror = () => { win.print(); win.close() }
-      setTimeout(() => { win.print(); win.close() }, 3000)
-    } else {
-      setTimeout(() => { win.print(); win.close() }, 400)
-    }
-  }
+  imprimirHtml(html, janela)
 }
 
 // Opções da avulsa sem emoji (Lucas, 21/11/2026): cartão com título, linha curta e marca de escolhido
@@ -756,7 +743,7 @@ export default function EntregaAvulsaPage() {
     const trocoNum = parseFloat(trocoPara.replace(/\./g, "").replace(",", "."))
     if (usaForma("dinheiro") && precisaTroco && !(trocoNum > valorEmDinheiro)) { alert(`Informe um valor de troco maior que o valor em dinheiro (${brl(valorEmDinheiro)})`); return }
     // Abre a janela do cupom AGORA (ainda dentro do clique) — senão o navegador bloqueia.
-    const janelaCupom = window.open("", "_blank", "width=420,height=600,menubar=no,toolbar=no")
+    const janelaCupom = ehIOS() ? null : window.open("", "_blank", "width=420,height=600,menubar=no,toolbar=no")
     setEnviando(true)
     try {
       const res = await fetch("/api/loja/pedido-loja", {
