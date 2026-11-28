@@ -1,5 +1,5 @@
 // sw.js — bump CACHE_NAME a cada deploy para forçar atualização
-const CACHE_NAME = "chego-v193"
+const CACHE_NAME = "chego-v194"
 
 // ─── Background Location ──────────────────────────────────────────────────────
 // Armazena última posição recebida da aba principal para envio em background
