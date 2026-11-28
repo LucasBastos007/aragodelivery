@@ -51,7 +51,7 @@ export default function HistoricoPage() {
     setLoadingPedidos(true)
     supabase
       .from("pedidos")
-      .select(`${PEDIDO_PUB}, loja:lojas(id, nome, logo_url), itens:itens_pedido(*, produto:produtos(foto_url))`)
+      .select(`${PEDIDO_PUB}, loja:lojas(id, nome, logo_url), itens:itens_pedido(*)`) // sem produtos(): a tabela fechou para o navegador (etapa 3, 25/11) e derrubava a lista inteira
       .eq("cliente_id", user.id)
       .in("status", [...STATUS_ANDAMENTO, "entregue", "cancelado"])
       .order("criado_em", { ascending: false })
